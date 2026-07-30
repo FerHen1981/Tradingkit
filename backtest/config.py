@@ -183,4 +183,15 @@ EL_DORADO = Config(
     use_mae_guard=True,
 )
 
-PRESETS = {"EL_TORO": EL_TORO, "EL_DORADO": EL_DORADO}
+# Walk-forward-validated money-management tweak (see docs/optimization.md).
+# The single robust change: loosen the day-profit trail from $75 to $300 so the
+# account can actually build to payout eligibility instead of being chopped daily.
+# Held up out-of-sample (2025-06..2026-06: PF 1.05, +$1.9k, $643 banked/breach).
+# The aggressive "let it all run" combos were rejected as in-sample overfit.
+EL_DORADO_TUNED = EL_DORADO.with_(
+    name="EL_DORADO_TUNED",
+    day_exit_mode="Day-trail (keep peak)",
+    day_trail_usd=300.0,
+)
+
+PRESETS = {"EL_TORO": EL_TORO, "EL_DORADO": EL_DORADO, "EL_DORADO_TUNED": EL_DORADO_TUNED}

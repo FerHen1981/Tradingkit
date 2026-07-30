@@ -41,6 +41,14 @@ def load(csv_path: str) -> pd.DataFrame:
 
     df = df.copy()
     df["et"] = et
+    return _derive(df)
+
+
+def _derive(df: pd.DataFrame) -> pd.DataFrame:
+    """(Re)compute the time-derived columns from an existing ET timestamp column.
+    Shared by load() and resample()."""
+    et = df["et"]
+    df = df.copy()
     df["hour"] = et.dt.hour.to_numpy()
     df["minute"] = et.dt.minute.to_numpy()
     df["weekday"] = et.dt.weekday.to_numpy()          # 0=Mon .. 6=Sun
@@ -49,10 +57,36 @@ def load(csv_path: str) -> pd.DataFrame:
     # Trade date: session opens 18:00 ET -> shift +6h so 18:00 becomes 00:00 next day.
     session_date = (et + pd.Timedelta(hours=6)).dt.date
     df["session_date"] = session_date
-    df["new_session"] = pd.Series(session_date, index=df.index).ne(
+    new_session = pd.Series(session_date, index=df.index).ne(
         pd.Series(session_date, index=df.index).shift(1)
-    ).to_numpy()
-    df.loc[df.index[0], "new_session"] = True
+    ).to_numpy().copy()
+    new_session[0] = True
+    df["new_session"] = new_session
+    return df.reset_index(drop=True)
 
-    df = df.reset_index(drop=True)
-    return df
+
+def resample(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
+    """Aggregate 1-minute bars to N-minute bars, aligned to each session's
+    18:00 ET open (bars never span the session boundary or the maintenance
+    break). Elapsed-minute bucketing is gap-safe.
+    """
+    if minutes <= 1:
+        return df.reset_index(drop=True)
+    g = df.copy()
+    first = g.groupby("session_date")["et"].transform("first")
+    elapsed = ((g["et"] - first).dt.total_seconds() // 60).astype("int64")
+    g["_bucket"] = elapsed // minutes
+
+    agg = {"et": ("et", "first"), "Open": ("Open", "first"), "High": ("High", "max"),
+           "Low": ("Low", "min"), "Close": ("Close", "last")}
+    for opt, how in (("Volume", "sum"), ("Delta", "sum"), ("BuyVolume", "sum"),
+                     ("SellVolume", "sum"), ("CVD_close", "last")):
+        if opt in g.columns:
+            agg[opt] = (opt, how)
+
+    out = (g.groupby(["session_date", "_bucket"], sort=True)
+             .agg(**agg)
+             .reset_index()
+             .sort_values("et")
+             .drop(columns=["session_date", "_bucket"]))
+    return _derive(out)

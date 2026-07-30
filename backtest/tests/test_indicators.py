@@ -58,6 +58,27 @@ def test_delta_streak_run_length():
     assert list(r) == [1, 2, 0, 1, 2, 3, 0, 1]
 
 
+def test_resample_preserves_ohlc_and_volume():
+    from backtest.data import resample
+    # 6 one-minute bars in one session -> two 3-minute bars
+    idx = pd.date_range("2024-01-02 18:00", periods=6, freq="1min", tz="America/New_York")
+    df = pd.DataFrame({
+        "Open": [10, 11, 12, 13, 14, 15], "High": [11, 12, 13, 14, 15, 16],
+        "Low": [9, 10, 11, 12, 13, 14], "Close": [11, 12, 13, 14, 15, 16],
+        "Volume": [1, 2, 3, 4, 5, 6], "Delta": [1, -1, 2, -2, 3, -3],
+    })
+    df["et"] = idx
+    df["session_date"] = idx[0].date()
+    df["new_session"] = [True] + [False] * 5
+    r = resample(df, 3)
+    assert len(r) == 2
+    assert r["Open"].iloc[0] == 10 and r["Close"].iloc[0] == 13   # first/last of bars 0-2
+    assert r["High"].iloc[0] == 13 and r["Low"].iloc[0] == 9      # max/min
+    assert r["Volume"].iloc[0] == 6 and r["Delta"].iloc[0] == 2   # sums
+    assert r["Volume"].sum() == df["Volume"].sum()                # conserved
+    assert bool(r["new_session"].iloc[0]) is True
+
+
 def test_vwap_resets_each_session():
     bars = [(100, 100, 100, 100, 1, 0), (200, 200, 200, 200, 1, 0)]
     df = _mk(bars)

@@ -15,14 +15,45 @@ from dataclasses import dataclass, field, replace
 @dataclass(frozen=True)
 class Contract:
     symbol: str = "NQ"
-    mintick: float = 0.25          # index points per tick
-    pointvalue: float = 20.0       # $ per index point  -> $5 per tick
+    mintick: float = 0.25          # price increment per tick
+    pointvalue: float = 20.0       # $ per 1.0 price move  -> $5 per tick
     commission_per_contract: float = 1.55   # cash per contract, per side
     slippage_ticks: float = 1.0    # adverse ticks on market/stop fills
 
     @property
     def tickvalue(self) -> float:
         return self.mintick * self.pointvalue
+
+
+# Contract registry. pointvalue = $ per 1.0 move; tickvalue = mintick*pointvalue.
+# Commissions are round-trip-per-side estimates; adjust to your broker.
+# FX-futures specs are approximate — verify per exchange before trusting P&L.
+CONTRACTS = {
+    # CME equity index
+    "NQ": Contract("NQ", 0.25, 20.0, 1.55),
+    "ES": Contract("ES", 0.25, 50.0, 1.55),
+    "YM": Contract("YM", 1.0, 5.0, 1.55),
+    "RTY": Contract("RTY", 0.10, 50.0, 1.55),
+    # metals / energy
+    "GC": Contract("GC", 0.10, 100.0, 1.75),   # gold, $10/tick
+    "CL": Contract("CL", 0.01, 1000.0, 1.75),  # crude, $10/tick
+    # crypto (CME BTC future = 5 BTC; VERIFY — may be MBT micro in your data)
+    "BTC": Contract("BTC", 5.0, 5.0, 5.0),     # $25/tick
+    # CME FX futures (approximate; verify multipliers)
+    "6E": Contract("6E", 0.00005, 125000.0, 1.75),  # EUR, $6.25/tick
+    "6B": Contract("6B", 0.0001, 62500.0, 1.75),    # GBP, $6.25/tick
+    "6J": Contract("6J", 0.0000005, 12500000.0, 1.75),  # JPY, $6.25/tick
+    "6A": Contract("6A", 0.0001, 100000.0, 1.75),   # AUD, $10/tick
+    "6S": Contract("6S", 0.0001, 125000.0, 1.75),   # CHF, $12.50/tick
+    "6C": Contract("6C", 0.00005, 100000.0, 1.75),  # CAD, $5/tick
+}
+
+
+def contract(symbol: str) -> Contract:
+    key = symbol.upper()
+    if key not in CONTRACTS:
+        raise KeyError(f"unknown symbol {symbol!r}; known: {sorted(CONTRACTS)}")
+    return CONTRACTS[key]
 
 
 @dataclass(frozen=True)
@@ -32,6 +63,12 @@ class Config:
 
     # --- account / capital ---
     initial_capital: float = 50_000.0
+
+    # --- distance unit for all *_ticks inputs ---
+    # "Ticks" (default) keeps the Pine behaviour; "ATR" makes the tick-unit
+    # inputs scale with volatility so one config ports across instruments.
+    unit_mode: str = "Ticks"             # "Ticks" | "Points" | "%" | "ATR"
+    atr_len: int = 14
 
     # --- position sizing (Fixed contracts) ---
     contract_size: float = 2.0
@@ -194,4 +231,18 @@ EL_DORADO_TUNED = EL_DORADO.with_(
     day_trail_usd=300.0,
 )
 
-PRESETS = {"EL_TORO": EL_TORO, "EL_DORADO": EL_DORADO, "EL_DORADO_TUNED": EL_DORADO_TUNED}
+# Walk-forward-validated El Toro tweak (see docs/optimization.md): restrict
+# entries to the US regular session (09:00-15:59 ET). Pass-rate 29.8->32.7% IS
+# and 27.7->38.3% OOS. Optionally loosen delta streak to 2 (OOS 46.8%, more
+# regime-dependent). Recovery-trail left ON (adds ~4pp; fix A1 for live use).
+EL_TORO_TUNED = EL_TORO.with_(
+    name="EL_TORO_TUNED",
+    enabled_hours=frozenset(range(9, 16)),
+)
+
+PRESETS = {
+    "EL_TORO": EL_TORO,
+    "EL_TORO_TUNED": EL_TORO_TUNED,
+    "EL_DORADO": EL_DORADO,
+    "EL_DORADO_TUNED": EL_DORADO_TUNED,
+}

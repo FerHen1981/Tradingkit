@@ -59,6 +59,22 @@ def _run_length_negative(delta: np.ndarray) -> np.ndarray:
     return out
 
 
+def _atr(high, low, close, length):
+    """Wilder's ATR (RMA of true range), matching Pine ta.atr."""
+    n = len(close)
+    tr = np.empty(n)
+    tr[0] = high[0] - low[0]
+    for i in range(1, n):
+        pc = close[i - 1]
+        tr[i] = max(high[i] - low[i], abs(high[i] - pc), abs(low[i] - pc))
+    atr = np.empty(n)
+    atr[0] = tr[0]
+    alpha = 1.0 / length
+    for i in range(1, n):
+        atr[i] = atr[i - 1] + alpha * (tr[i] - atr[i - 1])
+    return atr
+
+
 def _session_vwap(hlc3: np.ndarray, vol: np.ndarray, new_session: np.ndarray) -> np.ndarray:
     n = len(hlc3)
     out = np.full(n, np.nan)
@@ -140,6 +156,9 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         bear_cvd = np.ones(n, dtype=bool)
     out["bull_cvd"] = bull_cvd
     out["bear_cvd"] = bear_cvd
+
+    # --- ATR (for ATR unit mode) ----------------------------------------------
+    out["atr"] = _atr(high, low, close, cfg.atr_len)
 
     # --- VWAP veto -------------------------------------------------------------
     if cfg.use_vwap_veto:

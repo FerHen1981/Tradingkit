@@ -30,8 +30,13 @@ def load(csv_path: str) -> pd.DataFrame:
 
     et = pd.to_datetime(df["DateTime"], format="%d-%m-%Y %H:%M:%S %z", errors="coerce")
     if et.isna().any():
+        # fall back to flexible parsing for other instrument exports
+        et = pd.to_datetime(df["DateTime"], errors="coerce", utc=False)
+    if et.isna().any():
         n = int(et.isna().sum())
         raise ValueError(f"{n} DateTime values failed to parse")
+    if et.dt.tz is None:
+        et = et.dt.tz_localize("America/New_York")
     et = et.dt.tz_convert("America/New_York")
 
     df = df.copy()

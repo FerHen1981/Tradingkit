@@ -79,6 +79,7 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "fvg_pass": ind["fvg_pass"].to_numpy(bool),
         "piv_low": ind["piv_low"].to_numpy(),
         "piv_high": ind["piv_high"].to_numpy(),
+        "atr": ind["atr"].to_numpy(),
         "bull_cvd": ind["bull_cvd"].to_numpy(bool),
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
@@ -100,7 +101,7 @@ class Engine:
         self.new_session = a["new_session"]
         self.fvg_dir = a["fvg_dir"]; self.fvg_top = a["fvg_top"]; self.fvg_bot = a["fvg_bot"]
         self.fvg_mid = a["fvg_mid"]; self.fvg_pass = a["fvg_pass"]
-        self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]
+        self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]; self.atr = a["atr"]
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
 
@@ -159,11 +160,26 @@ class Engine:
         # FVG confirmation memory (only if confirm_bars>0)
         self.mem = []  # list of dicts: bar,dir,mid,top,bot
 
+        self._cur_i = self.start_bar
         self.trades: list[Trade] = []
 
     # --------------------------------------------------------------- helpers
-    def _dist(self, ticks: float) -> float:
-        return ticks * self.c.mintick
+    def _dist(self, units: float) -> float:
+        """Convert a strategy distance input to a price distance per unit_mode.
+        Uses the bar currently being processed (self._cur_i) for %/ATR modes."""
+        m = self.cfg.unit_mode
+        if m == "Ticks":
+            return units * self.c.mintick
+        if m == "Points":
+            return units
+        i = self._cur_i
+        if m == "%":
+            return self.close[i] * units / 100.0
+        return units * self.atr[i]   # ATR mode
+
+    def _slip(self) -> float:
+        """Slippage is always in ticks, independent of unit_mode."""
+        return self.c.slippage_ticks * self.c.mintick
 
     def _open_profit(self, i: int) -> float:
         if self.pos == 0:
@@ -200,6 +216,7 @@ class Engine:
     def run(self, end_bar: Optional[int] = None) -> Result:
         end = self.n if end_bar is None else min(end_bar, self.n)
         for i in range(self.start_bar, end):
+            self._cur_i = i
             self._broker(i)
             self._strategy(i)
             if self.acct_halted and self.pos == 0 and self.pend_dir == 0:
@@ -266,7 +283,7 @@ class Engine:
         self._manage_position(i)
 
     def _check_bracket(self, i: int):
-        slip = self._dist(self.c.slippage_ticks)
+        slip = self._slip()
         if self.pos > 0:
             hit_stop = self.low[i] <= self.cur_stop
             hit_tp = (not np.isnan(self.cur_limit)) and self.high[i] >= self.cur_limit
@@ -296,7 +313,7 @@ class Engine:
         d = int(np.sign(self.pos))
         qty = abs(self.pos)
         if slippage:
-            px = px - d * self._dist(self.c.slippage_ticks)
+            px = px - d * self._slip()
         gross = (px - self.entry_avg) * d * qty * self.c.pointvalue
         comm = 2 * self.c.commission_per_contract * qty
         net = gross - comm

@@ -62,6 +62,26 @@ Two decisive conclusions:
 - **Do not** adopt the high-R / wide-trail combos — they are in-sample artefacts.
 - Leave break-even and trailing near default (no robust improvement found).
 
+## 3b. El Toro — signal-filter optimisation (walk-forward validated)
+
+El Toro's money-management is already tuned for pass-rate (see code_review D3);
+the lever is the **signal**. Measured by the eval funnel (fresh eval every 5
+sessions, 20-session horizon), IS 2y / OOS 1y:
+
+| config | IS pass | OOS pass |
+|---|---:|---:|
+| DEFAULT | 29.8% | 27.7% |
+| **RTH hours 09-15 ET** | 32.7% | **38.3%** |
+| RTH + delta-streak 2 | 31.7% | **46.8%** |
+
+- **Restricting entries to the US regular session (09-15 ET)** improves pass-rate
+  in-sample *and* out-of-sample — robust. Shipped as `EL_TORO_TUNED`.
+- Loosening the delta streak (4→2) adds more OOS pass-rate but the in-sample gain
+  is smaller (more regime-dependent); offer as an aggressive option, not default.
+- The **recovery-trail** (code_review A1) is worth ~+4pp pass-rate when it works
+  (29.1% vs 25.2%). In the eval funnel each account is fresh so it already fires;
+  **fix A1 in the Pine** so it also works in continuous/live use.
+
 ## 4. Honest caveats
 
 - This is a **conservative-fill** independent engine (stop-first intrabar,

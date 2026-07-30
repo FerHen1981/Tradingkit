@@ -13,7 +13,7 @@ import time
 
 from . import data as data_mod
 from . import indicators as ind_mod
-from .config import PRESETS
+from .config import PRESETS, contract
 from .engine import Engine
 from .funnel import run_funnel, summarize
 from .metrics import kpis, trades_frame
@@ -57,6 +57,9 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--preset", choices=list(PRESETS))
     ap.add_argument("--all", action="store_true", help="run both presets")
+    ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
+    ap.add_argument("--unit-mode", choices=["Ticks", "Points", "%", "ATR"],
+                    help="override distance unit (use ATR to port a config across instruments)")
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
@@ -73,6 +76,10 @@ def main():
     out = {}
     for name in presets:
         cfg = PRESETS[name]
+        if args.symbol:
+            cfg = cfg.with_(contract=contract(args.symbol))
+        if args.unit_mode:
+            cfg = cfg.with_(unit_mode=args.unit_mode)
         if args.funnel:
             ind = ind_mod.compute(df, cfg)
             t0 = time.time()

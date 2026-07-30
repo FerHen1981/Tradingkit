@@ -1,0 +1,16 @@
+# Data (large; keep out of git)
+*.csv
+*.zip
+nqdata/
+data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Outputs
+*.out
+trades*.csv

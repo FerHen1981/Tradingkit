@@ -396,7 +396,10 @@ class Engine:
 
         # --- account overlay (may set day_halted / acct_halted / bank payout) ---
         if not self.research and cfg.phase_on:
-            self._account(i)
+            if cfg.is_static:
+                self._account_static(i)
+            else:
+                self._account(i)
 
         day_halted = self.day_halted
         flat_win = self._in_flat_window(i)
@@ -537,6 +540,38 @@ class Engine:
                 self.pa_payouts_this_cycle = 0
                 self.acct_hwm = np.nan
                 self.pa_reset_pnl_prev = self.net_profit
+
+    def _account_static(self, i: int):
+        """FTMO-style static account: fixed max-overall-loss (from the initial
+        balance, never trails) + a daily loss limit measured from the day's start.
+        Challenge passes at the profit target; any breach fails the account.
+        `acct_trail_dd` is reused as the fixed max overall loss ($); `acct_goal`
+        the target ($); `acct_dll` the daily loss ($)."""
+        cfg = self.cfg
+        if self.risk_base is None:
+            self.risk_base = self.net_profit
+        today = self.net_profit - self.risk_base
+        running = today + self._open_profit(i)          # incl. floating (equity basis)
+        total = self.net_profit + self._open_profit(i)   # from initial (offset 0)
+
+        if self.acct_halted:
+            return
+        # daily loss limit -> whole account fails (FTMO)
+        if cfg.acct_dll and running <= -cfg.acct_dll:
+            self.acct_halted = True
+            self.acct_halt_reason = "FAILED (daily loss)"
+            self.day_halted = True
+            self.halt_reason = "FAILED (daily loss)"
+            return
+        # fixed max overall loss (does NOT trail)
+        if total <= -cfg.acct_trail_dd:
+            self.acct_halted = True
+            self.acct_halt_reason = "FAILED (max loss)"
+            return
+        # challenge passed
+        if cfg.phase == "FTMO Challenge" and self.net_profit >= cfg.acct_goal:
+            self.acct_halted = True
+            self.acct_halt_reason = "CHALLENGE PASSED"
 
     # -------------------------------------------------------------- signals
     def _signal(self, i: int, can_trade: bool):

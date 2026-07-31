@@ -30,7 +30,7 @@ notes, source, as_of`.
 | drawdown_type | firms (seed) | status |
 |---|---|---|
 | intraday_trailing / eod_trailing | **Apex**, **Topstep** (futures) | ✅ runs on the current overlay |
-| static (fixed max-loss + daily) | **FTMO** (forex) | 🟡 data captured; needs the FTMO/static overlay (planned) |
+| static (fixed max-loss + daily) | **FTMO**, FundedNext (forex) | ✅ runs (FTMO/static overlay shipped; NQ-mechanics-validated, real FX needs FX data + lot sizing) |
 
 The current `engine._account` models trailing-drawdown (Apex/Topstep) firms.
 Static-drawdown firms (FTMO and most forex/CFD firms) are stored as data and map

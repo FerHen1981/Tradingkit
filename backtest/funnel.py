@@ -43,9 +43,10 @@ def run_funnel(cfg: Config, df: pd.DataFrame, ind: pd.DataFrame,
         eb = int(starts[si + horizon_sessions]) if si + horizon_sessions < len(starts) else len(df)
         eng = Engine(cfg, research_mode=False, start_bar=sb, arrays=arrays)
         res = eng.run(end_bar=eb)
-        if eng.acct_halt_reason.startswith("EVAL PASSED"):
+        reason = eng.acct_halt_reason
+        if "PASSED" in reason:                 # "EVAL PASSED" or "CHALLENGE PASSED"
             r = "PASS"
-        elif eng.acct_halt_reason.startswith("TRAILING"):
+        elif "TRAILING" in reason or "FAILED" in reason:
             r = "BREACH"
         else:
             r = "TIMEOUT"

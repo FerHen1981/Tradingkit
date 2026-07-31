@@ -47,8 +47,9 @@ class Program:
 
     @property
     def executable_now(self) -> bool:
-        """Whether engine._account can run this firm as-is (trailing DD)."""
-        return self.drawdown_type in ("intraday_trailing", "eod_trailing")
+        """Whether the engine can run this firm: trailing (Apex/Topstep) or
+        static (FTMO) — both overlays now exist. 'scaling' is not modelled yet."""
+        return self.drawdown_type in ("intraday_trailing", "eod_trailing", "static")
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +201,19 @@ def to_overlay(p: Program) -> dict:
     """
     if not p.executable_now:
         return {"phase": "Research", "initial_capital": p.account_size}
+    if p.drawdown_type == "static":            # FTMO-style
+        phase = "FTMO Challenge" if p.stage == "eval" else "FTMO Funded"
+        return {
+            "phase": phase,
+            "dd_model": "Static",
+            "initial_capital": p.account_size,
+            "acct_trail_dd": p.drawdown,        # fixed max overall loss ($)
+            "acct_goal": p.profit_target if p.profit_target else 0.0,
+            "acct_dll": p.max_daily_loss if p.max_daily_loss else 0.0,
+        }
     dd_model = "EOD" if p.drawdown_type == "eod_trailing" else "Intraday"
     phase = "Apex Eval" if p.stage == "eval" else "Apex PA"
-    ov = {
+    return {
         "phase": phase,
         "dd_model": dd_model,
         "initial_capital": p.account_size,
@@ -211,4 +222,3 @@ def to_overlay(p: Program) -> dict:
         "acct_dll": p.max_daily_loss if p.max_daily_loss else 1_000.0,
         "consistency_pct": p.consistency_pct if p.consistency_pct else 50.0,
     }
-    return ov

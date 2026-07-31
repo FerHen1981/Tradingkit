@@ -128,11 +128,13 @@ class Config:
     day_trail_usd: float = 75.0
     day_cap_usd: float = 300.0
 
-    # --- account phase (Apex) ---
-    phase: str = "Research"              # "Research" | "Apex Eval" | "Apex PA"
-    dd_model: str = "Intraday"           # "Intraday" | "EOD"
-    acct_trail_dd: float = 2000.0
-    acct_goal: float = 3000.0            # Eval profit target
+    # --- account phase ---
+    # Apex-style trailing: phase Apex Eval/PA + dd_model Intraday/EOD.
+    # FTMO-style static:   phase FTMO Challenge/Funded + dd_model Static.
+    phase: str = "Research"              # Research | Apex Eval | Apex PA | FTMO Challenge | FTMO Funded
+    dd_model: str = "Intraday"           # "Intraday" | "EOD" | "Static"
+    acct_trail_dd: float = 2000.0        # trailing DD ($) — or, for Static, the fixed max overall loss ($)
+    acct_goal: float = 3000.0            # Eval/Challenge profit target ($)
     acct_dll: float = 1000.0             # PA daily loss limit
     consistency_pct: float = 50.0
     min_payout: float = 500.0
@@ -155,8 +157,16 @@ class Config:
         return self.phase == "Apex PA"
 
     @property
+    def is_static(self) -> bool:
+        return self.dd_model == "Static"
+
+    @property
+    def is_ftmo(self) -> bool:
+        return self.phase in ("FTMO Challenge", "FTMO Funded")
+
+    @property
     def phase_on(self) -> bool:
-        return self.is_eval or self.is_pa
+        return self.phase in ("Apex Eval", "Apex PA", "FTMO Challenge", "FTMO Funded")
 
     def ticks(self, n: float) -> float:
         """Convert a tick-unit input to a price distance."""

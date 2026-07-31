@@ -70,9 +70,16 @@ class Config:
     unit_mode: str = "Ticks"             # "Ticks" | "Points" | "%" | "ATR"
     atr_len: int = 14
 
-    # --- position sizing (Fixed contracts) ---
+    # --- position sizing ---
+    # "fixed"     : fixed contract_size (the Pine default)
+    # "target_dd" : target-driven — risk a fraction of the remaining trailing-DD
+    #               room per trade, so size scales with how much runway is left
+    #               (big early / when far from the floor, small near breach).
+    sizing_mode: str = "fixed"           # "fixed" | "target_dd"
+    target_risk_frac: float = 0.5        # fraction of DD room risked per trade (target_dd)
     contract_size: float = 2.0
     max_qty: float = 100.0
+    min_qty: float = 1.0
 
     # --- entry & stop ---
     entry_limit_mode: bool = True        # "Limit @ 50% FVG" vs market

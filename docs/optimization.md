@@ -93,3 +93,30 @@ sessions, 20-session horizon), IS 2y / OOS 1y:
   proxy, not net profit after account costs.
 - One 3-year sample, one instrument. Re-validate on the full 10-year set and on
   a second instrument before trusting it live.
+
+## 5. Target-driven position sizing — assessment (Python prototype)
+
+Idea (user): stop using a fixed contract count; for **eval** size from the profit
+goal, for **funded** find the optimum from the same target-driven thinking.
+
+Implemented as `sizing_mode="target_dd"`: risk a fraction of the remaining
+trailing-DD room per trade (size grows with runway, shrinks to 0 near the floor).
+Result on NQ:
+
+| | fixed | target_dd (frac 0.15–0.4) |
+|---|---|---|
+| **Eval** (Matador+RTH) pass-rate | 41% | 19% at frac 0.3 (mostly timeouts) |
+| **Funded** (Dorado tuned) banked / breaches | $9k / 28 | $0 / 0, ~20–57 trades |
+
+**Verdict:** the idea is architecturally *correct* — sizing should follow the
+objective + constraints, not a fixed count — but it exposes the real problem
+rather than solving it. On a **marginal/negative-edge** signal, DD-fraction
+sizing degenerates: for the eval it must gamble (fixed-aggressive already wins
+the variance play), and for funded it correctly sizes *down to nothing*
+(banked $0, 0 breaches) because there is no edge to compound. **No sizing scheme
+manufactures edge.**
+
+Target-driven sizing becomes powerful **once a positive-edge config is locked in**
+(hour-filter + EOD model + regime selection). Kept in the backtester
+(`sizing_mode`, `target_risk_frac`) for that stage; deliberately **not** put into
+the Pine yet.

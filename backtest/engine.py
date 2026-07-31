@@ -152,6 +152,7 @@ class Engine:
         self.pa_total_banked = 0.0
         self.acct_halted = False
         self.acct_halt_reason = ""
+        self.dd_room = None          # remaining trailing-DD room ($), for target_dd sizing
 
         # recovery-trail attempt tracking
         self.attempt_trade_no = 0
@@ -187,7 +188,15 @@ class Engine:
         return (self.close[i] - self.entry_avg) * np.sign(self.pos) * abs(self.pos) * self.c.pointvalue
 
     def _calc_qty(self, stop_dist: float) -> float:
-        q = min(self.cfg.contract_size, self.cfg.max_qty)
+        cfg = self.cfg
+        # target-driven: risk a fraction of the remaining trailing-DD room per
+        # trade. Size grows with runway and shrinks to 0 near the floor (protect).
+        if (cfg.sizing_mode == "target_dd" and not self.research and cfg.phase_on
+                and self.dd_room is not None and stop_dist > 0):
+            risk_usd = max(self.dd_room, 0.0) * cfg.target_risk_frac
+            q = risk_usd / (stop_dist * self.c.pointvalue)
+            return float(np.floor(min(q, cfg.max_qty)))   # <1 -> 0 -> trade skipped
+        q = min(cfg.contract_size, cfg.max_qty)
         return float(np.floor(q))
 
     # ------------------------------------------------------------ time gate
@@ -483,6 +492,7 @@ class Engine:
             self.acct_hwm = 0.0
         acct_locked = self.acct_hwm >= cfg.acct_trail_dd + 100
         acct_floor = 100.0 if acct_locked else self.acct_hwm - cfg.acct_trail_dd
+        self.dd_room = acct_pnl - acct_floor          # runway before a trailing breach
 
         consistency_ok = self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0
         eff_nr = min(self.pa_payouts_this_cycle + 1, 6)

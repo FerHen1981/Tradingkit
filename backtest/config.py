@@ -46,6 +46,15 @@ CONTRACTS = {
     "6A": Contract("6A", 0.0001, 100000.0, 1.75),   # AUD, $10/tick
     "6S": Contract("6S", 0.0001, 125000.0, 1.75),   # CHF, $12.50/tick
     "6C": Contract("6C", 0.00005, 100000.0, 1.75),  # CAD, $5/tick
+    # Spot FX (MT4/5/FTMO): qty in LOTS, 1 lot = 100k units, pointvalue = 100000
+    # (USD-quote pairs give USD P&L directly; JPY-quote P&L is approximate — the
+    # true pip value needs the live quote-currency rate). commission ~$3.5/lot/side.
+    "EURUSD": Contract("EURUSD", 0.00001, 100000.0, 3.5),
+    "GBPUSD": Contract("GBPUSD", 0.00001, 100000.0, 3.5),
+    "AUDUSD": Contract("AUDUSD", 0.00001, 100000.0, 3.5),
+    "EURGBP": Contract("EURGBP", 0.00001, 100000.0, 3.5),
+    "USDJPY": Contract("USDJPY", 0.001, 100000.0, 3.5),   # JPY-quote: P&L approximate
+    "CADJPY": Contract("CADJPY", 0.001, 100000.0, 3.5),   # JPY-quote: P&L approximate
 }
 
 
@@ -75,8 +84,14 @@ class Config:
     # "target_dd" : target-driven — risk a fraction of the remaining trailing-DD
     #               room per trade, so size scales with how much runway is left
     #               (big early / when far from the floor, small near breach).
-    sizing_mode: str = "fixed"           # "fixed" | "target_dd"
+    #  "fixed"     : fixed contract_size (futures default)
+    #  "target_dd" : risk a fraction of remaining trailing-DD room
+    #  "pct_risk"  : risk pct_risk_per_trade % of account balance per trade
+    #                (the forex/FTMO primitive — lots computed from the stop)
+    sizing_mode: str = "fixed"           # "fixed" | "target_dd" | "pct_risk"
     target_risk_frac: float = 0.5        # fraction of DD room risked per trade (target_dd)
+    pct_risk_per_trade: float = 0.5      # % of balance risked per trade (pct_risk)
+    fractional_qty: bool = False         # True for forex lots (0.01), False for whole contracts
     contract_size: float = 2.0
     max_qty: float = 100.0
     min_qty: float = 1.0

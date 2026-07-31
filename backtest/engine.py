@@ -196,6 +196,12 @@ class Engine:
             risk_usd = max(self.dd_room, 0.0) * cfg.target_risk_frac
             q = risk_usd / (stop_dist * self.c.pointvalue)
             return float(np.floor(min(q, cfg.max_qty)))   # <1 -> 0 -> trade skipped
+        # % of account balance risked per trade (forex/FTMO primitive)
+        if cfg.sizing_mode == "pct_risk" and stop_dist > 0:
+            bal = cfg.initial_capital + self.net_profit
+            risk_usd = bal * cfg.pct_risk_per_trade / 100.0
+            q = min(risk_usd / (stop_dist * self.c.pointvalue), cfg.max_qty)
+            return round(q, 2) if cfg.fractional_qty else float(np.floor(q))
         q = min(cfg.contract_size, cfg.max_qty)
         return float(np.floor(q))
 

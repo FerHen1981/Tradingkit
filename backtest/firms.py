@@ -203,7 +203,7 @@ def to_overlay(p: Program) -> dict:
         return {"phase": "Research", "initial_capital": p.account_size}
     if p.drawdown_type == "static":            # FTMO-style
         phase = "FTMO Challenge" if p.stage == "eval" else "FTMO Funded"
-        return {
+        ov = {
             "phase": phase,
             "dd_model": "Static",
             "initial_capital": p.account_size,
@@ -211,6 +211,10 @@ def to_overlay(p: Program) -> dict:
             "acct_goal": p.profit_target if p.profit_target else 0.0,
             "acct_dll": p.max_daily_loss if p.max_daily_loss else 0.0,
         }
+        # forex/CFD firms size in lots/%-risk, not fixed contracts
+        if p.asset_class in ("forex", "cfd", "crypto"):
+            ov.update(sizing_mode="pct_risk", fractional_qty=True)
+        return ov
     dd_model = "EOD" if p.drawdown_type == "eod_trailing" else "Intraday"
     phase = "Apex Eval" if p.stage == "eval" else "Apex PA"
     return {

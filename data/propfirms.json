@@ -1,0 +1,168 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-07-31",
+  "value_unit_note": "Rule values carry a unit ('usd' or 'pct'). % is of account size unless noted. VERIFY all — rules change; verified=false means Claude-drafted, not human-confirmed.",
+  "programs": [
+    {
+      "key": "apex_50k_intraday_eval",
+      "firm": "Apex", "display_name": "Apex 50K — Eval (Intraday DD)",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 50000, "currency": "USD", "fee": 167, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 3000, "unit": "usd"},
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 2500, "unit": "usd"},
+        "drawdown_type": "intraday_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2600, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
+        "max_position": {"value": 10, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 1.0, "split_scaling": "100% first $25k then 90/10", "payout_cadence": null,
+        "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "propfirmmatch.com; velotrade/quantcrawler 2026", "as_of": "2026-07", "verified": false,
+        "notes": "One-step eval -> PA. Apex 4.0 (Mar 2026): no overnight, payout cap on the PA."}
+    },
+    {
+      "key": "apex_50k_eod_eval",
+      "firm": "Apex", "display_name": "Apex 50K — Eval (EOD DD)",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 50000, "currency": "USD", "fee": 167, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 3000, "unit": "usd"},
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 2500, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2600, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
+        "max_position": {"value": 10, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 1.0, "split_scaling": "100% first $25k then 90/10", "payout_cadence": null,
+        "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "propfirmmatch.com; velotrade/quantcrawler 2026", "as_of": "2026-07", "verified": false,
+        "notes": "EOD trailing = intraday dips that recover don't count. Milder than intraday."}
+    },
+    {
+      "key": "apex_50k_eod_pa",
+      "firm": "Apex", "display_name": "Apex 50K — Funded PA (EOD DD)",
+      "status": "active", "asset_class": "futures", "stage": "funded", "eval_steps": null,
+      "account": {"size": 50000, "currency": "USD", "fee": null, "fee_refundable": null, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": {"value": 1000, "unit": "usd"},
+        "max_overall_loss": {"value": 2500, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2600, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null,
+        "consistency": {"type": "max_day_pct_of_total", "value": 50},
+        "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
+        "max_position": {"value": 10, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": "100% first $25k then 90/10",
+        "payout_cadence": "ladder", "first_payout_wait_days": null, "min_payout": 500, "payout_cap": null,
+        "payout_ladder": [1500, 1500, 2000, 2500, 2500, 3000], "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "Apex rulebook; propfirmmatch 2026", "as_of": "2026-07", "verified": false,
+        "notes": "6-step payout ladder, 50% consistency, min payout $500."}
+    },
+    {
+      "key": "topstep_50k_eval",
+      "firm": "Topstep", "display_name": "Topstep 50K — Combine",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 50000, "currency": "USD", "fee": 49, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 3000, "unit": "usd"},
+        "max_daily_loss": {"value": 1000, "unit": "usd"},
+        "max_overall_loss": {"value": 2000, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2000, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 2, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
+        "max_position": {"value": 5, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": null, "payout_cadence": "weekly",
+        "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "phidias/velotrade 2026", "as_of": "2026-07", "verified": false,
+        "notes": "EOD trailing, floor locks at start balance. 90/10 split, weekly payouts. VERIFY 100k/150k sizes."}
+    },
+    {
+      "key": "mffu_50k_eval",
+      "firm": "MyFundedFutures", "display_name": "MFFU 50K — Eval (no DLL)",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 50000, "currency": "USD", "fee": null, "fee_refundable": null, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 3000, "unit": "usd"},
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 2000, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2000, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": null, "weekend_allowed": null, "news_allowed": true,
+        "max_position": null, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": null, "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate", "ProjectX"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "newyorkcityservers/phidias 2026", "as_of": "2026-07", "verified": false,
+        "notes": "No daily loss limit in eval; only EOD balance vs trailing threshold. Fast payouts. VERIFY exact target/DD per plan."}
+    },
+    {
+      "key": "ftmo_100k_challenge",
+      "firm": "FTMO", "display_name": "FTMO 100K — Challenge (2-step)",
+      "status": "active", "asset_class": "forex", "stage": "eval", "eval_steps": 2,
+      "account": {"size": 100000, "currency": "USD", "fee": 540, "fee_refundable": true, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 10, "unit": "pct"},
+        "profit_target_step2": {"value": 5, "unit": "pct"},
+        "max_daily_loss": {"value": 5, "unit": "pct"},
+        "max_overall_loss": {"value": 10, "unit": "pct"},
+        "drawdown_type": "static", "drawdown_basis": "balance",
+        "trailing_locks_at": null
+      },
+      "trading_rules": {"min_trading_days": 0, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": true, "weekend_allowed": false, "news_allowed": true,
+        "max_position": null, "scaling_plan": "scale to ~$2M"},
+      "funded": {"profit_split": 0.80, "split_scaling": "80% -> 90%", "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["MT4", "MT5", "cTrader", "DXtrade"], "data_feed": "broker",
+        "sizing_unit": "pct_risk", "default_symbol": "EURUSD", "symbol_map": {}},
+      "meta": {"source": "lune/journalplus FTMO 2026", "as_of": "2026-07", "verified": false,
+        "notes": "STATIC 10% max loss from initial + 5% daily. Fee refunded on 1st payout. Needs the static/FTMO overlay to execute."}
+    },
+    {
+      "key": "fundednext_15k_challenge",
+      "firm": "FundedNext", "display_name": "FundedNext 15K — Challenge (2-step, eval profit share)",
+      "status": "active", "asset_class": "forex", "stage": "eval", "eval_steps": 2,
+      "account": {"size": 15000, "currency": "USD", "fee": 99, "fee_refundable": true, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 8, "unit": "pct"},
+        "profit_target_step2": {"value": 5, "unit": "pct"},
+        "max_daily_loss": {"value": 5, "unit": "pct"},
+        "max_overall_loss": {"value": 10, "unit": "pct"},
+        "drawdown_type": "static", "drawdown_basis": "balance",
+        "trailing_locks_at": null
+      },
+      "trading_rules": {"min_trading_days": 0, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": true, "weekend_allowed": true, "news_allowed": true,
+        "max_position": null, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": "up to 95%", "payout_cadence": "biweekly",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": 0.15},
+      "execution": {"platforms": ["MT4", "MT5", "cTrader", "Match-Trader"], "data_feed": "broker",
+        "sizing_unit": "pct_risk", "default_symbol": "EURUSD", "symbol_map": {}},
+      "meta": {"source": "fundednext/tradezella 2026", "as_of": "2026-07", "verified": false,
+        "notes": "Pays 15% of eval-phase profit even on fail. Static DD. Needs the static/FTMO overlay."}
+    }
+  ]
+}

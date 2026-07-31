@@ -1,8 +1,9 @@
-# Data (large; keep out of git)
+# Data (large; keep out of git) — but DO track the prop-firm registry JSON
 *.csv
 *.zip
 nqdata/
-data/
+data/*.csv
+data/*.parquet
 
 # Python
 __pycache__/

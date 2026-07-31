@@ -57,6 +57,7 @@ def main():
     ap.add_argument("--data", required=True)
     ap.add_argument("--preset", choices=list(PRESETS))
     ap.add_argument("--all", action="store_true", help="run both presets")
+    ap.add_argument("--firm", help="prop-firm program key (e.g. apex_100k_eod, topstep_50k_eval) — overlays that firm's account rules; see backtest/firms.py")
     ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
     ap.add_argument("--unit-mode", choices=["Ticks", "Points", "%", "ATR"],
                     help="override distance unit (use ATR to port a config across instruments)")
@@ -76,6 +77,15 @@ def main():
     out = {}
     for name in presets:
         cfg = PRESETS[name]
+        if args.firm:
+            from .firms import program, to_overlay
+            p = program(args.firm)
+            cfg = cfg.with_(**to_overlay(p))
+            if not args.symbol and p.default_contract:
+                cfg = cfg.with_(contract=contract(p.default_contract))
+            if not p.executable_now:
+                print(f"  NOTE: {p.firm} uses {p.drawdown_type} drawdown — runs as Research "
+                      f"(no overlay) until the static/FTMO overlay ships.")
         if args.symbol:
             cfg = cfg.with_(contract=contract(args.symbol))
         if args.unit_mode:

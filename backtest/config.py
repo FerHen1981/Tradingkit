@@ -253,10 +253,19 @@ EL_TORO_TUNED = EL_TORO.with_(
     enabled_hours=frozenset(range(9, 16)),
 )
 
+# Best funder found: EOD drawdown model + RTH hours. Walk-forward: EOD lifts the
+# baseline (OOS 31.9% vs Toro 27.7%) and RTH lifts it further (~41% IS). Keep both
+# DD models available — some accounts are Intraday, not EOD.
+EL_MATADOR_TUNED = EL_MATADOR.with_(
+    name="EL_MATADOR_TUNED",
+    enabled_hours=frozenset(range(9, 16)),
+)
+
 PRESETS = {
     "EL_TORO": EL_TORO,
     "EL_TORO_TUNED": EL_TORO_TUNED,
     "EL_MATADOR": EL_MATADOR,
+    "EL_MATADOR_TUNED": EL_MATADOR_TUNED,
     "EL_DORADO": EL_DORADO,
     "EL_DORADO_TUNED": EL_DORADO_TUNED,
     "EL_PATRON": EL_PATRON,

@@ -231,6 +231,12 @@ EL_DORADO_TUNED = EL_DORADO.with_(
     day_trail_usd=300.0,
 )
 
+# EOD-drawdown siblings (same engine, ddModel="EOD"): the trailing DD ratchets
+# only on the daily *closing* balance, not the intraday unrealised peak — much
+# gentler on giving back open profit.
+EL_MATADOR = EL_TORO.with_(name="EL_MATADOR", dd_model="EOD")     # Eval, EOD
+EL_PATRON = EL_DORADO.with_(name="EL_PATRON", dd_model="EOD")     # Funded/PA, EOD
+
 # Walk-forward-validated El Toro tweak (see docs/optimization.md): restrict
 # entries to the US regular session (09:00-15:59 ET). Pass-rate 29.8->32.7% IS
 # and 27.7->38.3% OOS. Optionally loosen delta streak to 2 (OOS 46.8%, more
@@ -243,6 +249,8 @@ EL_TORO_TUNED = EL_TORO.with_(
 PRESETS = {
     "EL_TORO": EL_TORO,
     "EL_TORO_TUNED": EL_TORO_TUNED,
+    "EL_MATADOR": EL_MATADOR,
     "EL_DORADO": EL_DORADO,
     "EL_DORADO_TUNED": EL_DORADO_TUNED,
+    "EL_PATRON": EL_PATRON,
 }

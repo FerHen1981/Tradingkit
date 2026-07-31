@@ -120,7 +120,55 @@ _SEED = _apex_programs() + [
             source="propfirmmatch.com; lune FTMO review 2026"),
 ]
 
-REGISTRY = {p.key: p for p in _SEED}
+def _amt_usd(a, size):
+    """Convert an {value,unit} amount to USD given the account size."""
+    if a is None:
+        return None
+    return a["value"] if a["unit"] == "usd" else a["value"] / 100.0 * size
+
+
+def _program_from_json(rec: dict) -> Program:
+    size = rec["account"]["size"]
+    tl = rec["targets_limits"]
+    tr = rec.get("trading_rules") or {}
+    fu = rec.get("funded") or {}
+    ex = rec["execution"]
+    cons = tr.get("consistency")
+    return Program(
+        firm=rec["firm"], key=rec["key"], asset_class=rec["asset_class"], stage=rec["stage"],
+        account_size=size,
+        profit_target=_amt_usd(tl.get("profit_target"), size),
+        max_daily_loss=_amt_usd(tl.get("max_daily_loss"), size),
+        drawdown=_amt_usd(tl["max_overall_loss"], size),
+        drawdown_type=tl["drawdown_type"],
+        trailing_locks_at=_amt_usd(tl.get("trailing_locks_at"), size),
+        min_days=tr.get("min_trading_days") or 0,
+        consistency_pct=(cons["value"] if cons else None),
+        profit_split=fu.get("profit_split") or 1.0,
+        activation_fee=rec["account"].get("fee"),
+        payout_cadence=fu.get("payout_cadence") or "",
+        default_contract=ex.get("default_symbol") or "",
+        notes=rec["meta"].get("notes", ""), source=rec["meta"].get("source", ""),
+        as_of=rec["meta"].get("as_of", ""))
+
+
+def _load_json_registry() -> dict:
+    """Load data/propfirms.json (the single source of truth) if present; else the
+    built-in seed. The JSON is the canonical registry consumed by the Pine
+    generator and the middleware too."""
+    import json as _json
+    import os as _os
+    path = _os.path.join(_os.path.dirname(__file__), "..", "data", "propfirms.json")
+    try:
+        with open(path) as f:
+            doc = _json.load(f)
+        progs = [_program_from_json(r) for r in doc["programs"]]
+        return {p.key: p for p in progs}
+    except (FileNotFoundError, KeyError, ValueError):
+        return {p.key: p for p in _SEED}
+
+
+REGISTRY = _load_json_registry()
 
 
 def program(key: str) -> Program:

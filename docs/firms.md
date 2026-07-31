@@ -74,3 +74,26 @@ page text) and I'll add it accurately.
 - https://phidiaspropfirm.com/education/apex-vs-topstep
 - https://lunefi.com/blog/ftmo-an-in-depth-guide-rules-review-and-discount
 - https://journalplus.co/compare/ftmo-vs-apex-trader-funding/
+
+---
+
+## Prepared for Pine (simple inputs)
+
+The scripts will consume the registry through a **tiny** input surface — the
+firm's rules resolve from one dropdown, so the user picks a firm, not 8 numbers.
+
+Minimal inputs to add (group `L6 · Account`):
+```pine
+firmPreset = input.string("apex_50k_eod_eval", "Firm program",
+     options=[ /* auto-generated from data/propfirms.json keys */ ])
+// The generated pf library returns the rule set for the chosen preset:
+[ddType, trailDD, goal, dll, consPct, acctSize] = pf.rules(firmPreset)
+```
+`ddType` → the existing `ddModel` path (`"Intraday"`/`"EOD"`), plus a new
+`"static"` branch (the FTMO overlay). `trailDD/goal/dll/consPct` feed the account
+inputs that already exist — so wiring is: replace the hand-typed account numbers
+with `pf.rules(...)` outputs. Manual override inputs stay for edge cases.
+
+The `pf` library + the `options=[...]` list are **auto-generated** from
+`data/propfirms.json` by a small build script (planned, step 5) so Pine and the
+backtester never diverge. Static-DD firms light up once the FTMO overlay ships.

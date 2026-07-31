@@ -1,0 +1,67 @@
+// AUTO-GENERATED from data/propfirms.json by tools/gen_pine_firms.py — DO NOT EDIT.
+// Single source of truth is the JSON; re-run the generator after editing it.
+//@version=6
+library("PropFirms")
+
+// rules(preset) -> [ddType, maxLoss$, goal$, dll$, consPct, acctSize$]
+// ddType: "Intraday" | "EOD" | "Static". Feed these into the account inputs.
+export rules(string preset) =>
+    string ddType = "Intraday"
+    float maxLoss = 0.0
+    float goal = 0.0
+    float dll = 0.0
+    float consPct = 0.0
+    float acctSize = 0.0
+    if preset == "apex_50k_eod_eval"
+        ddType := "EOD"
+        maxLoss := 2500.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 50.0
+        acctSize := 50000.0
+    else if preset == "apex_50k_eod_pa"
+        ddType := "EOD"
+        maxLoss := 2500.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 50.0
+        acctSize := 50000.0
+    else if preset == "apex_50k_intraday_eval"
+        ddType := "Intraday"
+        maxLoss := 2500.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 50.0
+        acctSize := 50000.0
+    else if preset == "ftmo_100k_challenge"
+        ddType := "Static"
+        maxLoss := 10000.0
+        goal := 10000.0
+        dll := 5000.0
+        consPct := 0.0
+        acctSize := 100000.0
+    else if preset == "fundednext_15k_challenge"
+        ddType := "Static"
+        maxLoss := 1500.0
+        goal := 1200.0
+        dll := 750.0
+        consPct := 0.0
+        acctSize := 15000.0
+    else if preset == "mffu_50k_eval"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 50.0
+        acctSize := 50000.0
+    else if preset == "topstep_50k_eval"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 50.0
+        acctSize := 50000.0
+    [ddType, maxLoss, goal, dll, consPct, acctSize]
+
+// Preset keys (for the strategy's input.string options=[...]):
+// "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "mffu_50k_eval", "topstep_50k_eval"

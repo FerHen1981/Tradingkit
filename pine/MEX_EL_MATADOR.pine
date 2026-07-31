@@ -35,8 +35,8 @@
 // --------------------------------------------------------------------------------------------
 // ============================================================================================
 //@version=6
-// v6.8.8 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 re-arm fix.
-var string currentVersion = "v6.8.8"
+// v6.8.9 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
+var string currentVersion = "v6.8.9"
 strategy("MΞX ΞL MΛTΛDOR · Eval EOD · " + currentVersion, shorttitle="ΞL MΛTΛDOR", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -265,7 +265,7 @@ vwapDistMin   = 0.05
 
 // === DELTA FILTER (vereenvoudigd) ===========================================
 useCVDFilter  = input.bool(true, "Use Delta Filter", group=GROUP_CVD,
-     tooltip="Requires volume data. Per-bar semantics (fixed). Mainly does selection work; the VWAP effect only existed within the delta-filtered subset.")
+     tooltip="Requires volume data. Per-bar semantics (fixed). Mainly does selection work; the VWAP effect only existed within the delta-filtered subset. SPOT FX (EURUSD, USDJPY, ...): there is no real volume, so this AUTOMATICALLY falls back to TICK-VOLUME delta (a weaker proxy). Backtests show the 4-bar Streak adds little even on futures — on FX consider turning the Streak OFF (below), or this whole filter OFF and leaning on FVG + VWAP + time.")
 cvdLowerTf    = input.timeframe("1", "Lower Timeframe for Delta", group=GROUP_CVD, tooltip="Lower timeframe scanned to approximate the volume delta (1 = per-minute polarity, matches the research engine).", display=display.none)
 useCvdStreak  = input.bool(true, "Streak", inline="cv", group=GROUP_CVD, display=display.none)
 cvdTrendCount = input.int(4, "Count", minval=1, inline="cv", group=GROUP_CVD, tooltip="Consecutive same-direction delta bars required.")

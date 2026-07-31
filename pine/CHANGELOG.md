@@ -55,6 +55,22 @@ the recovery-trail active it adds ~+4pp to El Toro's eval pass-rate.
   Patron have the payout/DLL/consistency/MAE inputs), so it is a per-file change.
   Will be done once these memory/recovery fixes are confirmed to compile.
 
+
+## v6.8.9 / v6.8.14 — FX / tick-volume delta note
+
+No engine change. The delta filter already **auto-falls-back to tick-volume**
+on spot-FX charts (which have no real volume), so the scripts run on FX as-is.
+Clarified the *Use Delta Filter* tooltip to say this and to recommend, per the
+CVD contribution test (`docs/forex_delta.md`), turning the **Streak off** (or the
+filter off) on FX. The "borrow a CME FX-future's real delta" idea was dropped:
+it needs a nested `request.security(sym, ta.requestVolumeDelta(...))` which
+Pine generally rejects and would break the whole script.
+
+Target-driven position sizing (size from the eval goal / DD room instead of a
+fixed contract count) was prototyped in the Python backtester, not Pine — see the
+session notes: it is the right architecture but does not manufacture edge, so it
+is held until a positive-edge config is locked in.
+
 ## How to use
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —

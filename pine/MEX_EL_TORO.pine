@@ -36,7 +36,8 @@
 // ============================================================================================
 //@version=6
 // v6.8.9 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
-var string currentVersion = "v6.8.9"
+// v6.8.10: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
+var string currentVersion = "v6.8.10"
 strategy("MΞX ΞL TORO · Eval Intraday · " + currentVersion, shorttitle="ΞL TORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -584,18 +585,24 @@ vetoShortOK = not useVwapVeto or close < vwapVal
 // ============================================================================
 // === DELTA FILTER (per-bar, vereenvoudigd) ==================================
 // ============================================================================
+// v6.8.10 AUTO-GUARD (non-futures assets): the delta filter needs volume.
+// On symbols with no real volume (many CFDs / spot) requestVolumeDelta has no
+// data -> auto-disable it. On forex/CFD (tick-volume proxy) auto-relax the
+// 4-bar streak to direction-only. Futures/crypto keep the full filter.
+bool cvdEff    = useCVDFilter and not na(volume)
+bool streakEff = useCvdStreak and (syminfo.type == "futures" or syminfo.type == "crypto")
 float perBarDelta = na
-if useCVDFilter
+if cvdEff
     [vdO, vdH, vdL, vdC] = ta.requestVolumeDelta(cvdLowerTf, "1D")
     perBarDelta := vdC - vdO
 bullDirOk = perBarDelta > 0
 bearDirOk = perBarDelta < 0
 int barsSinceNotBull = ta.barssince(not bullDirOk)
 int barsSinceNotBear = ta.barssince(not bearDirOk)
-bullStreakOk = not useCvdStreak or nz(barsSinceNotBull, 99999) >= cvdTrendCount
-bearStreakOk = not useCvdStreak or nz(barsSinceNotBear, 99999) >= cvdTrendCount
-bullCvdPass = not useCVDFilter or (bullDirOk and bullStreakOk)
-bearCvdPass = not useCVDFilter or (bearDirOk and bearStreakOk)
+bullStreakOk = not streakEff or nz(barsSinceNotBull, 99999) >= cvdTrendCount
+bearStreakOk = not streakEff or nz(barsSinceNotBear, 99999) >= cvdTrendCount
+bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
+bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
 
 // ============================================================================
 // === DAILY RISK / EQUITY (geünificeerd, gelatcht) ===========================

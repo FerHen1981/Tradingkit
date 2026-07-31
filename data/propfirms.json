@@ -162,7 +162,146 @@
       "execution": {"platforms": ["MT4", "MT5", "cTrader", "Match-Trader"], "data_feed": "broker",
         "sizing_unit": "pct_risk", "default_symbol": "EURUSD", "symbol_map": {}},
       "meta": {"source": "fundednext/tradezella 2026", "as_of": "2026-07", "verified": false,
-        "notes": "Pays 15% of eval-phase profit even on fail. Static DD. Needs the static/FTMO overlay."}
+        "notes": "Pays 15% of eval-phase profit even on fail. Static DD."}
+    },
+    {
+      "key": "daytraders_s2f_25k_instant",
+      "firm": "DayTraders", "display_name": "DayTraders S2F 25K — Instant Live (EOD)",
+      "status": "active", "asset_class": "futures", "stage": "instant", "eval_steps": null,
+      "account": {"size": 25000, "currency": "USD", "fee": null, "fee_refundable": null, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 1000, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 1000, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": null, "weekend_allowed": null, "news_allowed": true,
+        "max_position": {"value": 1, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 1.0, "split_scaling": "100% (live 80%)", "payout_cadence": "on_demand",
+        "first_payout_wait_days": 10, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "propfirmhero/propfirmapp DayTraders 2026", "as_of": "2026-07", "verified": false,
+        "notes": "S2F = INSTANT funded (no eval). No target, $1k EOD-trailing max loss, 1 mini/10 micros, no fee, 10-day payouts. Instant Live variant."}
+    },
+    {
+      "key": "daytraders_static_25k_eval",
+      "firm": "DayTraders", "display_name": "DayTraders 25K — Static eval -> Pro",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 25000, "currency": "USD", "fee": null, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 2500, "unit": "usd"},
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 750, "unit": "usd"},
+        "drawdown_type": "static", "drawdown_basis": "balance",
+        "trailing_locks_at": null
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": null, "weekend_allowed": null, "news_allowed": true,
+        "max_position": {"value": 2, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 1.0, "split_scaling": "100% (live 80%)", "payout_cadence": "on_demand",
+        "first_payout_wait_days": 8, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "propfirmhero/propfirmapp DayTraders 2026", "as_of": "2026-07", "verified": false,
+        "notes": "Static eval: $2.5k target, $750 static max loss, 2 minis/20 micros. Also offers Trail & EOD evals. All DD types available."}
+    },
+    {
+      "key": "takeprofittrader_50k_eval",
+      "firm": "Take Profit Trader", "display_name": "TPT 50K — PRO eval (EOD)",
+      "status": "active", "asset_class": "futures", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 50000, "currency": "USD", "fee": null, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 3000, "unit": "usd"},
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 2000, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 2000, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
+        "max_position": {"value": 5, "unit": "contracts"}, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": "first $10k 100% then 90%", "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["Rithmic", "Tradovate"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "newyorkcityservers/phidias 2026", "as_of": "2026-07", "verified": false,
+        "notes": "EOD trailing, no DLL. VERIFY exact target/DD per size."}
+    },
+    {
+      "key": "tradeify_advanced_25k_instant",
+      "firm": "Tradeify", "display_name": "Tradeify Advanced 25K — Instant (EOD)",
+      "status": "active", "asset_class": "futures", "stage": "instant", "eval_steps": null,
+      "account": {"size": 25000, "currency": "USD", "fee": null, "fee_refundable": null, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {"value": 1500, "unit": "usd"},
+        "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
+        "trailing_locks_at": {"value": 1500, "unit": "usd"}
+      },
+      "trading_rules": {"min_trading_days": 1, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": null, "weekend_allowed": null, "news_allowed": true,
+        "max_position": null, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": null, "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["Tradovate", "Rithmic"], "data_feed": "CME",
+        "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
+      "meta": {"source": "phidias/newyorkcityservers 2026", "as_of": "2026-07", "verified": false,
+        "notes": "Instant funding, 90% split. VERIFY size/DD table."}
+    },
+    {
+      "key": "the5ers_hypergrowth_5k",
+      "firm": "The5ers", "display_name": "The5ers Hyper-Growth 5K",
+      "status": "active", "asset_class": "forex", "stage": "eval", "eval_steps": 1,
+      "account": {"size": 5000, "currency": "USD", "fee": 39, "fee_refundable": false, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 8, "unit": "pct"},
+        "max_daily_loss": {"value": 5, "unit": "pct"},
+        "max_overall_loss": {"value": 10, "unit": "pct"},
+        "drawdown_type": "static", "drawdown_basis": "balance",
+        "trailing_locks_at": null
+      },
+      "trading_rules": {"min_trading_days": 3, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": true, "weekend_allowed": true, "news_allowed": true,
+        "max_position": null, "scaling_plan": "scale to ~$4M"},
+      "funded": {"profit_split": 0.80, "split_scaling": "up to 100%", "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["MT4", "MT5"], "data_feed": "broker",
+        "sizing_unit": "pct_risk", "default_symbol": "EURUSD", "symbol_map": {}},
+      "meta": {"source": "fxnx/onlinepropfirm The5ers 2026", "as_of": "2026-07", "verified": false,
+        "notes": "Static DD, aggressive scaling. VERIFY targets per program (Bootcamp vs Hyper-Growth)."}
+    },
+    {
+      "key": "fundingpips_10k_eval",
+      "firm": "FundingPips", "display_name": "FundingPips 10K — Challenge",
+      "status": "active", "asset_class": "forex", "stage": "eval", "eval_steps": 2,
+      "account": {"size": 10000, "currency": "USD", "fee": 59, "fee_refundable": true, "reset_fee": null},
+      "targets_limits": {
+        "profit_target": {"value": 8, "unit": "pct"},
+        "profit_target_step2": {"value": 5, "unit": "pct"},
+        "max_daily_loss": {"value": 5, "unit": "pct"},
+        "max_overall_loss": {"value": 10, "unit": "pct"},
+        "drawdown_type": "static", "drawdown_basis": "balance",
+        "trailing_locks_at": null
+      },
+      "trading_rules": {"min_trading_days": 0, "max_trading_days": null, "consistency": null,
+        "overnight_allowed": true, "weekend_allowed": true, "news_allowed": true,
+        "max_position": null, "scaling_plan": null},
+      "funded": {"profit_split": 0.90, "split_scaling": "up to 95% (consistency-gated)", "payout_cadence": "on_demand",
+        "first_payout_wait_days": null, "min_payout": null, "payout_cap": null, "payout_ladder": null,
+        "in_eval_profit_share": null},
+      "execution": {"platforms": ["MT5", "cTrader", "TradeLocker"], "data_feed": "broker",
+        "sizing_unit": "pct_risk", "default_symbol": "EURUSD", "symbol_map": {}},
+      "meta": {"source": "fundedea-algo/thepropfirmguide 2026", "as_of": "2026-07", "verified": false,
+        "notes": "Static DD. Split up to 95% based on consistency. VERIFY current step structure."}
     }
   ]
 }

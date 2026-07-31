@@ -71,6 +71,18 @@ fixed contract count) was prototyped in the Python backtester, not Pine — see 
 session notes: it is the right architecture but does not manufacture edge, so it
 is held until a positive-edge config is locked in.
 
+## v6.8.10 / v6.8.15 — auto-guard the delta filter on non-futures assets
+
+The CVD/delta filter needs volume. Added an auto-guard so the scripts behave on
+Forex / CFD / Spot / Crypto / Commodities without manual toggling:
+- `cvdEff = useCVDFilter and not na(volume)` — on symbols with **no real volume**
+  (many CFDs/spot) the filter auto-disables (and `ta.requestVolumeDelta` is not
+  called, avoiding a no-data runtime error).
+- `streakEff = useCvdStreak and (syminfo.type=="futures" or "crypto")` — on
+  **forex/CFD** (tick-volume proxy) the 4-bar streak auto-relaxes to
+  direction-only; futures/crypto keep the full filter.
+Purely a robustness guard; on futures nothing changes. Bundles with v6.8.9.
+
 ## How to use
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —

@@ -20,6 +20,7 @@ from .dedupe import Deduper
 from .journal import Journal
 from .models import Signal
 from .notify import alert_failure
+from .risk import RiskState
 from .router import dispatch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -31,6 +32,7 @@ settings = Settings()
 accounts = load_accounts(settings.accounts_file)
 journal = Journal(settings.journal_db)
 deduper = Deduper(settings.idem_ttl)
+risk = RiskState(settings.max_entries_default)
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
@@ -75,7 +77,7 @@ async def webhook(request: Request) -> dict:
         log.warning("duplicate signal within %ss — skipped", settings.idem_ttl)
         return {"accepted": True, "dispatched": False, "reason": "duplicate (idempotency)"}
 
-    results = await dispatch(sig, accounts, settings)
+    results = await dispatch(sig, accounts, settings, risk)
     failures = [r for r in results if r.get("status") == "error"]
     for r in results:
         journal.write("dispatch", r, strategy=sig.strategy, account=r.get("account", ""))
@@ -99,3 +101,19 @@ def killswitch(secret: str, armed: bool) -> dict:
     STATE["armed"] = armed
     log.warning("kill-switch set armed=%s", armed)
     return {"armed": STATE["armed"]}
+
+
+@app.get("/risk")
+def risk_state(secret: str) -> dict:
+    _check_secret(secret)
+    return risk.snapshot()
+
+
+@app.post("/halt")
+def halt(secret: str, account: str, halted: bool = True) -> dict:
+    """Halt (or resume) new entries for one account — e.g. when it hits its daily-loss
+    limit. Exits are never blocked. Halts auto-clear at the next trading-day rollover."""
+    _check_secret(secret)
+    (risk.halt if halted else risk.resume)(account)
+    log.warning("risk halt account=%s halted=%s", account, halted)
+    return risk.snapshot()

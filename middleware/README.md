@@ -72,5 +72,7 @@ lives here, not in the alert. (Kept out of scope for Phase 0.)
 - [x] Phase 2 — Pine "→ Middleware" alert (v6.9.1) — contract verified against the Signal model
 - [x] Phase 4 — idempotency (dedupe within IDEM_TTL), PMT retries w/ backoff (5xx only), failure alerts
 - [x] Phase 3 — PineConnector (MT5/FTMO) broker + cross-firm fan-out (one signal → Apex + FTMO)
-- [ ] Phase 5 — risk overlays (consistency-rule / daily-loss mirror per account)
+- [x] Phase 5 — risk overlay: per-account daily entry cap + halt flag (`/halt`, `/risk`);
+      exits never blocked. Full DLL/consistency ($) enforcement is dormant until a PnL
+      feed is wired to `RiskState.record_fill` (Phase 5b).
 - [ ] Go-live — VPS deploy, tokens, TradingView alerts, flip one account to DRY_RUN=false

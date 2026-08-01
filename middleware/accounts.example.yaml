@@ -17,6 +17,7 @@ accounts:
     account_id: "APEX-1234567"      # Tradovate account id in PMT
     quantity_multiplier: 1          # scales base qty for this account (size control)
     symbol_override: null           # e.g. "MGC1!" if this account trades micros
+    max_entries_per_day: 0          # risk overlay: 0 = unlimited; set e.g. 4 to cap new entries/day
   apex_f2:
     broker: pmt_tradovate
     token: "${PMT_TOKEN}"

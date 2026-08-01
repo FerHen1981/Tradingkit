@@ -39,6 +39,8 @@ class Settings:
     retry_max: int = int(os.environ.get("RETRY_MAX", "3"))                 # PMT POST attempts on network/5xx
     retry_backoff: float = float(os.environ.get("RETRY_BACKOFF_SECONDS", "0.5"))
     alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
+    # Phase 5 — risk overlay
+    max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)
 
 
 @dataclass

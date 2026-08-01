@@ -36,6 +36,7 @@ CONTRACTS = {
     "RTY": Contract("RTY", 0.10, 50.0, 1.55),
     # metals / energy
     "GC": Contract("GC", 0.10, 100.0, 1.75),   # gold, $10/tick
+    "SI": Contract("SI", 0.005, 5000.0, 1.75), # silver, 5000oz, $25/tick
     "CL": Contract("CL", 0.01, 1000.0, 1.75),  # crude, $10/tick
     # crypto (CME BTC future = 5 BTC; VERIFY — may be MBT micro in your data)
     "BTC": Contract("BTC", 5.0, 5.0, 5.0),     # $25/tick

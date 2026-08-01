@@ -1,0 +1,26 @@
+# Account map — copy to accounts.yaml (git-ignored) and fill in your real accounts.
+# Tokens/ids can be inline OR ${ENV_VAR} references (resolved from the environment).
+#
+# Model: a strategy alert (e.g. "GC") fans out to every account listed under it.
+# This is what lets you keep ONE TradingView alert per strategy.
+
+strategies:
+  GC:                       # El Tesoro (funded) / El Minero (eval) send strategy:"GC"
+    accounts: [apex_f1, apex_f2, apex_f3, apex_f4]
+  ES:                       # El Rey (funded) / El Leon (eval) send strategy:"ES"
+    accounts: [apex_f5, apex_f6, apex_f7]
+
+accounts:
+  apex_f1:
+    broker: pmt_tradovate
+    token: "${PMT_TOKEN}"           # PickMyTrade API token
+    account_id: "APEX-1234567"      # Tradovate account id in PMT
+    quantity_multiplier: 1          # scales base qty for this account (size control)
+    symbol_override: null           # e.g. "MGC1!" if this account trades micros
+  apex_f2:
+    broker: pmt_tradovate
+    token: "${PMT_TOKEN}"
+    account_id: "APEX-1234568"
+    quantity_multiplier: 1
+    symbol_override: null
+  # ...apex_f3 ... apex_f7 (same shape)

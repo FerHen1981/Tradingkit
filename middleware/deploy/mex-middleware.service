@@ -1,0 +1,19 @@
+# systemd unit — put in /etc/systemd/system/mex-middleware.service on the VPS.
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mex-middleware
+# Logs: journalctl -u mex-middleware -f
+[Unit]
+Description=MEX trade middleware
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=mex
+WorkingDirectory=/opt/mex-middleware
+EnvironmentFile=/opt/mex-middleware/.env
+ExecStart=/opt/mex-middleware/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -83,6 +83,22 @@ Forex / CFD / Spot / Crypto / Commodities without manual toggling:
   direction-only; futures/crypto keep the full filter.
 Purely a robustness guard; on futures nothing changes. Bundles with v6.8.9.
 
+## v6.8.11 / v6.8.16 — inputs restructured + firm-preset dropdown
+
+- **Inputs menu reorganised** by concern via the GROUP_* labels: `0-1 ACCOUNT`
+  (firm & routing / phase & drawdown / funded payouts / eval tracking),
+  `2-4 TRADE` (sizing / entry & stop / TP & exits), `5-8 SIGNAL` (FVG / delta /
+  VWAP / time gate), `9 EXECUTION`, `10-11 RESEARCH/MONITOR`. Research/Eval/Funded
+  account settings now cluster together. (Grouping via labels; physical input
+  order unchanged — a deeper reorder is higher-risk and deferred.)
+- **Firm-preset dropdown** (`Use firm preset` + `Firm program`) in the ACCOUNT
+  group: auto-fills drawdown model, trailing DD, eval goal, daily-loss and
+  consistency from the prop-firm registry (inlined `f_firmRules`, generated from
+  data/propfirms.json). **Futures/trailing firms only** (Apex, Topstep, MFFU,
+  TPT, DayTraders S2F, Tradeify); forex/static firms run in the backtester until
+  the static-DD Pine engine is added. Off by default -> zero behaviour change.
+  No engine edits: the preset just overrides the existing account variables.
+
 ## How to use
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —

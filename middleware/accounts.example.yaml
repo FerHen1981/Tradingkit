@@ -8,7 +8,7 @@ strategies:
   GC:                       # El Tesoro (funded) / El Minero (eval) send strategy:"GC"
     accounts: [apex_f1, apex_f2, apex_f3, apex_f4]
   ES:                       # El Rey (funded) / El Leon (eval) send strategy:"ES"
-    accounts: [apex_f5, apex_f6, apex_f7]
+    accounts: [apex_f5, apex_f6, apex_f7, ftmo_mt5_1]   # cross-firm: Apex + FTMO from one alert
 
 accounts:
   apex_f1:
@@ -24,3 +24,9 @@ accounts:
     quantity_multiplier: 1
     symbol_override: null
   # ...apex_f3 ... apex_f7 (same shape)
+
+  ftmo_mt5_1:                       # FTMO / MetaTrader via PineConnector
+    broker: pineconnector
+    license: "${PC_LICENSE}"        # your PineConnector license id (the EA listens on it)
+    risk: 1.0                       # lot size / risk units per your EA config
+    symbol_override: "US500"        # broker symbol for ES on MT5 (differs per broker)

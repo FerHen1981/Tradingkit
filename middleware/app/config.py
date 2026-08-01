@@ -31,6 +31,7 @@ class Settings:
     secret: str = os.environ.get("MIDDLEWARE_SECRET", "")
     dry_run: bool = os.environ.get("DRY_RUN", "true").lower() != "false"
     pmt_url: str = os.environ.get("PMT_URL", "")  # your PickMyTrade webhook URL
+    pc_url: str = os.environ.get("PC_URL", "")    # your PineConnector webhook URL
     accounts_file: str = os.environ.get("ACCOUNTS_FILE", "accounts.yaml")
     journal_db: str = os.environ.get("JOURNAL_DB", "journal.db")
     # Phase 4 — reliability

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import httpx
 
-from .brokers import pmt
+from .brokers import pineconnector, pmt
 from .config import AccountMap, Settings
 from .models import Signal
 
@@ -25,6 +25,10 @@ async def dispatch(sig: Signal, accounts: AccountMap, settings: Settings) -> lis
                 res = await pmt.send(sig, acct, pmt_url=settings.pmt_url,
                                      dry_run=settings.dry_run, retry_max=settings.retry_max,
                                      retry_backoff=settings.retry_backoff, client=client)
+            elif broker == "pineconnector":
+                res = await pineconnector.send(sig, acct, pc_url=settings.pc_url,
+                                               dry_run=settings.dry_run, retry_max=settings.retry_max,
+                                               retry_backoff=settings.retry_backoff, client=client)
             else:
                 res = {"status": "error", "reason": f"unknown broker '{broker}'"}
             res["account"] = acct["id"]

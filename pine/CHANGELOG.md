@@ -2,9 +2,10 @@
 
 ## v6.9.0 — Roll / OpEx / News factory (event-regime filters)
 
-Applied to the four validated ES/GC scripts: **MEX_EL_LEON** (ES · Eval),
-**MEX_EL_REY** (ES · Funded), **MEX_EL_MINERO** (GC · Eval),
-**MEX_EL_TESORO** (GC · Funded).
+Applied to the **whole fleet** (all 8 scripts). Validated ES/GC edges:
+**MEX_EL_LEON** (ES · Eval), **MEX_EL_REY** (ES · Funded),
+**MEX_EL_MINERO** (GC · Eval), **MEX_EL_TESORO** (GC · Funded); plus the NQ fleet
+**MEX_EL_TORO / MEX_EL_MATADOR / MEX_EL_DORADO / MEX_EL_PATRON** (Auto → `NQ · any`).
 
 **Why.** 3-year OOS analysis showed the mean-reversion engine's losses concentrate
 in the **quarterly roll / triple-witching window** — especially on quiet, no-news

@@ -120,8 +120,23 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     fvg_size = np.abs(fvg_top - fvg_bot)
     fvg_mid = (fvg_top + fvg_bot) / 2.0
 
-    gmin = cfg.ticks(cfg.gap_min_ticks)
-    gmax = cfg.ticks(cfg.gap_max_ticks)
+    # Gap-size thresholds are unit_mode-aware. For %/ATR they are PER-BAR so the
+    # filter scales with price / volatility — essential for high-price (BTC) or
+    # 5x-price-range assets where fixed ticks/points don't fit. Ticks mode is
+    # unchanged (scalar), so NQ/ES/GC behaviour is identical.
+    atr = _atr(high, low, close, cfg.atr_len)
+    if cfg.unit_mode == "ATR":
+        gmin = cfg.gap_min_ticks * atr
+        gmax = cfg.gap_max_ticks * atr
+    elif cfg.unit_mode == "%":
+        gmin = close * cfg.gap_min_ticks / 100.0
+        gmax = close * cfg.gap_max_ticks / 100.0
+    elif cfg.unit_mode == "Points":
+        gmin = cfg.gap_min_ticks
+        gmax = cfg.gap_max_ticks
+    else:  # Ticks
+        gmin = cfg.ticks(cfg.gap_min_ticks)
+        gmax = cfg.ticks(cfg.gap_max_ticks)
     if cfg.use_gap_filter:
         fvg_pass = (~np.isnan(fvg_size)) & (fvg_size >= gmin) & (fvg_size <= gmax) & (fvg_size > 0)
     else:
@@ -157,8 +172,8 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     out["bull_cvd"] = bull_cvd
     out["bear_cvd"] = bear_cvd
 
-    # --- ATR (for ATR unit mode) ----------------------------------------------
-    out["atr"] = _atr(high, low, close, cfg.atr_len)
+    # --- ATR (computed above; reused for the ATR unit mode) -------------------
+    out["atr"] = atr
 
     # --- VWAP veto -------------------------------------------------------------
     if cfg.use_vwap_veto:

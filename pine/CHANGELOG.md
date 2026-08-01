@@ -99,6 +99,37 @@ Purely a robustness guard; on futures nothing changes. Bundles with v6.8.9.
   the static-DD Pine engine is added. Off by default -> zero behaviour change.
   No engine edits: the preset just overrides the existing account variables.
 
+## v6.8.12 (El Toro — PILOT) — alert destinations + borrowed-symbol delta
+
+**Piloted on MEX_EL_TORO only.** Once it compiles clean on TradingView these two
+changes copy verbatim to Matador / Dorado / Patron. (Matador stays v6.8.11,
+Dorado/Patron v6.8.16 until then.)
+
+- **Alert destinations added: `PMT Rithmic` and `PineConnector`.**
+  - *PMT Rithmic* reuses the existing PickMyTrade JSON payload (`f_pmtJSON`), same
+    as Tradovate — the Tradovate/Rithmic split is on the PMT side, not the payload.
+    `useRithmic` (previously a dead `= false` stub) now routes it.
+  - *PineConnector* emits the MT4/5 comma command
+    `{license},{buy|sell|exit},{symbol}[,sl=,tp=,risk=]` — the FTMO/forex bridge.
+    New inputs: `PineConnector license ID`, `PineConnector symbol (empty=chart)`,
+    `PineConnector risk / lots`. SL/TP absolute prices are reconstructed from the
+    call-site price distances. Closes send `exit` (flatten symbol).
+  - `plainAlertsOK` / `execInstance` / `alertMsgAuto` updated to include both.
+- **Borrow delta from another symbol** (`Borrow delta from symbol`, group 6):
+  set e.g. `CME_MINI:6E1!` on a spot-EURUSD chart to drive the delta filter from
+  the Euro FX future's REAL volume. Uses `request.security_lower_tf` up/down
+  volume (delta = up − down) — an approximation of native CVD, not TradingView's
+  exact `ta.requestVolumeDelta`. Empty = chart's own volume (unchanged). When a
+  borrow symbol is set, the no-volume auto-guard and the streak both treat the
+  chart as if it had real volume (the borrowed futures does).
+  - *Correction to the v6.8.9 note:* borrowing another symbol's delta IS possible
+    this way. Only the *nested* `request.security(sym, ta.requestVolumeDelta(...))`
+    is rejected by Pine — the `request.security_lower_tf` up/down-volume path is not.
+
+> FTMO **static-drawdown account engine** is still deferred (by decision: prove a
+> positive-edge config first). PineConnector gives FTMO/EURUSD *execution* now;
+> the FTMO *phase/DD rules* in-Pine come after the edge is locked.
+
 ## How to use
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —

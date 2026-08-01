@@ -29,9 +29,9 @@ def build_payload(sig: Signal, account: dict) -> dict:
         "symbol": symbol,
         "date": now,
         "data": sig.action,                 # buy | sell | close
-        "quantity": sig.qty,
+        "quantity": str(sig.qty),           # PMT expects quantity/price as strings (matches f_pmtJSON)
         "risk_percentage": 0,
-        "price": sig.price,
+        "price": str(sig.price),
         "tp": 0,
         "percentage_tp": 0,
         "dollar_tp": sig.dollar_tp,

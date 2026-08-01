@@ -1,5 +1,16 @@
 # MEX Pine scripts — optimisation changelog
 
+## v6.9.1 — "→ Middleware" route (fan-out seam)
+
+All 8 scripts gain a `→ Middleware (fan-out)` alert route in group *9 · EXECUTION*.
+When enabled, `f_sendExec` emits a lean JSON signal
+(`{secret, strategy, event, action, symbol, price, order_type, dollar_sl, dollar_tp, qty}`)
+instead of baking each account into the alert. The middleware (see `middleware/`) maps
+`strategy` → subscribed accounts and rebuilds each account's PMT/PineConnector payload —
+so 11+ accounts run from two alerts (GC, ES) plus a config file. New inputs: `mwSecret`,
+`mwStrategy` (default per script: ES/GC/NQ). The emitted shape is verified against the
+middleware `Signal` model. Set the webhook URL on the TradingView alert itself.
+
 ## v6.9.0 — Roll / OpEx / News factory (event-regime filters)
 
 Applied to the **whole fleet** (all 8 scripts). Validated ES/GC edges:

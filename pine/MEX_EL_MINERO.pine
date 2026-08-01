@@ -39,7 +39,8 @@
 // v6.8.10: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.11: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
-var string currentVersion = "v6.9.0"
+// v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+var string currentVersion = "v6.9.1"
 strategy("MΞX ΞL MINΞRO · GC Eval EOD · " + currentVersion, shorttitle="ΞL MINΞRO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -458,6 +459,10 @@ usePineConnector = routePineConnector
 pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, tooltip="Your PineConnector license ID — the number your MT4/5 EA listens on. Used only when Alert destination = PineConnector.", display=display.none)
 pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
 pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size, or risk units, per your EA's configuration).", display=display.none)
+routeMiddleware = input.bool(false, "→ Middleware (fan-out)", group=GROUP_EXEC, tooltip="Send one lean signal to your middleware /webhook; it fans out to every account subscribed to this strategy. Put the webhook URL on the TradingView alert itself.")
+mwSecret   = input.string("", "Middleware secret", group=GROUP_EXEC, tooltip="Must match MIDDLEWARE_SECRET on your server.", display=display.none)
+mwStrategy = input.string("GC", "Middleware strategy key", group=GROUP_EXEC, tooltip="Strategy key the middleware maps to accounts (e.g. GC, ES, NQ). Match accounts.yaml.", display=display.none)
+useMiddleware = routeMiddleware
 botName    = input.string("MΞX ΞL MINΞRO", "Bot Name", group=GROUP_ALRT, tooltip="Display name for Discord messages.", display=display.none)
 lockBufTicks = input.float(4, "Lock cost buffer (ticks)", minval=0, group=GROUP_ALRT, tooltip="Extra open-profit buffer (in ticks, per contract) required above the target before the intra-trade lock closes all — covers fees & slippage.")
 lockOnPass   = input.bool(true, "Close all when eval passes intra-trade", group=GROUP_ALRT, tooltip="Once open+closed PnL since start covers the eval target plus the cost buffer, close everything (PMT + Discord) and bank the pass.")
@@ -521,8 +526,8 @@ f_autoAcctName() =>
 string jrnlAcct = str.length(jrnlAcctName) > 0 ? jrnlAcctName : f_autoAcctName()
 f_msgHead() =>
     "MPT " + currentVersion + " | " + jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz)
-bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal
-bool execInstance = usePMT or useRithmic or usePineConnector
+bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal and not useMiddleware
+bool execInstance = usePMT or useRithmic or usePineConnector or useMiddleware
 
 // ============================================================================
 // === TIME GATE ==============================================================
@@ -1077,6 +1082,9 @@ f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
             float _slPx = _action == "buy" ? _price - _slD : _price + _slD
             float _tpPx = _action == "buy" ? _price + _tpD : _price - _tpD
             alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
+    if useMiddleware
+        string _mwEv = _action == "close" ? "EXIT" : "ENTRY"
+        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","

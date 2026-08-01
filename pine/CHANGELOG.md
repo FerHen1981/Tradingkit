@@ -174,3 +174,17 @@ ES preset defaults (both): FVG band **9–15** · **Fixed stop 100 ticks** (25 p
 no delta) · EOD drawdown · all hours. Same engine as the four NQ scripts
 (v6.8.13/18), only input DEFAULTS differ. Eval funnel (Apex 50k): EOD 26.8% /
 Intraday 24.0% pass. PF ~1.06 is a thin-but-real edge — size accordingly.
+
+## NEW GC scripts — El Minero (Eval) + El Tesoro (Funded)
+
+**GC (gold) is the strongest edge so far** — pervasive across nearly all 18 swept
+configs (research PF up to 1.132; winner FVG6-12 stop100 split-half H1 1.19 /
+H2 1.05, positive both halves). See LifeOS "📊 Asset-analyse — GC".
+
+- **MEX_EL_MINERO** (GC · Eval · EOD) — from El Matador. FVG 6-12 · fixed 100t ·
+  R1.5 · CVD off · **2 contracts** (2ct lifts eval pass 20%→31.9%; edge supports it).
+- **MEX_EL_TESORO** (GC · Funded · EOD) — from El Patron. FVG 6-12 · fixed 100t ·
+  R2.5 · CVD off · 1 contract (scale to taste). PF 1.12.
+
+GC tick 0.10, $100/pt ($10/tick); 100t stop = 10 pts = $1,000/contract. Same
+engine as the rest; only input defaults differ.

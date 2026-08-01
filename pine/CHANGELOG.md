@@ -1,5 +1,32 @@
 # MEX Pine scripts — optimisation changelog
 
+## v6.9.0 — Roll / OpEx / News factory (event-regime filters)
+
+Applied to the four validated ES/GC scripts: **MEX_EL_LEON** (ES · Eval),
+**MEX_EL_REY** (ES · Funded), **MEX_EL_MINERO** (GC · Eval),
+**MEX_EL_TESORO** (GC · Funded).
+
+**Why.** 3-year OOS analysis showed the mean-reversion engine's losses concentrate
+in the **quarterly roll / triple-witching window** — especially on quiet, no-news
+days (ES no-news near-roll PF 0.86, −$144k; YM roll-window PF 0.77–0.95) — while
+**macro news sits on the profit side** (NFP a tailwind for the index strats, FOMC a
+profit day for ES/GC). Unlike fine-grained day×hour cells (which are OOS noise),
+these are coarse, mechanism-backed regimes that persist every year.
+
+**What.** A new input group *8b · SIGNAL — Roll / OpEx / News factory* with a
+`Preset (strategy · type · phase)` dropdown. `Auto` resolves to the validated
+default for that script; you can borrow another strategy/account-type's config, or
+pick `Off / Custom` and drive seven individual toggles:
+avoid quarterly roll window (± N days), news-override, avoid triple-witching week,
+avoid the week after monthly OpEx, block FOMC, block NFP. Calendar math is native
+(3rd-Friday resolver for quarterly + monthly expiries, 1st-Friday NFP); FOMC dates
+are a hardcoded 2022-2026 table (2026 projected — update yearly). The gate folds
+into `canTrade` via `evtGateOK`; master switch `useEvtFilter` disables the whole
+block. Preset defaults: ES → avoid roll (news-override) + week-after-OpEx;
+GC → no filter (robust across regimes); YM → avoid roll + witching; NQ → block FOMC.
+
+---
+
 The four scripts are one engine; they differ only in phase + drawdown model:
 
 | script | version | phase | drawdown model |

@@ -38,7 +38,8 @@
 // v6.8.14 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
-var string currentVersion = "v6.8.19"
+// v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
+var string currentVersion = "v6.9.0"
 strategy("MΞX ΞL TΞSORO · GC Funded EOD · " + currentVersion, shorttitle="ΞL TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -65,6 +66,9 @@ var string GROUP_VIS   = "10 · RESEARCH — Visuals & labels"
 var string GROUP_DASH  = "11 · MONITOR — Dashboard"
 var string GROUP_EXEC  = "9 · EXECUTION — Alerts & routing"
 var string GROUP_ALRT  = GROUP_EXEC
+var string GROUP_EVT   = "8b · SIGNAL — Roll / OpEx / News factory"
+// Regime-factory identity for THIS script (strategy · account-type · phase). The "Auto" preset resolves to this.
+var string AUTO_PRESET = "GC · Funded"
 
 // === TIMEZONE / DAY ==========================================================
 var string GROUP_ACCT = "0 · ACCOUNT — Firm & routing"
@@ -380,6 +384,26 @@ flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP
 resumeHour  = input.int(18, "Until", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
 resumeMinute= input.int(0, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, tooltip="Trading resume minute.", display=display.none)
 
+// === ROLL / OPEX / NEWS FACTORY (event-regime filters) ======================
+// Validated on 3y OOS: for the mean-reversion engine the losses concentrate in the
+// quarterly roll/triple-witching window (esp. quiet, no-news days), while macro news
+// (NFP tailwind, FOMC on ES/GC) sits on the profit side. This block lets you AVOID the
+// loss-regimes per strategy / account-type / phase. Preset "Auto" = the validated default
+// for THIS script; pick another to borrow its config, or "Off / Custom" to drive the
+// toggles yourself. Survival over winning — don't fight the bull in the witching-week chaos.
+useEvtFilter = input.bool(true, "Enable roll/OpEx/news factory", group=GROUP_EVT,
+     tooltip="Master switch. Off = trade every session regardless of roll/OpEx/news regime.")
+evtPreset = input.string("Auto (this script)", "Preset (strategy · type · phase)",
+     options=["Auto (this script)","ES · Eval","ES · Funded","GC · Eval","GC · Funded","YM · any","NQ · any","Off / Custom"],
+     group=GROUP_EVT, tooltip="Auto resolves to the validated default for this script (" + AUTO_PRESET + "). Choose another strategy/account-type to borrow its regime config, or 'Off / Custom' to use the manual toggles below.")
+rgAvoidRoll    = input.bool(true,  "Custom · avoid quarterly roll window",   group=GROUP_EVT, tooltip="Used only when preset = Off / Custom. Skip entries within ± the day-window around the quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry.")
+rgRollDays     = input.int(10,     "Custom · roll window ± days", minval=0, maxval=30, group=GROUP_EVT, tooltip="Half-width of the roll window in calendar days.")
+rgRollNewsOvr  = input.bool(true,  "Custom · but trade if it IS a news day", group=GROUP_EVT, tooltip="News (FOMC/NFP) sits on the profit side — keep trading it even inside the roll window.")
+rgAvoidWitch   = input.bool(false, "Custom · avoid triple-witching week",    group=GROUP_EVT, tooltip="Skip the trading week of the quarterly expiry (the strongest loss-regime for YM).")
+rgAvoidWkAfter = input.bool(false, "Custom · avoid week AFTER monthly OpEx",  group=GROUP_EVT, tooltip="ES bleeds the week after every monthly options expiry (all 4 years <1).")
+rgBlockFOMC    = input.bool(false, "Custom · block FOMC days",               group=GROUP_EVT, tooltip="Skip FOMC decision days (a loss-regime for NQ; a profit day for ES/GC — leave off there).")
+rgBlockNFP     = input.bool(false, "Custom · block NFP days",                group=GROUP_EVT, tooltip="Skip Non-Farm-Payroll Fridays. Usually a tailwind for index strats — leave off.")
+
 // === VISUALISATION ===========================================================
 showSignals     = input.bool(true, "Show Signals", inline="v1", group=GROUP_VIS, display=display.none)
 showTradeLevels = input.bool(true, "Show SL/TP Levels", inline="v1", group=GROUP_VIS, display=display.none)
@@ -579,6 +603,75 @@ bool paFiltersOK  = relVolOK and bbwpOK and not rthOpenBlock
 
 timeGatePass = timeGatePassRaw and paFiltersOK
 inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
+
+// ============================================================================
+// === ROLL / OPEX / NEWS FACTORY — preset resolver + calendar gate ============
+// ============================================================================
+f_evtPreset(_p) =>
+    string _pp = _p == "Auto (this script)" ? AUTO_PRESET : _p
+    bool _ar = false
+    bool _ro = true
+    bool _aw = false
+    bool _wa = false
+    bool _bf = false
+    bool _bn = false
+    bool _cu = false
+    int  _rd = 10
+    if _pp == "ES · Eval" or _pp == "ES · Funded"
+        _ar := true
+        _wa := true
+    else if _pp == "YM · any"
+        _ar := true
+        _aw := true
+    else if _pp == "NQ · any"
+        _bf := true
+    else if _pp == "Off / Custom"
+        _cu := true
+    // "GC · Eval" / "GC · Funded" -> all-false: GC is robust across regimes, no event filter
+    [_ar, _rd, _ro, _aw, _wa, _bf, _bn, _cu]
+[epAr, epRd, epRo, epAw, epWa, epBf, epBn, epCu] = f_evtPreset(evtPreset)
+bool evtAvoidRoll  = epCu ? rgAvoidRoll    : epAr
+int  evtRollDays   = epCu ? rgRollDays     : epRd
+bool evtRollNewsOv = epCu ? rgRollNewsOvr  : epRo
+bool evtAvoidWitch = epCu ? rgAvoidWitch   : epAw
+bool evtAvoidWkAft = epCu ? rgAvoidWkAfter : epWa
+bool evtBlockFOMC  = epCu ? rgBlockFOMC    : epBf
+bool evtBlockNFP   = epCu ? rgBlockNFP     : epBn
+
+f_thirdFriDay(_y, _m) =>
+    int _wd1 = dayofweek(timestamp(activeTz, _y, _m, 1, 0, 0), activeTz)  // 1=Sun .. 7=Sat
+    int _firstFri = 1 + ((6 - _wd1 + 7) % 7)                              // Friday = 6
+    _firstFri + 14
+int _cy = year(time, activeTz)
+int _cm = month(time, activeTz)
+int _cd = dayofmonth(time, activeTz)
+// nearest quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry; signed days (>0 = after expiry)
+float _qSigned = na
+float _qAbs = 1.0e12
+for _yy = _cy - 1 to _cy + 1
+    for _qm = 3 to 12 by 3
+        float _ts = timestamp(activeTz, _yy, _qm, f_thirdFriDay(_yy, _qm), 0, 0)
+        float _dd = (time - _ts) / 86400000.0
+        if math.abs(_dd) < _qAbs
+            _qAbs := math.abs(_dd)
+            _qSigned := _dd
+// monthly OpEx (this month's 3rd Friday) — signed within-month days
+int _mRel = _cd - f_thirdFriDay(_cy, _cm)
+// NFP = 1st Friday of the month
+int _wd1m = dayofweek(timestamp(activeTz, _cy, _cm, 1, 0, 0), activeTz)
+int _firstFriDay = 1 + ((6 - _wd1m + 7) % 7)
+bool isNFP = _cd == _firstFriDay
+// FOMC decision days (US, 2022-2026; 2026 projected — update yearly)
+var int[] FOMC_YMD = array.from(20220126,20220316,20220504,20220615,20220727,20220921,20221102,20221214, 20230201,20230322,20230503,20230614,20230726,20230920,20231101,20231213, 20240131,20240320,20240501,20240612,20240731,20240918,20241107,20241218, 20250129,20250319,20250507,20250618,20250730,20250917,20251029,20251210, 20260128,20260318,20260429,20260617,20260729,20260916,20261028,20261209)
+bool isFOMC = array.includes(FOMC_YMD, _cy * 10000 + _cm * 100 + _cd)
+bool isNews = isFOMC or isNFP
+bool _blkRoll  = evtAvoidRoll  and (math.abs(_qSigned) <= evtRollDays) and not (evtRollNewsOv and isNews)
+bool _blkWitch = evtAvoidWitch and (_qSigned >= -4 and _qSigned <= 1)
+bool _blkWkAft = evtAvoidWkAft and (_mRel >= 2 and _mRel <= 8)
+bool _blkFOMC  = evtBlockFOMC  and isFOMC
+bool _blkNFP   = evtBlockNFP   and isNFP
+bool evtBlock  = useEvtFilter and (_blkRoll or _blkWitch or _blkWkAft or _blkFOMC or _blkNFP)
+bool evtGateOK = not evtBlock
 
 var bool hasTraded = false
 if not timeGatePass
@@ -836,7 +929,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
-canTrade = timeGatePass and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
+canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
 
 // ============================================================================
 // === SIZING =================================================================

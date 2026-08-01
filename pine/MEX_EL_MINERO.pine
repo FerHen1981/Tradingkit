@@ -132,7 +132,7 @@ unitMode  = input.string("Ticks", "Distance Unit", options=["Ticks","Points","%"
 atrLen    = input.int(14, "ATR Length (ATR unit)", minval=1, group=GROUP_UNIT, tooltip="ATR length, only used when Distance Unit is set to ATR.", display=display.none)
 sizingMode = input.string("Fixed contracts", "Sizing Mode", options=["Fixed contracts","Fixed $ risk","% equity risk"], group=GROUP_UNIT,
      tooltip="With the swing stop the stop distance varies per trade; $-risk or %-risk sizing keeps risk per trade constant and is recommended in that case.", display=display.none)
-contractSize       = input.float(2, "Fixed Qty", minval=0, group=GROUP_UNIT, tooltip="Fixed number of contracts per trade. The MAE guard may scale this down per trade on a PA.")
+contractSize       = input.float(1, "Fixed Qty", minval=0, group=GROUP_UNIT, tooltip="Fixed number of contracts per trade. The MAE guard may scale this down per trade on a PA.")
 riskValue          = input.float(250, "Risk per Trade ($ of %)", minval=0, group=GROUP_UNIT, tooltip="Risk per trade when using $-risk or %-risk sizing instead of fixed contracts.", display=display.none)
 allowFractionalQty = input.bool(false, "Allow Fractional Qty (crypto)", group=GROUP_UNIT, tooltip="Allow fractional position sizes (crypto only — futures require whole contracts).", display=display.none)
 maxQty             = input.float(100, "Max Qty Cap", minval=0, group=GROUP_UNIT, tooltip="Hard cap on position size regardless of the sizing mode.", display=display.none)
@@ -343,8 +343,8 @@ cvdTrendCount = input.int(4, "Count", minval=1, inline="cv", group=GROUP_CVD, to
 // === FVG =====================================================================
 useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
-gapMinSize   = input.float(6,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
-gapMaxSize   = input.float(12, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+gapMinSize   = input.float(9,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
+gapMaxSize   = input.float(15, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
 confirmBarsIn = input.int(2, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 

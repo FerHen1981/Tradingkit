@@ -16,8 +16,10 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
 from .config import Settings, load_accounts
+from .dedupe import Deduper
 from .journal import Journal
 from .models import Signal
+from .notify import alert_failure
 from .router import dispatch
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -28,6 +30,7 @@ app = FastAPI(title="MEX trade middleware", version="0.1.0")
 settings = Settings()
 accounts = load_accounts(settings.accounts_file)
 journal = Journal(settings.journal_db)
+deduper = Deduper(settings.idem_ttl)
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
@@ -67,10 +70,21 @@ async def webhook(request: Request) -> dict:
     if not STATE["armed"]:
         return {"accepted": True, "dispatched": False, "reason": "kill-switch: disarmed"}
 
+    if deduper.seen_recently(sig):
+        journal.write("dedupe", {"skipped": sig.redacted()}, strategy=sig.strategy)
+        log.warning("duplicate signal within %ss — skipped", settings.idem_ttl)
+        return {"accepted": True, "dispatched": False, "reason": "duplicate (idempotency)"}
+
     results = await dispatch(sig, accounts, settings)
+    failures = [r for r in results if r.get("status") == "error"]
     for r in results:
         journal.write("dispatch", r, strategy=sig.strategy, account=r.get("account", ""))
-    return {"accepted": True, "dispatched": True, "dry_run": settings.dry_run, "results": results}
+    if failures:
+        summary = ", ".join(f"{r.get('account', '?')}: {r.get('reason') or r.get('http_status')}" for r in failures)
+        await alert_failure(settings.alert_webhook,
+                            f"⚠️ MEX middleware: {len(failures)} dispatch failure(s) on {sig.strategy} {sig.action} — {summary}")
+    return {"accepted": True, "dispatched": True, "dry_run": settings.dry_run,
+            "failures": len(failures), "results": results}
 
 
 @app.get("/journal")

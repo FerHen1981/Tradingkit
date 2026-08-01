@@ -10,6 +10,7 @@ a live order. Flip DRY_RUN=false when you're ready.
 """
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from typing import Optional
 
@@ -51,21 +52,35 @@ def build_payload(sig: Signal, account: dict) -> dict:
 
 
 async def send(sig: Signal, account: dict, *, pmt_url: str, dry_run: bool,
+               retry_max: int = 3, retry_backoff: float = 0.5,
                client: Optional[httpx.AsyncClient] = None) -> dict:
-    """Returns a result dict for the journal. Never raises to the caller."""
+    """POST the PMT order, retrying on network errors and 5xx (not 4xx — a client error
+    won't fix by retrying). Returns a result dict for the journal; never raises."""
     payload = build_payload(sig, account)
     if dry_run:
         return {"status": "dry_run", "would_post_to": pmt_url or "(PMT_URL unset)", "payload": payload}
     if not pmt_url:
         return {"status": "error", "reason": "PMT_URL not configured", "payload": payload}
+
     own = client is None
     client = client or httpx.AsyncClient(timeout=10.0)
+    last = {}
     try:
-        resp = await client.post(pmt_url, json=payload)
-        return {"status": "sent", "http_status": resp.status_code, "response": resp.text[:500],
-                "payload": payload}
-    except Exception as exc:  # network / timeout — reported, not raised
-        return {"status": "error", "reason": repr(exc), "payload": payload}
+        for attempt in range(1, max(1, retry_max) + 1):
+            try:
+                resp = await client.post(pmt_url, json=payload)
+                if resp.status_code < 400:
+                    return {"status": "sent", "http_status": resp.status_code,
+                            "response": resp.text[:500], "attempts": attempt, "payload": payload}
+                last = {"status": "error", "http_status": resp.status_code,
+                        "response": resp.text[:500], "attempts": attempt, "payload": payload}
+                if resp.status_code < 500:
+                    return last  # 4xx: don't retry
+            except Exception as exc:  # network / timeout
+                last = {"status": "error", "reason": repr(exc), "attempts": attempt, "payload": payload}
+            if attempt < retry_max:
+                await asyncio.sleep(retry_backoff * (2 ** (attempt - 1)))
+        return last
     finally:
         if own:
             await client.aclose()

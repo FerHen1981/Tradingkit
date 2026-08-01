@@ -69,7 +69,8 @@ lives here, not in the alert. (Kept out of scope for Phase 0.)
 ## Roadmap
 - [x] Phase 0 — receive + journal
 - [x] Phase 1 — PMT (Tradovate) dispatch, DRY_RUN
-- [ ] Phase 2 — Pine "→ Middleware" alert + go live on one account
+- [x] Phase 2 — Pine "→ Middleware" alert (v6.9.1) — contract verified against the Signal model
+- [x] Phase 4 — idempotency (dedupe within IDEM_TTL), PMT retries w/ backoff (5xx only), failure alerts
 - [ ] Phase 3 — PineConnector (MT5/FTMO) broker + cross-firm fan-out
-- [ ] Phase 4 — idempotency keys, retries, failure alerts (Discord/Telegram)
 - [ ] Phase 5 — risk overlays (consistency-rule / daily-loss mirror per account)
+- [ ] Go-live — VPS deploy, tokens, TradingView alerts, flip one account to DRY_RUN=false

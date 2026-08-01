@@ -23,7 +23,8 @@ async def dispatch(sig: Signal, accounts: AccountMap, settings: Settings) -> lis
             broker = acct.get("broker", "")
             if broker == "pmt_tradovate":
                 res = await pmt.send(sig, acct, pmt_url=settings.pmt_url,
-                                     dry_run=settings.dry_run, client=client)
+                                     dry_run=settings.dry_run, retry_max=settings.retry_max,
+                                     retry_backoff=settings.retry_backoff, client=client)
             else:
                 res = {"status": "error", "reason": f"unknown broker '{broker}'"}
             res["account"] = acct["id"]

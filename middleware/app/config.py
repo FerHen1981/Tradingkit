@@ -33,6 +33,11 @@ class Settings:
     pmt_url: str = os.environ.get("PMT_URL", "")  # your PickMyTrade webhook URL
     accounts_file: str = os.environ.get("ACCOUNTS_FILE", "accounts.yaml")
     journal_db: str = os.environ.get("JOURNAL_DB", "journal.db")
+    # Phase 4 — reliability
+    idem_ttl: float = float(os.environ.get("IDEM_TTL_SECONDS", "3"))       # dedupe identical signals within N s
+    retry_max: int = int(os.environ.get("RETRY_MAX", "3"))                 # PMT POST attempts on network/5xx
+    retry_backoff: float = float(os.environ.get("RETRY_BACKOFF_SECONDS", "0.5"))
+    alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
 
 
 @dataclass

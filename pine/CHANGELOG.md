@@ -157,3 +157,20 @@ route is on; off by default.
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —
 the memory error should be gone. Paste any compile error back for an immediate fix.
+
+## NEW ES scripts — El León (Eval) + El Rey (Funded)
+
+First asset to clear the from-scratch edge bar. **ES has a real, out-of-sample
+robust edge** (research PF 1.063; split-half H1 1.107 / H2 1.023 — positive in
+both halves), unlike NQ. See LifeOS "📊 Asset-analyse — ES".
+
+Two new scripts, forked from the EOD templates with the ES-validated preset
+baked into the defaults:
+- **MEX_EL_LEON** (ES · Eval · EOD) — from El Matador. contractSize 1.
+- **MEX_EL_REY** (ES · Funded · EOD) — from El Patron. contractSize 1.
+
+ES preset defaults (both): FVG band **9–15** · **Fixed stop 100 ticks** (25 pts) ·
+**TP R1.5** · **Delta filter OFF** (edge validated without CVD; this dataset had
+no delta) · EOD drawdown · all hours. Same engine as the four NQ scripts
+(v6.8.13/18), only input DEFAULTS differ. Eval funnel (Apex 50k): EOD 26.8% /
+Intraday 24.0% pass. PF ~1.06 is a thin-but-real edge — size accordingly.

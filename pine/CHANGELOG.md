@@ -131,9 +131,9 @@ asserted 8-replacement script so every file is byte-identical in these regions.)
 > positive-edge config first). PineConnector gives FTMO/EURUSD *execution* now;
 > the FTMO *phase/DD rules* in-Pine come after the edge is locked.
 
-## v6.8.13 (El Toro — PILOT) — alert routing as independent toggles
+## v6.8.13 / v6.8.18 — alert routing as independent toggles (ALL FOUR)
 
-**Piloted on MEX_EL_TORO only** (compile-check, then propagate to the other three).
+**Pilot (El Toro v6.8.13) compiled clean, so propagated to all four:** Toro/Matador → v6.8.13, Dorado/Patron → v6.8.18.
 
 The single-select **"Alert destination" dropdown is replaced by independent
 per-destination on/off toggles**, so all routing config lives in the inputs and

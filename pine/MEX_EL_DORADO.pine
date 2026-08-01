@@ -38,7 +38,7 @@
 // v6.8.14 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
-var string currentVersion = "v6.8.17"
+var string currentVersion = "v6.8.18"
 strategy("MΞX ΞL DORΛDO · Funded Intraday · " + currentVersion, shorttitle="ΞL DORΛDO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -422,14 +422,24 @@ color vNegTxt = visIsDark ? #FF7A85 : #B22833
 color zRiskBg   = color.new(vNEG, visIsDark ? 90 : 92)
 color zRewardBg = color.new(vPOS, visIsDark ? 90 : 92)
 
-// === EXECUTION / DISCORD =====================================================
-alertDest    = input.string("Off", "Alert destination", options=["Off","PMT Tradovate","PMT Rithmic","PineConnector","Discord","Journal"], group=GROUP_EXEC,
-     tooltip="One webhook URL per TradingView alert -> one destination per alert instance. WORKFLOW: set the destination, create the alert with the matching URL (TV freezes the input state per alert), switch the destination, create the next alert. Each alert then only carries its own channel payloads — no foreign JSON on any endpoint. Notify events are selected automatically per destination (Discord: fills/exits/halts/derisk/eval/payout · PMT: order execution only · Journal: CSV rows).")
-usePMT       = alertDest == "PMT Tradovate"
+// === EXECUTION / ROUTING =====================================================
+// v6.8.13 — independent per-destination toggles; ALL config lives in these inputs
+// (single-select "Alert destination" dropdown removed). Enable any combination.
+// NOTE: TradingView delivers one alert to ONE webhook URL and Pine cannot POST to
+// a URL itself. So TODAY: enable ONE route per alert and put that route's webhook
+// on the alert. Enabling several at once is for the planned MIDDLEWARE step: the
+// alert URL points only at the middleware, which reads the enabled routes and
+// fans out. Per-route webhooks then live in the middleware (Pine can't send them).
+routePMT           = input.bool(false, "→ PMT Tradovate", group=GROUP_EXEC, tooltip="PickMyTrade, Tradovate route (PMT JSON). Needs PMT Token + the Account ID (group 0).")
+routeRithmic       = input.bool(false, "→ PMT Rithmic", group=GROUP_EXEC, tooltip="PickMyTrade, Rithmic route. Same PMT JSON payload; needs PMT Token + Account ID.")
+routePineConnector = input.bool(false, "→ PineConnector (MT4/5)", group=GROUP_EXEC, tooltip="MT4/5 comma command (forex/CFD, e.g. FTMO on EURUSD). Needs license + symbol + risk below.")
+routeDiscord       = input.bool(false, "→ Discord", group=GROUP_EXEC, tooltip="Discord embeds (fills/exits/halts/derisk/eval/payout).")
+routeJournal       = input.bool(false, "→ Journal (CSV)", group=GROUP_EXEC, tooltip="CSV journal rows for the Notion pipeline.")
+usePMT       = routePMT
 pmtToken     = input.string("", "PMT Token", group=GROUP_EXEC, tooltip="PickMyTrade API token (Tradovate route).", display=display.none)
-useDiscord = alertDest == "Discord"
-useRithmic   = alertDest == "PMT Rithmic"
-usePineConnector = alertDest == "PineConnector"
+useDiscord   = routeDiscord
+useRithmic   = routeRithmic
+usePineConnector = routePineConnector
 pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, tooltip="Your PineConnector license ID — the number your MT4/5 EA listens on. Used only when Alert destination = PineConnector.", display=display.none)
 pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
 pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size, or risk units, per your EA's configuration).", display=display.none)
@@ -477,7 +487,7 @@ maeMarginPct = input.float(10, "Safety margin (%)", minval=0, maxval=50, step=5,
 
 // === v5: CSV TRADE-JOURNAAL (Notion) =========================================
 var string GROUP_JRNL = GROUP_EVAL
-useJournal   = alertDest == "Journal"
+useJournal   = routeJournal
 jrnlJsonWrap = true
 jrnlAcctName = input.string("", "Account name (empty = auto)", group=GROUP_JRNL,
      tooltip="Leave empty for automatic composition: first 2 letters + last 3 digits of the PMT Account ID, start balance in 'k', and the start date (from group 15) — e.g. AP456-50k-250101. Fill in to override manually.", display=display.none)

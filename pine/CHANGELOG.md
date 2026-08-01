@@ -99,11 +99,12 @@ Purely a robustness guard; on futures nothing changes. Bundles with v6.8.9.
   the static-DD Pine engine is added. Off by default -> zero behaviour change.
   No engine edits: the preset just overrides the existing account variables.
 
-## v6.8.12 (El Toro — PILOT) — alert destinations + borrowed-symbol delta
+## v6.8.12 / v6.8.17 — alert destinations + borrowed-symbol delta (ALL FOUR)
 
-**Piloted on MEX_EL_TORO only.** Once it compiles clean on TradingView these two
-changes copy verbatim to Matador / Dorado / Patron. (Matador stays v6.8.11,
-Dorado/Patron v6.8.16 until then.)
+**Pilot (El Toro v6.8.12) compiled and ran on a live EURUSD chart**, so the two
+changes below were propagated verbatim to all four scripts:
+Toro/Matador → **v6.8.12**, Dorado/Patron → **v6.8.17**. (Propagation done by an
+asserted 8-replacement script so every file is byte-identical in these regions.)
 
 - **Alert destinations added: `PMT Rithmic` and `PineConnector`.**
   - *PMT Rithmic* reuses the existing PickMyTrade JSON payload (`f_pmtJSON`), same

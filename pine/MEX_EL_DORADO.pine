@@ -38,7 +38,7 @@
 // v6.8.14 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
-var string currentVersion = "v6.8.16"
+var string currentVersion = "v6.8.17"
 strategy("MΞX ΞL DORΛDO · Funded Intraday · " + currentVersion, shorttitle="ΞL DORΛDO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -345,6 +345,7 @@ vwapDistMin   = 0.05
 useCVDFilter  = input.bool(true, "Use Delta Filter", group=GROUP_CVD,
      tooltip="Requires volume data. Per-bar semantics (fixed). Mainly does selection work; the VWAP effect only existed within the delta-filtered subset. SPOT FX (EURUSD, USDJPY, ...): there is no real volume, so this AUTOMATICALLY falls back to TICK-VOLUME delta (a weaker proxy). Backtests show the 4-bar Streak adds little even on futures — on FX consider turning the Streak OFF (below), or this whole filter OFF and leaning on FVG + VWAP + time.")
 cvdLowerTf    = input.timeframe("1", "Lower Timeframe for Delta", group=GROUP_CVD, tooltip="Lower timeframe scanned to approximate the volume delta (1 = per-minute polarity, matches the research engine).", display=display.none)
+deltaBorrowSym = input.symbol("", "Borrow delta from symbol (empty = chart)", group=GROUP_CVD, tooltip="Drive the delta filter from ANOTHER symbol's real volume. Example: on a spot EURUSD chart set CME_MINI:6E1! to use the Euro FX future's genuine volume delta (spot FX has no real volume of its own). Empty = use this chart's own volume. Method: request.security_lower_tf up/down volume on the borrowed symbol — an approximation of native CVD.", display=display.none)
 useCvdStreak  = input.bool(true, "Streak", inline="cv", group=GROUP_CVD, display=display.none)
 cvdTrendCount = input.int(4, "Count", minval=1, inline="cv", group=GROUP_CVD, tooltip="Consecutive same-direction delta bars required.")
 
@@ -422,12 +423,16 @@ color zRiskBg   = color.new(vNEG, visIsDark ? 90 : 92)
 color zRewardBg = color.new(vPOS, visIsDark ? 90 : 92)
 
 // === EXECUTION / DISCORD =====================================================
-alertDest    = input.string("Off", "Alert destination", options=["Off","PMT Tradovate","Discord","Journal"], group=GROUP_EXEC,
+alertDest    = input.string("Off", "Alert destination", options=["Off","PMT Tradovate","PMT Rithmic","PineConnector","Discord","Journal"], group=GROUP_EXEC,
      tooltip="One webhook URL per TradingView alert -> one destination per alert instance. WORKFLOW: set the destination, create the alert with the matching URL (TV freezes the input state per alert), switch the destination, create the next alert. Each alert then only carries its own channel payloads — no foreign JSON on any endpoint. Notify events are selected automatically per destination (Discord: fills/exits/halts/derisk/eval/payout · PMT: order execution only · Journal: CSV rows).")
 usePMT       = alertDest == "PMT Tradovate"
 pmtToken     = input.string("", "PMT Token", group=GROUP_EXEC, tooltip="PickMyTrade API token (Tradovate route).", display=display.none)
 useDiscord = alertDest == "Discord"
-useRithmic = false
+useRithmic   = alertDest == "PMT Rithmic"
+usePineConnector = alertDest == "PineConnector"
+pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, tooltip="Your PineConnector license ID — the number your MT4/5 EA listens on. Used only when Alert destination = PineConnector.", display=display.none)
+pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
+pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size, or risk units, per your EA's configuration).", display=display.none)
 botName    = input.string("MΞX ΞL DORΛDO", "Bot Name", group=GROUP_ALRT, tooltip="Display name for Discord messages.", display=display.none)
 lockBufTicks = input.float(4, "Lock cost buffer (ticks)", minval=0, group=GROUP_ALRT, tooltip="Extra open-profit buffer (in ticks, per contract) required above the target before the intra-trade lock closes all — covers fees & slippage.")
 lockOnCap    = input.bool(true, "Close all when payout cap is reached intra-trade", group=GROUP_ALRT, tooltip="Once projected withdrawable (incl. open PnL) covers the FULL ladder cap plus the cost buffer, close everything (PMT + Discord) and bank the payout.")
@@ -478,7 +483,7 @@ jrnlAcctName = input.string("", "Account name (empty = auto)", group=GROUP_JRNL,
      tooltip="Leave empty for automatic composition: first 2 letters + last 3 digits of the PMT Account ID, start balance in 'k', and the start date (from group 15) — e.g. AP456-50k-250101. Fill in to override manually.", display=display.none)
 // === v6.0: AUTO ALERT MESSAGE ================================================
 var string GROUP_AMSG = GROUP_EXEC
-alertMsgAuto    = usePMT
+alertMsgAuto    = usePMT or useRithmic
 sendCfgOnStart  = input.bool(true, "Send CONFIG message on first live bar", group=GROUP_AMSG,
      tooltip="When an alert instance starts running, the script sends ONE fully labeled settings message (key=value for every strategy-relevant parameter) with the standard header. This makes every alert stream self-describing: you can always read back exactly which settings this chart runs, with the parameter name in front of each value. If the CSV journal is enabled, the CONFIG line is shaped as a journal row (event=CONFIG, settings in the last field) so the Notion pipeline stores it cleanly.")
 alertIncludeCfg = input.bool(true, "Append full parameter config (|CFG|)", group=GROUP_AMSG,
@@ -495,8 +500,8 @@ f_autoAcctName() =>
 string jrnlAcct = str.length(jrnlAcctName) > 0 ? jrnlAcctName : f_autoAcctName()
 f_msgHead() =>
     "MPT " + currentVersion + " | " + jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz)
-bool plainAlertsOK = not usePMT and not useRithmic and not useDiscord and not useJournal
-bool execInstance = usePMT or useRithmic
+bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal
+bool execInstance = usePMT or useRithmic or usePineConnector
 
 // ============================================================================
 // === TIME GATE ==============================================================
@@ -670,12 +675,17 @@ vetoShortOK = not useVwapVeto or close < vwapVal
 // On symbols with no real volume (many CFDs / spot) requestVolumeDelta has no
 // data -> auto-disable it. On forex/CFD (tick-volume proxy) auto-relax the
 // 4-bar streak to direction-only. Futures/crypto keep the full filter.
-bool cvdEff    = useCVDFilter and not na(volume)
-bool streakEff = useCvdStreak and (syminfo.type == "futures" or syminfo.type == "crypto")
+bool hasBorrow = str.length(deltaBorrowSym) > 0
+bool cvdEff    = useCVDFilter and (hasBorrow or not na(volume))
+bool streakEff = useCvdStreak and (hasBorrow or syminfo.type == "futures" or syminfo.type == "crypto")
 float perBarDelta = na
 if cvdEff
-    [vdO, vdH, vdL, vdC] = ta.requestVolumeDelta(cvdLowerTf, "1D")
-    perBarDelta := vdC - vdO
+    if hasBorrow
+        [_upV, _dnV] = request.security_lower_tf(deltaBorrowSym, cvdLowerTf, [close > open ? volume : 0.0, close < open ? volume : 0.0])
+        perBarDelta := array.sum(_upV) - array.sum(_dnV)
+    else
+        [vdO, vdH, vdL, vdC] = ta.requestVolumeDelta(cvdLowerTf, "1D")
+        perBarDelta := vdC - vdO
 bullDirOk = perBarDelta > 0
 bearDirOk = perBarDelta < 0
 int barsSinceNotBull = ta.barssince(not bullDirOk)
@@ -963,11 +973,22 @@ bool ddGuardOK = not phaseOn or not useDDGuard or (not na(ddRoom) and ddRoom >= 
 f_trailOn(_slD) => useTrailEff and _slD > 0
 f_pmtJSON(_action, _qty, _price, _slD, _tpD, _ordType) =>
     "{" + "\"symbol\":\"" + syminfo.ticker + "\",\"date\":\"" + str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "\",\"data\":\"" + _action + "\",\"quantity\":\"" + str.tostring(_qty) + "\",\"risk_percentage\":0,\"price\":\"" + str.tostring(_price) + "\",\"tp\":0,\"percentage_tp\":0,\"dollar_tp\":" + str.tostring(_tpD) + ",\"sl\":0,\"dollar_sl\":" + str.tostring(_slD) + ",\"percentage_sl\":0,\"trail\":" + (f_trailOn(_slD) ? "1" : "0") + ",\"trail_stop\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trBufEff) : 0) + ",\"trail_trigger\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trStartEff) : 0) + ",\"trail_freq\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0) + ",\"update_tp\":false,\"update_sl\":false,\"breakeven\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beTrigEff)) : "0") + ",\"token\":\"" + pmtToken + "\",\"pyramid\":false,\"reverse_order_close\":true,\"order_type\":\"" + _ordType + "\",\"multiple_accounts\":[{\"token\":\"" + pmtToken + "\",\"account_id\":\"" + accountID + "\",\"risk_percentage\":0,\"quantity_multiplier\":1}]}"
+f_pcSym() => str.length(pcSymbol) > 0 ? pcSymbol : syminfo.ticker
 f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
-    if usePMT and pmtBlock and _action != "close"
+    bool _pmtRoute = usePMT or useRithmic
+    if _pmtRoute and pmtBlock and _action != "close"
         label.new(bar_index, high, "⛔ PMT BLOCKED — " + pmtBlockReason, style=label.style_label_down, color=color.new(color.red, 20), textcolor=color.white, size=size.small)
-    if usePMT and (not pmtBlock or _action == "close")
+    if _pmtRoute and (not pmtBlock or _action == "close")
         alert(f_pmtJSON(_action, _qty, _price, _slD, _tpD, _ordType), alert.freq_once_per_bar)
+    // PineConnector (MT4/5): comma command "{license},{buy|sell|exit},{symbol}[,sl=,tp=,risk=]".
+    // _slD/_tpD are PRICE distances at the call site -> reconstruct absolute SL/TP prices.
+    if usePineConnector
+        if _action == "close"
+            alert(pcLicense + ",exit," + f_pcSym(), alert.freq_once_per_bar)
+        else
+            float _slPx = _action == "buy" ? _price - _slD : _price + _slD
+            float _tpPx = _action == "buy" ? _price + _tpD : _price - _tpD
+            alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","

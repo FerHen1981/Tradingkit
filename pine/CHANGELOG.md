@@ -131,6 +131,28 @@ asserted 8-replacement script so every file is byte-identical in these regions.)
 > positive-edge config first). PineConnector gives FTMO/EURUSD *execution* now;
 > the FTMO *phase/DD rules* in-Pine come after the edge is locked.
 
+## v6.8.13 (El Toro — PILOT) — alert routing as independent toggles
+
+**Piloted on MEX_EL_TORO only** (compile-check, then propagate to the other three).
+
+The single-select **"Alert destination" dropdown is replaced by independent
+per-destination on/off toggles**, so all routing config lives in the inputs and
+any combination can be enabled:
+`→ PMT Tradovate` · `→ PMT Rithmic` · `→ PineConnector (MT4/5)` · `→ Discord` ·
+`→ Journal (CSV)`, each with its own params (PMT token, PineConnector
+license/symbol/risk, account-id from group 0). `usePMT/useRithmic/
+usePineConnector/useDiscord/useJournal` now derive from the toggles; all
+downstream emitters, `plainAlertsOK`, `execInstance` and `alertMsgAuto`
+unchanged.
+
+Interim by design (config stays in the script): **TradingView still delivers one
+alert to one webhook URL and Pine cannot POST to a URL itself**, so for now enable
+ONE route per alert and put that route's webhook on the alert. Enabling several
+at once is the MIDDLEWARE step (planned): the alert URL points only at the
+middleware, which reads the enabled routes and fans out — per-route webhooks then
+live in the middleware, keyed by these toggles. No behaviour change when a single
+route is on; off by default.
+
 ## How to use
 Copy the file's contents into the Pine editor and save. Verify it compiles
 (this environment cannot compile Pine). Then run your entire-history backtest —

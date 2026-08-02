@@ -21,8 +21,12 @@ SRC = {
     "NQ": "data/3 years of NQ 1m tickdata.csv",
     "GC": "data/3 years of GC 1m tickdata.csv",
     "YM": "data/3 years of YM 1m tickdata.csv",
+    "ES": "data/3 years of ES 1m tickdata.csv",
 }
-OUT = {"NQ": "data/NQ_norm.csv", "GC": "data/GC_norm.csv", "YM": "data/YM_norm.csv"}
+OUT = {"NQ": "data/NQ_norm.csv", "GC": "data/GC_norm.csv", "YM": "data/YM_norm.csv",
+       "ES": "data/ES_norm.csv"}
+# ES uses the GC/YM export shape (UTC-offset column, decimal comma, no delta).
+_ETWALL = {"GC", "YM", "ES"}
 
 
 def _num(df, cols):

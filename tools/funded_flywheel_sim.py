@@ -32,11 +32,13 @@ GC_FUNDED = EL_DORADO_TUNED.with_(
     tp_mode="R-multiple", r_multiple=2.5, confirm_bars=0, use_recov_trail=False, **CVD_OFF)
 NQ_FUNDED = EL_DORADO_TUNED.with_(name="NQ_ElDorado", **CVD_OFF)
 
-# El Rey (ES funded): FVG 9-15, fixed 100t, R1.5 on the El Dorado PA management.
+# El Rey (ES funded): FVG 9-15, fixed 100t, R1.5, VWAP off + confirm 2 (tuned edge
+# PF 1.09, tools/edge_sweep.py) on the El Dorado PA management.
 ES_FUNDED = EL_DORADO_TUNED.with_(
     name="ES_ElRey", gap_min_ticks=9.0, gap_max_ticks=15.0,
     stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
-    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=0, use_recov_trail=False, **CVD_OFF)
+    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=2, use_vwap_veto=False,
+    use_recov_trail=False, **CVD_OFF)
 
 ASSETS = {
     "GC": ("data/GC_norm.csv", "GC", GC_FUNDED, [1, 2, 3]),

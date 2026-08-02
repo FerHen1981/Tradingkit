@@ -39,12 +39,14 @@ GC_SIG = EL_TORO.with_(
 # YM port of El Toro tuned — tick-unit inputs do NOT port cleanly (instruments.md).
 YM_SIG = PRESETS["EL_TORO_TUNED"].with_(name="YM_ElToro_port", **CVD_OFF)
 
-# El León (ES eval): FVG 9-15, fixed 100-tick stop, R-multiple 1.5, 1 contract,
-# delta OFF (research PF 1.063; H1 1.107 / H2 1.023). from-scratch ES edge.
+# El León (ES eval): FVG 9-15, fixed 100t stop, R1.5, 1 contract, delta OFF.
+# Tuned edge (tools/edge_sweep.py): VWAP veto OFF + confirm 2 lifts PF 1.06 -> 1.09,
+# most balanced split-half (H1 1.15 / H2 1.07). ES's optimum is the 9-15 band —
+# widening it (unlike GC) does NOT help.
 ES_SIG = EL_TORO.with_(
     name="ES_ElLeon", gap_min_ticks=9.0, gap_max_ticks=15.0,
     stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
-    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=0,
+    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=2, use_vwap_veto=False,
     use_recov_trail=False, contract_size=1.0, **CVD_OFF,
 )
 

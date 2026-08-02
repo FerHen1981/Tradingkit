@@ -24,8 +24,10 @@ CVD_OFF = dict(use_cvd_filter=False, use_cvd_streak=False)
 
 # Funded signals (CVD off). GC = El Tesoro (FVG6-12, fixed 100t, R2.5) on the
 # validated El Dorado PA money-management; NQ = El Dorado tuned as-is.
+# gap (9,18): the recovered GC edge (tools/gc_edge_sweep.py) — PF 1.06, split-half
+# robust (H1 1.22 / H2 1.03), vs the 0.99 floor at the documented 6-12 band.
 GC_FUNDED = EL_DORADO_TUNED.with_(
-    name="GC_ElTesoro", gap_min_ticks=6.0, gap_max_ticks=12.0,
+    name="GC_ElTesoro", gap_min_ticks=9.0, gap_max_ticks=18.0,
     stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
     tp_mode="R-multiple", r_multiple=2.5, confirm_bars=0, use_recov_trail=False, **CVD_OFF)
 NQ_FUNDED = EL_DORADO_TUNED.with_(name="NQ_ElDorado", **CVD_OFF)

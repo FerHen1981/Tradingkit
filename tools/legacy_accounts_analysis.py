@@ -27,9 +27,10 @@ CVD_OFF = dict(use_cvd_filter=False, use_cvd_streak=False)
 # --- signal presets per asset (CVD off; delta feed is empty in these exports) ---
 NQ_SIG = PRESETS["EL_TORO_TUNED"].with_(name="NQ_ElToro", **CVD_OFF)
 
-# El Minero (GC): FVG 6-12, fixed 100-tick stop, R-multiple 1.5, 2 contracts.
+# GC recovered edge (tools/gc_edge_sweep.py): FVG 9-18 (wider than the documented
+# 6-12), stop100, R1.5 -> PF 1.06 split-half robust (H1 1.22/H2 1.03) vs 0.99 floor.
 GC_SIG = EL_TORO.with_(
-    name="GC_ElMinero", gap_min_ticks=6.0, gap_max_ticks=12.0,
+    name="GC_ElMinero", gap_min_ticks=9.0, gap_max_ticks=18.0,
     stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
     tp_mode="R-multiple", r_multiple=1.5, confirm_bars=0,
     use_recov_trail=False, contract_size=2.0, **CVD_OFF,

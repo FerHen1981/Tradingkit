@@ -23,8 +23,12 @@ from backtest.engine import Engine, extract
 from tools.legacy_accounts_analysis import ES_SIG
 
 SESS_PER_YR = 252.0
-# funded (GC El Tesoro, capped) from tools/funded_flywheel_sim.py
-FUNDED = {"250k": (25_500, 14), "300k": (59_000, 18)}   # (banked_3y, breaches_3y)
+# funded (GC El Tesoro, capped) — RECOVERED edge gap (9,18), PF 1.06.
+# From tools/funded_flywheel_sim.py; per size a few nominal qty (banked_3y, breaches_3y).
+FUNDED = {
+    "250k": {1: (34_000, 10), 2: (63_500, 21), 3: (57_000, 28)},
+    "300k": {1: (30_500, 7),  2: (51_000, 17), 3: (79_000, 21)},
+}
 YEARS = 3.0
 
 
@@ -53,34 +57,37 @@ def eval_durations(sym, sig, qty, dd, step=5, horizon=20):
     return by
 
 
-def model(sym, qty, dd, size_label):
-    by = eval_durations(sym, ES_SIG, qty, dd)
+def model(eval_qty, dd, size_label):
+    # eval re-qualification time on ES (El León) at the design size
+    by = eval_durations("ES", ES_SIG, eval_qty, dd)
     n = sum(len(v) for v in by.values())
     p = len(by["PASS"]) / n if n else 0.0
-    mean_fail = np.mean(by["BREACH"] + by["TIMEOUT"]) if (by["BREACH"] + by["TIMEOUT"]) else horizon
+    mean_fail = np.mean(by["BREACH"] + by["TIMEOUT"]) if (by["BREACH"] + by["TIMEOUT"]) else 20.0
     mean_pass = np.mean(by["PASS"]) if by["PASS"] else 20.0
-    attempts = 1.0 / p if p else float("inf")
     requal = ((1 - p) / p) * mean_fail + mean_pass if p else float("inf")
 
-    banked_3y, breaches_3y = FUNDED[size_label]
-    funded_run = (YEARS * SESS_PER_YR) / breaches_3y
-    uptime = funded_run / (funded_run + requal)
-    sim_yr = banked_3y / YEARS
-    realized_yr = sim_yr * uptime
-
-    print(f"\n{size_label}  (ES eval @{qty}ct  ->  GC funded)")
-    print(f"  eval: pass={p*100:.1f}%  attempts~{attempts:.1f}  "
-          f"mean_fail={mean_fail:.0f}s  mean_pass={mean_pass:.0f}s  -> requal~{requal:.0f} sessions (~{requal/5:.0f} wk)")
-    print(f"  funded run ~{funded_run:.0f} sessions (~{funded_run/5:.0f} wk between breaches)")
-    print(f"  UPTIME = {uptime*100:.0f}%   sim ${sim_yr:,.0f}/yr  ->  REALIZED ${realized_yr:,.0f}/yr")
-    return realized_yr
+    print(f"\n{size_label}  (ES eval @{eval_qty}ct  ->  GC funded)   "
+          f"eval pass={p*100:.1f}%  requal~{requal:.0f}s (~{requal/5:.0f}wk)")
+    print(f"  {'GCqty':>5} {'sim/yr':>9} {'breach/yr':>10} {'funded_run':>11} {'uptime':>7} {'REALIZED/yr':>12}")
+    best = (None, -1)
+    for gcq, (banked_3y, breaches_3y) in FUNDED[size_label].items():
+        funded_run = (YEARS * SESS_PER_YR) / breaches_3y
+        uptime = funded_run / (funded_run + requal)
+        realized = (banked_3y / YEARS) * uptime
+        mark = ""
+        if realized > best[1]:
+            best = (gcq, realized);
+        print(f"  {gcq:>5} ${banked_3y/YEARS:>7,.0f} {breaches_3y/YEARS:>10.1f} "
+              f"{funded_run:>9.0f}s {uptime*100:>6.0f}% ${realized:>10,.0f}")
+    print(f"  -> best GC size = {best[0]}ct  ->  REALIZED ${best[1]:,.0f}/yr")
+    return best[1]
 
 
 def main():
     fleet = 0.0
-    fleet += 3 * model("ES", 3, 6500, "250k")
-    fleet += 1 * model("ES", 3, 7500, "300k")
-    print(f"\nFLEET realized (3x250k + 1x300k) ~ ${fleet:,.0f}/yr  (churn-adjusted)")
+    fleet += 3 * model(3, 6500, "250k")
+    fleet += 1 * model(3, 7500, "300k")
+    print(f"\nFLEET realized (3x250k + 1x300k), best funded size each ~ ${fleet:,.0f}/yr")
 
 
 if __name__ == "__main__":

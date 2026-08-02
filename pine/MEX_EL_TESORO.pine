@@ -40,7 +40,7 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-var string currentVersion = "v6.9.2"
+var string currentVersion = "v6.9.3"
 strategy("MΞX ΞL TΞSORO · GC Funded EOD · " + currentVersion, shorttitle="ΞL TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -48,8 +48,8 @@ strategy("MΞX ΞL TΞSORO · GC Funded EOD · " + currentVersion, shorttitle="�
      max_bars_back=500,
      max_boxes_count=500, max_labels_count=500,
      margin_long=0, margin_short=0,
-     slippage=1,
-     commission_type=strategy.commission.cash_per_contract, commission_value=1.55)
+     slippage=input.int(1, "Slippage (ticks)", minval=0, group="0 · Costs"),
+     commission_type=strategy.commission.cash_per_contract, commission_value=input.float(1.55, "Commission $/contract/side (set to YOUR broker; futures ~1.5-2.5, micros ~0.35-0.55)", minval=0, group="0 · Costs"))
 
 import TradingView/ta/8
 

@@ -1,5 +1,24 @@
 # MEX Pine scripts — optimisation changelog
 
+## v6.9.3 — commission/slippage now inputs; execution notes for live-fill validation
+
+**Costs are now inputs** (were hardcoded to the NQ template value $1.55/contract +
+1 tick on all scripts). Set `Commission $/contract/side` and `Slippage (ticks)`
+(group *0 · Costs*) to YOUR broker: full-size futures ~$1.5-2.5/side, **micros
+(MGC/MES) ~$0.35-0.55/side** — and remember micros run ~6-8 contracts/signal, so
+costs eat a bigger share of the (1/10) micro P&L.
+
+**Live-fill validation (why a TradingView run can diverge from the research
+engine).** A validated ES El León TV run came out PF 0.86 / negative where the
+engine showed PF ~1.05 positive on the same window — an execution gap, not a
+regime. Two existing toggles close it; test on TV before trusting the edge live:
+- **Entry Mode → "Market (legacy)"** (group *Entry*): removes the limit-@-50%-FVG
+  fill ambiguity (the engine fills more/other trades than TV's real limit fills).
+- **Flat window → 16:00 … 09:30** (group *Time*, `Force Flat Window`): the default
+  16:55-18:00 only covers the maintenance break, so positions still hold overnight
+  and gap through the 100t stop. Widen it to stay RTH-only and kill gap risk.
+
+
 ## v6.9.2 — validated legacy-account defaults baked in (ES/GC on your data)
 
 The four traded scripts now ship with the settings validated on the uploaded

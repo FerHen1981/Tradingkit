@@ -38,10 +38,20 @@ GC_SIG = EL_TORO.with_(
 # YM port of El Toro tuned — tick-unit inputs do NOT port cleanly (instruments.md).
 YM_SIG = PRESETS["EL_TORO_TUNED"].with_(name="YM_ElToro_port", **CVD_OFF)
 
+# El León (ES eval): FVG 9-15, fixed 100-tick stop, R-multiple 1.5, 1 contract,
+# delta OFF (research PF 1.063; H1 1.107 / H2 1.023). from-scratch ES edge.
+ES_SIG = EL_TORO.with_(
+    name="ES_ElLeon", gap_min_ticks=9.0, gap_max_ticks=15.0,
+    stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
+    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=0,
+    use_recov_trail=False, contract_size=1.0, **CVD_OFF,
+)
+
 ASSETS = {
     "NQ": ("data/NQ_norm.csv", "NQ", NQ_SIG, [5, 10, 13, 18, 25]),
     "GC": ("data/GC_norm.csv", "GC", GC_SIG, [1, 2, 3, 4, 6]),
     "YM": ("data/YM_norm.csv", "YM", YM_SIG, [3, 5, 8, 12]),
+    "ES": ("data/ES_norm.csv", "ES", ES_SIG, [1, 2, 3, 4]),
 }
 # Apex legacy (pre-4.0) intraday-trailing overlays, built explicitly from the
 # _APEX_SIZES table in backtest/firms.py (250k: tgt 15k / DD 6.5k; 300k: 20k / 7.5k).

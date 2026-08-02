@@ -30,9 +30,16 @@ GC_FUNDED = EL_DORADO_TUNED.with_(
     tp_mode="R-multiple", r_multiple=2.5, confirm_bars=0, use_recov_trail=False, **CVD_OFF)
 NQ_FUNDED = EL_DORADO_TUNED.with_(name="NQ_ElDorado", **CVD_OFF)
 
+# El Rey (ES funded): FVG 9-15, fixed 100t, R1.5 on the El Dorado PA management.
+ES_FUNDED = EL_DORADO_TUNED.with_(
+    name="ES_ElRey", gap_min_ticks=9.0, gap_max_ticks=15.0,
+    stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
+    tp_mode="R-multiple", r_multiple=1.5, confirm_bars=0, use_recov_trail=False, **CVD_OFF)
+
 ASSETS = {
     "GC": ("data/GC_norm.csv", "GC", GC_FUNDED, [1, 2, 3]),
     "NQ": ("data/NQ_norm.csv", "NQ", NQ_FUNDED, [2, 3, 5]),
+    "ES": ("data/ES_norm.csv", "ES", ES_FUNDED, [1, 2, 3, 4]),
 }
 
 def pa_overlay(dd, wait_for_cap):

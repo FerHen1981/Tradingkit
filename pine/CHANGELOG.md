@@ -1,5 +1,27 @@
 # MEX Pine scripts — optimisation changelog
 
+## v6.9.2 — validated legacy-account defaults baked in (ES/GC on your data)
+
+The four traded scripts now ship with the settings validated on the uploaded
+NQ/ES/GC/YM 1m data (split-half robust), so each runs stand-alone per account —
+no middleware required. Delta/CVD OFF on all (empty order-flow; no edge). Account
+defaults set to the **Apex legacy 250k intraday** overlay (DD $6,500, goal
+$15,000, ddModel Intraday). For a **300k** account change two inputs: Trailing
+Drawdown $6,500 -> **$7,500**, Eval Goal $15,000 -> **$20,000**, and (funded)
+contract size 2 -> **3**.
+
+| script | asset · phase | FVG band | VWAP veto | confirm | stop | R | qty | funded MM |
+|---|---|---|---|---|---|---|---|---|
+| **MEX_EL_LEON**   | ES · Eval  | 9-15 | **OFF** | 2 | 100t fix | 1.5 | 2 | — |
+| **MEX_EL_REY**    | ES · Funded| 9-15 | **OFF** | 2 | 100t fix | 1.5 | 2 | day-trail $300, MAE on, wait-for-cap |
+| **MEX_EL_MINERO** | GC · Eval  | **9-18** | ON | **0** | 100t fix | 1.5 | 2 | — |
+| **MEX_EL_TESORO** | GC · Funded| **9-18** | ON | **0** | 100t fix | **2.5** | 2 | day-trail $300, MAE on, wait-for-cap |
+
+Recovered GC edge (wider 9-18 FVG): PF 1.06-1.07 split-half robust vs 0.99 at the
+old 6-12 band. ES tuned (VWAP off + confirm 2): PF 1.09. See
+docs/legacy_accounts_playbook.md and tools/edge_sweep.py.
+
+
 ## v6.9.1 — "→ Middleware" route (fan-out seam)
 
 All 8 scripts gain a `→ Middleware (fan-out)` alert route in group *9 · EXECUTION*.

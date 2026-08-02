@@ -40,7 +40,7 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-var string currentVersion = "v6.9.1"
+var string currentVersion = "v6.9.2"
 strategy("MΞX ΞL TΞSORO · GC Funded EOD · " + currentVersion, shorttitle="ΞL TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -137,7 +137,7 @@ unitMode  = input.string("Ticks", "Distance Unit", options=["Ticks","Points","%"
 atrLen    = input.int(14, "ATR Length (ATR unit)", minval=1, group=GROUP_UNIT, tooltip="ATR length, only used when Distance Unit is set to ATR.", display=display.none)
 sizingMode = input.string("Fixed contracts", "Sizing Mode", options=["Fixed contracts","Fixed $ risk","% equity risk"], group=GROUP_UNIT,
      tooltip="With the swing stop the stop distance varies per trade; $-risk or %-risk sizing keeps risk per trade constant and is recommended in that case.", display=display.none)
-contractSize       = input.float(1, "Fixed Qty", minval=0, group=GROUP_UNIT, tooltip="Fixed number of contracts per trade. The MAE guard may scale this down per trade on a PA.")
+contractSize       = input.float(2, "Fixed Qty", minval=0, group=GROUP_UNIT, tooltip="Fixed number of contracts per trade. The MAE guard may scale this down per trade on a PA.")
 riskValue          = input.float(250, "Risk per Trade ($ of %)", minval=0, group=GROUP_UNIT, tooltip="Risk per trade when using $-risk or %-risk sizing instead of fixed contracts.", display=display.none)
 allowFractionalQty = input.bool(false, "Allow Fractional Qty (crypto)", group=GROUP_UNIT, tooltip="Allow fractional position sizes (crypto only — futures require whole contracts).", display=display.none)
 maxQty             = input.float(100, "Max Qty Cap", minval=0, group=GROUP_UNIT, tooltip="Hard cap on position size regardless of the sizing mode.", display=display.none)
@@ -209,16 +209,16 @@ onlyFirstTrade       = false
 
 // === INTRADAY DAY-EXIT (v6.4.4i — sim-gevalideerde dagwinst-behoud) ==========
 var string GROUP_DEX = "1e · ACCOUNT — Funded: day-profit exit"
-dayExitMode = input.string("Off", "Day-profit exit mode", options=["Off","Day-trail (keep peak)","Day-cap (hard target)","Trail + cap"], group=GROUP_DEX,
+dayExitMode = input.string("Day-trail (keep peak)", "Day-profit exit mode", options=["Off","Day-trail (keep peak)","Day-cap (hard target)","Trail + cap"], group=GROUP_DEX,
      tooltip="Off = no day-profit exit. Day-trail closes the day once open day profit pulls back the trail amount from the intraday peak. Day-cap closes the day at the hard target. Trail + cap: both.")
-dayTrailUSD = input.float(75, "Day-trail pullback ($)", minval=10, step=10, group=GROUP_DEX,
+dayTrailUSD = input.float(300, "Day-trail pullback ($)", minval=10, step=10, group=GROUP_DEX,
      tooltip="Day-profit pullback from the intraday peak that closes the day (trail modes).")
 dayCapUSD   = input.float(300, "Day-cap hard target ($)", minval=50, step=25, group=GROUP_DEX,
      tooltip="Hard day-profit target that closes the day (cap modes).")
 
 
 // === ACCOUNT PHASE (Apex) ====================================================
-ddModel       = input.string("EOD", "Drawdown Model", options=["EOD","Intraday"], group=GROUP_PHASE,
+ddModel       = input.string("Intraday", "Drawdown Model", options=["EOD","Intraday"], group=GROUP_PHASE,
      tooltip="EOD (Apex 4.0 default): trailing ratchets on the daily closing balance only; open profit peaks do not count. Intraday (legacy): ratchets in real time with the live peak.", display=display.none)
 payoutBuffer  = input.float(500, "Extra buffer above safety net ($)", step=100, group=GROUP_PHASE,
      tooltip="Payout-ready only when realized >= safety net + this buffer + min. payout. VALIDATION (PA-phase sweep $500-12,000, 300+ fresh PAs, horizon 500 sessions): death rate is FLAT across the whole range (27-31%) because PA mortality sits pre-lock, before any buffer exists; a bigger buffer only traps money in accounts that later die — payout/PA falls monotonically from $721 (buffer $500) to $416 ($12,000). Optimum: $500-1,000. Withdraw early and often; banked money is the only money that is truly yours.", display=display.none)
@@ -233,7 +233,7 @@ paBacktestMode = input.bool(true, "PA backtest mode (breach marks, does NOT clos
      tooltip="ON (backtest): a PA breach is counted and marked but does not halt the strategy. OFF (live): a breach truly halts the account.")
 accountPhase  = input.string("Apex PA", "Account Phase", options=["Research (none)","Apex Eval","Apex PA"], group=GROUP_PHASE,
      tooltip="Research: no account rules (default; backtests unchanged). Eval: goal + trailing. PA: trailing until lock, DLL, consistency/payout monitor — and the MAE guard (group 16).")
-acctTrailDD   = input.float(2000, "Trailing Drawdown ($)", step=100, group=GROUP_PHASE, tooltip="Trailing drawdown of your account plan.", display=display.none)
+acctTrailDD   = input.float(6500, "Trailing Drawdown ($)", step=100, group=GROUP_PHASE, tooltip="Trailing drawdown of your account plan.", display=display.none)
 acctGoal      = 3000.0
 acctDLL       = input.float(1000, "PA Daily Loss Limit ($)", step=50, group=GROUP_PHASE, tooltip="PA daily loss limit; the phase layer halts the day when hit.", display=display.none)
 consistencyPct= input.float(50, "Consistency rule (%)", minval=10, maxval=100, group=GROUP_PHASE, tooltip="Max share of total profit one day may contribute at payout request (Apex: 30-50% depending on plan).", display=display.none)
@@ -358,7 +358,7 @@ cvdTrendCount = input.int(4, "Count", minval=1, inline="cv", group=GROUP_CVD, to
 useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
 gapMinSize   = input.float(9,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
-gapMaxSize   = input.float(15, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+gapMaxSize   = input.float(18, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
 confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 
@@ -507,7 +507,7 @@ evalTrailEod    = input.bool(true, "EOD-trailing (uit=intraday)", group=GROUP_EV
 
 // === v5.4: APEX LEGACY 30% MAE-GUARD =========================================
 var string GROUP_MAE = GROUP_PHASE
-useMaeGuard  = input.bool(false, "MAE guard on (only active in Apex PA phase)", group=GROUP_MAE,
+useMaeGuard  = input.bool(true, "MAE guard on (only active in Apex PA phase)", group=GROUP_MAE,
      tooltip="Apex Legacy 30% Negative P&L (MAE) rule: open negative P&L may never exceed 30% of the profit balance at the START of the day. New/low-profit accounts: 30% of the trailing drawdown (50k: $750). Once EOD profit reaches 2x the safety net (trailing DD + $100): 50%. This guard automatically scales contracts down so stop risk fits, and only blocks a trade if even 1 contract does not fit. Active only when Account Phase (group 4b) is Apex PA, with the live-sync PnL offset filled in.", display=display.none)
 maeBasePct   = input.float(30, "Base limit (% of profit balance)", minval=5, maxval=100, step=5, group=GROUP_MAE, tooltip="Apex base MAE limit: open loss as % of start-of-day profit balance (rule: 30%).", display=display.none)
 maeGrownPct  = input.float(50, "Limit after 2x safety net (%)", minval=5, maxval=100, step=5, group=GROUP_MAE, tooltip="MAE limit once EOD profit has reached 2x the safety net (rule: 50%).", display=display.none)

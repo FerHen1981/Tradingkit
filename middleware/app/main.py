@@ -19,9 +19,12 @@ from .config import Settings, load_accounts_source
 from .dedupe import Deduper
 from .journal import Journal
 from .models import Signal
+import asyncio
+
 from .notify import alert_failure
 from .risk import RiskState
 from .router import dispatch
+from .tradovate import TradovateClient, poll_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("mex.middleware")
@@ -36,6 +39,15 @@ risk = RiskState(settings.max_entries_default)
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
+
+
+@app.on_event("startup")
+async def _start_poller() -> None:
+    if settings.tradovate_enabled():
+        client = TradovateClient(settings.tradovate_base, settings.tradovate_creds(), mock=settings.tradovate_mock)
+        asyncio.create_task(poll_loop(client, journal, settings.perf_poll_seconds))
+    else:
+        log.info("Tradovate tracking off (set TRADOVATE_NAME/... or TRADOVATE_MOCK=true)")
 
 
 def _check_secret(supplied: str) -> None:
@@ -107,6 +119,20 @@ def killswitch(secret: str, armed: bool) -> dict:
 def risk_state(secret: str) -> dict:
     _check_secret(secret)
     return risk.snapshot()
+
+
+@app.get("/performance")
+def performance(secret: str) -> dict:
+    """Latest live P&L snapshot per account + fleet totals (from the Tradovate poller)."""
+    _check_secret(secret)
+    rows = journal.latest_perf()
+    fleet = {
+        "realized": round(sum(r["realized"] or 0 for r in rows), 2),
+        "open_pnl": round(sum(r["open_pnl"] or 0 for r in rows), 2),
+        "total_val": round(sum(r["total_val"] or 0 for r in rows), 2),
+        "accounts": len(rows),
+    }
+    return {"fleet": fleet, "accounts": rows}
 
 
 @app.post("/halt")

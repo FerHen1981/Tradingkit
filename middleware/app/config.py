@@ -41,6 +41,24 @@ class Settings:
     alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
     # Phase 5 — risk overlay
     max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)
+    # Live fleet tracking — Tradovate read API
+    tradovate_base: str = os.environ.get("TRADOVATE_BASE", "https://live.tradovateapi.com/v1")
+    tradovate_mock: bool = os.environ.get("TRADOVATE_MOCK", "false").lower() == "true"
+    perf_poll_seconds: float = float(os.environ.get("PERF_POLL_SECONDS", "60"))
+
+    def tradovate_creds(self) -> dict:
+        return {
+            "name": os.environ.get("TRADOVATE_NAME", ""),
+            "password": os.environ.get("TRADOVATE_PASSWORD", ""),
+            "appId": os.environ.get("TRADOVATE_APPID", ""),
+            "appVersion": os.environ.get("TRADOVATE_APPVERSION", "1.0"),
+            "cid": os.environ.get("TRADOVATE_CID", ""),
+            "sec": os.environ.get("TRADOVATE_SEC", ""),
+            "deviceId": os.environ.get("TRADOVATE_DEVICE_ID", ""),
+        }
+
+    def tradovate_enabled(self) -> bool:
+        return self.tradovate_mock or bool(os.environ.get("TRADOVATE_NAME"))
 
 
 @dataclass

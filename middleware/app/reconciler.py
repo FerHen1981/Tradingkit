@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 
-from .reconcile import match_fills
+from .reconcile import find_intended, match_fills, pair_roundtrips, roundtrip_pnl
 
 log = logging.getLogger("mex.reconciler")
 
@@ -38,16 +38,22 @@ class Reconciler:
             except Exception as exc:
                 log.warning("metaapi fills error: %r", exc)
 
-        rows = match_fills(intended, fills)
+        slip_rows = match_fills(intended, fills)
+        # P&L-deviation: pair entry+exit fills into round-trips, realized R vs expected R
+        pnl_rows = [roundtrip_pnl(rt, find_intended(rt["entry"], intended)) for rt in pair_roundtrips(fills)]
+        rows = slip_rows + pnl_rows
         if rows:
             self.journal.write_recon(rows)
             if self.notion is not None:
                 await self.notion.append(rows)
 
-        matched = [r for r in rows if r.get("matched")]
+        matched = [r for r in slip_rows if r.get("matched")]
+        closed = [r for r in pnl_rows if r.get("realized_r") is not None]
         return {
             "intended": len(intended), "fills": len(fills),
-            "matched": len(matched), "unmatched": len(rows) - len(matched),
+            "matched": len(matched), "unmatched": len(slip_rows) - len(matched),
+            "roundtrips": len(pnl_rows),
+            "avg_realized_r": round(sum(r["realized_r"] for r in closed) / len(closed), 3) if closed else None,
             "avg_slippage_ticks": round(
                 sum(r["slippage_ticks"] for r in matched if r.get("slippage_ticks") is not None)
                 / max(1, sum(1 for r in matched if r.get("slippage_ticks") is not None)), 2) if matched else None,

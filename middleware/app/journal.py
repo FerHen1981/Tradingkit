@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS recon (
     intended_price REAL, fill_price REAL,
     slippage_price REAL, slippage_ticks REAL, slippage_usd REAL, slippage_pct REAL,
     latency_s REAL, intended_qty REAL, fill_qty REAL, qty_diff REAL,
+    realized_usd REAL, realized_r REAL, expected_r REAL, hold_s REAL,
     matched INTEGER
 );
 """
@@ -81,13 +82,15 @@ class Journal:
         for ts, detail in cur.fetchall():
             d = json.loads(detail)
             out.append({"ts": ts, "strategy": d.get("strategy"), "symbol": d.get("symbol"),
-                        "side": d.get("action"), "price": d.get("price"), "qty": d.get("qty")})
+                        "side": d.get("action"), "price": d.get("price"), "qty": d.get("qty"),
+                        "dollar_sl": d.get("dollar_sl"), "dollar_tp": d.get("dollar_tp")})
         return out
 
     def write_recon(self, rows: list[dict]) -> None:
         cols = ("ts", "strategy", "venue", "account", "symbol", "side", "intended_price",
                 "fill_price", "slippage_price", "slippage_ticks", "slippage_usd", "slippage_pct",
-                "latency_s", "intended_qty", "fill_qty", "qty_diff", "matched")
+                "latency_s", "intended_qty", "fill_qty", "qty_diff",
+                "realized_usd", "realized_r", "expected_r", "hold_s", "matched")
         import time as _t
         payload = [{**{c: r.get(c) for c in cols if c != "ts"},
                     "ts": r.get("fill_ts") or _t.time(),

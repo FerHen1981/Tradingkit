@@ -148,6 +148,9 @@ class NotionRecon:
             "Slippage %": self._num(r.get("slippage_pct")),
             "Latency s": self._num(r.get("latency_s")),
             "Qty diff": self._num(r.get("qty_diff")),
+            "Realized $": self._num(r.get("realized_usd")),
+            "Realized R": self._num(r.get("realized_r")),
+            "Expected R": self._num(r.get("expected_r")),
         }
 
     async def append(self, rows: list[dict]) -> None:

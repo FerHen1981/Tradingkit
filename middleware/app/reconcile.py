@@ -84,6 +84,64 @@ def compute_discrepancies(intended: dict, fill: Fill) -> dict:
     }
 
 
+def find_intended(fill: Fill, intended_list: list[dict], window_s: float = 90.0) -> dict | None:
+    """The intended signal that best matches a fill (same side + symbol base + closest time)."""
+    fbase = _norm(fill.symbol)
+    best, best_dt = None, None
+    for sig in intended_list:
+        if sig.get("side") != fill.side or _norm(sig["symbol"]) != fbase:
+            continue
+        dt = abs(fill.ts - sig.get("ts", fill.ts))
+        if dt <= window_s and (best_dt is None or dt < best_dt):
+            best, best_dt = sig, dt
+    return best
+
+
+def pair_roundtrips(fills: list[Fill]) -> list[dict]:
+    """FIFO-pair opening and closing fills per (venue, account, symbol) into round-trips.
+    Simple 1-lot-oriented netting (a fill of the opposite side closes the oldest open one);
+    good enough for the common single-contract case, refine for partials later."""
+    from collections import defaultdict, deque
+    books: dict = defaultdict(deque)
+    trips: list[dict] = []
+    for f in sorted(fills, key=lambda x: x.ts):
+        key = (f.venue, f.account, _norm(f.symbol))
+        book = books[key]
+        if book and book[0].side != f.side:
+            entry = book.popleft()
+            trips.append({"venue": f.venue, "account": f.account, "symbol": entry.symbol,
+                          "side": entry.side, "entry": entry, "exit": f})
+        else:
+            book.append(f)
+    return trips
+
+
+def roundtrip_pnl(rt: dict, intended_entry: dict | None) -> dict:
+    """Realized P&L + realized R (vs expected R from the entry signal's SL/TP)."""
+    entry, exit = rt["entry"], rt["exit"]
+    signed = 1.0 if entry.side == "buy" else -1.0
+    realized_price = (exit.price - entry.price) * signed
+    inst = _instrument(entry.symbol) if entry.venue == "tradovate" else None
+    realized_usd = realized_price * inst[1] * entry.qty if inst else None
+    realized_r = expected_r = None
+    if intended_entry:
+        dsl = intended_entry.get("dollar_sl")      # SL distance in price (== 1R risk in price)
+        dtp = intended_entry.get("dollar_tp")
+        if dsl:                                     # R is venue-agnostic: price move / stop distance
+            realized_r = round(realized_price / dsl, 3)
+            if dtp:
+                expected_r = round(dtp / dsl, 3)
+    return {
+        "venue": rt["venue"], "account": rt["account"], "symbol": entry.symbol, "side": entry.side,
+        "entry_price": entry.price, "exit_price": exit.price, "qty": entry.qty,
+        "realized_price": round(realized_price, 6),
+        "realized_usd": round(realized_usd, 2) if realized_usd is not None else None,
+        "realized_r": realized_r, "expected_r": expected_r,
+        "hold_s": round(exit.ts - entry.ts, 1),
+        "matched": True, "fill_ts": exit.ts,
+    }
+
+
 def match_fills(intended_list: list[dict], fills: list[Fill], window_s: float = 90.0) -> list[dict]:
     """Match each fill to the closest-in-time intended signal with the same symbol base and
     side, within window_s. Greedy by time proximity; each intended matched once per venue.

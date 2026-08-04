@@ -70,3 +70,47 @@ class NotionSync:
                                           json={"parent": {"database_id": self.db_id}, "properties": props})
                 except Exception as exc:  # one account failing must not stall the rest
                     log.warning("notion upsert failed for %s: %r", row.get("account"), exc)
+
+
+class NotionJournal:
+    """Append one row per trade to a Notion Trade Journal database (a visible log in LifeOS).
+    Create-only (each trade is its own row). DRY when unconfigured."""
+
+    def __init__(self, token: str, db_id: str):
+        self.token = token
+        self.db_id = db_id
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.token and self.db_id)
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.token}", "Notion-Version": _VER,
+                "Content-Type": "application/json"}
+
+    async def append_trade(self, sig, results: list[dict]) -> None:
+        ok = sum(1 for r in results if r.get("status") in ("sent", "dry_run"))
+        blocked = sum(1 for r in results if r.get("status") == "blocked")
+        failed = sum(1 for r in results if r.get("status") == "error")
+        result = f"{ok} sent" + (f", {blocked} blocked" if blocked else "") + (f", {failed} FAILED" if failed else "")
+        props = {
+            "Trade": {"title": [{"text": {"content": f"{sig.strategy} {sig.action} {sig.symbol}"}}]},
+            "Strategy": {"rich_text": [{"text": {"content": sig.strategy}}]},
+            "Action": {"select": {"name": sig.action}},
+            "Symbol": {"rich_text": [{"text": {"content": sig.symbol}}]},
+            "Price": {"number": sig.price},
+            "Qty": {"number": sig.qty},
+            "SL $": {"number": sig.dollar_sl},
+            "TP $": {"number": sig.dollar_tp},
+            "Accounts": {"number": ok},
+            "Result": {"rich_text": [{"text": {"content": result}}]},
+        }
+        if not self.enabled:
+            log.info("notion journal DRY: %s %s %s -> %s", sig.strategy, sig.action, sig.symbol, result)
+            return
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                await client.post(f"{_API}/pages", headers=self._headers(),
+                                  json={"parent": {"database_id": self.db_id}, "properties": props})
+        except Exception as exc:
+            log.warning("notion journal append failed: %r", exc)

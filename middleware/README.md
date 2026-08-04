@@ -7,10 +7,14 @@ PickMyTrade → Tradovate). That is what lets you run 11+ accounts from 2 alerts
 of hand-maintaining one alert per account per strategy.
 
 ```
-TradingView alert ──POST /webhook──▶  middleware  ──▶ PMT (Tradovate)  ──▶ account 1
-   (strategy: "GC")                   │  account-map     PineConnector  ──▶ account 2  (later)
-                                       └─ journal (sqlite)                    ...
+                        ┌─ EXEC ── PMT ──────▶ Tradovate account 1..N   (per acct: firm/asset/vol)
+TradingView alert ─▶ middleware ┼─ EXEC ── PineConnector ▶ MT5/FTMO
+   (strategy "GC")   (control    ├─ NOTIFY ─ Discord (live, every trade)
+                      plane)     ├─ JOURNAL ─ sqlite (internal) + LifeOS Trade Journal
+                                 └─ TRACK ── Tradovate P&L ▶ LifeOS Fleet Performance
 ```
+Not a copy-trader: you control per account which firm/asset/volume/channel. One alert →
+the middleware fans out across execution AND notification channels and keeps you informed.
 
 ## Safety model
 - **DRY_RUN=true by default** — payloads are built and journalled but NOT sent. Wire

@@ -9,6 +9,7 @@ strategies:
     accounts: [apex_f1, apex_f2, apex_f3, apex_f4]
   ES:                       # El Rey (funded) / El Leon (eval) send strategy:"ES"
     accounts: [apex_f5, apex_f6, apex_f7, ftmo_mt5_1]   # cross-firm: Apex + FTMO from one alert
+    notify: ""              # optional per-strategy Discord webhook (else global NOTIFY_WEBHOOK)
 
 accounts:
   apex_f1:

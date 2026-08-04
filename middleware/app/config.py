@@ -38,16 +38,18 @@ class Settings:
     idem_ttl: float = float(os.environ.get("IDEM_TTL_SECONDS", "3"))       # dedupe identical signals within N s
     retry_max: int = int(os.environ.get("RETRY_MAX", "3"))                 # PMT POST attempts on network/5xx
     retry_backoff: float = float(os.environ.get("RETRY_BACKOFF_SECONDS", "0.5"))
-    alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
+    alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for FAILURES
+    notify_webhook: str = os.environ.get("NOTIFY_WEBHOOK", "")            # Discord webhook for EVERY trade (live notify)
     # Phase 5 — risk overlay
     max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)
     # Live fleet tracking — Tradovate read API
     tradovate_base: str = os.environ.get("TRADOVATE_BASE", "https://live.tradovateapi.com/v1")
     tradovate_mock: bool = os.environ.get("TRADOVATE_MOCK", "false").lower() == "true"
     perf_poll_seconds: float = float(os.environ.get("PERF_POLL_SECONDS", "60"))
-    # LifeOS / Notion fleet dashboard
+    # LifeOS / Notion fleet dashboard + trade journal
     notion_token: str = os.environ.get("NOTION_TOKEN", "")
-    notion_db_id: str = os.environ.get("NOTION_DB_ID", "")
+    notion_db_id: str = os.environ.get("NOTION_DB_ID", "")               # fleet performance DB
+    notion_journal_db: str = os.environ.get("NOTION_JOURNAL_DB", "")     # trade journal DB (one row per trade)
 
     def tradovate_creds(self) -> dict:
         return {
@@ -68,6 +70,10 @@ class Settings:
 class AccountMap:
     strategies: dict = field(default_factory=dict)  # {strategy: {"accounts": [ids]}}
     accounts: dict = field(default_factory=dict)     # {id: {broker, token, account_id, ...}}
+
+    def notify_for(self, strategy: str) -> str:
+        """Optional per-strategy Discord webhook override (falls back to the global one)."""
+        return (self.strategies.get(strategy) or {}).get("notify", "")
 
     def accounts_for(self, strategy: str) -> list[dict]:
         ids = (self.strategies.get(strategy) or {}).get("accounts", [])

@@ -21,8 +21,8 @@ from .journal import Journal
 from .models import Signal
 import asyncio
 
-from .notify import alert_failure
-from .notion_sync import NotionSync
+from .notify import alert_failure, notify_trade
+from .notion_sync import NotionJournal, NotionSync
 from .risk import RiskState
 from .router import dispatch
 from .tradovate import TradovateClient, poll_loop
@@ -37,6 +37,7 @@ accounts = load_accounts_source(settings)
 journal = Journal(settings.journal_db)
 deduper = Deduper(settings.idem_ttl)
 risk = RiskState(settings.max_entries_default)
+trade_journal = NotionJournal(settings.notion_token, settings.notion_journal_db)
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
@@ -96,6 +97,10 @@ async def webhook(request: Request) -> dict:
     failures = [r for r in results if r.get("status") == "error"]
     for r in results:
         journal.write("dispatch", r, strategy=sig.strategy, account=r.get("account", ""))
+
+    # Notify + journal channels (best-effort; never block the trade path)
+    await notify_trade(accounts.notify_for(sig.strategy) or settings.notify_webhook, sig, results)
+    await trade_journal.append_trade(sig, results)
     if failures:
         summary = ", ".join(f"{r.get('account', '?')}: {r.get('reason') or r.get('http_status')}" for r in failures)
         await alert_failure(settings.alert_webhook,

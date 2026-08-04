@@ -21,6 +21,8 @@ from typing import Optional
 
 import httpx
 
+from .reconcile import Fill
+
 log = logging.getLogger("mex.tradovate")
 
 
@@ -85,6 +87,35 @@ class TradovateClient:
                     "raw": snap,
                 })
         return rows
+
+
+    async def fills(self, since_ts: float) -> list["Fill"]:
+        """Actual futures fills for reconciliation. Real path: GET /fill/list (defensive
+        parse — confirm price/qty/action/symbol fields against your first live fills)."""
+        if self.mock:
+            return [Fill("tradovate", "APEX-1", "GC1!", "buy", 2650.8, 1.0, since_ts + 1.2, "tv-mock-1")]
+        out: list[Fill] = []
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                token = await self._auth(client)
+                headers = {"Authorization": f"Bearer {token}"}
+                data = (await client.get(f"{self.base}/fill/list", headers=headers)).json()
+                for f in data:
+                    ts = f.get("timestamp")
+                    try:
+                        import datetime as _dt
+                        fts = _dt.datetime.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S").timestamp()
+                    except Exception:
+                        fts = since_ts
+                    if fts < since_ts:
+                        continue
+                    side = "buy" if str(f.get("action", "")).lower().startswith("b") else "sell"
+                    out.append(Fill("tradovate", str(f.get("accountId", "")), str(f.get("symbol", "")),
+                                    side, float(f.get("price", 0) or 0), float(f.get("qty", 0) or 0),
+                                    fts, str(f.get("id", ""))))
+        except Exception as exc:
+            log.warning("tradovate fills failed: %r", exc)
+        return out
 
 
 async def poll_loop(client: TradovateClient, journal, interval: float, on_snapshot=None) -> None:

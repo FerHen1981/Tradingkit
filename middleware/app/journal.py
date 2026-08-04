@@ -28,6 +28,15 @@ CREATE TABLE IF NOT EXISTS perf (
     raw        TEXT                   -- full snapshot JSON
 );
 CREATE INDEX IF NOT EXISTS perf_ts ON perf(ts);
+CREATE TABLE IF NOT EXISTS recon (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         REAL NOT NULL,
+    strategy   TEXT, venue TEXT, account TEXT, symbol TEXT, side TEXT,
+    intended_price REAL, fill_price REAL,
+    slippage_price REAL, slippage_ticks REAL, slippage_usd REAL, slippage_pct REAL,
+    latency_s REAL, intended_qty REAL, fill_qty REAL, qty_diff REAL,
+    matched INTEGER
+);
 """
 
 
@@ -62,6 +71,29 @@ class Journal:
             "VALUES (:ts, :account, :account_id, :realized, :open_pnl, :total_val, :raw)",
             [{**r, "raw": json.dumps(r.get("raw", {}), default=str)} for r in rows],
         )
+        self._db.commit()
+
+    def signals_since(self, since_ts: float) -> list[dict]:
+        """Intended trades: signal events since `since_ts`, flattened with their timestamp."""
+        cur = self._db.execute(
+            "SELECT ts, detail FROM events WHERE kind='signal' AND ts>=? ORDER BY ts", (since_ts,))
+        out = []
+        for ts, detail in cur.fetchall():
+            d = json.loads(detail)
+            out.append({"ts": ts, "strategy": d.get("strategy"), "symbol": d.get("symbol"),
+                        "side": d.get("action"), "price": d.get("price"), "qty": d.get("qty")})
+        return out
+
+    def write_recon(self, rows: list[dict]) -> None:
+        cols = ("ts", "strategy", "venue", "account", "symbol", "side", "intended_price",
+                "fill_price", "slippage_price", "slippage_ticks", "slippage_usd", "slippage_pct",
+                "latency_s", "intended_qty", "fill_qty", "qty_diff", "matched")
+        import time as _t
+        payload = [{**{c: r.get(c) for c in cols if c != "ts"},
+                    "ts": r.get("fill_ts") or _t.time(),
+                    "matched": 1 if r.get("matched") else 0} for r in rows]
+        self._db.executemany(
+            f"INSERT INTO recon ({','.join(cols)}) VALUES ({','.join(':' + c for c in cols)})", payload)
         self._db.commit()
 
     def latest_perf(self) -> list[dict]:

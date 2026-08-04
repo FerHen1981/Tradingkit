@@ -21,8 +21,10 @@ from .journal import Journal
 from .models import Signal
 import asyncio
 
+from .metaapi import MetaApiClient
 from .notify import alert_failure, notify_trade
-from .notion_sync import NotionJournal, NotionSync
+from .notion_sync import NotionJournal, NotionRecon, NotionSync
+from .reconciler import Reconciler
 from .risk import RiskState
 from .router import dispatch
 from .tradovate import TradovateClient, poll_loop
@@ -38,6 +40,7 @@ journal = Journal(settings.journal_db)
 deduper = Deduper(settings.idem_ttl)
 risk = RiskState(settings.max_entries_default)
 trade_journal = NotionJournal(settings.notion_token, settings.notion_journal_db)
+RECON: dict = {"engine": None}   # populated at startup
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
@@ -45,13 +48,20 @@ STATE = {"armed": True}
 
 @app.on_event("startup")
 async def _start_poller() -> None:
+    tv_client = None
     if settings.tradovate_enabled():
-        client = TradovateClient(settings.tradovate_base, settings.tradovate_creds(), mock=settings.tradovate_mock)
+        tv_client = TradovateClient(settings.tradovate_base, settings.tradovate_creds(), mock=settings.tradovate_mock)
         notion = NotionSync(settings.notion_token, settings.notion_db_id)
-        asyncio.create_task(poll_loop(client, journal, settings.perf_poll_seconds,
+        asyncio.create_task(poll_loop(tv_client, journal, settings.perf_poll_seconds,
                                       on_snapshot=notion.upsert_fleet))
     else:
         log.info("Tradovate tracking off (set TRADOVATE_NAME/... or TRADOVATE_MOCK=true)")
+
+    # Phase 6 — reconciliation engine (Tradovate + MetaAPI fills vs intended signals)
+    meta = MetaApiClient(settings.metaapi_base, settings.metaapi_token, settings.metaapi_account,
+                         mock=settings.metaapi_mock)
+    RECON["engine"] = Reconciler(journal, tv_client, meta,
+                                 NotionRecon(settings.notion_token, settings.notion_recon_db))
 
 
 def _check_secret(supplied: str) -> None:
@@ -127,6 +137,17 @@ def killswitch(secret: str, armed: bool) -> dict:
 def risk_state(secret: str) -> dict:
     _check_secret(secret)
     return risk.snapshot()
+
+
+@app.post("/reconcile")
+async def reconcile(secret: str, lookback_s: float = 900.0) -> dict:
+    """Run one reconciliation pass: match recent intended trades to actual venue fills,
+    compute slippage/latency/qty discrepancies, store + push to LifeOS."""
+    _check_secret(secret)
+    engine = RECON["engine"]
+    if engine is None:
+        return {"error": "reconciler not initialised"}
+    return await engine.run(lookback_s)
 
 
 @app.get("/performance")

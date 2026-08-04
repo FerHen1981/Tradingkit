@@ -114,3 +114,50 @@ class NotionJournal:
                                   json={"parent": {"database_id": self.db_id}, "properties": props})
         except Exception as exc:
             log.warning("notion journal append failed: %r", exc)
+
+
+class NotionRecon:
+    """Append one row per reconciled (trade × venue) to a Notion Reconciliation DB."""
+
+    def __init__(self, token: str, db_id: str):
+        self.token = token
+        self.db_id = db_id
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.token and self.db_id)
+
+    def _headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.token}", "Notion-Version": _VER, "Content-Type": "application/json"}
+
+    @staticmethod
+    def _num(v):
+        return {"number": v if isinstance(v, (int, float)) else None}
+
+    def _props(self, r: dict) -> dict:
+        title = f"{r.get('strategy','?')} {r.get('side','')} {r.get('symbol','')} @ {r.get('venue','')}"
+        return {
+            "Trade": {"title": [{"text": {"content": title}}]},
+            "Venue": {"select": {"name": r.get("venue", "?")}},
+            "Account": {"rich_text": [{"text": {"content": str(r.get("account", ""))}}]},
+            "Matched": {"checkbox": bool(r.get("matched"))},
+            "Intended": self._num(r.get("intended_price")),
+            "Fill": self._num(r.get("fill_price")),
+            "Slippage ticks": self._num(r.get("slippage_ticks")),
+            "Slippage $": self._num(r.get("slippage_usd")),
+            "Slippage %": self._num(r.get("slippage_pct")),
+            "Latency s": self._num(r.get("latency_s")),
+            "Qty diff": self._num(r.get("qty_diff")),
+        }
+
+    async def append(self, rows: list[dict]) -> None:
+        if not self.enabled:
+            log.info("notion recon DRY: would append %d rows", len(rows))
+            return
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for r in rows:
+                try:
+                    await client.post(f"{_API}/pages", headers=self._headers(),
+                                      json={"parent": {"database_id": self.db_id}, "properties": self._props(r)})
+                except Exception as exc:
+                    log.warning("notion recon append failed: %r", exc)

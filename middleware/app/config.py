@@ -50,6 +50,12 @@ class Settings:
     notion_token: str = os.environ.get("NOTION_TOKEN", "")
     notion_db_id: str = os.environ.get("NOTION_DB_ID", "")               # fleet performance DB
     notion_journal_db: str = os.environ.get("NOTION_JOURNAL_DB", "")     # trade journal DB (one row per trade)
+    notion_recon_db: str = os.environ.get("NOTION_RECON_DB", "")         # reconciliation DB (trade x venue)
+    # Phase 6 — MetaAPI (MT5 fills)
+    metaapi_base: str = os.environ.get("METAAPI_BASE", "https://mt-client-api-v1.new-york.agiliumtrade.ai")
+    metaapi_token: str = os.environ.get("METAAPI_TOKEN", "")
+    metaapi_account: str = os.environ.get("METAAPI_ACCOUNT_ID", "")
+    metaapi_mock: bool = os.environ.get("METAAPI_MOCK", "false").lower() == "true"
 
     def tradovate_creds(self) -> dict:
         return {

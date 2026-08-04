@@ -15,7 +15,7 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
-from .config import Settings, load_accounts
+from .config import Settings, load_accounts_source
 from .dedupe import Deduper
 from .journal import Journal
 from .models import Signal
@@ -29,7 +29,7 @@ log = logging.getLogger("mex.middleware")
 app = FastAPI(title="MEX trade middleware", version="0.1.0")
 
 settings = Settings()
-accounts = load_accounts(settings.accounts_file)
+accounts = load_accounts_source(settings)
 journal = Journal(settings.journal_db)
 deduper = Deduper(settings.idem_ttl)
 risk = RiskState(settings.max_entries_default)

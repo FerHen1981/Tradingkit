@@ -45,7 +45,21 @@ That's Phase 0+1 proven with zero risk.
 2. Test on ONE demo/eval account first.
 3. Set `DRY_RUN=false`, restart, fire one signal, confirm the order in Tradovate.
 
-## Deploy on the VPS (public HTTPS for TradingView)
+## Easiest deploy — Render (no VPS, no terminal)
+Best for beginners. Render runs the app straight from GitHub and gives you an HTTPS URL.
+1. Make a free account at https://render.com and connect your GitHub.
+2. **New + → Blueprint →** pick this repo. Render reads `middleware/render.yaml` and creates
+   the service (plan: *starter*, ~$7/mo — the free plan sleeps and would miss webhooks).
+3. In the service **Environment** tab, fill the blanks:
+   - `MIDDLEWARE_SECRET` — any long random text (your password).
+   - `ACCOUNTS_YAML` — paste your whole account map (the contents of `accounts.example.yaml`,
+     edited with your accounts). No file needed.
+   - `PMT_URL`, `PMT_TOKEN` — from your PickMyTrade dashboard.
+   - leave `DRY_RUN=true`.
+4. Deploy. Your webhook URL is `https://<your-app>.onrender.com/webhook`.
+Flip `DRY_RUN=false` only after you've watched the dry-run journal and tested one account.
+
+## Deploy on a VPS (advanced — public HTTPS for TradingView)
 ```bash
 # on the VPS, as a non-root user 'mex'
 sudo mkdir -p /opt/mex-middleware && sudo chown mex /opt/mex-middleware

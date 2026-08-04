@@ -58,9 +58,22 @@ class AccountMap:
         return out
 
 
+def _parse_accounts(text: str) -> AccountMap:
+    raw = _expand(yaml.safe_load(text) or {})
+    return AccountMap(strategies=raw.get("strategies", {}), accounts=raw.get("accounts", {}))
+
+
 def load_accounts(path: str) -> AccountMap:
     p = Path(path)
     if not p.exists():
         return AccountMap()
-    raw = _expand(yaml.safe_load(p.read_text()) or {})
-    return AccountMap(strategies=raw.get("strategies", {}), accounts=raw.get("accounts", {}))
+    return _parse_accounts(p.read_text())
+
+
+def load_accounts_source(settings: "Settings") -> AccountMap:
+    """Prefer the ACCOUNTS_YAML env var (paste the whole map into one field — ideal for
+    managed hosts like Render where there is no file to upload). Fall back to the file."""
+    inline = os.environ.get("ACCOUNTS_YAML", "")
+    if inline.strip():
+        return _parse_accounts(inline)
+    return load_accounts(settings.accounts_file)

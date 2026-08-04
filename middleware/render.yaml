@@ -1,0 +1,29 @@
+# One-click deploy on Render (https://render.com) — no VPS, no terminal, no server admin.
+# In Render: New + → "Blueprint" → connect this GitHub repo. Render reads this file and
+# creates the service. Then fill the secret env vars in the dashboard (marked sync:false).
+#
+# Why the "starter" plan: Render's FREE web services go to sleep when idle and would MISS
+# TradingView webhooks. "starter" (~$7/mo) stays awake 24/7 — required for live trading.
+services:
+  - type: web
+    name: mex-middleware
+    runtime: python
+    rootDir: middleware
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DRY_RUN
+        value: "true"          # keep true until you've watched the dry-run journal
+      - key: MIDDLEWARE_SECRET
+        sync: false            # you set this in the dashboard (a long random password)
+      - key: ACCOUNTS_YAML
+        sync: false            # paste your whole account map here (no file needed)
+      - key: PMT_URL
+        sync: false
+      - key: PMT_TOKEN
+        sync: false
+      - key: ALERT_WEBHOOK
+        sync: false            # optional: Discord/Telegram webhook for failure pings

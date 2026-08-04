@@ -87,8 +87,9 @@ class TradovateClient:
         return rows
 
 
-async def poll_loop(client: TradovateClient, journal, interval: float) -> None:
-    """Background task: refresh fleet P&L on an interval and store each snapshot."""
+async def poll_loop(client: TradovateClient, journal, interval: float, on_snapshot=None) -> None:
+    """Background task: refresh fleet P&L on an interval, store each snapshot, and hand the
+    rows to an optional async `on_snapshot(rows)` callback (e.g. the Notion sync)."""
     log.info("Tradovate poller started (interval=%ss, mock=%s)", interval, client.mock)
     while True:
         try:
@@ -96,6 +97,8 @@ async def poll_loop(client: TradovateClient, journal, interval: float) -> None:
             if rows:
                 journal.write_perf(rows)
                 log.info("perf snapshot: %d accounts", len(rows))
+                if on_snapshot is not None:
+                    await on_snapshot(rows)
         except Exception as exc:  # keep the loop alive across transient failures
             log.warning("poll failed: %r", exc)
         await asyncio.sleep(interval)

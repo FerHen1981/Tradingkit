@@ -45,6 +45,9 @@ class Settings:
     tradovate_base: str = os.environ.get("TRADOVATE_BASE", "https://live.tradovateapi.com/v1")
     tradovate_mock: bool = os.environ.get("TRADOVATE_MOCK", "false").lower() == "true"
     perf_poll_seconds: float = float(os.environ.get("PERF_POLL_SECONDS", "60"))
+    # LifeOS / Notion fleet dashboard
+    notion_token: str = os.environ.get("NOTION_TOKEN", "")
+    notion_db_id: str = os.environ.get("NOTION_DB_ID", "")
 
     def tradovate_creds(self) -> dict:
         return {

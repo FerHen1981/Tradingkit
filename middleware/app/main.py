@@ -22,6 +22,7 @@ from .models import Signal
 import asyncio
 
 from .notify import alert_failure
+from .notion_sync import NotionSync
 from .risk import RiskState
 from .router import dispatch
 from .tradovate import TradovateClient, poll_loop
@@ -45,7 +46,9 @@ STATE = {"armed": True}
 async def _start_poller() -> None:
     if settings.tradovate_enabled():
         client = TradovateClient(settings.tradovate_base, settings.tradovate_creds(), mock=settings.tradovate_mock)
-        asyncio.create_task(poll_loop(client, journal, settings.perf_poll_seconds))
+        notion = NotionSync(settings.notion_token, settings.notion_db_id)
+        asyncio.create_task(poll_loop(client, journal, settings.perf_poll_seconds,
+                                      on_snapshot=notion.upsert_fleet))
     else:
         log.info("Tradovate tracking off (set TRADOVATE_NAME/... or TRADOVATE_MOCK=true)")
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "trader-dev": {
+      "type": "sse",
+      "url": "https://mcp.trader.dev/sse"
+    }
+  }
+}

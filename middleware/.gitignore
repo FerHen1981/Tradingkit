@@ -1,0 +1,6 @@
+# Never commit secrets or runtime state
+.env
+accounts.yaml
+*.db
+__pycache__/
+.venv/

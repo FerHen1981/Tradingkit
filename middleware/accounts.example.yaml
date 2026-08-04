@@ -1,0 +1,34 @@
+# Account map — copy to accounts.yaml (git-ignored) and fill in your real accounts.
+# Tokens/ids can be inline OR ${ENV_VAR} references (resolved from the environment).
+#
+# Model: a strategy alert (e.g. "GC") fans out to every account listed under it.
+# This is what lets you keep ONE TradingView alert per strategy.
+
+strategies:
+  GC:                       # El Tesoro (funded) / El Minero (eval) send strategy:"GC"
+    accounts: [apex_f1, apex_f2, apex_f3, apex_f4]
+  ES:                       # El Rey (funded) / El Leon (eval) send strategy:"ES"
+    accounts: [apex_f5, apex_f6, apex_f7, ftmo_mt5_1]   # cross-firm: Apex + FTMO from one alert
+    notify: ""              # optional per-strategy Discord webhook (else global NOTIFY_WEBHOOK)
+
+accounts:
+  apex_f1:
+    broker: pmt_tradovate
+    token: "${PMT_TOKEN}"           # PickMyTrade API token
+    account_id: "APEX-1234567"      # Tradovate account id in PMT
+    quantity_multiplier: 1          # scales base qty for this account (size control)
+    symbol_override: null           # e.g. "MGC1!" if this account trades micros
+    max_entries_per_day: 0          # risk overlay: 0 = unlimited; set e.g. 4 to cap new entries/day
+  apex_f2:
+    broker: pmt_tradovate
+    token: "${PMT_TOKEN}"
+    account_id: "APEX-1234568"
+    quantity_multiplier: 1
+    symbol_override: null
+  # ...apex_f3 ... apex_f7 (same shape)
+
+  ftmo_mt5_1:                       # FTMO / MetaTrader via PineConnector
+    broker: pineconnector
+    license: "${PC_LICENSE}"        # your PineConnector license id (the EA listens on it)
+    risk: 1.0                       # lot size / risk units per your EA config
+    symbol_override: "US500"        # broker symbol for ES on MT5 (differs per broker)

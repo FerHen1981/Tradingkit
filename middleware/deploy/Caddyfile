@@ -1,0 +1,10 @@
+# Caddy gives you automatic HTTPS (Let's Encrypt) in 3 lines — TradingView requires
+# a public HTTPS webhook. Point your domain's A-record at the VPS, then:
+#   sudo apt install caddy
+#   sudo cp Caddyfile /etc/caddy/Caddyfile   (edit the domain)
+#   sudo systemctl reload caddy
+# Caddy terminates TLS on 443 and proxies to uvicorn on 127.0.0.1:8000.
+
+middleware.yourdomain.com {
+    reverse_proxy 127.0.0.1:8000
+}

@@ -59,7 +59,18 @@ Best for beginners. Render runs the app straight from GitHub and gives you an HT
 4. Deploy. Your webhook URL is `https://<your-app>.onrender.com/webhook`.
 Flip `DRY_RUN=false` only after you've watched the dry-run journal and tested one account.
 
-## Deploy on a VPS (advanced — public HTTPS for TradingView)
+## Deploy on a VPS — one command (persistent journaling + live tracking)
+On a fresh Ubuntu VPS, clone the repo, then from `middleware/` run:
+```bash
+sudo bash deploy/setup.sh middleware.yourdomain.com
+```
+It installs Python + Caddy, builds the app, writes `.env` (auto-generates your secret,
+keeps `DRY_RUN=true`), installs the systemd service, and sets up HTTPS. Then edit `.env`
+with your tokens and `sudo systemctl restart mex-middleware`. Point your domain's A-record
+at the VPS first. Live fleet tracking to LifeOS: set `TRADOVATE_*` and
+`NOTION_TOKEN` + `NOTION_DB_ID` (the "MEX Fleet Performance (live)" database) in `.env`.
+
+## Deploy on a VPS (manual steps — public HTTPS for TradingView)
 ```bash
 # on the VPS, as a non-root user 'mex'
 sudo mkdir -p /opt/mex-middleware && sudo chown mex /opt/mex-middleware

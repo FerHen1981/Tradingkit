@@ -25,6 +25,36 @@ audit-log**. Een gekaapte login mag nooit ongemerkt een funded positie kunnen sl
 
 ---
 
+## Herziene richting (v2 — bevestigd)
+
+Op basis van de nadere eisen ("alles zelf, directe API's, live feeds, geen black-box,
+volledige web-controle"):
+
+- **Hosting: eigen VPS — bevestigd.** Managed PaaS (Render) afgewezen: te veel
+  abstractie voor de gewenste volledige controle, permanente live-feeds (websockets)
+  en transparantie. De VPS is geen tussenpartij — jouw code praat direct met de
+  API-providers, en niets anders.
+- **Execution: directe Tradovate order-API vanaf dag 1 — PMT eruit.** De middleware
+  plaatst orders zelf en leest echte fills via de Tradovate-websocket. PickMyTrade
+  vervalt als brug (uitfaseren zodra Tradovate-direct bewezen is). Behouden:
+  **PineConnector** (MT5/FTMO), **Discord** (notify), **MetaAPI** (MT5-fills/recon).
+- **Live feeds — realtime.** Permanente websocket-verbindingen (Tradovate + MetaAPI)
+  leveren fills/PnL live i.p.v. polling. Vraagt altijd-aan workers → onderstreept de VPS.
+- **Geen "ik wist het niet".** Ontwerpprincipe: elke dispatch naar elk kanaal logt zijn
+  échte uitkomst (verstuurd / bevestigd / gefaald / gevulde prijs); reconciliatie
+  vergelijkt bedoeld vs werkelijk. Geen stille mislukkingen.
+- **Volledige HTTPS-controle over accounts, fleet én trades.** Vanuit de owner-console:
+  posities sluiten/flatten, accounts halt/resume, zichtbaarheid togglen, per-account
+  instellen — alles achter 2FA + audit.
+- **Ontwerpprincipe: krachtige backend, simpele knoppen.** Géén capaciteitslimieten in
+  de control-plane; wél eenvoudige, duidelijke opties in de console.
+
+**Gevolg voor de routekaart:** het directe-Tradovate-stuk + de live fill-feeds schuiven
+naar voren (van Fase B naar de kern van Fase A) — ze zijn nu het executie-fundament
+i.p.v. de PMT-brug.
+
+---
+
 ## Kernprincipe: "Brain" gescheiden van "Faces"
 
 ```

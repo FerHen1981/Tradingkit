@@ -23,6 +23,14 @@ payout per account, publieke zichtbaarheid per account, en een meekijk-portal me
 - **Next.js/React** voor de faces (Vercel).
 - **Secrets**: alleen referenties in LifeOS; echte waarden in een kluis (zie `SECRETS-REGISTER.md`).
 
+**Herziene richting (v2 — bevestigd):**
+- **Hosting: eigen VPS bevestigd** (Render/PaaS afgewezen — te veel abstractie voor volledige controle + live feeds).
+- **Directe Tradovate order-API vanaf dag 1; PMT eruit.** Behouden: PineConnector (MT5), Discord, MetaAPI.
+- **Live websocket-feeds** (Tradovate + MetaAPI) i.p.v. polling → realtime fills/PnL.
+- **Geen "ik wist het niet"**: elke dispatch logt zijn échte uitkomst; reconciliatie bedoeld vs werkelijk.
+- **Volledige web-controle over accounts, fleet én trades** vanuit de owner-console (2FA + audit).
+- **Krachtige backend, simpele knoppen** — geen capaciteitslimieten, wel eenvoudige opties.
+
 ## Al aanwezig (herbruikbaar, niet opnieuw bouwen)
 
 `/performance` + Tradovate-poller · reconciliation-engine (`reconciler.py`,`metaapi.py`) ·
@@ -45,6 +53,8 @@ De datalaag en de "waarheid" per account waar alles op leunt.
 - Postgres opzetten (Supabase) + schema (zie ARCHITECTURE.md datamodel).
 - sqlite → Postgres migreren (`events`, `perf` → nieuw schema).
 - Fill-feed aan `RiskState.record_fill` → DLL + consistency live (nu dormant).
+- **Directe Tradovate order-API** (execution vanaf dag 1; PMT eruit) + **live fill-feed via websocket** (Tradovate + MetaAPI) — realtime, geen polling.
+- **Per-kanaal statusfeedback**: elke dispatch (Tradovate / PineConnector / Discord) logt zijn échte uitkomst — geen stille fouten.
 - **State Engine**: per account → balans · DD-ruimte · DLL · consistency % · payout-beschikbaar · status.
 - Auth + rollen (owner/follower) + **2FA (TOTP)** + audit-log.
 - Viewer API (alleen-lezen, gefilterd) + Control API (owner-only) als aparte oppervlakken.
@@ -74,6 +84,9 @@ Kolommen → Notion-properties: **Fase · Taak · Status · Afhankelijk van · E
 | Fase | Taak | Status | Afhankelijk van | Effort | Notitie |
 |---|---|---|---|---|---|
 | 0 | Middleware live op VPS (DRY_RUN, webhook getest) | Todo | — | M | volgens SETUP.md |
+| A | Directe Tradovate order-API (execution; PMT eruit) | Todo | 0 | L | middleware plaatst orders zelf |
+| A | Live fill-feed via websocket (Tradovate + MetaAPI) | Todo | Tradovate-API | L | realtime fills, geen polling |
+| A | Per-kanaal statusfeedback (geen stille fouten) | Todo | fill-feed | M | elke dispatch logt echte uitkomst |
 | A | Supabase-project + Postgres opzetten | Todo | 0 | S | provider-keuze bevestigen |
 | A | DB-schema aanleggen (users/accounts/fills/trades/account_state/events/recaps/audit_log) | Todo | Supabase | M | zie ARCHITECTURE.md |
 | A | sqlite → Postgres migratie | Todo | schema | M | events + perf overzetten |

@@ -46,6 +46,11 @@ volledige web-controle"):
 - **Volledige HTTPS-controle over accounts, fleet én trades.** Vanuit de owner-console:
   posities sluiten/flatten, accounts halt/resume, zichtbaarheid togglen, per-account
   instellen — alles achter 2FA + audit.
+- **Owner beheert óók de view-only accounts (toegangsbeheer).** Vanuit dezelfde console:
+  view-only/viewer-accounts aanmaken, intrekken en **per viewer instellen wat ze mogen
+  zien** (welke accounts/fleet-subset). Eén controlecentrum voor zowel de eigen fleet
+  als de toegang van anderen. Vereist een fijnmaziger rol/rechten-laag dan alleen
+  owner/follower — per-viewer scope-grants naast de globale `is_public`-vlag.
 - **Ontwerpprincipe: krachtige backend, simpele knoppen.** Géén capaciteitslimieten in
   de control-plane; wél eenvoudige, duidelijke opties in de console.
 

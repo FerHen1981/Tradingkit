@@ -30,6 +30,7 @@ payout per account, publieke zichtbaarheid per account, en een meekijk-portal me
 - **Geen "ik wist het niet"**: elke dispatch logt zijn échte uitkomst; reconciliatie bedoeld vs werkelijk.
 - **Volledige web-controle over accounts, fleet én trades** vanuit de owner-console (2FA + audit).
 - **Krachtige backend, simpele knoppen** — geen capaciteitslimieten, wel eenvoudige opties.
+- **Owner beheert ook de view-only accounts** — aanmaken/intrekken/scopen; één console voor fleet én toegang.
 
 ## Al aanwezig (herbruikbaar, niet opnieuw bouwen)
 
@@ -98,6 +99,7 @@ Kolommen → Notion-properties: **Fase · Taak · Status · Afhankelijk van · E
 | B | Close/flatten-capability (Tradovate order-API + MetaAPI) | Todo | Control API | L | nieuw; funded-gevoelig |
 | B | Control-acties in console (halt/close/kill/zichtbaarheid) | Todo | close-capability | M | audit + confirm |
 | B | Zichtbaarheid-toggle per account (`is_public`) | Todo | Control API | S | stuurt follower-view |
+| B | Toegang/viewer-beheer (view-only accts aanmaken/intrekken/scopen) | Todo | auth | M | owner beheert wie wat ziet; per-viewer scope |
 | C | Marketing-site pipsandpalmtrees.com | Todo | Next.js-basis | M | Vercel |
 | C | Follower-signup/login | Todo | auth (follower-rol) | M | Supabase-auth |
 | C | Meekijk-view (viewer + trades + status) | Todo | Viewer API, `is_public` | M | alleen-lezen |

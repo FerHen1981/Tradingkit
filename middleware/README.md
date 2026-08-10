@@ -87,3 +87,12 @@ kill-switch en de per-account risk-overlay (entry-cap/halt; exits worden nooit
 geblokkeerd; tokens worden geredacteerd gejournald). Geen Pine-wijziging nodig;
 DRY_RUN geldt ook hier. De fan-out-route (`/webhook`, lean signal) blijft
 bestaan voor het één-alert-per-strategie-model.
+
+
+## Healthcheck (deploy)
+
+`deploy/mex-healthcheck.{sh,service,timer}`: curlt elke minuut `/health`; bij
+falen wordt de service herstart en een melding op ALERT_WEBHOOK gepost. Installeren:
+kopieer de units naar /etc/systemd/system, `systemctl enable --now mex-healthcheck.timer`.
+Externe uptime-monitor (bv. UptimeRobot op https://<host>/health) blijft aan te raden
+naast deze lokale wachter — die ziet ook een gevallen VPS.

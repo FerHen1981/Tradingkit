@@ -76,3 +76,14 @@ lives here, not in the alert. (Kept out of scope for Phase 0.)
       exits never blocked. Full DLL/consistency ($) enforcement is dormant until a PnL
       feed is wired to `RiskState.record_fill` (Phase 5b).
 - [ ] Go-live — VPS deploy, tokens, TradingView alerts, flip one account to DRY_RUN=false
+
+
+## /pmt — passthrough (één alert i.p.v. twee)
+
+De Pine "→ PMT Tradovate"-route bouwt de complete PMT-JSON al. Wijs die alert
+naar `https://<middleware>/pmt?secret=<MIDDLEWARE_SECRET>` en de middleware
+stuurt de body 1-op-1 door naar `PMT_URL` — mét journal, idempotency-dedupe,
+kill-switch en de per-account risk-overlay (entry-cap/halt; exits worden nooit
+geblokkeerd; tokens worden geredacteerd gejournald). Geen Pine-wijziging nodig;
+DRY_RUN geldt ook hier. De fan-out-route (`/webhook`, lean signal) blijft
+bestaan voor het één-alert-per-strategie-model.

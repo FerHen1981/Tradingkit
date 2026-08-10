@@ -38,6 +38,11 @@ class Settings:
     idem_ttl: float = float(os.environ.get("IDEM_TTL_SECONDS", "3"))       # dedupe identical signals within N s
     retry_max: int = int(os.environ.get("RETRY_MAX", "3"))                 # PMT POST attempts on network/5xx
     retry_backoff: float = float(os.environ.get("RETRY_BACKOFF_SECONDS", "0.5"))
+    # Discord trade-cards (Phase: berichten als afbeelding)
+    discord_webhook: str = os.environ.get("DISCORD_WEBHOOK_URL", "")   # kanaal voor trade-cards
+    render_cmd: str = os.environ.get("RENDER_CMD", "node render-signal.js")
+    render_dir: str = os.environ.get("RENDER_DIR", "/var/www/charts")
+    charts_base_url: str = os.environ.get("CHARTS_BASE_URL", "")       # bv. https://host/charts — leeg = multipart-upload
     alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
     # Phase 5 — risk overlay
     max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)

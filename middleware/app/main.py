@@ -4,6 +4,7 @@ Endpoints
   GET  /health        liveness probe
   POST /webhook       receive a Signal from TradingView, fan out to accounts
   POST /pmt           passthrough: ready-made PMT payload in, forwarded 1:1 to PMT
+  POST /discord       DISC-embed in -> trade-card (render-signal.js) -> Discord
   GET  /journal       last N journalled events (debug; secret-gated)
   POST /killswitch    enable/disable dispatching fleet-wide (secret-gated)
 
@@ -24,6 +25,7 @@ from .notify import alert_failure
 from .risk import RiskState
 from .router import dispatch
 from .brokers import pmt as pmt_broker
+from .render import render_card
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("mex.middleware")
@@ -156,6 +158,61 @@ async def pmt_passthrough(request: Request, secret: str) -> dict:
                             f"{result.get('reason') or result.get('http_status')}")
     return {"accepted": True, "forwarded": result.get("status") == "sent",
             "dry_run": settings.dry_run, "result": {k: v for k, v in result.items() if k != "payload"}}
+
+
+@app.post("/discord")
+async def discord_card(request: Request, secret: str) -> dict:
+    """Eén-alert flow voor Discord: de bestaande DISC-alert (Pine bouwt het
+    embed-JSON al) wijst naar deze URL. We renderen er een trade-card van via de
+    externe renderer (RENDER_CMD, output in RENDER_DIR) en posten die naar
+    DISCORD_WEBHOOK_URL — als embed-image (CHARTS_BASE_URL gezet) of als
+    multipart-attachment. Render- of postfout => origineel embed 1:1 doorgestuurd
+    (nooit een stil verloren bericht). DRY_RUN: renderen wel, posten niet."""
+    import json as _json
+    import os as _os
+
+    import httpx
+
+    _check_secret(secret)
+    raw = await request.body()
+    try:
+        payload = _json.loads(raw)
+        assert isinstance(payload, dict)
+    except Exception:
+        raise HTTPException(422, "invalid embed payload")
+    journal.write("discord_in", {k: payload.get(k) for k in ("username", "embeds") if k in payload})
+
+    png = await render_card(payload, render_cmd=settings.render_cmd, render_dir=settings.render_dir)
+    if settings.dry_run:
+        return {"accepted": True, "posted": False, "dry_run": True,
+                "rendered": bool(png), "png": png}
+    if not settings.discord_webhook:
+        return {"accepted": True, "posted": False, "reason": "DISCORD_WEBHOOK_URL not configured"}
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            if png and settings.charts_base_url:
+                url = settings.charts_base_url.rstrip("/") + "/" + _os.path.basename(png)
+                emb = (payload.get("embeds") or [{}])[0]
+                body = {"username": payload.get("username", "MEX"),
+                        "embeds": [{"title": emb.get("title", ""), "color": emb.get("color", 0),
+                                    "image": {"url": url}}]}
+                r = await client.post(settings.discord_webhook, json=body)
+            elif png:
+                with open(png, "rb") as fh:
+                    r = await client.post(settings.discord_webhook,
+                                          data={"payload_json": _json.dumps({"username": payload.get("username", "MEX")})},
+                                          files={"file": (_os.path.basename(png), fh, "image/png")})
+            else:
+                r = await client.post(settings.discord_webhook, json=payload)  # fallback: origineel embed
+            ok = r.status_code < 400
+        except Exception as exc:
+            journal.write("error", {"reason": f"discord post: {exc!r}"})
+            ok = False
+    if not ok:
+        await alert_failure(settings.alert_webhook, "\u26a0\ufe0f MEX middleware /discord: post naar Discord faalde")
+    journal.write("dispatch", {"route": "discord_card", "rendered": bool(png), "posted": ok})
+    return {"accepted": True, "posted": ok, "rendered": bool(png)}
 
 
 @app.get("/journal")

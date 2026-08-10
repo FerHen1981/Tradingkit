@@ -96,3 +96,15 @@ falen wordt de service herstart en een melding op ALERT_WEBHOOK gepost. Installe
 kopieer de units naar /etc/systemd/system, `systemctl enable --now mex-healthcheck.timer`.
 Externe uptime-monitor (bv. UptimeRobot op https://<host>/health) blijft aan te raden
 naast deze lokale wachter — die ziet ook een gevallen VPS.
+
+
+## /discord — trade-cards via render-signal.js
+
+DISC-alerts wijzen naar `https://<middleware>/discord?secret=…`. De middleware
+roept jouw renderer aan volgens het bestaande contract —
+`MEX_SIGNAL_OUT=<RENDER_DIR>/signal-<ts>.png <RENDER_CMD>` met de event-JSON op
+stdin — en post het resultaat naar DISCORD_WEBHOOK_URL: als embed-image-URL
+(CHARTS_BASE_URL gezet, bv. https://host/charts) of anders als multipart-upload.
+Render-/postfout ⇒ origineel embed 1:1 doorgestuurd. DRY_RUN: wel renderen, niet posten.
+Env: RENDER_CMD (default "node render-signal.js") · RENDER_DIR (default /var/www/charts) ·
+CHARTS_BASE_URL · DISCORD_WEBHOOK_URL.

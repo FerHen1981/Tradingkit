@@ -51,10 +51,12 @@ class Result:
     eval_passed: bool = False
     eval_breached: bool = False
     eval_pass_bar: int = -1
+    halt_bar: int = -1               # bar the account overlay stopped on (-1 = ran to the end)
     pa_total_banked: float = 0.0
     pa_breach_count: int = 0
     pa_milk_count: int = 0
     pa_payouts_this_cycle: int = 0
+    pa_payout_total: int = 0         # every payout ever banked; the cycle counter resets on breach
     bars: int = 0
     first_time: Optional[pd.Timestamp] = None
     last_time: Optional[pd.Timestamp] = None
@@ -149,6 +151,7 @@ class Engine:
         self.pa_breach_count = 0
         self.pa_reset_count = 0
         self.pa_milk_count = 0
+        self.pa_payout_total = 0
         self.pa_total_banked = 0.0
         self.acct_halted = False
         self.acct_halt_reason = ""
@@ -230,12 +233,14 @@ class Engine:
     # ------------------------------------------------------------------ run
     def run(self, end_bar: Optional[int] = None) -> Result:
         end = self.n if end_bar is None else min(end_bar, self.n)
+        halt_bar = -1
         for i in range(self.start_bar, end):
             self._cur_i = i
             self._broker(i)
             self._strategy(i)
             if self.acct_halted and self.pos == 0 and self.pend_dir == 0:
                 # Eval account is done; stop simulating further bars.
+                halt_bar = i
                 break
         # force-close any residual position at the last processed close
         if self.pos != 0:
@@ -247,8 +252,11 @@ class Engine:
         res.pa_breach_count = self.pa_breach_count
         res.pa_milk_count = self.pa_milk_count
         res.pa_payouts_this_cycle = self.pa_payouts_this_cycle
+        res.pa_payout_total = self.pa_payout_total
         res.eval_passed = self.acct_halt_reason.startswith("EVAL PASSED")
         res.eval_breached = self.acct_halt_reason.startswith("TRAILING")
+        res.halt_bar = halt_bar
+        res.eval_pass_bar = halt_bar if res.eval_passed else -1
         res.bars = end - self.start_bar
         res.first_time = pd.Timestamp(self.time[self.start_bar])
         res.last_time = pd.Timestamp(self.time[min(end - 1, self.n - 1)])
@@ -536,6 +544,7 @@ class Engine:
             take = cap if cfg.use_wait_for_cap else min(withdrawable, cap)
             self.pa_total_banked += take
             self.pa_payouts_this_cycle += 1
+            self.pa_payout_total += 1
             self.pa_reset_pnl_prev += take
             self.profit_since = 0.0
             self.best_day_since = 0.0

@@ -16,6 +16,7 @@ from . import indicators as ind_mod
 from .config import PRESETS, contract
 from .engine import Engine
 from .funnel import run_funnel, summarize
+from .goals import eval_throughput, format_eval, format_payout, payout_throughput
 from .metrics import kpis, trades_frame
 
 
@@ -63,6 +64,11 @@ def main():
                     help="override distance unit (use ATR to port a config across instruments)")
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
+    ap.add_argument("--goal", choices=["eval", "payout"],
+                    help="report the funnel against a goal: 'eval' = speed and cost to get funded, "
+                         "'payout' = payouts per account-year and 6/6 odds. Implies --funnel.")
+    ap.add_argument("--eval-fee", type=float, default=0.0,
+                    help="cost of one eval attempt, for --goal eval cost-per-funded")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
     ap.add_argument("--funnel-horizon", type=int, default=20, help="sessions per eval before TIMEOUT")
     ap.add_argument("--trades-out", help="write the trade list CSV to this path")
@@ -90,16 +96,30 @@ def main():
             cfg = cfg.with_(contract=contract(args.symbol))
         if args.unit_mode:
             cfg = cfg.with_(unit_mode=args.unit_mode)
-        if args.funnel:
+        if args.funnel or args.goal:
             ind = ind_mod.compute(df, cfg)
             t0 = time.time()
             outs = run_funnel(cfg, df, ind, step_sessions=args.funnel_step,
                               horizon_sessions=args.funnel_horizon)
-            s = summarize(outs)
-            print(f"\n{'='*70}\n{name}  [EVAL FUNNEL]  ({time.time()-t0:.1f}s)")
-            print(f"  fresh eval every {args.funnel_step} sessions, {args.funnel_horizon}-session horizon")
-            print(f"  starts={s['starts']}  PASS={s['pass']} ({s['pass_rate_pct']}%)  "
-                  f"BREACH={s['breach']}  TIMEOUT={s['timeout']}  median trades={s['median_trades_to_resolve']}")
+            header = (f"\n{'='*70}\n{name}  "
+                      f"[{'GOAL ' + args.goal.upper() if args.goal else 'EVAL FUNNEL'}]"
+                      f"  ({time.time()-t0:.1f}s)")
+            print(header)
+            print(f"  fresh start every {args.funnel_step} sessions, "
+                  f"{args.funnel_horizon}-session horizon")
+            if args.goal == "eval":
+                s = eval_throughput(outs, eval_fee=args.eval_fee,
+                                    horizon_sessions=args.funnel_horizon)
+                print(format_eval(s))
+            elif args.goal == "payout":
+                s = payout_throughput(outs, acct_trail_dd=cfg.acct_trail_dd,
+                                      horizon_sessions=args.funnel_horizon)
+                print(format_payout(s))
+            else:
+                s = summarize(outs)
+                print(f"  starts={s['starts']}  PASS={s['pass']} ({s['pass_rate_pct']}%)  "
+                      f"BREACH={s['breach']}  TIMEOUT={s['timeout']}  "
+                      f"median trades={s['median_trades_to_resolve']}")
             out[name] = s
             continue
         res, dt = run_one(df, cfg, args.research)

@@ -25,6 +25,15 @@ class FunnelOutcome:
     trades: int
     net_profit: float
     bars: int
+    # How long the account took to resolve. "Does it pass" and "how fast" are
+    # different questions and only the second one prices an eval attempt.
+    resolve_sessions: int = -1     # sessions from start to PASS/BREACH; -1 if unresolved
+    # Funded (PA) accounts never "pass" — they earn until they breach, so the
+    # payout ladder is what the window has to be read by.
+    payouts: int = 0               # payouts banked inside the window
+    banked: float = 0.0            # $ withdrawn
+    breaches: int = 0              # trailing breaches (each resets the cycle)
+    milks: int = 0                 # completed 6/6 ladders
 
 
 def _session_starts(df: pd.DataFrame) -> np.ndarray:
@@ -50,9 +59,18 @@ def run_funnel(cfg: Config, df: pd.DataFrame, ind: pd.DataFrame,
             r = "BREACH"
         else:
             r = "TIMEOUT"
+        # halt_bar is reason-agnostic, so this measures a challenge pass and an
+        # eval pass alike; -1 means the horizon ran out with the account alive.
+        resolve = -1
+        if res.halt_bar >= 0:
+            resolve = int(np.searchsorted(starts, res.halt_bar, side="right") - 1 - si)
         outcomes.append(FunnelOutcome(
             start_bar=sb, start_time=pd.Timestamp(times.iloc[sb]), result=r,
-            trades=len(res.trades), net_profit=eng.net_profit, bars=eb - sb))
+            trades=len(res.trades), net_profit=eng.net_profit, bars=eb - sb,
+            resolve_sessions=resolve,
+            payouts=res.pa_payout_total,
+            banked=res.pa_total_banked, breaches=res.pa_breach_count,
+            milks=res.pa_milk_count))
     return outcomes
 
 

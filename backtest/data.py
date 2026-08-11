@@ -22,16 +22,33 @@ import pandas as pd
 REQUIRED = ["DateTime", "Open", "High", "Low", "Close", "Volume", "Delta"]
 
 
+def _parse(values: pd.Series, fmt: str | None) -> pd.Series:
+    """Parse timestamps, tolerating the offset changing mid-file.
+
+    Any export longer than a few months crosses a DST boundary, so a column of
+    ET timestamps legitimately carries both -05:00 and -04:00. pandas refuses
+    that outright — the error is raised, not coerced — so normalise to UTC and
+    let the caller convert back.
+    """
+    kwargs = {"format": fmt} if fmt else {}
+    try:
+        return pd.to_datetime(values, errors="coerce", **kwargs)
+    except ValueError as exc:
+        if "Mixed timezones" not in str(exc):
+            raise
+        return pd.to_datetime(values, errors="coerce", utc=True, **kwargs)
+
+
 def load(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         raise ValueError(f"CSV missing required columns: {missing}")
 
-    et = pd.to_datetime(df["DateTime"], format="%d-%m-%Y %H:%M:%S %z", errors="coerce")
+    et = _parse(df["DateTime"], "%d-%m-%Y %H:%M:%S %z")
     if et.isna().any():
         # fall back to flexible parsing for other instrument exports
-        et = pd.to_datetime(df["DateTime"], errors="coerce", utc=False)
+        et = _parse(df["DateTime"], None)
     if et.isna().any():
         n = int(et.isna().sum())
         raise ValueError(f"{n} DateTime values failed to parse")

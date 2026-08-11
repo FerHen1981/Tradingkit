@@ -140,10 +140,26 @@ provisions it in one command. Nothing has been created yet.
 Before anything moves: `tools/inventory_local.py` over the local folders, so the
 scattered `C:\` files get triaged rather than relocated.
 
+## Skills
+
+| Skill | Goal | State |
+|---|---|---|
+| `/eval-throughput` | A — pass evals fast | built; terminal report, dashboard pending |
+| `/payout-throughput` | B — milk to 6/6 payouts | built; terminal report, dashboard pending |
+| `/heatmap` | — | demoted to diagnostic; no longer a decision instrument |
+
+Metrics live in `backtest/goals.py`, reachable as
+`python3 -m backtest.run --goal {eval,payout}`. Both walk-forward via `funnel.py`;
+both refuse a dataset that is not CVD-valid.
+
 ## Not started
 
-- `data-contract` skill (dataset registration + CVD gate)
-- `eval-throughput` skill (Goal A metrics)
-- `payout-throughput` skill (Goal B metrics)
-- `recap` skill (fixed weekly format)
-- El Presidente dashboards (two URLs, one per goal)
+- **The two dashboards** (one URL per goal) — waiting on real data so they can be
+  verified against real output rather than synthetic.
+- **The fleet model** — N accounts, correlated returns, per-firm rules,
+  P(≥k simultaneous breaches). This is what answers the 4×-liquidation question;
+  the per-account report explicitly does not.
+- `recap` skill (fixed weekly format).
+- Parquet reader in `backtest/data.py` (the loader is CSV-only).
+- Wiring reconciliation's measured slippage into the metrics, so "live overrules"
+  recalibrates rather than averages.

@@ -96,6 +96,17 @@ model the **fleet**: N accounts, correlated returns, per-firm rules → distribu
 of accounts alive at T, accounts reaching 6/6, and P(≥k simultaneous breaches).
 `funnel.py` today models one account at a time.
 
+## Infrastructure
+
+Target and migration order in `docs/infrastructure.md`. Short version: only the
+middleware, journal, dashboards and scheduled jobs need 24/7 — Quantower does not,
+because the corpus is a monthly refresh, not live infrastructure. One VPS
+(2-4 vCPU / 8 GB / 80 GB) runs everything; `middleware/deploy/setup.sh` already
+provisions it in one command. Nothing has been created yet.
+
+Before anything moves: `tools/inventory_local.py` over the local folders, so the
+scattered `C:\` files get triaged rather than relocated.
+
 ## Not started
 
 - `data-contract` skill (dataset registration + CVD gate)

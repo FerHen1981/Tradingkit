@@ -8,7 +8,7 @@ wat het is en het naar de juiste bestemming stuurt.
 | Binnenkomend | Herkenning | Actie |
 |---|---|---|
 | PMT-JSON | `multiple_accounts` of (`token` + `data`) | POST naar `MEX_PMT_URL` (of `MEX_PMT_RITHMIC_URL` als het account in `MEX_PMT_RITHMIC_ACCOUNTS` staat) |
-| Discord-embed | `embeds` of `content` | 1:1 POST naar de Discord-webhook |
+| Discord-embed | `embeds` of `content` | Tier A/B → PNG-kaart als bijlage; Tier C → 1:1 POST |
 | Journal | `{"type":"journal"}` / `csv` / CSV-regel | alleen opslaan |
 | PineConnector | `<license>,buy\|sell\|exit,<symbol>,…` | POST naar `MEX_PC_URL` |
 | overig | — | Fase C: intent + Discord-melding |
@@ -16,6 +16,20 @@ wat het is en het naar de juiste bestemming stuurt.
 Extra's: idempotency-dedupe (5s op body-hash), kill-switch (`POST /killswitch?token=…&armed=false`,
 exits nooit geblokkeerd), append-only audit in `routed_<datum>.jsonl`, retries op
 netwerk/5xx (niet op 4xx).
+
+## Kaarten (Discord als afbeelding)
+
+Discord-berichten van Tier A/B (zie `../CARDS.md`) worden door
+`renderer/render-signal.js` tot een PNG gerenderd en als bijlage gepost;
+Tier C (CONFIG, ACCOUNT STARTED, LIMIT EXPIRED, SIGNAL BLOCKED, AUTO FLAT)
+blijft tekst. De renderer leest de Pine-payload zelf: titel → event,
+description → velden.
+
+Renderen duurt seconden, dus het gebeurt ná het antwoord aan TradingView
+(achtergrondtaak, max 2 Chromium-processen tegelijk). Mislukt het renderen —
+node weg, timeout, Chromium stuk — dan gaat het **originele tekstbericht**
+alsnog naar Discord. Een alert kan dus niet verdwijnen door een render-probleem.
+Staat het script niet op `MEX_RENDER_SCRIPT`, dan blijft alles tekst.
 
 ## Env
 
@@ -26,6 +40,16 @@ netwerk/5xx (niet op 4xx).
     MEX_PMT_RITHMIC_ACCOUNTS=     # kommalijst account-id's op Rithmic
     MEX_PC_URL=                   # PineConnector-webhook (FTMO/MT5)
     MEX_DRY_RUN=true              # NIETS wordt doorgestuurd tot dit false is
+
+    # kaarten
+    MEX_RENDER_SCRIPT=/root/mex-renderer/render-signal.js
+    MEX_RENDER_ENABLED=           # 'false' zet kaarten uit (default: aan als het script bestaat)
+    MEX_NODE=node                 # of /usr/bin/node
+    MEX_RENDER_OUT_DIR=/tmp/mex-cards
+    MEX_RENDER_TIMEOUT_MS=30000
+    MEX_RENDER_KEEP=              # 'true' = PNG's niet opruimen (debuggen)
+    MEX_CHROMIUM_PATH=            # vaste Chromium-binary voor Playwright
+    MEX_CARD_TIER_OVERRIDES=      # bv. "AUTO FLAT=B,EXIT=C" — tier is data, geen code
 
 ## Uitrollen
 

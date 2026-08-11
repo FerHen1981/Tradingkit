@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -34,7 +36,23 @@ var dryRun = !string.Equals(Environment.GetEnvironmentVariable("MEX_DRY_RUN") ??
                             "false", StringComparison.OrdinalIgnoreCase);
 Directory.CreateDirectory(storePath);
 
-var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+// Kaart-rendering: Discord-berichten van Tier A/B gaan als PNG i.p.v. tekst.
+// Zelf-configurerend: staat het render-script er niet, dan blijft alles tekst.
+var renderScript = Environment.GetEnvironmentVariable("MEX_RENDER_SCRIPT")
+    ?? cfg["RenderScript"] ?? "/root/mex-renderer/render-signal.js";
+var renderEnabled = File.Exists(renderScript) &&
+    !string.Equals(Environment.GetEnvironmentVariable("MEX_RENDER_ENABLED"), "false",
+                   StringComparison.OrdinalIgnoreCase);
+CardRender.Node = Environment.GetEnvironmentVariable("MEX_NODE") ?? "node";
+CardRender.Script = renderScript;
+CardRender.OutDir = Environment.GetEnvironmentVariable("MEX_RENDER_OUT_DIR") ?? "/tmp/mex-cards";
+CardRender.TimeoutMs = int.TryParse(Environment.GetEnvironmentVariable("MEX_RENDER_TIMEOUT_MS"), out var rt) ? rt : 30000;
+CardRender.Keep = string.Equals(Environment.GetEnvironmentVariable("MEX_RENDER_KEEP"), "true",
+                                StringComparison.OrdinalIgnoreCase);
+CardTier.LoadOverrides(Environment.GetEnvironmentVariable("MEX_CARD_TIER_OVERRIDES") ?? "");
+if (renderEnabled) Directory.CreateDirectory(CardRender.OutDir);
+
+var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 var seen = new ConcurrentDictionary<string, DateTime>();   // idempotency
 
 app.MapGet("/health", () => Results.Ok(new
@@ -43,7 +61,9 @@ app.MapGet("/health", () => Results.Ok(new
     ts = DateTime.UtcNow,
     dryRun,
     armed = Runtime.Armed,
-    pmtConfigured = !string.IsNullOrEmpty(pmtUrl)
+    pmtConfigured = !string.IsNullOrEmpty(pmtUrl),
+    renderEnabled,
+    renderScript
 }));
 
 // Kill-switch: POST /killswitch?token=<secret>&armed=false  -> geen entries meer door.
@@ -110,9 +130,22 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
     if (obj is not null && (obj.ContainsKey("embeds") || obj.ContainsKey("content")))
     {
         var url = Environment.GetEnvironmentVariable(discordEnv) ?? "";
+        var title = obj["embeds"]?[0]?["title"]?.ToString() ?? "";
+        var tier = CardTier.For(title);
+
+        // Tier A/B krijgt een kaart. Renderen duurt seconden, dus dat gebeurt in
+        // de achtergrond: TradingView krijgt direct antwoord en probeert niet
+        // opnieuw. Mislukt de render, dan gaat het originele bericht alsnog door.
+        if (renderEnabled && tier != 'C')
+        {
+            _ = Task.Run(() => CardRender.RenderAndPostAsync(http, url, body, title, storePath, dryRun));
+            await AppendAsync(storePath, "discord", body, $"card queued (tier {tier})");
+            return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), card = "queued" });
+        }
+
         var res = await ForwardJsonAsync(http, url, body, dryRun);
         await AppendAsync(storePath, "discord", body, res);
-        return Results.Ok(new { accepted = true, kind = "discord", result = res });
+        return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), result = res });
     }
 
     // ---------------------------------------------------- journal (CSV) ----
@@ -178,19 +211,8 @@ app.Run();
 // --- helpers ---------------------------------------------------------------
 
 // Append-only audit: één regel per binnengekomen bericht, per dag één bestand.
-static async Task AppendAsync(string storePath, string kind, string body, string result, string account = "")
-{
-    var rec = JsonSerializer.Serialize(new
-    {
-        ts = DateTime.UtcNow,
-        kind,
-        account,
-        result,
-        body = body.Length > 4000 ? body[..4000] : body
-    });
-    var file = Path.Combine(storePath, $"routed_{DateTime.UtcNow:yyyyMMdd}.jsonl");
-    await File.AppendAllTextAsync(file, rec + "\n");
-}
+static Task AppendAsync(string storePath, string kind, string body, string result, string account = "")
+    => Audit.AppendAsync(storePath, kind, body, result, account);
 
 // POST met retry op netwerkfouten en 5xx; 4xx niet opnieuw proberen (lost niet op).
 static async Task<string> ForwardJsonAsync(HttpClient http, string url, string json, bool dryRun)
@@ -234,6 +256,214 @@ static string Tail(string s) => s.Length >= 5 ? s[^5..] : s;
 public static class Runtime
 {
     public static volatile bool Armed = true;
+}
+
+public static class Audit
+{
+    public static async Task AppendAsync(string storePath, string kind, string body, string result, string account = "")
+    {
+        var rec = JsonSerializer.Serialize(new
+        {
+            ts = DateTime.UtcNow,
+            kind,
+            account,
+            result,
+            body = body.Length > 4000 ? body[..4000] : body
+        });
+        var file = Path.Combine(storePath, $"routed_{DateTime.UtcNow:yyyyMMdd}.jsonl");
+        await File.AppendAllTextAsync(file, rec + "\n");
+    }
+}
+
+// Tier-matrix uit CARDS.md. Volgorde telt: "ACCOUNT HALT" moet vóór "ACCOUNT
+// STARTED"-achtige checks, en "LIMIT EXPIRED" vóór "LIMIT". Onbekende titel =>
+// tier B (generieke kaart), want een bericht mag nooit stil verdwijnen.
+public static class CardTier
+{
+    static readonly (string Needle, char Tier)[] Table =
+    {
+        ("CONFIG",         'C'),
+        ("ACCOUNT STARTED",'C'),
+        ("LIMIT EXPIRED",  'C'),
+        ("SIGNAL BLOCKED", 'C'),
+        ("AUTO FLAT",      'C'),
+        ("ACCOUNT HALT",   'A'),
+        ("EXIT",           'A'),
+        ("PASSED",         'A'),
+        ("FAILED",         'A'),
+        ("PAYOUT",         'A'),
+        ("FILL",           'B'),
+        ("RISK OFF",       'B'),
+        ("TRAIL",          'B'),
+        ("DAY HALT",       'B'),
+        ("DERISK",         'B'),
+        ("LOCK",           'B'),
+        ("THRESHOLD",      'B'),
+        ("REGIME",         'B'),
+        ("LIMIT",          'B'),
+        ("MARKET",         'B'),
+    };
+
+    static readonly List<(string Needle, char Tier)> Overrides = new();
+
+    // MEX_CARD_TIER_OVERRIDES="AUTO FLAT=B,EXIT=C" — tier is data, geen code.
+    public static void LoadOverrides(string spec)
+    {
+        Overrides.Clear();
+        foreach (var part in spec.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && kv[1].Trim().Length == 1)
+                Overrides.Add((kv[0].Trim().ToUpperInvariant(), char.ToUpperInvariant(kv[1].Trim()[0])));
+        }
+    }
+
+    public static char For(string title)
+    {
+        var t = title.ToUpperInvariant();
+        foreach (var (needle, tier) in Overrides)
+            if (t.Contains(needle)) return tier;
+        foreach (var (needle, tier) in Table)
+            if (t.Contains(needle)) return tier;
+        return 'B';
+    }
+}
+
+// Rendert een Discord-bericht tot PNG (Playwright/Chromium via render-signal.js)
+// en post die als bijlage. Faalt er iets, dan gaat het originele tekstbericht
+// alsnog door — een alert raken we nooit kwijt aan een render-probleem.
+public static class CardRender
+{
+    public static string Node = "node";
+    public static string Script = "";
+    public static string OutDir = "/tmp/mex-cards";
+    public static int TimeoutMs = 30000;
+    public static bool Keep;
+
+    // Chromium is zwaar; twee tegelijk is genoeg voor de alert-frequentie.
+    static readonly SemaphoreSlim Gate = new(2, 2);
+
+    public static async Task RenderAndPostAsync(HttpClient http, string url, string body,
+                                                string title, string storePath, bool dryRun)
+    {
+        var outPath = Path.Combine(OutDir, $"card_{DateTime.UtcNow:yyyyMMdd-HHmmss}_{Guid.NewGuid():N}.png");
+        string result;
+        try
+        {
+            var (ok, err) = await RenderAsync(body, outPath);
+            if (!ok)
+            {
+                var fb = await PostJsonAsync(http, url, body, dryRun);
+                result = $"card failed ({err}) -> tekst-fallback: {fb}";
+            }
+            else if (dryRun)
+            {
+                result = $"dry_run -> kaart op {outPath}";
+            }
+            else
+            {
+                result = await PostCardAsync(http, url, body, outPath);
+                if (result.StartsWith("error"))
+                    result += " -> tekst-fallback: " + await PostJsonAsync(http, url, body, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            result = $"card exception {ex.GetType().Name}: {ex.Message}";
+        }
+        finally
+        {
+            if (!Keep && !dryRun) { try { File.Delete(outPath); } catch { /* best effort */ } }
+        }
+        await Audit.AppendAsync(storePath, "discord-card", title, result);
+    }
+
+    static async Task<(bool ok, string err)> RenderAsync(string payloadJson, string outPath)
+    {
+        await Gate.WaitAsync();
+        try
+        {
+            var psi = new ProcessStartInfo(Node, $"\"{Script}\"")
+            {
+                WorkingDirectory = Path.GetDirectoryName(Script) is { Length: > 0 } dir ? dir : ".",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            // Contract van render-signal.js: payload in MEX_SIGNAL_JSON, PNG naar MEX_SIGNAL_OUT.
+            psi.Environment["MEX_SIGNAL_JSON"] = payloadJson;
+            psi.Environment["MEX_SIGNAL_OUT"] = outPath;
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return (false, "node start mislukt");
+            var stderr = proc.StandardError.ReadToEndAsync();
+            _ = proc.StandardOutput.ReadToEndAsync();
+
+            using var cts = new CancellationTokenSource(TimeoutMs);
+            try { await proc.WaitForExitAsync(cts.Token); }
+            catch (OperationCanceledException)
+            {
+                try { proc.Kill(true); } catch { /* al weg */ }
+                return (false, $"timeout na {TimeoutMs}ms");
+            }
+
+            if (proc.ExitCode != 0)
+            {
+                var e = (await stderr).Trim();
+                return (false, $"exit {proc.ExitCode}: {(e.Length > 200 ? e[..200] : e)}");
+            }
+            return File.Exists(outPath) ? (true, "") : (false, "geen PNG geschreven");
+        }
+        finally { Gate.Release(); }
+    }
+
+    // De kaart vervangt de embed; username/avatar/content (role-ping) blijven staan.
+    static async Task<string> PostCardAsync(HttpClient http, string url, string body, string outPath)
+    {
+        if (string.IsNullOrEmpty(url)) return "error: discord-url niet geconfigureerd";
+
+        var src = JsonNode.Parse(body) as JsonObject;
+        var payload = new JsonObject();
+        foreach (var key in new[] { "username", "avatar_url", "content" })
+            if (src?[key]?.ToString() is { Length: > 0 } v) payload[key] = v;
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            try
+            {
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json"), "payload_json");
+                var file = new ByteArrayContent(await File.ReadAllBytesAsync(outPath));
+                file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                form.Add(file, "files[0]", "card.png");
+
+                var resp = await http.PostAsync(url, form);
+                var code = (int)resp.StatusCode;
+                if (code < 400) return $"card sent {code} (poging {attempt})";
+                if (code == 429) { await Task.Delay(2000); continue; }   // Discord rate limit
+                if (code < 500) return $"error {code} (4xx, niet opnieuw)";
+            }
+            catch (Exception ex)
+            {
+                if (attempt == 3) return $"error {ex.GetType().Name}";
+            }
+            await Task.Delay(TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1)));
+        }
+        return "error: retries op";
+    }
+
+    static async Task<string> PostJsonAsync(HttpClient http, string url, string json, bool dryRun)
+    {
+        if (dryRun) return $"dry_run -> {(string.IsNullOrEmpty(url) ? "(geen url)" : url)}";
+        if (string.IsNullOrEmpty(url)) return "error: discord-url niet geconfigureerd";
+        try
+        {
+            using var content = new StringContent(json, Encoding.UTF8, "application/json");
+            var resp = await http.PostAsync(url, content);
+            return $"sent {(int)resp.StatusCode}";
+        }
+        catch (Exception ex) { return $"error {ex.GetType().Name}"; }
+    }
 }
 
 public class SignalIntent

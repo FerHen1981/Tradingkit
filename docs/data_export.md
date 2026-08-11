@@ -114,19 +114,74 @@ Send me, per symbol: **tick size**, **tick value ($)**, **contract multiplier**,
 and whether it is the full-size or micro contract. Cross-check against what your
 broker/prop firm actually fills, since that is what determines real P&L.
 
-## 8. File format & hosting
+## 8. File format, hosting & transfer
 
-Export CSV from Quantower, then convert (the validator does this with
-`--to-parquet`):
+Export CSV from Quantower, then convert — the validator does it in the same pass:
 
-- **Parquet + zstd** — roughly **4-10×** smaller than CSV, depending on how noisy
-  the volume columns are (measured 4.1× on a synthetic worst case; smooth real
-  price series do better). A ~500 MB CSV should land between 50 and 125 MB.
-- Publish as **GitHub Release assets** on this repo (2 GB per asset, plain HTTPS,
-  no LFS bandwidth limits). One release, versioned `data-v1`, one asset per symbol.
-- I fetch only the symbol an analysis needs.
+```
+python tools\validate_dataset.py NQ_export.csv --symbol NQ --to-parquet exports\
+```
+
+**Parquet + zstd** is roughly 4-10× smaller than CSV depending on how noisy the
+volume columns are (4.1× on a synthetic worst case; real price series do better).
+A ~500 MB CSV should land between 50 and 125 MB.
 
 Naming: `<SYMBOL>_1m_<FIRST>_<LAST>.parquet`, e.g. `NQ_1m_2019-01_2026-08.parquet`.
+
+### Where it goes: PC → bucket → server
+
+Not PC → server. The bucket is the canonical copy; the PC uploads once and the
+server pulls. That way nothing depends on the PC being awake, and a rebuilt server
+re-syncs itself.
+
+```
+  Quantower (PC)  ──upload──▶  object storage  ──sync──▶  VPS  ──▶  analyses
+                               (canonical)                 (cache)
+```
+
+**Cloudflare R2** is the recommended bucket: 10 GB free, zero egress fees, and it
+speaks the S3 API so `rclone` works out of the box.
+
+Upload from Windows (once `rclone config` has an `r2` remote):
+
+```
+rclone copy exports\ r2:tradingkit-corpus\1m\ --progress
+```
+
+Pull on the VPS:
+
+```
+rclone sync r2:tradingkit-corpus/1m /opt/tradingkit/data --progress
+```
+
+If you would rather not run `rclone` on the PC, R2's web UI accepts drag-and-drop
+for the pilot file — the CLI only starts paying off at corpus scale.
+
+### Getting a file to me
+
+I need a URL that plain `curl` can fetch. Two workable routes:
+
+1. **R2 presigned URL** (preferred) — time-limited, no public exposure:
+   `rclone link r2:tradingkit-corpus/1m/NQ_1m_....parquet` and paste me the link.
+2. **GitHub Release asset** on this repo — easy drag-and-drop in the browser
+   (Releases → Draft a new release → tag `data-v1` → attach → publish), but on a
+   **private** repo the asset download needs a token, so tell me if that route is
+   chosen and we check access before you upload 14 files.
+
+⚠ **Do not make exchange data publicly downloadable.** CME data via a broker feed
+comes with redistribution terms; a public bucket is redistribution. Presigned,
+expiring links are the right shape.
+
+### Direct PC → server, if you ever want it
+
+Windows 10+ ships OpenSSH, so from PowerShell:
+
+```
+scp exports\*.parquet mex@<vps-host>:/opt/tradingkit/data/
+```
+
+Fine for a one-off, but it makes the transfer depend on the PC being on, which is
+the thing we are trying to get rid of.
 
 ## 9. What to skip
 

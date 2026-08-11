@@ -27,13 +27,46 @@ that is not registered there.
 
 Defined on the **CVD-valid window**, not the calendar.
 
-- **In-sample**: everything up to ~2024.
-- **Walk-forward**: `funnel.py` restarts a fresh eval at many points — this is
-  the working OOS for the eval question.
-- **Sealed holdout**: most recent 12 months. Untouched until a config is frozen.
-  One look, one verdict.
-- **Note**: the 2023-2026 window is already *burnt* — the roll/OpEx factory was
-  tuned on it (`CLAUDE.md`: "validated, 3y OOS"). It is in-sample by use.
+- **In-sample**: everything before the final 3 years.
+- **Out-of-sample**: the **last 3 years**, reserved — this is the window intended
+  for the public track record on the site.
+- **Walk-forward**: `funnel.py` restarts a fresh eval at many points inside the
+  in-sample window. This is how configs get chosen; the 3-year block is not
+  touched during selection.
+- **Sealed holdout**: the most recent 12 months sit *inside* the OOS block and are
+  opened last, once a config is frozen. One look, one verdict.
+
+⚠ **The 2023-2026 window is currently burnt.** The roll/OpEx factory was tuned on
+it (`CLAUDE.md`: "validated, 3y OOS"), so as things stand it is in-sample by use
+and cannot honestly be presented as out-of-sample on a public site. Two ways back:
+
+1. **Re-select on pre-2023 only** and leave the 3 years genuinely untouched. Clean,
+   and it makes the site claim true — but it needs CVD history reaching back
+   before 2023, which is exactly the open question.
+2. **Relabel** the 3 years as *validation* and let the true out-of-sample be
+   forward: live results from the day a config is frozen.
+
+Option 2 always works and costs nothing but patience. Option 1 depends on the feed.
+
+## Evidence weighting — actual overrules backtest
+
+Live fills carry more information than simulated ones, so they weigh **2×**:
+
+```
+E_blend = (2·N_live·E_live + N_bt·E_bt) / (2·N_live + N_bt)
+```
+
+Two things this must not become:
+
+- **A number that never moves.** Live samples are dozens of trades against
+  thousands of backtest trades, so even at 2× the blend barely shifts early on.
+  Report `N_live` next to every blended figure, or the weighting is decoration.
+- **An average that hides a broken model.** When live *disagrees structurally* —
+  slippage per venue, fill rates, latency — the backtest is not one noisy opinion
+  to be averaged, it is **miscalibrated and must be re-run** with the measured
+  values. That is what "actual overrules" means. The Phase 6 reconciliation layer
+  already measures slippage in ticks per trade × venue, so this veto is instrumented;
+  it just needs wiring into the metrics.
 
 ## Units — how pips and ticks are made comparable
 

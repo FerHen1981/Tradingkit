@@ -5,6 +5,8 @@ Endpoints
   POST /webhook       receive a Signal from TradingView, fan out to accounts
   POST /pmt           passthrough: ready-made PMT payload in, forwarded 1:1 to PMT
   POST /discord       DISC-embed in -> trade-card (render-signal.js) -> Discord
+  POST /signal/{secret}  UNIVERSELE TRECHTER: herkent PMT-JSON / Discord-embed /
+                      lean signal / PineConnector-tekst en routeert elk naar zijn doel
   GET  /journal       last N journalled events (debug; secret-gated)
   POST /killswitch    enable/disable dispatching fleet-wide (secret-gated)
 
@@ -14,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
 from .config import Settings, load_accounts
@@ -147,7 +149,7 @@ async def pmt_passthrough(request: Request, secret: str) -> dict:
             journal.write("risk_block", {"account": account_id, "reason": why}, account=account_id)
             return {"accepted": True, "forwarded": False, "reason": f"risk: {why}"}
 
-    result = await pmt_broker.forward(payload, pmt_url=settings.pmt_url, dry_run=settings.dry_run,
+    result = await pmt_broker.forward(payload, pmt_url=_pmt_url_for(account_id), dry_run=settings.dry_run,
                                       retry_max=settings.retry_max, retry_backoff=settings.retry_backoff)
     if is_entry and account_id and result.get("status") == "sent":
         risk.record_entry(account_id)
@@ -160,35 +162,38 @@ async def pmt_passthrough(request: Request, secret: str) -> dict:
             "dry_run": settings.dry_run, "result": {k: v for k, v in result.items() if k != "payload"}}
 
 
-@app.post("/discord")
-async def discord_card(request: Request, secret: str) -> dict:
-    """Eén-alert flow voor Discord: de bestaande DISC-alert (Pine bouwt het
-    embed-JSON al) wijst naar deze URL. We renderen er een trade-card van via de
-    externe renderer (RENDER_CMD, output in RENDER_DIR) en posten die naar
-    DISCORD_WEBHOOK_URL — als embed-image (CHARTS_BASE_URL gezet) of als
-    multipart-attachment. Render- of postfout => origineel embed 1:1 doorgestuurd
-    (nooit een stil verloren bericht). DRY_RUN: renderen wel, posten niet."""
+def _pmt_url_for(account_id: str) -> str:
+    """Pine stuurt voor PMT-Tradovate én PMT-Rithmic exact dezelfde JSON, dus de
+    broker is niet uit het bericht af te leiden. We kiezen de endpoint op basis van
+    het account: per-account `pmt_url:` in accounts.yaml wint, anders `broker:`
+    (pmt_rithmic -> PMT_RITHMIC_URL), anders de globale PMT_URL."""
+    acc = accounts.accounts.get(account_id, {}) or {}
+    if acc.get("pmt_url"):
+        return str(acc["pmt_url"])
+    if "rithmic" in str(acc.get("broker", "")).lower() and settings.pmt_rithmic_url:
+        return settings.pmt_rithmic_url
+    return settings.pmt_url
+
+
+async def _render_and_post(payload: dict) -> None:
+    """Achtergrondtaak: kaart renderen + posten, uitkomst in het journaal."""
+    res = await _post_discord_card(payload)
+    journal.write("dispatch", {"route": "discord_card", **res})
+
+
+async def _post_discord_card(payload: dict) -> dict:
+    """Render the embed to a card and post it; fall back to the original embed."""
     import json as _json
     import os as _os
 
     import httpx
 
-    _check_secret(secret)
-    raw = await request.body()
-    try:
-        payload = _json.loads(raw)
-        assert isinstance(payload, dict)
-    except Exception:
-        raise HTTPException(422, "invalid embed payload")
-    journal.write("discord_in", {k: payload.get(k) for k in ("username", "embeds") if k in payload})
-
-    png = await render_card(payload, render_cmd=settings.render_cmd, render_dir=settings.render_dir)
+    png = await render_card(payload, render_cmd=settings.render_cmd, render_dir=settings.render_dir,
+                            timeout=settings.render_timeout)
     if settings.dry_run:
-        return {"accepted": True, "posted": False, "dry_run": True,
-                "rendered": bool(png), "png": png}
+        return {"status": "dry_run", "rendered": bool(png), "png": png}
     if not settings.discord_webhook:
-        return {"accepted": True, "posted": False, "reason": "DISCORD_WEBHOOK_URL not configured"}
-
+        return {"status": "error", "reason": "DISCORD_WEBHOOK_URL not configured"}
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             if png and settings.charts_base_url:
@@ -204,15 +209,147 @@ async def discord_card(request: Request, secret: str) -> dict:
                                           data={"payload_json": _json.dumps({"username": payload.get("username", "MEX")})},
                                           files={"file": (_os.path.basename(png), fh, "image/png")})
             else:
-                r = await client.post(settings.discord_webhook, json=payload)  # fallback: origineel embed
+                r = await client.post(settings.discord_webhook, json=payload)
             ok = r.status_code < 400
         except Exception as exc:
             journal.write("error", {"reason": f"discord post: {exc!r}"})
             ok = False
     if not ok:
-        await alert_failure(settings.alert_webhook, "\u26a0\ufe0f MEX middleware /discord: post naar Discord faalde")
-    journal.write("dispatch", {"route": "discord_card", "rendered": bool(png), "posted": ok})
-    return {"accepted": True, "posted": ok, "rendered": bool(png)}
+        await alert_failure(settings.alert_webhook, "\u26a0\ufe0f MEX middleware: Discord-post faalde")
+    return {"status": "sent" if ok else "error", "rendered": bool(png)}
+
+
+@app.post("/discord")
+async def discord_card(request: Request, secret: str, background: BackgroundTasks) -> dict:
+    """Losse Discord-route (embed in -> kaart uit). Zie ook /signal/{secret},
+    dat hetzelfde doet maar ook PMT/lean-signalen herkent."""
+    import json as _json
+
+    _check_secret(secret)
+    raw = await request.body()
+    try:
+        payload = _json.loads(raw)
+        assert isinstance(payload, dict)
+    except Exception:
+        raise HTTPException(422, "invalid embed payload")
+    journal.write("discord_in", {k: payload.get(k) for k in ("username", "embeds") if k in payload})
+    background.add_task(_render_and_post, payload)
+    return {"accepted": True, "queued": True, "dry_run": settings.dry_run}
+
+
+# ---------------------------------------------------------------------------
+# Universele ingest — één alert-URL per chart, ongeacht welke routes je in het
+# Pine-script aanvinkt. Elke aangevinkte route stuurt zijn eigen alert() naar
+# DEZELFDE webhook-URL; hier bepalen we per bericht welk soort het is.
+# ---------------------------------------------------------------------------
+def _classify(body: bytes):
+    """-> (kind, payload). kind: pmt | discord | signal | pineconnector | unknown"""
+    import json as _json
+    text = body.decode("utf-8", "replace").strip()
+    try:
+        obj = _json.loads(text)
+    except Exception:
+        obj = None
+    if isinstance(obj, dict):
+        if "multiple_accounts" in obj or ("token" in obj and "data" in obj):
+            return "pmt", obj
+        if "embeds" in obj or "content" in obj:
+            return "discord", obj
+        if obj.get("type") == "journal" or "csv" in obj:
+            return "journal", obj
+        if {"secret", "strategy", "event"} <= set(obj):
+            return "signal", obj
+        return "unknown", obj
+    parts = [p.strip() for p in text.split(",")]
+    if len(parts) >= 3 and parts[1].lower() in ("buy", "sell", "exit"):
+        return "pineconnector", text
+    # CSV-journalregel: "<ts>,<accountID>,<jrnlAcct>,<ticker>,<EVENT>,..."
+    if len(parts) >= 10 and parts[4].upper() in (
+            "ENTRY", "EXIT", "FILL", "CONFIG", "HALT", "DERISK", "PAYOUT", "EVAL"):
+        return "journal", text
+    return "unknown", text
+
+
+@app.post("/signal/{secret}")
+async def signal_ingest(secret: str, request: Request, background: BackgroundTasks) -> dict:
+    """Alle Pine-routes op één URL: https://<host>/signal/<MIDDLEWARE_SECRET>.
+
+    Vink in het script aan wat je wilt (PMT / Discord / Journal / Middleware) —
+    elk stuurt zijn eigen formaat naar deze ene URL en wij zetten het in de
+    juiste trechter:
+      PMT-JSON         -> 1:1 door naar PMT_URL (dedupe, kill-switch, risk-overlay)
+      Discord-embed    -> trade-card renderen -> DISCORD_WEBHOOK_URL
+      lean signal      -> fan-out naar alle accounts van die strategie
+      PC-tekstcommando -> door naar PC_URL
+      overig           -> alleen journaal (bv. CSV-journalregels)
+    """
+    import hashlib
+
+    import httpx
+
+    _check_secret(secret)
+    raw = await request.body()
+    kind, payload = _classify(raw)
+    journal.write("ingest", {"kind": kind, "bytes": len(raw)})
+
+    if deduper.seen_key(hashlib.sha1(raw).hexdigest()):
+        return {"accepted": True, "kind": kind, "handled": False, "reason": "duplicate (idempotency)"}
+
+    if kind == "pmt":
+        action = str(payload.get("data", "")).lower()
+        is_entry = action in ("buy", "sell")
+        accs = payload.get("multiple_accounts") or []
+        acct = str(accs[0].get("account_id", "")) if accs and isinstance(accs[0], dict) else ""
+        if is_entry and not STATE["armed"]:
+            return {"accepted": True, "kind": kind, "handled": False, "reason": "kill-switch: disarmed"}
+        if is_entry and acct:
+            allowed, why = risk.allow(acct, accounts.accounts.get(acct, {}), True)
+            if not allowed:
+                journal.write("risk_block", {"account": acct, "reason": why}, account=acct)
+                return {"accepted": True, "kind": kind, "handled": False, "reason": f"risk: {why}"}
+        res = await pmt_broker.forward(payload, pmt_url=_pmt_url_for(acct), dry_run=settings.dry_run,
+                                       retry_max=settings.retry_max, retry_backoff=settings.retry_backoff)
+        if is_entry and acct and res.get("status") == "sent":
+            risk.record_entry(acct)
+        journal.write("dispatch", {**res, "route": "pmt_pass", "account": acct}, account=acct)
+        return {"accepted": True, "kind": kind, "handled": res.get("status") in ("sent", "dry_run"), "result": res}
+
+    if kind == "discord":
+        # Renderen duurt seconden (headless browser); TradingView mag daar niet op
+        # wachten (timeout -> retry -> dubbele berichten). Dus: direct 200, kaart
+        # rendert en post op de achtergrond.
+        background.add_task(_render_and_post, payload)
+        return {"accepted": True, "kind": kind, "handled": True, "queued": True}
+
+    if kind == "signal":
+        try:
+            sig = Signal.model_validate(payload)
+        except ValidationError as exc:
+            journal.write("error", {"reason": "signal validation", "errors": exc.errors()})
+            raise HTTPException(422, "invalid signal")
+        if not STATE["armed"]:
+            return {"accepted": True, "kind": kind, "handled": False, "reason": "kill-switch: disarmed"}
+        results = await dispatch(sig, accounts, settings, risk)
+        for r in results:
+            journal.write("dispatch", r, strategy=sig.strategy, account=r.get("account", ""))
+        return {"accepted": True, "kind": kind, "handled": True, "results": results}
+
+    if kind == "pineconnector":
+        if settings.dry_run or not settings.pc_url:
+            journal.write("dispatch", {"route": "pineconnector", "status": "dry_run", "cmd": payload})
+            return {"accepted": True, "kind": kind, "handled": False, "dry_run": True}
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.post(settings.pc_url, content=payload, headers={"Content-Type": "text/plain"})
+        journal.write("dispatch", {"route": "pineconnector", "http_status": r.status_code})
+        return {"accepted": True, "kind": kind, "handled": r.status_code < 400}
+
+    if kind == "journal":
+        csv_row = payload.get("csv") if isinstance(payload, dict) else payload
+        journal.write("journal_row", {"csv": str(csv_row)[:2000]})
+        return {"accepted": True, "kind": kind, "handled": True, "note": "journal row stored"}
+
+    journal.write("unknown", {"raw": (payload if isinstance(payload, str) else str(payload))[:1000]})
+    return {"accepted": True, "kind": "unknown", "handled": True, "note": "journalled only"}
 
 
 @app.get("/journal")

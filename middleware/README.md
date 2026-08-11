@@ -108,3 +108,34 @@ stdin — en post het resultaat naar DISCORD_WEBHOOK_URL: als embed-image-URL
 Render-/postfout ⇒ origineel embed 1:1 doorgestuurd. DRY_RUN: wel renderen, niet posten.
 Env: RENDER_CMD (default "node render-signal.js") · RENDER_DIR (default /var/www/charts) ·
 CHARTS_BASE_URL · DISCORD_WEBHOOK_URL.
+
+
+## /signal/{secret} — één alert-URL per chart (de trechter)
+
+**Zet in TradingView per alert één webhook-URL:**
+`https://mw.mex-traders.com/signal/<MIDDLEWARE_SECRET>`
+
+In het Pine-script (groep *9 · EXECUTION*) vink je aan wat die chart moet doen.
+Elke aangevinkte route stuurt zijn eigen `alert()` naar diezelfde URL; de
+middleware herkent per bericht het type en zet het in de juiste trechter:
+
+| Toggle in script | Payload | Middleware doet |
+|---|---|---|
+| → PMT Tradovate | PMT-JSON | 1:1 door naar `PMT_URL` |
+| → PMT Rithmic | **zelfde** PMT-JSON | door naar `PMT_RITHMIC_URL` — gekozen op `broker:` van het account in accounts.yaml (payload is identiek, dus routing gaat via account_id) |
+| → PineConnector | `<license>,buy/sell/exit,<symbol>,…` | door naar `PC_URL` |
+| → Discord | embed-JSON | trade-card renderen → `DISCORD_WEBHOOK_URL` |
+| → Journal (CSV) | CSV-regel of `{"type":"journal","csv":…}` | opslaan in het journaal |
+| → Middleware (fan-out) | lean signal | fan-out naar alle accounts van die strategie |
+
+Onbekend formaat wordt gejournald (nooit stil weggegooid). Alles loopt door
+dedupe (idempotency), kill-switch en de per-account risk-overlay; exits worden
+nooit geblokkeerd.
+
+**Per-account overrides in accounts.yaml:** `broker: pmt_tradovate|pmt_rithmic`
+en optioneel `pmt_url:` (wint boven alles) als een account een eigen endpoint heeft.
+
+**Kaarten renderen op de achtergrond.** Een headless render duurt ~15s; TradingView
+mag daar niet op wachten (timeout → retry → dubbele berichten). De middleware
+antwoordt daarom binnen milliseconden en rendert+post daarna. Gemeten: HTTP 200 in
+0,005s, kaart daarna op schijf. `RENDER_TIMEOUT_SECONDS` (default 45) begrenst de render.

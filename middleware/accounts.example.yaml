@@ -18,6 +18,8 @@ accounts:
     quantity_multiplier: 1          # scales base qty for this account (size control)
     symbol_override: null           # e.g. "MGC1!" if this account trades micros
     max_entries_per_day: 0          # risk overlay: 0 = unlimited; set e.g. 4 to cap new entries/day
+    # broker: pmt_tradovate | pmt_rithmic  -> bepaalt welke PMT-endpoint gebruikt wordt
+    # pmt_url: https://...            # optioneel: eigen endpoint voor DIT account (wint boven alles)
   apex_f2:
     broker: pmt_tradovate
     token: "${PMT_TOKEN}"

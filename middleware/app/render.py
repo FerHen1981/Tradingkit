@@ -18,7 +18,7 @@ import time
 
 
 async def render_card(payload: dict, *, render_cmd: str, render_dir: str,
-                      timeout: float = 10.0) -> str | None:
+                      timeout: float = 45.0) -> str | None:
     fname = f"signal-{int(time.time()*1000)}.png"
     out = os.path.join(render_dir, fname)
     env = {**os.environ, "MEX_SIGNAL_OUT": out,

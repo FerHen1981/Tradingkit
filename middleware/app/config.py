@@ -30,7 +30,8 @@ def _expand(value):
 class Settings:
     secret: str = os.environ.get("MIDDLEWARE_SECRET", "")
     dry_run: bool = os.environ.get("DRY_RUN", "true").lower() != "false"
-    pmt_url: str = os.environ.get("PMT_URL", "")  # your PickMyTrade webhook URL
+    pmt_url: str = os.environ.get("PMT_URL", "")  # PickMyTrade webhook (Tradovate)
+    pmt_rithmic_url: str = os.environ.get("PMT_RITHMIC_URL", "")  # PickMyTrade webhook (Rithmic)
     pc_url: str = os.environ.get("PC_URL", "")    # your PineConnector webhook URL
     accounts_file: str = os.environ.get("ACCOUNTS_FILE", "accounts.yaml")
     journal_db: str = os.environ.get("JOURNAL_DB", "journal.db")
@@ -42,6 +43,7 @@ class Settings:
     discord_webhook: str = os.environ.get("DISCORD_WEBHOOK_URL", "")   # kanaal voor trade-cards
     render_cmd: str = os.environ.get("RENDER_CMD", "node render-signal.js")
     render_dir: str = os.environ.get("RENDER_DIR", "/var/www/charts")
+    render_timeout: float = float(os.environ.get("RENDER_TIMEOUT_SECONDS", "45"))
     charts_base_url: str = os.environ.get("CHARTS_BASE_URL", "")       # bv. https://host/charts — leeg = multipart-upload
     alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for failures
     # Phase 5 — risk overlay

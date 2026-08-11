@@ -39,8 +39,19 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
 
+## Working split — read `docs/state.md` first, update it last
+Three chats, one source of truth (`docs/chats.md`): **Analyses & Data** (`backtest/`,
+`data/`, recap), **Middleware dev** (`middleware/`), **Pine dev** (`pine/`). Regular
+chats own nothing — they capture into `docs/inbox.md`. Two goals, deliberately kept
+apart: **A** pass evals fast, **B** milk funded accounts to 6/6 payouts.
+
+**CVD is never disabled.** No real per-bar `Delta` → the analysis stops and a solution
+is proposed for approval. `use_cvd_filter=False` backtests a *different* strategy than
+the one running live (`indicators.py:162-173`).
+
 ## Dev conventions
-- Develop/commit/push only to branch `claude/mcp-trader-dev-sse-ibl64y`; never push elsewhere
-  without permission. Do not create PRs unless asked.
+- One branch per chat; never push to another chat's branch without permission.
+  Analyses & Data → `claude/analyses-data-*`, Middleware → `claude/mcp-trader-dev-*`,
+  Pine → `claude/pine-dev-*`. Do not create PRs unless asked.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

@@ -211,6 +211,7 @@ class NotionTradeJournal:
         self.db_id = db_id
         self._rel_db: dict[str, str] = {}      # prop name -> target database_id
         self._title_prop: dict[str, str] = {}  # database_id -> its title property name
+        self._rel_cache: dict[tuple[str, str], str] = {}  # (db_id, name) -> page id
         self._discovered = False
 
     @property
@@ -250,6 +251,9 @@ class NotionTradeJournal:
         db_id = self._rel_db.get(prop)
         if not db_id or not name:
             return None
+        ck = (db_id, name)
+        if ck in self._rel_cache:            # resolve each account/framework/asset once
+            return self._rel_cache[ck]
         title = self._title_prop.get(db_id, "Name")
         q = await client.post(f"{_API}/databases/{db_id}/query", headers=self._headers(),
                               json={"filter": {"property": title, "title": {"equals": name}},
@@ -257,13 +261,16 @@ class NotionTradeJournal:
         q.raise_for_status()
         hits = q.json().get("results", [])
         if hits:
-            return hits[0]["id"]
-        created = await client.post(f"{_API}/pages", headers=self._headers(),
-                                    json={"parent": {"database_id": db_id},
-                                          "properties": {title: {"title": [{"text": {"content": name}}]}}})
-        created.raise_for_status()
-        log.info("created missing %s relation: %s", prop, name)
-        return created.json()["id"]
+            page_id = hits[0]["id"]
+        else:
+            created = await client.post(f"{_API}/pages", headers=self._headers(),
+                                        json={"parent": {"database_id": db_id},
+                                              "properties": {title: {"title": [{"text": {"content": name}}]}}})
+            created.raise_for_status()
+            page_id = created.json()["id"]
+            log.info("created missing %s relation: %s", prop, name)
+        self._rel_cache[ck] = page_id
+        return page_id
 
     async def _existing_page(self, client: httpx.AsyncClient, key: str) -> str | None:
         r = await client.post(f"{_API}/databases/{self.db_id}/query", headers=self._headers(),

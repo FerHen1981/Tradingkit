@@ -2,4 +2,7 @@
 node_modules/
 package-lock.json
 .mex-browser/
+auth.json
+storage-state.json
+diag.mjs
 *.csv

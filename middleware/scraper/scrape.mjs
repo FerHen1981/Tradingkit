@@ -11,6 +11,7 @@
 //   MEX_HEADFUL=1    show the browser (first-time login / debugging)
 //   MEX_PERIOD       date-range option label that triggers the export (default "This quarter")
 import { chromium } from 'playwright';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,6 +21,12 @@ const HEADFUL = process.env.MEX_HEADFUL === '1';
 const PERIOD = process.env.MEX_PERIOD || 'This quarter';
 const TOGGLE = PERIOD === 'This quarter' ? 'Last quarter' : 'This quarter';
 
+// A saved Tradovate session (from login.mjs). On a headless server there's no screen to log
+// in with, so we reuse a storageState captured on a machine that HAS one. If MEX_AUTH isn't
+// set we fall back to auth.json next to this script, then to a persistent profile (headful).
+const localAuth = new URL('./auth.json', import.meta.url);
+const AUTH = process.env.MEX_AUTH || (fs.existsSync(localAuth) ? fileURLToPath(localAuth) : '');
+
 const accounts = process.env.MEX_ACCOUNTS
   ? process.env.MEX_ACCOUNTS.split(',').map(s => s.trim()).filter(Boolean)
   : JSON.parse(fs.readFileSync(new URL('./accounts.json', import.meta.url))).accounts;
@@ -27,24 +34,33 @@ const accounts = process.env.MEX_ACCOUNTS
 const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
 fs.mkdirSync(EXPORT_DIR, { recursive: true });
 
-const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-  headless: !HEADFUL, acceptDownloads: true,
-});
+// Two ways in: a saved session file (headless, server) or a persistent profile (headful login).
+let browser = null, ctx;
+if (AUTH) {
+  browser = await chromium.launch({ headless: !HEADFUL });
+  ctx = await browser.newContext({ acceptDownloads: true, storageState: AUTH });
+  console.error(`(using saved session ${AUTH})`);
+} else {
+  ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: !HEADFUL, acceptDownloads: true });
+}
+const closeAll = async () => { await ctx.close(); if (browser) await browser.close(); };
 const page = ctx.pages()[0] || await ctx.newPage();
 page.setDefaultTimeout(30000);
 
 await page.goto('https://trader.tradovate.com/welcome', { waitUntil: 'domcontentloaded' });
-
-if (await page.getByRole('button', { name: 'Login' }).isVisible().catch(() => false)) {
-  console.error('⛔ Not logged in. Run once with MEX_HEADFUL=1 and log in by hand; the profile keeps the session.');
-  await ctx.close(); process.exit(1);
-}
 
 // "new customer"/welcome-screen quirk → reload until the app (account caret) is present
 for (let i = 0; i < 4; i++) {
   if (await page.locator('.caret').first().isVisible().catch(() => false)) break;
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3000);
+}
+
+// still no app after the reloads → the session is dead (or absent). Say so clearly.
+if ((await page.locator('.caret').count()) === 0) {
+  console.error('⛔ Not logged in / session expired. Recreate the session on a machine WITH a screen:');
+  console.error('   node login.mjs   → produces auth.json → copy it to this server (MEX_AUTH or ./auth.json).');
+  await closeAll(); process.exit(1);
 }
 await page.getByText('Close').click({ timeout: 3000 }).catch(() => {});
 
@@ -112,4 +128,4 @@ for (const acct of accounts) {
 }
 
 console.log(`\n${gathered.length}/${accounts.length} downloaded → ${EXPORT_DIR}`);
-await ctx.close();
+await closeAll();

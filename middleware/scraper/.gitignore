@@ -1,0 +1,5 @@
+# Runtime-only — never commit
+node_modules/
+package-lock.json
+.mex-browser/
+*.csv

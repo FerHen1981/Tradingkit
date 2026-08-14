@@ -46,9 +46,23 @@ Then open **https://app.mex-traders.com**, log in with `VIEWER_PASSWORD`.
 |-----|---------|---------|
 | `VIEWER_PASSWORD` | *(unset = open!)* | owner login password — set this in production |
 | `VIEWER_SECRET` | derived from password | signs the session cookie |
+| `VIEWER_API_TOKEN` | *(unset)* | read-only token for `/api/state` (iPhone widget etc.) |
 | `ROUTED_DIR` | `/root/intent-store` | routed-log source |
 | `VIEWER_PORT` | `8080` | local listen port (Caddy proxies to it) |
 | `ROUTED_DAYS` | `2` | how many routed files back to read |
+
+## iPhone widget (Scriptable)
+
+`scriptable/mex-fleet-widget.js` renders the live fleet (realized today, open positions,
+trades, win rate) on the home screen — Small or Medium.
+
+1. Server: set `VIEWER_API_TOKEN=<long-random-string>` in `.env`, `sudo systemctl restart mex-viewer`.
+2. iPhone: install **Scriptable** → new script → paste the file → set `BASE` (your cockpit URL)
+   and `TOKEN` (== `VIEWER_API_TOKEN`).
+3. Home screen → add a Scriptable widget → pick this script. Tapping it opens the full cockpit.
+
+The token only grants read access to `/api/state`; it never exposes the owner password or any
+control action.
 
 ## What it shows now / later
 

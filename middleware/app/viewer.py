@@ -36,6 +36,7 @@ _ROUTED_DIR = os.environ.get("ROUTED_DIR", os.environ.get("INTENT_DIR", "/root/i
 _DAYS = int(os.environ.get("ROUTED_DAYS", "2"))
 _PASSWORD = os.environ.get("VIEWER_PASSWORD", "")
 _SECRET = (os.environ.get("VIEWER_SECRET") or _PASSWORD or "mex-dev-secret").encode()
+_API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the iPhone widget etc.
 
 
 # ---- state from the routed-log -------------------------------------------------------
@@ -143,6 +144,18 @@ def _authed(headers) -> bool:
     return False
 
 
+def _api_authorized(path: str, headers) -> bool:
+    """/api/state is reachable by the logged-in owner (cookie) OR a read-only token
+    (query ?token= or X-Token header) — the latter for the iPhone widget."""
+    if _authed(headers):
+        return True
+    if not _API_TOKEN:
+        return False
+    q = parse_qs(urlparse(path).query)
+    tok = (q.get("token", [None])[0]) or headers.get("X-Token")
+    return bool(tok) and hmac.compare_digest(tok, _API_TOKEN)
+
+
 # ---- HTTP ----------------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -165,7 +178,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, LOGIN_HTML.encode(), "text/html; charset=utf-8")
             return self._send(200, DASH_HTML.encode(), "text/html; charset=utf-8")
         if path == "/api/state":
-            if not _authed(self.headers):
+            if not _api_authorized(self.path, self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
             try:
                 body = json.dumps(build_state()).encode()

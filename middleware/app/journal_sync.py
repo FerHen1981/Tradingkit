@@ -113,6 +113,14 @@ async def run_once() -> dict:
     window_s = float(os.environ.get("INTENT_WINDOW_S", "900"))
     journal = NotionTradeJournal(os.environ.get("NOTION_TOKEN", ""),
                                  os.environ.get("NOTION_JOURNAL_DB", ""))
+    if journal.enabled:
+        try:
+            import httpx  # noqa: F401  — needed for the real upsert path
+        except ModuleNotFoundError:
+            log.error("httpx not installed in THIS interpreter. Run via the venv: "
+                      "`.venv/bin/pip install -r requirements.txt` then "
+                      "`.venv/bin/python -m app.journal_sync`.")
+            return {"error": "httpx missing (use the venv python)", "trades": 0, "upserted": 0}
     intents = IntentIndex(intent_dir)
 
     all_trades: list[CompletedTrade] = []

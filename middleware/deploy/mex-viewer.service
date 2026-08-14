@@ -1,0 +1,25 @@
+# MEX owner cockpit — read-only live fleet dashboard (app.mex-traders.com).
+# Stdlib-only web server; reads the routed-log; owner-only behind a password.
+# Install on mex-mw-01:
+#   1. Deploy middleware/ (e.g. /root/mex-journal/middleware).
+#   2. Put VIEWER_PASSWORD (+ optional VIEWER_SECRET) in the EnvironmentFile below —
+#      reuse /root/mex-journal/middleware/.env or a dedicated file.
+#   3. sudo cp deploy/mex-viewer.service /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-viewer
+#   4. Front it with TLS (see the app.mex-traders.com block in deploy/Caddyfile).
+[Unit]
+Description=MEX Fleet Cockpit (read-only viewer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+Environment=VIEWER_PORT=8080
+Environment=ROUTED_DIR=/root/intent-store
+ExecStart=/usr/bin/python3 -m app.viewer
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

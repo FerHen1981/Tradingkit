@@ -79,7 +79,7 @@ async def run() -> dict:
 
     # pair every fills CSV, grouped by account
     trades_by_acct = defaultdict(list)
-    for path in sorted(glob.glob(os.path.join(exports, "*_Fills.csv"))):
+    for path in sorted(glob.glob(os.path.join(exports, "*Fills*.csv"))):   # matches "Fills (11).csv" too
         try:
             for t in pair_fills(parse_fills_csv(path)):
                 trades_by_acct[t.account].append(t)

@@ -290,12 +290,14 @@ class NotionTradeJournal:
         res = r.json().get("results", [])
         return res[0]["id"] if res else None
 
-    async def upsert(self, t: TradeRecord) -> None:
+    async def upsert(self, t: TradeRecord) -> bool:
+        """Create/patch the trade's row. Returns True on success, False on failure (so a
+        caller's idempotency state only records genuinely-written rows and retries the rest)."""
         key = trade_key(t)
         if not self.enabled:
             log.info("journal DRY: would upsert %s (%s %s %s @ %.2f→%.2f, pnl %.2f)",
                      key, t.framework, t.direction, t.contract, t.entry_price, t.exit_price, t.gross_pnl)
-            return
+            return True
         import httpx  # local import: pure mapping + DRY mode stay usable without httpx
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
@@ -308,10 +310,13 @@ class NotionTradeJournal:
                         props[prop] = {"relation": [{"id": page_id}]}
                 existing = await self._existing_page(client, key)
                 if existing:
-                    await client.patch(f"{_API}/pages/{existing}", headers=self._headers(),
-                                       json={"properties": props})
+                    r = await client.patch(f"{_API}/pages/{existing}", headers=self._headers(),
+                                           json={"properties": props})
                 else:
-                    await client.post(f"{_API}/pages", headers=self._headers(),
-                                      json={"parent": {"database_id": self.db_id}, "properties": props})
+                    r = await client.post(f"{_API}/pages", headers=self._headers(),
+                                          json={"parent": {"database_id": self.db_id}, "properties": props})
+                r.raise_for_status()
+            return True
         except Exception as exc:  # never let journaling stall execution
             log.warning("journal upsert failed for %s: %r", key, exc)
+            return False

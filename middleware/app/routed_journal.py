@@ -301,7 +301,8 @@ async def run_once() -> dict:
         pass
 
     from .notion_journal import trade_key
-    new = updated = skipped = 0
+    throttle = float(os.environ.get("NOTION_THROTTLE_S", "0.34"))
+    new = updated = skipped = failed = 0
     for t in trades:
         rec = to_record(t)
         key = trade_key(rec)
@@ -310,14 +311,16 @@ async def run_once() -> dict:
             skipped += 1
             continue
         was_known = key in done
-        try:
-            await journal.upsert(rec)
-            if journal.enabled:
+        ok = await journal.upsert(rec)
+        if journal.enabled:
+            if ok:
                 updated += 1 if was_known else 0
                 new += 0 if was_known else 1
-                done[key] = sig
-        except Exception as exc:
-            log.warning("routed upsert failed for %s: %r", key, exc)
+                done[key] = sig      # only remember rows that were genuinely written
+            else:
+                failed += 1
+            if throttle:
+                await asyncio.sleep(throttle)   # stay under Notion's rate limit on a backfill
 
     if journal.enabled:
         try:
@@ -328,7 +331,7 @@ async def run_once() -> dict:
 
     summary = {"files": len(files), "events": len(events), "accounts": len(amap),
                "trades": len(trades), "new": new, "updated": updated, "skipped": skipped,
-               "dry": not journal.enabled}
+               "failed": failed, "dry": not journal.enabled}
     log.info("routed_journal run: %s", summary)
     return summary
 

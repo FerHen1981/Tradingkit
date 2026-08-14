@@ -274,12 +274,12 @@ class NotionTradeJournal:
         return res[0]["id"] if res else None
 
     async def upsert(self, t: TradeRecord) -> None:
-        import httpx  # local import: the pure mapping helpers stay usable without httpx
         key = trade_key(t)
         if not self.enabled:
             log.info("journal DRY: would upsert %s (%s %s %s @ %.2f→%.2f, pnl %.2f)",
                      key, t.framework, t.direction, t.contract, t.entry_price, t.exit_price, t.gross_pnl)
             return
+        import httpx  # local import: pure mapping + DRY mode stay usable without httpx
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
                 await self._discover(client)

@@ -121,25 +121,48 @@ async def run_once() -> dict:
                       "`.venv/bin/pip install -r requirements.txt` then "
                       "`.venv/bin/python -m app.journal_sync`.")
             return {"error": "httpx missing (use the venv python)", "trades": 0, "upserted": 0}
+    state_file = os.environ.get("STATE_FILE", "journal_sync_state.json")
     intents = IntentIndex(intent_dir)
 
+    # incremental: skip trades already written in a previous run (steady-state stays light)
+    done: set[str] = set()
+    try:
+        with open(state_file) as f:
+            done = set(json.load(f))
+    except (FileNotFoundError, ValueError):
+        pass
+
+    csvs = sorted(glob.glob(os.path.join(exports, "*_Fills.csv")))
     all_trades: list[CompletedTrade] = []
-    for csv_path in sorted(glob.glob(os.path.join(exports, "*_Fills.csv"))):
+    for csv_path in csvs:
         try:
             all_trades.extend(pair_fills(parse_fills_csv(csv_path)))
         except Exception as exc:
             log.warning("failed to process %s: %r", csv_path, exc)
 
-    ok = 0
+    ok = skipped = 0
     for t in all_trades:
+        key = f"{t.account[-3:]}_{t.buy_fill_id}_{t.sell_fill_id}"
+        if key in done:
+            skipped += 1
+            continue
         try:
             await journal.upsert(to_record(t, intents, window_s))
             ok += 1
+            if journal.enabled:      # only remember what was really written
+                done.add(key)
         except Exception as exc:
-            log.warning("upsert failed for %s_%s_%s: %r", t.account[-3:], t.buy_fill_id, t.sell_fill_id, exc)
+            log.warning("upsert failed for %s: %r", key, exc)
 
-    summary = {"csv_files": len(glob.glob(os.path.join(exports, "*_Fills.csv"))),
-               "trades": len(all_trades), "upserted": ok, "dry": not journal.enabled}
+    if journal.enabled:
+        try:
+            with open(state_file, "w") as f:
+                json.dump(sorted(done), f)
+        except Exception as exc:
+            log.warning("could not write state %s: %r", state_file, exc)
+
+    summary = {"csv_files": len(csvs), "trades": len(all_trades),
+               "new": ok, "skipped": skipped, "dry": not journal.enabled}
     log.info("journal_sync run: %s", summary)
     return summary
 

@@ -146,6 +146,7 @@ def _load_accounts(token: str) -> list[dict]:
                     "buffer": None if buffer is None else round(buffer, 2),
                     "floor": None if buffer is None else round(current - buffer, 2),
                     "bufpct": _num(p.get("DD Buffer %")),
+                    "net": _num(p.get("Net PnL")),   # ledger truth (rollup), matches Current
                     "health": health, "seed": seed is not None,
                     "hrank": _HEALTH_RANK.get(health, 0) * 1000 + (_num(p.get("DD Buffer %")) or -999),
                 })
@@ -159,28 +160,29 @@ def _load_accounts(token: str) -> list[dict]:
 # ---- local fills -> closed trades ----------------------------------------------------
 
 def _load_trades(exports: str, skip: list[str]) -> list[dict]:
-    seen: set[tuple] = set()
-    trades: list[dict] = []
+    # Gather EVERY fill across all export snapshots and dedup by fill id (overlapping snapshots
+    # share the same fills), THEN FIFO-pair once — globally, not per file. Pairing per file
+    # mis-attributes any position that opens in one snapshot and closes in another.
+    fills_by_id: dict = {}
     for path in sorted(glob.glob(os.path.join(exports, "*Fills*.csv"))):
         try:
-            fills = parse_fills_csv(path)
+            for f in parse_fills_csv(path):
+                if any(s in f.account for s in skip):
+                    continue
+                fills_by_id[f.fill_id] = f
         except Exception as exc:
             log.warning("dashboard: failed to parse %s: %r", path, exc)
-            continue
-        for t in pair_fills(fills):
-            if any(s in t.account for s in skip):
-                continue
-            key = (t.account, t.buy_fill_id, t.sell_fill_id)
-            if key in seen:
-                continue                          # overlapping exports → count once
-            seen.add(key)
-            sym = _ROOT2ASSET.get(t.product.upper(), t.product.upper())
-            net = round(t.gross_pnl - t.commissions, 2)
-            move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
-            ticks = round(move / t.tick_size) if t.tick_size else 0
-            close = t.exit_ts.astimezone(_ET).date()
-            trades.append({"acct": t.account, "sym": sym, "net": net,
-                           "ticks": ticks, "close": close})
+    fills = sorted(fills_by_id.values(), key=lambda x: (x.ts, x.fill_id))
+
+    trades: list[dict] = []
+    for t in pair_fills(fills):
+        sym = _ROOT2ASSET.get(t.product.upper(), t.product.upper())
+        net = round(t.gross_pnl - t.commissions, 2)
+        move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
+        ticks = round(move / t.tick_size) if t.tick_size else 0
+        close = t.exit_ts.astimezone(_ET).date()
+        trades.append({"acct": t.account, "sym": sym, "net": net,
+                       "ticks": ticks, "close": close})
     return trades
 
 
@@ -254,16 +256,12 @@ def command_state(window: str = "all") -> dict:
     window = window if window in WINDOWS else "all"
     trades, accounts_src = _sources()
     ag = _aggregate(trades, window)
-    assets, atot, acct_net = ag["assets"], ag["totals"], ag["acct_net"]
+    assets, atot = ag["assets"], ag["totals"]
 
-    # accounts: live buffers (window-independent) + window Net P&L
-    accounts = []
-    for a in accounts_src:
-        a = dict(a)
-        a["net"] = acct_net.get(a["full"])         # match on full id, not last-3 (013 collision)
-        accounts.append(a)
-
-    funded_net = round(sum(acct_net.get(a["full"], 0.0) for a in accounts if a["stage"] == "Funded"), 2)
+    # accounts: live buffers + ledger Net P&L (from Notion — always matches Current/Tradovate).
+    # acct_net (from the trade log) drives the window-scoped performance cards, not this column.
+    accounts = [dict(a) for a in accounts_src]
+    funded_net = round(sum((a["net"] or 0.0) for a in accounts if a["stage"] == "Funded"), 2)
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)
     breached = sum(1 for a in accounts if a["health"] == "Breached")
     best = assets[0] if assets else None

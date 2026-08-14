@@ -375,7 +375,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=accounts hidden>
     <h2 class=sec>Survival cockpit</h2>
-    <p class=sec-note>Per account: waar staat de floor, hoeveel buffer tot breach. <span class=seed>◆ goud</span> = exacte Tradovate-seed · <span class=calc>○ grijs</span> = gereconstrueerd. Klik een kop om te sorteren.</p>
+    <p class=sec-note>Per account: waar staat de floor, hoeveel buffer tot breach. <span class=seed>◆ goud</span> = exacte Tradovate-seed · <span class=calc>○ grijs</span> = gereconstrueerd. Net P&amp;L = grootboek-totaal (Notion). Klik een kop om te sorteren.</p>
     <div class=tablewrap><table id=acctTable><thead><tr>
       <th data-k=id data-t=s>Account</th><th data-k=stage data-t=s>Type</th>
       <th data-k=current data-t=n>Current</th><th data-k=floor data-t=n>DD Floor</th>

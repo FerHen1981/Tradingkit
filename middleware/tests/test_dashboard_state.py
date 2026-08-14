@@ -104,3 +104,14 @@ def test_seed_property_mapping():
     # 209 is deliberately excluded from seeding (incomplete export)
     assert not any("209" in a for a in SEEDS)
     assert SEEDS["PAAPEX2700250000015"]["DD Floor $"] == 49897.60
+
+
+def test_global_pairing_across_files():
+    """A position opened in one export snapshot and closed in another must pair as ONE trade.
+    Per-file pairing would see an orphan open in A and an orphan close in B → 0 trades."""
+    d = tempfile.mkdtemp()
+    _write(d, "20260804a_Fills.csv", [_GC[0]])   # only the BUY (open)
+    _write(d, "20260804b_Fills.csv", [_GC[1]])   # only the SELL (close), later snapshot
+    trades = ds._load_trades(d, skip=[])
+    assert len(trades) == 1                        # globally paired, not lost
+    assert trades[0]["sym"] == "GC" and trades[0]["net"] == 38.66

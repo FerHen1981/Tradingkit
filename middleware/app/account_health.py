@@ -57,21 +57,36 @@ class Health:
     reasons: str
 
 
-def compute(size, starting, current, peak_stored, rule, prop_firm, status) -> Health | None:
+def compute(size, starting, current, peak_stored, rule, prop_firm, status,
+            stage="funded", dd_amount=None, dd_floor=None) -> Health | None:
     """Pure survival-buffer + health calc. Returns None when the account lacks the balances
-    needed to compute (so we don't write misleading zeros)."""
+    needed to compute (so we don't write misleading zeros).
+
+    The drawdown FLOOR reproduces Tradovate's per-account rule:
+      - trailing base: intraday realized peak, or the EOD balance for EOD-trail accounts
+      - lock: FUNDED (PA) accounts lock the floor at start + $100; EVAL accounts never lock
+      - dd_floor: an exact seed from the broker dashboard (e.g. for EOD accounts we can't fully
+        reconstruct intraday) — the floor only ever ratchets UP from it
+    """
     if starting is None or current is None:
         return None
     rule = rule or ""
-    prop_firm = prop_firm or ""
-    threshold = dd_threshold(size, rule)
-    is_eod = "EOD" in rule and "Apex" not in prop_firm   # MFFU/Topstep EOD lock at start; Apex at start+100
-    lock_offset = 0.0 if is_eod else 100.0               # Apex trailing locks at start + $100
-
-    # maintained realized peak (converges; historical pre-tracking peak not reconstructed)
+    threshold = float(dd_amount) if dd_amount else dd_threshold(size, rule)
+    is_eod = "EOD" in rule.upper()
+    # funded locks the floor (Apex at start+$100; MFFU/Topstep at start); eval never locks
+    lock_offset = 100.0 if "apex" in (prop_firm or "").lower() else 0.0
+    cap = (starting + lock_offset) if stage == "funded" else float("inf")
     peak = max(x for x in (peak_stored or 0.0, current, starting) if x is not None)
-    # trailing floor: trails the peak by the allowance, but never rises above the lock level
-    floor = min(starting + lock_offset, peak - threshold)
+
+    if dd_floor is not None:
+        # exact broker seed; ratchet up (intraday for trailing, hold for EOD until re-seeded)
+        floor = float(dd_floor)
+        if not is_eod:
+            floor = max(floor, min(cap, current - threshold))
+    else:
+        # reconstruct: floor = min(lock cap, peak − dd). Exact for locked/eval/fresh;
+        # EOD-not-locked is best-effort until an EOD seed is provided.
+        floor = min(cap, peak - threshold)
     buffer_usd = round(current - floor, 2)
     buffer_pct = round(100.0 * buffer_usd / threshold, 1) if threshold else 0.0
 
@@ -153,6 +168,7 @@ async def run_once() -> dict:
                 if _checkbox(props.get("Archived")):
                     continue
                 acct = _title(props.get("Account ID"))
+                stage = "funded" if acct.upper().startswith(("PA", "PAAPEX")) else "eval"
                 h = compute(
                     size=_num(props.get("Account Size")),
                     starting=_num(props.get("Starting Balance")),
@@ -161,6 +177,9 @@ async def run_once() -> dict:
                     rule=_sel(props.get("Drawdown Rule")),
                     prop_firm=_sel(props.get("Prop Firm")),
                     status=_sel(props.get("Status")),
+                    stage=stage,
+                    dd_amount=_num(props.get("DD Amount $")),
+                    dd_floor=_num(props.get("DD Floor $")),
                 )
                 if h is None:
                     skipped += 1

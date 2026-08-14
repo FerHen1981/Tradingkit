@@ -55,5 +55,32 @@ def test_eod_firm_locks_at_start():
     assert h.buffer_usd == 2500
 
 
+def test_eval_never_locks():
+    # Apex EVAL: floor trails the peak with NO lock (214: peak 53,034.50 → floor 50,534.50)
+    h = compute(50000, 50000, 53034.50, 53034.50, "Legacy 50k", "Apex Trader Funding",
+                "Active Eval", stage="eval")
+    assert h.floor == 50534.50 and h.buffer_usd == 2500.0
+
+
+def test_funded_locks_at_start_plus_100():
+    # Apex FUNDED, past the lock: floor caps at start + $100
+    h = compute(50000, 50000, 55470.08, 55470.08, "Legacy 50k", "Apex Trader Funding",
+                "Funded Account", stage="funded")
+    assert h.floor == 50100.0 and h.buffer_usd == 5370.08
+
+
+def test_dd_floor_seed_is_exact():
+    # EOD-trail account we can't fully reconstruct: the broker floor seed is used exactly
+    h = compute(50000, 50000, 51897.60, 51897.60, "50k Tradovate EOD Trail", "Apex Trader Funding",
+                "Funded Account", stage="funded", dd_floor=48331.70)
+    assert h.floor == 48331.70 and h.buffer_usd == 3565.90
+
+
+def test_dd_amount_override():
+    h = compute(50000, 50000, 50000, 50000, "Intraday Trail", "Apex Trader Funding",
+                "Active Eval", stage="eval", dd_amount=2000)
+    assert h.threshold == 2000 and h.floor == 48000.0
+
+
 def test_missing_balances_returns_none():
     assert compute(50000, None, None, None, "Trailing Equity Peak", "Apex", "x") is None

@@ -27,6 +27,7 @@ def _headers(token: str) -> dict:
 async def _archive_page(client, token, page_id) -> None:
     r = await client.patch(f"{_API}/pages/{page_id}", headers=_headers(token), json={"archived": True})
     r.raise_for_status()
+    await asyncio.sleep(0.2)   # stay under Notion's rate limit on a bulk archive
 
 
 async def _by_after(client, token, db, date: str) -> int:

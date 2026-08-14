@@ -1,91 +1,90 @@
-# Trade Journal-pipeline — near-real-time voorstel
+# Trade Journal-pipeline — live uit het routed-log
 
-Doel: **trades verschijnen automatisch in het Notion Trade Journal zodra ze er zijn**
-(near-real-time, elke paar minuten), zonder handwerk. Dit legt de huidige stand vast,
-het einddoel, de te bouwen stukken en de openstaande keuzes.
+Doel: **trades verschijnen in het Notion Trade Journal zodra ze er zijn** — puur uit data die
+de server zelf al genereert. Geen browser, geen Tradovate-login, geen CSV nodig voor het live
+beeld.
 
 ---
 
-## Huidige stand (geverifieerd op `mex-mw-01`)
+## De doorbraak: alles staat al in `routed_*.jsonl`
+
+De executor schrijft `/root/intent-store/routed_YYYYMMDD.jsonl`. Dat log bevat de **complete
+trade per account** in zijn Discord-kaarten:
+
+| Kaart | Voorbeeld | Levert |
+|---|---|---|
+| 📥 **FILL** | `PA015-0k-260813 \| 5ct @ 4403.1 \| SL 4413.1 \| TP 4378.1` | account, aantal, **echte instapprijs**, SL, TP |
+| 📤 **EXIT** | `PA015 \| short closed @ 4397.7 \| TRAIL \| PnL +$263.3 \| MFE 79t · MAE 3t` | **echte uitstapprijs, reden, P&L, MFE/MAE** |
+| 📈 **LIMIT** | `Entry 4449.8 \| Stop 4439.8 \| TP 4474.8 \| Qty 8` | bedoelde prijs → **slippage** |
+| `pmt` record | `account: APEX27002500000209` | volledige account-id (kort `AP209` → vol) |
+
+De accounts komen dus óók uit dit log — nieuwe accounts verschijnen vanzelf, weggevallen
+accounts verdwijnen vanzelf. **Fleet-churn lost zichzelf op.**
+
+---
+
+## Architectuur — twee lagen
+
+```
+Laag 1 — LIVE (elke minuut, server-side, kan niet stuk door een UI-wijziging)
+  routed_*.jsonl ─▶ [routed_journal] parse FILL/EXIT/LIMIT
+                     pair FILL↔EXIT per (account, symbool, richting)
+                     resolve account (kort→vol) · framework (instrument+fase)
+                  ─▶ Notion Trade Journal upsert (rij opent bij FILL, sluit bij EXIT)
+       via systemd-timer  mex-routed-journal.timer  (OnUnitActiveSec=1min)
+
+Laag 2 — RECONCILIATIE (optioneel, 1×/dag) — alleen als extra controle / commissies
+  Fills-CSV ─▶ [fills_pairing] ─▶ match op de bestaande live-rij ─▶ echte commissie/controle
+       download = scraper/ (draait op een ingelogde pc), NIET in het live-pad
+```
+
+### Huidige stand
 
 | Stuk | Status | Waar |
 |---|---|---|
-| Signalen ontvangen → intent-store | ✅ live | `mex-receiver.service` → `/root/intent-store/intents_*.jsonl` + `routed_*.jsonl` |
-| Fills (Tradovate) → CSV | ⚠️ **handmatig** | `/root/exports/YYYYMMDD_<acct>_Fills.csv` |
-| Fills → completed trades (pairing) | ✅ **gebouwd + gevalideerd** | `app/fills_pairing.py` |
-| Completed trade → Notion-rij (mapping) | ✅ **gebouwd + 956/956 gevalideerd** | `app/notion_journal.py` |
-| Verwerking koppelen + plannen | ❌ te bouwen | (deze pipeline) |
-| Download automatiseren | ❌ te bouwen | (de echte real-time-knop) |
-
-De oude .NET-verwerker (`MEX_Middleware_FaseA/B`) op de server = verouderd, vervangen we.
+| Signalen → intent-store + routed-log | ✅ live | `mex-receiver.service` → `/root/intent-store/` |
+| routed-log → completed trades (parse + pair) | ✅ **gebouwd + getest** | `app/routed_journal.py` |
+| completed trade → Notion-rij (mapping) | ✅ gebouwd (956/956 gevalideerd) | `app/notion_journal.py` |
+| live timer (elke minuut) | ✅ klaar om te deployen | `deploy/mex-routed-journal.{service,timer}` |
+| fills-CSV verwerking (reconciliatie) | ✅ gebouwd (optioneel) | `app/journal_sync.py`, `scraper/` |
 
 ---
 
-## Doel-pipeline (automatisch, near-real-time)
+## Wat een rij in Notion krijgt
 
+- **Bij FILL (open):** richting, contract, instapprijs, aantal, SL/TP, framework, status `Open`.
+- **Bij EXIT (dicht):** uitstapprijs, **gerealiseerde P&L**, reden (TRAIL/SL/TP), MFE/MAE, status
+  `Closed`. Idempotent op een entry-gebaseerde `Webhook ID`, dus de rij die opende wordt
+  bijgewerkt — nooit een dubbele.
+- **Slippage:** instap-fill vs de bedoelde LIMIT-prijs → `Slippage Entry (ticks)`.
+
+---
+
+## Deploy (op mex-mw-01)
+
+```bash
+cd /root/mex-journal/middleware
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt   # eenmalig
+# .env:  NOTION_TOKEN=...  NOTION_JOURNAL_DB=1ddb61ea444d813294f8e4eac39809e4  ROUTED_DIR=/root/intent-store
+
+# eerst DRY (zonder token in de omgeving) — laat zien wat het ZOU schrijven:
+ROUTED_DIR=/root/intent-store .venv/bin/python -m app.routed_journal
+
+# daarna live op een timer van 1 minuut:
+sudo cp deploy/mex-routed-journal.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now mex-routed-journal.timer
 ```
-TradingView-alerts ─▶ mex-receiver ─▶ intent-store (signaalprijs, strategie)   [LIVE]
-                                            │  (join op account+symbool+tijd)
-Tradovate ─▶ [AUTO fills ophalen, elke N min] ─▶ fills
-                                            ▼
-                          [fills_pairing]  fills → completed trades
-                                            ▼
-                    join intent  → Signal Price (slippage) + Framework
-                                            ▼
-                     [notion_journal]  → Trade Journal upsert (Webhook ID)
-              alles elke ~5-10 min via systemd-timer op mex-mw-01
-```
+
+Elke run logt zijn uitkomst (`files/events/trades/new/updated/skipped`) — geen
+"ik-wist-het-niet": je ziet precies wat er verwerkt is.
 
 ---
 
-## De download automatiseren — twee wegen (voorkeur = API)
+## Openstaand / later
 
-**Weg A — Tradovate-API fills pollen (aanrader, schoonst).**
-De middleware authenticeert al bij de Tradovate-API voor P&L (`app/tradovate.py`). "Directe
-API" was onmogelijk voor *order-plaatsing* — maar **lezen** werkt aantoonbaar (P&L komt
-binnen). Fills lezen is één endpoint erbij (`/fill/list` of `/execution/list`). Als dat met
-je bestaande creds werkt: **geen CSV-download en geen browser-automation meer nodig** — de
-runner pollt fills direct → pairt → journal. Te testen op de server met de huidige creds.
-
-**Weg B — browser-automation (fallback).**
-Werkt de API-read niet voor fills, dan automatiseren we de rapport-export zoals je
-charts-crawler al doet (Playwright → inloggen → Fills-report per account exporteren →
-`/root/exports/`). Meer werk (login/sessie/auth-verloop), maar bewezen aanpak in jouw stack.
-
-→ **Eerst Weg A testen** (kost weinig, kan alles vereenvoudigen); anders Weg B.
-
----
-
-## Wat er nog gebouwd moet worden (de backlog)
-
-1. **Fills-bron** — Weg A (API-fills-poll in `tradovate.py`) of Weg B (browser-export). *[keuze na test]*
-2. **Runner** `app/journal_sync.py` — scant fills-bron → `pair_fills` → completed trades. *[bouwen]*
-3. **Intent-join** — match trade ↔ signaal (account + symbool + entry-tijd) → `Signal Price`
-   (slippage) + `Framework`/strategie. *[bouwen]*
-4. **Framework-resolutie** — uit `routed_*.jsonl` als de strategie daar staat, anders afleiden
-   (instrument + account-fase: GC/MGC·funded→El Tesoro, ES·eval→El Leon, …; NQ = 4 varianten,
-   vereist de intent). *[1 check: staat strategie in routed_?]*
-5. **Idempotentie/state** — incrementeel verwerken (bijhouden welke fills al gedaan zijn);
-   Notion-upsert op `Webhook ID` vangt dubbels sowieso af. *[bouwen]*
-6. **Scheduling** — systemd-timer(s) elke ~5-10 min (fetch + process). *[leveren]*
-7. **Observability ("geen ik-wist-het-niet")** — elke run logt zijn uitkomst; bij fout een
-   Discord-ping. *[bouwen]*
-8. **Reconciliatie** — intended (intent) vs actual (fill) → slippage/latency per trade, in de
-   bestaande `Slippage`-kolommen. *[valt samen met de join]*
-9. **Backfill** — bestaande `/root/exports` (+ archive) eenmalig doorlopen om gaten te vullen;
-   idempotent, dus veilig naast de al ingevulde 457 rijen. *[eenmalig]*
-
----
-
-## Openstaande keuzes
-
-- **Fills-bron:** eerst Weg A (Tradovate-API) testen op de server? (aanrader)
-- **Framework:** staat de strategie/El___-naam in `routed_*.jsonl`? Zo ja → exact; zo nee →
-  afleiden uit instrument+fase (+ intent voor NQ).
-
-## Volgorde
-
-1. Test Weg A (API-fills) → bepaalt de fills-bron.
-2. Runner + intent-join + Framework → complete rijen.
-3. Systemd-timer + observability → automatisch & near-real-time.
-4. Backfill → gaten dicht.
+- **Commissies & harde P&L-controle:** laag 2 (fills-CSV) 1×/dag om commissie in te vullen en
+  de executor-P&L te verifiëren tegen de broker.
+- **Framework-exactheid:** de El___-namen worden afgeleid uit instrument + account-fase; als de
+  strategie de scriptnaam in het signaal meestuurt, kunnen we die 1-op-1 overnemen.
+- **Status-opties in Notion:** `Open` / `Closed` / `Closed (SL)` worden automatisch aangemaakt
+  bij de eerste write.

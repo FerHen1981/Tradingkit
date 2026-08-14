@@ -83,6 +83,10 @@ class TradeRecord:
     planned_sl: float | None = None        # planned stop PRICE
     planned_tp: float | None = None        # planned target PRICE
     tick_size: float | None = None         # override; else derived from contract
+    # --- extras carried by the executor's routed cards (live layer) ---
+    exit_reason: str | None = None         # e.g. "TRAIL", "SL", "TP"
+    mfe_ticks: int | None = None           # max favourable excursion (ticks)
+    mae_ticks: int | None = None           # max adverse excursion (ticks)
 
     def tick(self) -> float:
         return self.tick_size if self.tick_size else tick_size_for(self.contract or self.symbol)
@@ -136,6 +140,12 @@ def build_notes(t: TradeRecord) -> str:
         parts.append(f"plannedSL={t.planned_sl:g}")
     if t.planned_tp is not None:
         parts.append(f"plannedTP={t.planned_tp:g}")
+    if t.exit_reason:
+        parts.append(f"exit={t.exit_reason}")
+    if t.mfe_ticks is not None:
+        parts.append(f"MFE={t.mfe_ticks}t")
+    if t.mae_ticks is not None:
+        parts.append(f"MAE={t.mae_ticks}t")
     return "; ".join(parts)
 
 

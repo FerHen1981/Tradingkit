@@ -87,6 +87,9 @@ class TradeRecord:
     exit_reason: str | None = None         # e.g. "TRAIL", "SL", "TP"
     mfe_ticks: int | None = None           # max favourable excursion (ticks)
     mae_ticks: int | None = None           # max adverse excursion (ticks)
+    # --- provenance (routed = live "Auto"; Fills reconciliation = "Reconciled") ---
+    source: str = SOURCE_CUSTOM            # a Trade Journal `Source` option
+    sync_status: str = "Auto"              # "Auto" (live) | "Reconciled" (from broker fills)
 
     def tick(self) -> float:
         return self.tick_size if self.tick_size else tick_size_for(self.contract or self.symbol)
@@ -190,9 +193,9 @@ def scalar_properties(t: TradeRecord) -> dict:
         "Day": _select(day_name(t)),
         "Notes": _text(build_notes(t)),
         "Strategy": _select(ENGINE_STRATEGY),
-        "Source": _select(SOURCE_CUSTOM),
+        "Source": _select(t.source),
         "Status": _select(t.status),
-        "Sync Status": _select("Auto"),
+        "Sync Status": _select(t.sync_status),
     }
     if t.signal_price is not None:
         props["Signal Price ($)"] = _num(t.signal_price)

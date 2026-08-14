@@ -222,6 +222,9 @@ class NotionTradeJournal:
         self._rel_db: dict[str, str] = {}      # prop name -> target database_id
         self._title_prop: dict[str, str] = {}  # database_id -> its title property name
         self._rel_cache: dict[tuple[str, str], str] = {}  # (db_id, name) -> page id
+        self._recap_db_id = ""                 # the Recap database (daily rollup rows)
+        self._recap_title = "Name"             # its title property
+        self._recap_cache: dict[str, str] = {}  # apex date -> Recap page id
         self._discovered = False
 
     @property
@@ -246,7 +249,39 @@ class NotionTradeJournal:
                 self._rel_db[prop] = meta["relation"]["database_id"]
         for db_id in set(self._rel_db.values()):
             self._title_prop[db_id] = await self._find_title_prop(client, db_id)
+        # the daily Recap rollup: trades link to a per-day Recap page (keyed by Apex trade date)
+        recap = schema.get("Recap")
+        if recap and recap.get("type") == "relation":
+            self._recap_db_id = recap["relation"]["database_id"]
+            self._recap_title = await self._find_title_prop(client, self._recap_db_id)
         self._discovered = True
+
+    async def _resolve_recap(self, client: httpx.AsyncClient, apex_date: str) -> str | None:
+        """Return the Recap page id for an Apex trade date (YYYY-MM-DD), creating the daily
+        row if absent. Notion keeps the relation two-way, so linking a trade here makes the
+        Recap's rollups (Net Profit, Hit Rate, Profit Factor) recompute automatically."""
+        if not self._recap_db_id or not apex_date:
+            return None
+        if apex_date in self._recap_cache:
+            return self._recap_cache[apex_date]
+        q = await client.post(f"{_API}/databases/{self._recap_db_id}/query", headers=self._headers(),
+                              json={"filter": {"property": "Date", "date": {"equals": apex_date}},
+                                    "page_size": 1})
+        q.raise_for_status()
+        hits = q.json().get("results", [])
+        if hits:
+            page_id = hits[0]["id"]
+        else:
+            created = await client.post(f"{_API}/pages", headers=self._headers(),
+                                        json={"parent": {"database_id": self._recap_db_id},
+                                              "properties": {
+                                                  self._recap_title: {"title": [{"text": {"content": apex_date}}]},
+                                                  "Date": {"date": {"start": apex_date}}}})
+            created.raise_for_status()
+            page_id = created.json()["id"]
+            log.info("created Recap day %s", apex_date)
+        self._recap_cache[apex_date] = page_id
+        return page_id
 
     async def _find_title_prop(self, client: httpx.AsyncClient, db_id: str) -> str:
         r = await client.get(f"{_API}/databases/{db_id}", headers=self._headers())
@@ -308,6 +343,12 @@ class NotionTradeJournal:
                     page_id = await self._resolve_relation(client, prop, name) if name else None
                     if page_id:
                         props[prop] = {"relation": [{"id": page_id}]}
+                try:   # best-effort: link to the daily Recap so its rollups recompute
+                    recap_id = await self._resolve_recap(client, apex_trade_date(t))
+                    if recap_id:
+                        props["Recap"] = {"relation": [{"id": recap_id}]}
+                except Exception as exc:
+                    log.warning("recap link failed for %s: %r", key, exc)
                 existing = await self._existing_page(client, key)
                 if existing:
                     r = await client.patch(f"{_API}/pages/{existing}", headers=self._headers(),

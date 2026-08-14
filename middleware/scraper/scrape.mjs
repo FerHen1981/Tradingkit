@@ -79,10 +79,22 @@ if ((await page.locator('.caret').count()) === 0) {
 }
 await page.getByText('Close').click({ timeout: 3000 }).catch(() => {});
 
-// load the report workspace that holds the export panel
+// load the report workspace that holds the export panel (best-effort; may silently no-op)
 await page.getByTestId('bar-button-link').first().click({ timeout: 15000 }).catch(() => {});
 await page.getByText('MEX Fleet Quad Legacy').click({ timeout: 15000 }).catch(() => {});
 await page.waitForTimeout(2500);
+
+// Headful setup pause: our auto-navigation to the workspace/Fills tab isn't reliable yet, so
+// on a machine with a screen we let the operator make the FILLS report visible once, then the
+// loop below just switches accounts + toggles the date dropdown per account. Skip with
+// MEX_NOPAUSE=1 (e.g. once the session reliably restores the panel). Headless never pauses.
+if (HEADFUL && process.stdin.isTTY && process.env.MEX_NOPAUSE !== '1') {
+  console.error('\n>>> In the browser window: open the report workspace and click the FILLS tab');
+  console.error('>>> so you can see the fills table WITH its date-range dropdown.');
+  console.error('>>> Then come back here and press ENTER to download all accounts…\n');
+  process.stdin.resume();
+  await new Promise(res => process.stdin.once('data', res));
+}
 
 // Select the "Fills" report type. Tries the ways Tradovate might render the selector and
 // returns true on the first one that clicks; false if none matched (caller warns).

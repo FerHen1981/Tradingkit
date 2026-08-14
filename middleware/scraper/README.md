@@ -2,57 +2,62 @@
 
 Downloads a **per-account Fills CSV** from Tradovate into `EXPORT_DIR` so the
 Notion Trade Journal sync (`app.journal_sync`) can pair + upsert them. This is
-the download half; the pairing/upsert half already runs on `mex-journal-sync.timer`.
+the download half; the pairing/upsert half runs on `mex-journal-sync.timer`.
 
-There is **no Tradovate API** — this drives the real web UI with a persistent
-login profile, so you log in **once** and it runs unattended afterwards.
+There is **no Tradovate API** — this drives the real web UI with a browser.
 
-## First run (log in once, headful)
+## Where it has to run: a machine WITH a screen (your PC), not the headless VPS
 
-On the machine that will run it (mex-mw-01), with a desktop/X or over VNC:
+Tradovate keeps the logged-in token in the browser's **`sessionStorage`**, which
+Playwright's saved-session file (`storageState`/`auth.json`) does **not** carry.
+So a session captured on your PC will *not* authenticate when copied to the
+server — it lands back on the login page. The download therefore runs on the
+machine where you actually log in (Windows/Mac), and only the resulting CSVs are
+shipped to the server, where the Notion sync takes over.
+
+A **persistent profile** (`~/.mex-browser`) keeps you logged in between runs on
+that machine, so after the first login it can run without prompting until
+Tradovate expires the session.
+
+## First run — log in once (headful)
 
 ```bash
 cd middleware/scraper
 npm install                       # installs playwright
-npx playwright install chromium   # skip on the server: chromium is pre-provisioned
-MEX_HEADFUL=1 node scrape.mjs     # opens a window — log in to Tradovate by hand
+npx playwright install chromium   # first time only
+MEX_HEADFUL=1 node scrape.mjs     # opens a window
 ```
 
-The login is saved in `~/.mex-browser` (the `MEX_PROFILE_DIR`). After that the
-session persists and it can run headless.
+A browser opens. Log in (password + any 2FA); when you see your accounts, come
+back to the terminal and press **ENTER**. It then downloads every account in
+`accounts.json` to `EXPORT_DIR`. The login is saved in the profile dir.
 
-> **Login quirk:** the first page sometimes shows a "new customer"/welcome
-> screen — the scraper already reloads up to 4× until the trading app (the
-> account caret) appears, which is what a manual refresh does.
+> **Welcome-screen quirk:** the first page sometimes shows a "new customer"
+> screen — the scraper reloads a few times until the trading app appears, which
+> is what a manual refresh does.
 
-## Steady state (headless, on a timer)
+## Steady state (same machine, can run headless)
 
 ```bash
-node scrape.mjs                   # headless; writes EXPORT_DIR/<YYYYMMDD>_<acct>_Fills.csv
+node scrape.mjs                   # writes EXPORT_DIR/<YYYYMMDD>_<acct>_Fills.csv
 ```
 
-Then `mex-journal-sync` picks the CSVs up within 5 min and upserts to Notion.
+If the profile is still logged in this runs with no window. Ship the CSVs to the
+server (e.g. `scp EXPORT_DIR/*_Fills.csv root@HOST:/root/exports/`); the
+`mex-journal-sync` timer upserts them to Notion within ~5 min.
 
 ## Config (env)
 
 | var | default | meaning |
 |-----|---------|---------|
-| `MEX_EXPORT_DIR` | `~/exports` | where CSVs land (must match `EXPORTS_DIR` of the sync) |
+| `MEX_EXPORT_DIR` | `~/exports` (Win: `%USERPROFILE%\exports`) | where CSVs land |
 | `MEX_PROFILE_DIR` | `~/.mex-browser` | persistent login profile |
-| `MEX_ACCOUNTS` | *(reads `accounts.json`)* | comma-separated account ids to override the list |
-| `MEX_HEADFUL` | *(unset)* | `1` shows the browser — first login / debugging |
+| `MEX_ACCOUNTS` | *(reads `accounts.json`)* | comma-separated ids to override the list |
+| `MEX_HEADFUL` | *(unset)* | `1` shows the browser + enables the login prompt |
 | `MEX_PERIOD` | `This quarter` | date-range option that triggers the export |
 
-Edit `accounts.json` when the fleet changes. Never commit `~/.mex-browser` or any
-downloaded CSV — the session cookies and fills are private.
+Edit `accounts.json` when the fleet changes. Never commit `~/.mex-browser`,
+`auth.json` or any CSV — those are private (session + fills).
 
-## Deploy on a timer
-
-```bash
-sudo cp ../deploy/mex-scrape.{service,timer} /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now mex-scrape.timer
-```
-
-Adjust `WorkingDirectory`/`ExecStart` paths in `mex-scrape.service` to match
-where you deployed `middleware/`.
+> `login.mjs` / `MEX_AUTH` (saved-session file) are kept only for a same-machine
+> headless setup; they do **not** work across machines (see the note above).

@@ -15,8 +15,9 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
 
-const EXPORT_DIR = process.env.MEX_EXPORT_DIR || `${process.env.HOME}/exports`;
-const PROFILE_DIR = process.env.MEX_PROFILE_DIR || `${process.env.HOME}/.mex-browser`;
+const HOME = process.env.HOME || process.env.USERPROFILE || '.';   // HOME on Linux/mac, USERPROFILE on Windows
+const EXPORT_DIR = process.env.MEX_EXPORT_DIR || `${HOME}/exports`;
+const PROFILE_DIR = process.env.MEX_PROFILE_DIR || `${HOME}/.mex-browser`;
 const HEADFUL = process.env.MEX_HEADFUL === '1';
 const PERIOD = process.env.MEX_PERIOD || 'This quarter';
 const TOGGLE = PERIOD === 'This quarter' ? 'Last quarter' : 'This quarter';
@@ -56,11 +57,25 @@ for (let i = 0; i < 4; i++) {
   await page.waitForTimeout(3000);
 }
 
-// still no app after the reloads → the session is dead (or absent). Say so clearly.
+// no app after the reloads → not logged in. On a machine WITH a screen (MEX_HEADFUL=1) we
+// pause so you can log in by hand — the persistent profile then keeps the session for next
+// time. Headless (server) can't do that, so it just reports and exits.
 if ((await page.locator('.caret').count()) === 0) {
-  console.error('⛔ Not logged in / session expired. Recreate the session on a machine WITH a screen:');
-  console.error('   node login.mjs   → produces auth.json → copy it to this server (MEX_AUTH or ./auth.json).');
-  await closeAll(); process.exit(1);
+  if (HEADFUL && !AUTH && process.stdin.isTTY) {
+    console.error('\n>>> Log in to Tradovate in the browser window. When you SEE YOUR ACCOUNTS,');
+    console.error('>>> come back here and press ENTER to continue…\n');
+    process.stdin.resume();
+    await new Promise(res => process.stdin.once('data', res));
+    for (let i = 0; i < 5; i++) {
+      if (await page.locator('.caret').first().isVisible().catch(() => false)) break;
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForTimeout(3000);
+    }
+  }
+  if ((await page.locator('.caret').count()) === 0) {
+    console.error('⛔ Not logged in. Run once with MEX_HEADFUL=1 on a machine with a screen and log in by hand.');
+    await closeAll(); process.exit(1);
+  }
 }
 await page.getByText('Close').click({ timeout: 3000 }).catch(() => {});
 

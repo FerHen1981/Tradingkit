@@ -217,11 +217,9 @@ def pair_events(events: list[RoutedEvent], amap: dict[str, str]) -> list[RoutedT
                 t = q.popleft()
                 t.exit_ts, t.exit_price, t.pnl = e.ts, e.price, e.pnl
                 t.mfe, t.mae, t.reason = e.mfe, e.mae, e.reason
-            else:
-                # exit whose entry predates our window — keep it so P&L is still journalled
-                trades.append(RoutedTrade(account=full, symbol=e.symbol, direction=e.direction,
-                                          exit_ts=e.ts, exit_price=e.price, pnl=e.pnl,
-                                          mfe=e.mfe, mae=e.mae, reason=e.reason))
+            # else: an exit whose entry predates our window (e.g. opened the day before, before
+            # the routed log for that day) — skip it. Its full trade comes from the Fills-CSV
+            # reconciliation instead, so we don't write an incomplete entry-less row here.
     return trades
 
 

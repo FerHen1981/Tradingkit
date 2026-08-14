@@ -140,6 +140,14 @@ async def run_once() -> dict:
         except Exception as exc:
             log.warning("failed to process %s: %r", csv_path, exc)
 
+    # Optional entry-date filter (UTC), e.g. JOURNAL_ENTRY_DATES=2026-08-10 to backfill just
+    # one session from a quarter-range CSV without re-importing everything / overlapping routed.
+    entry_dates = os.environ.get("JOURNAL_ENTRY_DATES", "").strip()
+    if entry_dates:
+        keep = {d.strip() for d in entry_dates.split(",") if d.strip()}
+        all_trades = [t for t in all_trades if t.entry_ts.date().isoformat() in keep]
+        log.info("entry-date filter %s -> %d trades", sorted(keep), len(all_trades))
+
     ok = skipped = 0
     for t in all_trades:
         key = f"{t.account[-3:]}_{t.buy_fill_id}_{t.sell_fill_id}"

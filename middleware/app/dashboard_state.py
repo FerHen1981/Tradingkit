@@ -131,9 +131,10 @@ def _load_accounts(token: str) -> list[dict]:
                 if _checkbox(p.get("Archived")):
                     continue
                 full = _title(p.get("Account ID"))
+                starting = _num(p.get("Starting Balance"))
                 current = _num(p.get("Current Balance"))
-                if current is None:
-                    continue                      # bare row — nothing to show yet
+                if starting is None or current is None:
+                    continue                      # bare / unconfigured row — hide it
                 buffer = _num(p.get("DD Buffer $"))
                 seed = _num(p.get("DD Floor $"))
                 health = _sel(p.get("Health")) or "—"
@@ -178,7 +179,7 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
             move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
             ticks = round(move / t.tick_size) if t.tick_size else 0
             close = t.exit_ts.astimezone(_ET).date()
-            trades.append({"acct3": t.account[-3:], "sym": sym, "net": net,
+            trades.append({"acct": t.account, "sym": sym, "net": net,
                            "ticks": ticks, "close": close})
     return trades
 
@@ -201,7 +202,7 @@ def _aggregate(trades: list[dict], window: str) -> dict:
         a["wins"] += 1 if t["net"] > 0 else 0
         a["net"] = round(a["net"] + t["net"], 2)
         a["ticks"] += t["ticks"]
-        acct_net[t["acct3"]] = round(acct_net[t["acct3"]] + t["net"], 2)
+        acct_net[t["acct"]] = round(acct_net[t["acct"]] + t["net"], 2)   # full id — 013 collision-safe
 
     assets = []
     for sym, a in agg.items():
@@ -259,10 +260,10 @@ def command_state(window: str = "all") -> dict:
     accounts = []
     for a in accounts_src:
         a = dict(a)
-        a["net"] = acct_net.get(a["id"])
+        a["net"] = acct_net.get(a["full"])         # match on full id, not last-3 (013 collision)
         accounts.append(a)
 
-    funded_net = round(sum(acct_net.get(a["id"], 0.0) for a in accounts if a["stage"] == "Funded"), 2)
+    funded_net = round(sum(acct_net.get(a["full"], 0.0) for a in accounts if a["stage"] == "Funded"), 2)
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)
     breached = sum(1 for a in accounts if a["health"] == "Breached")
     best = assets[0] if assets else None

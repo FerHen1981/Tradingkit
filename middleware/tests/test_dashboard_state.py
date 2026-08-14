@@ -42,7 +42,8 @@ def test_trades_dedup_and_pnl():
     assert by["GC"]["robust"] is True
     assert by["ES"]["net"] == 13.75 and by["ES"]["ticks"] == 11
     assert ag["totals"]["n"] == 2 and ag["totals"]["net"] == 52.41
-    assert ag["acct_net"]["018"] == 38.66 and ag["acct_net"]["205"] == 13.75
+    assert ag["acct_net"]["PAAPEX2700250000018"] == 38.66
+    assert ag["acct_net"]["APEX27002500000205"] == 13.75
 
 
 def test_skip_filters_account():
@@ -68,8 +69,8 @@ def test_aggregate_window_filters_by_close():
     today = dt.datetime.now(ds._ET).date()
     old = today - dt.timedelta(days=90)
     trades = [
-        {"acct3": "018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today},
-        {"acct3": "018", "sym": "GC", "net": 50.0, "ticks": 5, "close": old},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 50.0, "ticks": 5, "close": old},
     ]
     assert ds._aggregate(trades, "all")["totals"]["net"] == 150.0
     assert ds._aggregate(trades, "day")["totals"]["net"] == 100.0     # only today's
@@ -93,3 +94,13 @@ def test_command_state_assembles_without_token():
     finally:
         os.environ.clear()
         os.environ.update(old)
+
+
+def test_seed_property_mapping():
+    from app.seed_accounts import to_property, SEEDS
+    assert to_property("DD Floor $", 50100.0) == {"number": 50100.0}
+    assert to_property("Prop Firm", "Apex Trader Funding") == {"select": {"name": "Apex Trader Funding"}}
+    assert to_property("Status", "Funded Account") == {"select": {"name": "Funded Account"}}
+    # 209 is deliberately excluded from seeding (incomplete export)
+    assert not any("209" in a for a in SEEDS)
+    assert SEEDS["PAAPEX2700250000015"]["DD Floor $"] == 49897.60

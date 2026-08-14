@@ -53,6 +53,31 @@ await page.getByTestId('bar-button-link').first().click({ timeout: 15000 }).catc
 await page.getByText('MEX Fleet Quad Legacy').click({ timeout: 15000 }).catch(() => {});
 await page.waitForTimeout(2500);
 
+// Select the "Fills" report type. Tries the ways Tradovate might render the selector and
+// returns true on the first one that clicks; false if none matched (caller warns).
+async function selectFillsReport(page) {
+  const attempts = [
+    () => page.getByRole('tab', { name: 'Fills', exact: true }),
+    () => page.getByRole('button', { name: 'Fills', exact: true }),
+    () => page.getByRole('link', { name: 'Fills', exact: true }),
+    () => page.getByText('Fills', { exact: true }),
+  ];
+  for (const make of attempts) {
+    try {
+      const el = make().first();
+      if (await el.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await el.click({ timeout: 3000 });
+        return true;
+      }
+    } catch { /* try next strategy */ }
+  }
+  // last resort: a <select> whose options include "Fills"
+  try {
+    await page.getByRole('combobox').nth(0).selectOption({ label: 'Fills' });
+    return true;
+  } catch { return false; }
+}
+
 const gathered = [];
 for (const acct of accounts) {
   try {
@@ -61,9 +86,14 @@ for (const acct of accounts) {
     await page.getByTestId(`account-item-${acct}`).locator('a').click({ timeout: 15000 });
     await page.waitForTimeout(1500);
 
-    // TODO(verify): if there is a report-TYPE selector (Fills / Orders / Performance),
-    // set it to Fills here. The recording only touched the date-range combobox (nth 1).
-    // await page.getByRole('combobox').nth(0).selectOption('Fills').catch(() => {});
+    // choose the FILLS report type (there's a Fills/Orders/Performance selector that must
+    // be clicked). We only need Fills — Orders + Performance are derivable from the fills.
+    // Tradovate may render this as a tab, a button, a combobox option, or plain text, so try
+    // each until one sticks; if none matches we fall through to whatever is already selected.
+    if (!(await selectFillsReport(page))) {
+      console.error(`WARN ${acct}: could not confirm the Fills report tab — check the download`);
+    }
+    await page.waitForTimeout(1000);
 
     // trigger the export: toggling the date-range combobox re-generates + downloads the CSV.
     await page.getByRole('combobox').nth(1).selectOption(TOGGLE).catch(() => {});

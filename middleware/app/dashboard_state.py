@@ -5,12 +5,16 @@ Two robust, server-side sources (no browser, no Notion paging of 700 trades):
   ACCOUNTS  → the LifeOS Accounts DB (small, ~20 rows). account_health already materialises
               Current Balance / DD Floor / DD Buffer / Health there every 5 min, so we just
               read that one query. NOTION_TOKEN unset → accounts omitted (assets still work).
-  ASSETS    → the local Tradovate Fills export, paired with the SAME fills_pairing the journal
+  TRADES    → the local Tradovate Fills export, paired with the SAME fills_pairing the journal
               uses (real commissions). Deduped on trade key so overlapping exports never double
-              count. Rolled up per asset (GC/ES/NQ/YM) → net, ticks, win-rate, count.
+              count. Each carries its ET close-date so P&L can be sliced by timeframe.
 
-Fleet / firm / strategy cuts derive from those. Result is cached (DASH_TTL_S, default 60s) so
-the 10-second dashboard poll stays cheap. Shape matches the front-end in viewer.py 1:1.
+The P&L cuts (fleet / firm / strategy / asset, and each account's Net P&L) are filtered to a
+timeframe window — day / week / month / quarter / rolling / all. The survival buffers are
+point-in-time state and never window (an account's cushion is whatever it is *now*).
+
+Trades and accounts are cached (DASH_TTL_S, default 60s); windows re-aggregate the cached
+trades cheaply. Shape matches the front-end in viewer.py 1:1.
 """
 from __future__ import annotations
 
@@ -24,6 +28,12 @@ from collections import defaultdict
 from .fills_pairing import parse_fills_csv, pair_fills
 
 log = logging.getLogger("mex.dashboard")
+
+try:
+    from zoneinfo import ZoneInfo
+    _ET = ZoneInfo("America/New_York")
+except Exception:                                    # pragma: no cover - tzdata missing
+    _ET = dt.timezone(dt.timedelta(hours=-4))
 
 _API = "https://api.notion.com/v1"
 _VER = "2022-06-28"
@@ -40,6 +50,28 @@ _EDGE_LABEL = {"GC": "Funded workhorse", "ES": "Cleanest OOS",
                "NQ": "Variance-lottery (eval)", "YM": "Variance-lottery (eval)"}
 
 _HEALTH_RANK = {"Healthy": 5, "Watch": 4, "Warning": 3, "Critical": 2, "Breached": 1}
+
+WINDOWS = ("day", "week", "month", "quarter", "rolling", "all")
+_WINDOW_LABEL = {"day": "Vandaag", "week": "Deze week", "month": "Deze maand",
+                 "quarter": "Dit kwartaal", "rolling": "Rolling 30d", "all": "Alles"}
+
+
+# ---- timeframe -----------------------------------------------------------------------
+
+def _window_start(window: str, today: dt.date) -> dt.date | None:
+    """Inclusive start date (ET) for the window, or None for 'all'."""
+    if window == "day":
+        return today
+    if window == "week":
+        return today - dt.timedelta(days=today.weekday())      # Monday
+    if window == "month":
+        return today.replace(day=1)
+    if window == "quarter":
+        qm = ((today.month - 1) // 3) * 3 + 1
+        return today.replace(month=qm, day=1)
+    if window == "rolling":
+        return today - dt.timedelta(days=30)
+    return None                                                # all
 
 
 # ---- Notion accounts -----------------------------------------------------------------
@@ -113,7 +145,6 @@ def _load_accounts(token: str) -> list[dict]:
                     "buffer": None if buffer is None else round(buffer, 2),
                     "floor": None if buffer is None else round(current - buffer, 2),
                     "bufpct": _num(p.get("DD Buffer %")),
-                    "net": _num(p.get("Net PnL")),
                     "health": health, "seed": seed is not None,
                     "hrank": _HEALTH_RANK.get(health, 0) * 1000 + (_num(p.get("DD Buffer %")) or -999),
                 })
@@ -124,11 +155,11 @@ def _load_accounts(token: str) -> list[dict]:
     return out
 
 
-# ---- local fills -> asset rollup -----------------------------------------------------
+# ---- local fills -> closed trades ----------------------------------------------------
 
-def _load_asset_rollup(exports: str, skip: list[str]) -> tuple[list[dict], dict]:
+def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     seen: set[tuple] = set()
-    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0.0})
+    trades: list[dict] = []
     for path in sorted(glob.glob(os.path.join(exports, "*Fills*.csv"))):
         try:
             fills = parse_fills_csv(path)
@@ -146,11 +177,31 @@ def _load_asset_rollup(exports: str, skip: list[str]) -> tuple[list[dict], dict]
             net = round(t.gross_pnl - t.commissions, 2)
             move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
             ticks = round(move / t.tick_size) if t.tick_size else 0
-            a = agg[sym]
-            a["n"] += 1
-            a["wins"] += 1 if net > 0 else 0
-            a["net"] = round(a["net"] + net, 2)
-            a["ticks"] += ticks
+            close = t.exit_ts.astimezone(_ET).date()
+            trades.append({"acct3": t.account[-3:], "sym": sym, "net": net,
+                           "ticks": ticks, "close": close})
+    return trades
+
+
+def _aggregate(trades: list[dict], window: str) -> dict:
+    today = dt.datetime.now(_ET).date()
+    start = _window_start(window, today)
+    if window == "day":
+        rows = [t for t in trades if t["close"] == today]
+    elif start is not None:
+        rows = [t for t in trades if t["close"] >= start]
+    else:
+        rows = trades
+
+    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0})
+    acct_net: dict[str, float] = defaultdict(float)
+    for t in rows:
+        a = agg[t["sym"]]
+        a["n"] += 1
+        a["wins"] += 1 if t["net"] > 0 else 0
+        a["net"] = round(a["net"] + t["net"], 2)
+        a["ticks"] += t["ticks"]
+        acct_net[t["acct3"]] = round(acct_net[t["acct3"]] + t["net"], 2)
 
     assets = []
     for sym, a in agg.items():
@@ -163,36 +214,59 @@ def _load_asset_rollup(exports: str, skip: list[str]) -> tuple[list[dict], dict]
             "cls": {"GC": "gc", "ES": "es"}.get(sym, "nq"),
         })
     assets.sort(key=lambda x: -x["net"])
-    totals = {
-        "net": round(sum(x["net"] for x in assets), 2),
-        "n": sum(x["n"] for x in assets),
-        "wins": sum(x["wins"] for x in assets),
-    }
-    return assets, totals
+    totals = {"net": round(sum(x["net"] for x in assets), 2),
+              "n": sum(x["n"] for x in assets),
+              "wins": sum(x["wins"] for x in assets)}
+    return {"assets": assets, "totals": totals, "acct_net": dict(acct_net)}
 
 
-# ---- assemble ------------------------------------------------------------------------
+# ---- caches --------------------------------------------------------------------------
 
-def _build() -> dict:
-    token = os.environ.get("NOTION_TOKEN", "")
+_cache: dict = {"t": 0.0, "trades": None, "accounts": None}
+
+
+def _sources() -> tuple[list[dict], list[dict]]:
+    ttl = float(os.environ.get("DASH_TTL_S", "60"))
+    now = time.monotonic()
+    if _cache["trades"] is not None and (now - _cache["t"]) < ttl:
+        return _cache["trades"], _cache["accounts"]
+
     exports = os.environ.get("EXPORTS_DIR", "/root/exports")
     skip = [s.strip() for s in os.environ.get("DASH_SKIP", "").split(",") if s.strip()]
+    trades = _load_trades(exports, skip)
 
     accounts: list[dict] = []
+    token = os.environ.get("NOTION_TOKEN", "")
     if token:
         try:
             accounts = _load_accounts(token)
         except Exception as exc:
             log.warning("dashboard: accounts load failed: %r", exc)
 
-    assets, atot = _load_asset_rollup(exports, skip)
+    _cache.update(t=now, trades=trades, accounts=accounts)
+    return trades, accounts
 
-    funded_net = round(sum(a["net"] or 0 for a in accounts if a["stage"] == "Funded"), 2)
+
+# ---- assemble ------------------------------------------------------------------------
+
+def command_state(window: str = "all") -> dict:
+    window = window if window in WINDOWS else "all"
+    trades, accounts_src = _sources()
+    ag = _aggregate(trades, window)
+    assets, atot, acct_net = ag["assets"], ag["totals"], ag["acct_net"]
+
+    # accounts: live buffers (window-independent) + window Net P&L
+    accounts = []
+    for a in accounts_src:
+        a = dict(a)
+        a["net"] = acct_net.get(a["id"])
+        accounts.append(a)
+
+    funded_net = round(sum(acct_net.get(a["id"], 0.0) for a in accounts if a["stage"] == "Funded"), 2)
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)
     breached = sum(1 for a in accounts if a["health"] == "Breached")
     best = assets[0] if assets else None
 
-    # firm rollup
     firms: dict[str, dict] = defaultdict(lambda: {"accts": 0, "net": 0.0, "buffer": 0.0})
     for a in accounts:
         f = firms[a["firm"]]
@@ -206,6 +280,9 @@ def _build() -> dict:
 
     return {
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "window": window,
+        "window_label": _WINDOW_LABEL.get(window, window),
+        "windows": list(WINDOWS),
         "fleet": {
             "realized_net": atot["net"],
             "funded_net": funded_net,
@@ -223,20 +300,7 @@ def _build() -> dict:
     }
 
 
-_cache: dict = {"t": 0.0, "data": None}
-
-
-def command_state() -> dict:
-    ttl = float(os.environ.get("DASH_TTL_S", "60"))
-    now = time.monotonic()
-    if _cache["data"] is not None and (now - _cache["t"]) < ttl:
-        return _cache["data"]
-    data = _build()
-    _cache.update(t=now, data=data)
-    return data
-
-
 if __name__ == "__main__":
     import json
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    print(json.dumps(command_state(), indent=2))
+    print(json.dumps(command_state(os.environ.get("WINDOW", "all")), indent=2))

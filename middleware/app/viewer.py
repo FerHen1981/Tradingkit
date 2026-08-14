@@ -193,8 +193,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/command":
             if not _api_authorized(self.path, self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
+            window = parse_qs(urlparse(self.path).query).get("window", ["all"])[0]
             try:
-                body = json.dumps(command_state()).encode()
+                body = json.dumps(command_state(window)).encode()
             except Exception as exc:
                 log.warning("command state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
@@ -283,6 +284,11 @@ backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .kpi .note{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
 .pos{color:var(--ok)}.neg{color:var(--crit)}.gold{color:var(--gold)}.aqua{color:var(--aqua)}
 @media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi:last-child{grid-column:1/-1}}
+.tf{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 -6px}
+.tf button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--mono);font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;padding:6px 12px;border-radius:20px;cursor:pointer}
+.tf button:hover{color:var(--ink);border-color:#26545a}
+.tf button[aria-pressed="true"]{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600}
+.tf button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 nav.tabs{display:flex;gap:4px;margin:20px 0 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .tab{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:12.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:11px 15px;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--ink)}
@@ -347,8 +353,9 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <div class=clock><span class=live></span><span id=clock>—</span></div>
 </div></header>
 <div class=wrap>
+  <div class=tf id=tf></div>
   <div class=kpis id=kpis></div>
-  <p class=sec-note style="margin-top:4px">Realized · gereconcilieerd uit de Tradovate Fills-export. Buffers matchen de Tradovate risk-grid tot op de cent. <span id=asof></span></p>
+  <p class=sec-note style="margin-top:4px">P&amp;L over <b id=tflabel style="color:var(--ink)">alles</b> · gereconcilieerd uit de Fills-export. Buffers zijn live "nu"-state (window-onafhankelijk). <span id=asof></span></p>
   <nav class=tabs role=tablist aria-label="Command center levels">
     <button class=tab role=tab aria-selected=true  data-panel=fleet><span class=lv>L0</span>Fleet</button>
     <button class=tab role=tab aria-selected=false data-panel=accounts><span class=lv>L2</span>Accounts</button>
@@ -419,6 +426,13 @@ const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
 const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
 let CMD={accounts:[],assets:[],firms:[],fleet:{}};
+const WLAB={day:"Dag",week:"Week",month:"Maand",quarter:"Kwartaal",rolling:"Rolling",all:"Alles"};
+let WIN="all";
+function renderTf(){
+  $("#tf").innerHTML=Object.keys(WLAB).map(w=>`<button data-w="${w}" aria-pressed="${w===WIN}">${WLAB[w]}</button>`).join("");
+  $("#tf").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    WIN=b.dataset.w;$("#tf").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));loadCommand();}));
+}
 
 function renderKpis(f){
   const k=[
@@ -483,10 +497,11 @@ function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
   <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=7 class=calc>geen trades</td></tr>'}
 
 async function loadCommand(){
-  let s;try{s=await(await fetch("/api/command",{cache:"no-store"})).json()}catch(e){return}
+  let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();
+  if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· bijgewerkt "+new Date(s.as_of).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";
 }
@@ -519,7 +534,7 @@ function tick(){const d=new Date();
   const t=d.toLocaleTimeString("en-GB",{hour12:false,timeZone:"America/New_York"});
   $("#clock").textContent=t+" ET · "+d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",timeZone:"America/New_York"})}
 tick();setInterval(tick,1000);
-loadCommand();setInterval(loadCommand,60000);
+renderTf();loadCommand();setInterval(loadCommand,60000);
 setInterval(()=>{if(!$("#live").hidden)loadLive()},15000);
 </script></html>"""
 

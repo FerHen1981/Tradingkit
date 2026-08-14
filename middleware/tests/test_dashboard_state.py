@@ -1,10 +1,11 @@
-"""Command-center asset rollup — pairs local Fills into per-asset edge, deduped."""
+"""Command-center state — asset rollup (deduped), timeframe windows, assembly."""
+import datetime as dt
 import os
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from app.dashboard_state import _load_asset_rollup  # noqa: E402
+from app import dashboard_state as ds  # noqa: E402
 
 _HDR = "_id,_orderId,_timestamp,_action,_qty,_price,Account,Contract,Product,_tickSize,commission\n"
 
@@ -28,32 +29,67 @@ _ES = [
 ]
 
 
-def test_asset_rollup_and_dedup():
+def test_trades_dedup_and_pnl():
     d = tempfile.mkdtemp()
     _write(d, "20260804_018_Fills.csv", _GC)
-    _write(d, "20260804_018_Fills (1).csv", _GC)      # overlapping export → must count once
+    _write(d, "20260804_018_Fills (1).csv", _GC)      # overlapping export → count once
     _write(d, "20260803_205_Fills.csv", _ES)
-    assets, totals = _load_asset_rollup(d, skip=[])
-    by = {a["sym"]: a for a in assets}
-
-    assert by["GC"]["n"] == 1                          # deduped, not 2
-    assert by["GC"]["net"] == 38.66
-    assert by["GC"]["ticks"] == 40
-    assert by["GC"]["wins"] == 1 and by["GC"]["robust"] is True
-
-    assert by["ES"]["n"] == 1
-    assert by["ES"]["net"] == 13.75
-    assert by["ES"]["ticks"] == 11
-    assert by["ES"]["robust"] is True
-
-    assert totals["n"] == 2
-    assert totals["net"] == 52.41
+    trades = ds._load_trades(d, skip=[])
+    assert len(trades) == 2                            # deduped, not 3
+    ag = ds._aggregate(trades, "all")
+    by = {a["sym"]: a for a in ag["assets"]}
+    assert by["GC"]["n"] == 1 and by["GC"]["net"] == 38.66 and by["GC"]["ticks"] == 40
+    assert by["GC"]["robust"] is True
+    assert by["ES"]["net"] == 13.75 and by["ES"]["ticks"] == 11
+    assert ag["totals"]["n"] == 2 and ag["totals"]["net"] == 52.41
+    assert ag["acct_net"]["018"] == 38.66 and ag["acct_net"]["205"] == 13.75
 
 
 def test_skip_filters_account():
     d = tempfile.mkdtemp()
     _write(d, "20260804_018_Fills.csv", _GC)
     _write(d, "20260803_205_Fills.csv", _ES)
-    assets, totals = _load_asset_rollup(d, skip=["205"])   # drop the ES account
-    syms = {a["sym"] for a in assets}
-    assert syms == {"GC"} and totals["n"] == 1
+    trades = ds._load_trades(d, skip=["205"])          # drop the ES account
+    ag = ds._aggregate(trades, "all")
+    assert {a["sym"] for a in ag["assets"]} == {"GC"} and ag["totals"]["n"] == 1
+
+
+def test_window_start_boundaries():
+    d = dt.date(2026, 8, 14)                            # a Friday, Q3
+    assert ds._window_start("day", d) == d
+    assert ds._window_start("week", d) == dt.date(2026, 8, 10)   # Monday
+    assert ds._window_start("month", d) == dt.date(2026, 8, 1)
+    assert ds._window_start("quarter", d) == dt.date(2026, 7, 1)  # Q3 starts Jul
+    assert ds._window_start("rolling", d) == dt.date(2026, 7, 15)  # 30 days back
+    assert ds._window_start("all", d) is None
+
+
+def test_aggregate_window_filters_by_close():
+    today = dt.datetime.now(ds._ET).date()
+    old = today - dt.timedelta(days=90)
+    trades = [
+        {"acct3": "018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today},
+        {"acct3": "018", "sym": "GC", "net": 50.0, "ticks": 5, "close": old},
+    ]
+    assert ds._aggregate(trades, "all")["totals"]["net"] == 150.0
+    assert ds._aggregate(trades, "day")["totals"]["net"] == 100.0     # only today's
+    assert ds._aggregate(trades, "rolling")["totals"]["net"] == 100.0  # 90d ago excluded
+
+
+def test_command_state_assembles_without_token():
+    d = tempfile.mkdtemp()
+    _write(d, "20260804_018_Fills.csv", _GC)
+    _write(d, "20260803_205_Fills.csv", _ES)
+    old = dict(os.environ)
+    try:
+        os.environ["EXPORTS_DIR"] = d
+        os.environ["DASH_TTL_S"] = "0"                  # bypass cache
+        os.environ["DASH_SKIP"] = ""
+        os.environ.pop("NOTION_TOKEN", None)
+        st = ds.command_state("all")
+        assert st["window"] == "all" and st["accounts"] == []
+        assert st["fleet"]["trades"] == 2 and st["fleet"]["realized_net"] == 52.41
+        assert {a["sym"] for a in st["assets"]} == {"GC", "ES"}
+    finally:
+        os.environ.clear()
+        os.environ.update(old)

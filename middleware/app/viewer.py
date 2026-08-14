@@ -1,12 +1,15 @@
 """MEX owner cockpit — a read-only live fleet dashboard (app.mex-traders.com).
 
-Zero third-party deps (stdlib http.server only) so it runs on the VPS's Python 3.14 where
-FastAPI/pydantic won't build. Reads the SAME routed-log the journal uses, so it shows the
-live truth per account: open positions, today's closed trades, realized P&L, and the day's
-recap numbers — refreshed every few seconds. Owner-only behind a password + signed cookie.
+Zero third-party deps for the live intraday view (stdlib http.server only) so it runs on the
+VPS's Python 3.14 where FastAPI/pydantic won't build. Two data planes:
 
-This is the "Viewer API" seam from ARCHITECTURE.md: a later Next.js face can consume the same
-/api/state JSON without rework. Control actions (halt/kill/close) come later.
+  /api/state    live intraday from the routed-log (open positions, today's closed trades) —
+                fast, no external calls. Powers the "Live" tab.
+  /api/command  the reconciled command center (fleet survival buffers + asset/strategy edge)
+                from the Accounts DB + local Fills export. Cached. Powers the strategic tabs.
+
+A later Next.js face can consume the same JSON without rework. Owner-only behind a password +
+signed cookie; a read-only token (?token=) serves the iPhone widget.
 
 Env:
   VIEWER_PASSWORD   owner login password (required to enable auth; unset = open, dev only)
@@ -29,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .routed_journal import parse_routed_lines, pair_events
 from .journal_sync import FRAMEWORK, _ASSET, _phase, _sym_root
+from .dashboard_state import command_state
 
 log = logging.getLogger("mex.viewer")
 
@@ -145,7 +149,7 @@ def _authed(headers) -> bool:
 
 
 def _api_authorized(path: str, headers) -> bool:
-    """/api/state is reachable by the logged-in owner (cookie) OR a read-only token
+    """/api/* is reachable by the logged-in owner (cookie) OR a read-only token
     (query ?token= or X-Token header) — the latter for the iPhone widget."""
     if _authed(headers):
         return True
@@ -186,6 +190,15 @@ class Handler(BaseHTTPRequestHandler):
                 log.warning("state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/api/command":
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            try:
+                body = json.dumps(command_state()).encode()
+            except Exception as exc:
+                log.warning("command state build failed: %r", exc)
+                body = json.dumps({"error": str(exc)}).encode()
+            return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain")
         return self._send(404, b"not found", "text/plain")
@@ -216,147 +229,298 @@ LOGIN_HTML = """<!doctype html><html lang=nl><meta charset=utf-8>
 <title>MEX Traders — inloggen</title>
 <style>
 :root{color-scheme:dark}body{margin:0;height:100vh;display:grid;place-items:center;
-background:#0a0e13;color:#e8eef4;font:16px/1.5 system-ui,sans-serif;
-background-image:radial-gradient(900px 400px at 80% -10%,rgba(45,212,191,.08),transparent 60%)}
-form{background:#111a22;padding:2rem;border-radius:16px;border:1px solid #1f2c38;width:min(90vw,340px)}
+background:#06171a;color:#eaf4f1;font:16px/1.5 system-ui,sans-serif;
+background-image:radial-gradient(900px 400px at 80% -10%,rgba(63,208,189,.09),transparent 60%)}
+form{background:#0b2428;padding:2rem;border-radius:16px;border:1px solid #1c3f43;width:min(90vw,340px)}
 h1{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:.01em}
-.sub{color:#5b6b7a;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.2rem}
+.sub{color:#84a8a3;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.2rem}
 input{width:100%;box-sizing:border-box;padding:.75rem;margin:.2rem 0 1rem;border-radius:10px;
-border:1px solid #2a3646;background:#0a0e13;color:#e8eef4;font-size:1rem}
-button{width:100%;padding:.75rem;border:0;border-radius:10px;background:#2dd4bf;color:#04231f;
-font-weight:700;font-size:1rem;cursor:pointer}.err{color:#f7645a;font-size:.9rem;margin:.2rem 0 0}
+border:1px solid #26545a;background:#06171a;color:#eaf4f1;font-size:1rem}
+button{width:100%;padding:.75rem;border:0;border-radius:10px;background:#f0b64d;color:#06171a;
+font-weight:700;font-size:1rem;cursor:pointer}.err{color:#ef6b53;font-size:.9rem;margin:.2rem 0 0}
 .brand{opacity:.5;font-size:.8rem;margin-top:1.1rem;text-align:center}
 </style>
 <form method=post action=/login>
-<h1>🌴 MEX Fleet Cockpit</h1><div class=sub>Owner login</div>
+<h1>🌴 MEX Command Center</h1><div class=sub>Owner login</div>
 <!--ERR-->
 <input type=password name=password placeholder=Wachtwoord autofocus>
 <button>Inloggen</button>
 <div class=brand>Pips &amp; Palm Trees Holding</div>
 </form></html>"""
 
-DASH_HTML = """<!doctype html><html lang=nl><meta charset=utf-8>
+DASH_HTML = r"""<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>MEX Fleet Cockpit</title>
+<title>MEX Command Center</title>
 <style>
-:root{--ground:#0a0e13;--surface:#111a22;--raised:#16212c;--border:#1f2c38;--text:#e8eef4;
---muted:#8496a6;--faint:#5b6b7a;--accent:#2dd4bf;--profit:#46c96a;--loss:#f7645a;
---funded:#58a6ff;--eval:#bc8cff;--tab:"SF Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
+:root{
+  --bg:#06171a;--panel:#0b2428;--panel-2:#0f2e33;--line:#1c3f43;
+  --ink:#eaf4f1;--muted:#84a8a3;--dim:#5c807c;
+  --gold:#f0b64d;--gold-dim:#a9823a;--aqua:#3fd0bd;
+  --ok:#35c88a;--watch:#4fbfc0;--warn:#f0a53a;--crit:#ef6b53;--dead:#c0455a;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --radius:10px;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:var(--ground);color:var(--text);
-font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
-background-image:radial-gradient(1200px 500px at 85% -10%,rgba(45,212,191,.06),transparent 60%)}
-.bar{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;padding:.95rem 1.3rem;
-border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(22,33,44,.6),transparent)}
-.mark{display:flex;align-items:center;gap:.6rem;font-weight:700}
-.mark .p{font-size:1.15rem}
-.mark small{display:block;font-weight:500;color:var(--faint);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase}
-.live{display:inline-flex;align-items:center;gap:.4rem;color:var(--accent);font-size:.72rem;font-weight:600;
-letter-spacing:.08em;text-transform:uppercase;border:1px solid rgba(45,212,191,.3);border-radius:999px;padding:.15rem .55rem}
-.live .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,191,.5)}70%{box-shadow:0 0 0 7px rgba(45,212,191,0)}100%{box-shadow:0 0 0 0 rgba(45,212,191,0)}}
-@media (prefers-reduced-motion:reduce){.live .dot{animation:none}}
-.asof{margin-left:auto;color:var(--muted);font-size:.8rem}
-.wrap{max-width:1180px;margin:0 auto;padding:1.3rem}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin-bottom:1.5rem}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.95rem 1.1rem}
-.kpi.hero{grid-column:span 2}
-.kpi .l{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em}
-.kpi .v{font-family:var(--tab);font-size:1.65rem;font-weight:700;margin-top:.25rem;font-variant-numeric:tabular-nums}
-.kpi.hero .v{font-size:2.3rem}
-.pos{color:var(--profit)}.neg{color:var(--loss)}
-.eyebrow{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;margin:1.6rem 0 .7rem}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:640px}
-th,td{padding:.6rem .75rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)}
-thead th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;background:var(--raised)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
+background-image:radial-gradient(1200px 500px at 85% -10%,rgba(63,208,189,.07),transparent 60%),
+radial-gradient(900px 400px at 5% 0%,rgba(240,182,77,.05),transparent 55%);background-attachment:fixed}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 64px}
+header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(6,23,26,.97),rgba(6,23,26,.86));
+backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
+.brand .mark{font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:.5px;color:var(--bg);background:var(--gold);padding:3px 9px;border-radius:6px}
+.brand .name{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+.brand .sub{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--aqua);text-transform:uppercase}
+.clock{font-family:var(--mono);font-size:12.5px;color:var(--dim);letter-spacing:1px;display:flex;align-items:center;gap:8px}
+.live{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2.4s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(53,200,138,.55)}70%{box-shadow:0 0 0 7px rgba(53,200,138,0)}100%{box-shadow:0 0 0 0 rgba(53,200,138,0)}}
+@media (prefers-reduced-motion:reduce){.live{animation:none}}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;margin:22px 0 8px}
+.kpi{background:var(--panel);padding:15px 16px;min-width:0}
+.kpi .lab{font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.kpi .val{font-family:var(--mono);font-size:23px;font-weight:600;margin-top:6px;letter-spacing:.3px;font-variant-numeric:tabular-nums}
+.kpi .note{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+.pos{color:var(--ok)}.neg{color:var(--crit)}.gold{color:var(--gold)}.aqua{color:var(--aqua)}
+@media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi:last-child{grid-column:1/-1}}
+nav.tabs{display:flex;gap:4px;margin:20px 0 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tab{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:12.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:11px 15px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected="true"]{color:var(--gold);border-bottom-color:var(--gold)}
+.tab:focus-visible{outline:2px solid var(--aqua);outline-offset:2px;border-radius:4px}
+.tab .lv{color:var(--dim);font-size:10px;margin-right:6px}
+section[role="tabpanel"]{animation:fade .25s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+section[hidden]{display:none}
+h2.sec{font-size:15px;font-weight:600;margin:4px 0 2px;letter-spacing:.2px}
+.sec-note{color:var(--muted);font-size:13px;margin:0 0 16px}
+.grid{display:grid;gap:14px}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:820px){.g3,.g2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 17px}
+.card .ey{font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.card .big{font-family:var(--mono);font-size:26px;font-weight:600;margin:9px 0 2px;font-variant-numeric:tabular-nums}
+.card .row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:12.5px;color:var(--muted);padding:3px 0;font-variant-numeric:tabular-nums}
+.card .row b{color:var(--ink);font-weight:600}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:.5px;padding:2px 7px;border-radius:20px;text-transform:uppercase}
+.tag.gc{background:rgba(240,182,77,.14);color:var(--gold)}
+.tag.es{background:rgba(63,208,189,.14);color:var(--aqua)}
+.tag.nq{background:rgba(239,107,83,.14);color:var(--crit)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;min-width:720px}
+thead th{text-align:right;padding:11px 14px;background:var(--panel-2);color:var(--muted);font-weight:500;font-size:10.5px;letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:first-child,tbody td:first-child{text-align:left}
+thead th:hover{color:var(--ink)}
+thead th .ar{color:var(--gold);font-size:9px}
+tbody td{padding:10px 14px;border-bottom:1px solid rgba(28,63,67,.55);white-space:nowrap}
 tbody tr:last-child td{border-bottom:0}
-td.num,th.num{text-align:right;font-family:var(--tab);font-variant-numeric:tabular-nums}
-.acct{cursor:pointer;transition:background .12s}.acct:hover{background:var(--raised)}
-.acct .caret{color:var(--faint);display:inline-block;width:1em;transition:transform .15s}
-.acct.open .caret{transform:rotate(90deg)}
-.aid{font-family:var(--tab);font-size:.86rem}
-.tag{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.7rem;font-weight:600}
-.tag.funded{background:rgba(88,166,255,.14);color:var(--funded)}
-.tag.eval{background:rgba(188,140,255,.14);color:var(--eval)}
-.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.12rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600}
-.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
-.pill.trade{background:rgba(70,201,106,.12);color:var(--profit)}
-.pill.flat{background:rgba(132,150,166,.12);color:var(--muted)}
-.detail td{padding:0;background:var(--ground)}
-.trades{padding:.3rem .75rem .6rem 2.1rem;display:flex;flex-direction:column;gap:.1rem}
-.trow{display:grid;grid-template-columns:60px 1fr auto;gap:.8rem;align-items:center;padding:.28rem 0;font-size:.83rem}
-.trow .dir{font-family:var(--tab);font-weight:600;font-size:.78rem}
-.dir.BUY{color:var(--profit)}.dir.SELL{color:var(--loss)}
-.trow .desc{color:var(--muted)}
-.trow .px{font-family:var(--tab);font-variant-numeric:tabular-nums;color:var(--faint);font-size:.78rem}
-.trow .pnl{font-family:var(--tab);font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
-.badge{font-size:.68rem;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:.02rem .35rem;margin-left:.4rem}
-.foot{color:var(--faint);font-size:.78rem;margin:1.4rem .2rem 2rem;display:flex;gap:1rem;flex-wrap:wrap}
-.foot .k{color:var(--muted)}.muted{color:var(--faint)}
+tbody tr:hover{background:rgba(63,208,189,.045)}
+td.acct{color:var(--ink);font-weight:600}
+td .firmdot{color:var(--dim);font-size:11px}
+.num{text-align:right}
+.pill{display:inline-block;font-size:10px;letter-spacing:.6px;text-transform:uppercase;padding:3px 9px;border-radius:20px;font-weight:600}
+.h-ok{background:rgba(53,200,138,.15);color:var(--ok)}
+.h-watch{background:rgba(79,191,192,.15);color:var(--watch)}
+.h-warn{background:rgba(240,165,58,.15);color:var(--warn)}
+.h-crit{background:rgba(239,107,83,.15);color:var(--crit)}
+.h-dead{background:rgba(192,69,90,.18);color:var(--dead)}
+.h-idle{background:rgba(92,128,124,.15);color:var(--dim)}
+.bufcell{display:flex;align-items:center;gap:9px;justify-content:flex-end}
+.bufbar{width:66px;height:6px;border-radius:4px;background:rgba(28,63,67,.8);overflow:hidden;flex:none}
+.bufbar i{display:block;height:100%;border-radius:4px}
+.seed{color:var(--gold);font-size:10px}.calc{color:var(--dim);font-size:10px}
+.healthbar{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:2px 0 10px}
+.healthbar span{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--bg)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.attr{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+.attr .a-row{display:grid;grid-template-columns:70px 1fr 96px;align-items:center;gap:12px;font-family:var(--mono);font-size:12.5px}
+.attr .track{height:16px;background:rgba(28,63,67,.5);border-radius:4px;overflow:hidden}
+.attr .track i{display:block;height:100%}
+.attr .a-val{text-align:right;font-variant-numeric:tabular-nums}
+.dir.BUY{color:var(--ok)}.dir.SELL{color:var(--crit)}
+footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11.5px;line-height:1.7}
+.caption{color:var(--muted)}.caption b{color:var(--ink)}
+.err-banner{background:rgba(239,107,83,.12);border:1px solid rgba(239,107,83,.4);color:var(--crit);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:12.5px;margin:16px 0}
 </style>
-<div class=bar>
-  <div class=mark><span class=p>🌴</span><div>MEX Fleet Cockpit<small>Pips &amp; Palm Trees Holding</small></div></div>
-  <span class=live><span class=dot></span>Live</span>
-  <span id=asof class=asof>…</span>
-</div>
+<header><div class=bar>
+  <div class=brand><span class=mark>MEX</span><span class=name>Traders</span><span class=sub>· Command Center</span></div>
+  <div class=clock><span class=live></span><span id=clock>—</span></div>
+</div></header>
 <div class=wrap>
   <div class=kpis id=kpis></div>
-  <div class=eyebrow>Accounts — funded eerst, dan eval · klik een rij open voor de trades</div>
-  <div class="card scroll"><table><thead><tr>
-    <th>Account</th><th>Type</th><th>Status</th><th class=num>Open</th>
-    <th class=num>Trades</th><th class=num>Realized</th><th>Laatste</th>
-  </tr></thead><tbody id=tb></tbody></table></div>
-  <div class=foot>
-    <span><span class=k>Bron:</span> routed-log (live)</span>
-    <span><span class=k>Ververst:</span> elke 10s</span>
-    <span><span class=k>Modus:</span> read-only</span>
-  </div>
+  <p class=sec-note style="margin-top:4px">Realized · gereconcilieerd uit de Tradovate Fills-export. Buffers matchen de Tradovate risk-grid tot op de cent. <span id=asof></span></p>
+  <nav class=tabs role=tablist aria-label="Command center levels">
+    <button class=tab role=tab aria-selected=true  data-panel=fleet><span class=lv>L0</span>Fleet</button>
+    <button class=tab role=tab aria-selected=false data-panel=accounts><span class=lv>L2</span>Accounts</button>
+    <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
+    <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
+    <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
+  </nav>
+  <section role=tabpanel id=fleet>
+    <h2 class=sec>Fleet health</h2>
+    <p class=sec-note>Alle accounts in één oogopslag — verdeeld naar survival-status.</p>
+    <div class=healthbar id=healthbar></div><div class=legend id=legend></div>
+    <div class="grid g2" style="margin-top:22px">
+      <div class=card><div class=ey>P&amp;L attributie · per asset</div><div class=attr id=attr></div></div>
+      <div class=card><div class=ey>Watchlist · laagste buffer</div><div id=watch style="margin-top:10px"></div></div>
+    </div>
+  </section>
+  <section role=tabpanel id=accounts hidden>
+    <h2 class=sec>Survival cockpit</h2>
+    <p class=sec-note>Per account: waar staat de floor, hoeveel buffer tot breach. <span class=seed>◆ goud</span> = exacte Tradovate-seed · <span class=calc>○ grijs</span> = gereconstrueerd. Klik een kop om te sorteren.</p>
+    <div class=tablewrap><table id=acctTable><thead><tr>
+      <th data-k=id data-t=s>Account</th><th data-k=stage data-t=s>Type</th>
+      <th data-k=current data-t=n>Current</th><th data-k=floor data-t=n>DD Floor</th>
+      <th data-k=buffer data-t=n>Buffer $</th><th data-k=bufpct data-t=n>Buffer %</th>
+      <th data-k=net data-t=n>Net P&amp;L</th><th data-k=hrank data-t=n>Health</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=firms hidden>
+    <h2 class=sec>Per prop-firm</h2>
+    <p class=sec-note>Rollup per firma — kapitaal, buffer en resultaat.</p>
+    <div class="grid g3" id=firmCards></div>
+  </section>
+  <section role=tabpanel id=strategies hidden>
+    <h2 class=sec>Per strategie-engine</h2>
+    <p class=sec-note>Eén engine, per asset ingesteld met de "El ___"-varianten. Gevalideerde funded edges: GC + ES; NQ = variance-lottery (eval-only).</p>
+    <div class="grid g3" id=stratCards></div>
+  </section>
+  <section role=tabpanel id=assets hidden>
+    <h2 class=sec>Per asset · uitvoeringskwaliteit</h2>
+    <p class=sec-note>De pips-en-ticks-doorsnede: netto, ticks en trefkans per markt.</p>
+    <div class=tablewrap><table id=assetTable><thead><tr>
+      <th data-k=sym data-t=s>Asset</th><th data-k=engine data-t=s>Engine</th>
+      <th data-k=n data-t=n>Trades</th><th data-k=win data-t=n>Win %</th>
+      <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
+      <th data-k=edge data-t=s>Edge</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=live hidden>
+    <h2 class=sec>Live · intraday</h2>
+    <p class=sec-note id=livenote>Open posities en vandaag gesloten trades — uit de routed-log, elke 15s.</p>
+    <div class="grid g2" id=liveKpis style="margin-bottom:18px"></div>
+    <div class=tablewrap><table id=liveTable style="min-width:640px"><thead><tr>
+      <th>Account</th><th>Type</th><th>Status</th><th class=num>Open</th>
+      <th class=num>Trades</th><th class=num>Realized vandaag</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+  <footer>
+    <div class=caption><b>Bron:</b> Accounts DB (buffers) + lokale Fills-export (asset-edge), server-side. <span id=footnet></span></div>
+    <div style="margin-top:8px">Live cockpit · <b style="color:var(--aqua)">app.mex-traders.com</b> — geen browser-scraper. Notion blijft de records-backend.</div>
+  </footer>
 </div>
 <script>
 const $=s=>document.querySelector(s);
-const money=n=>(n>=0?'+':'−')+'$'+Math.abs(n).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2});
-const cls=n=>n>0?'pos':n<0?'neg':'';
-const time=s=>s?new Date(s).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}):'—';
-function kpi(l,v,c){return `<div class="kpi ${c||''}"><div class=l>${l}</div><div class="v ${c==='hero'?cls(0):''}">${v}</div></div>`}
-const open=new Set();
-async function load(){
-  let s; try{ s=await (await fetch('/api/state',{cache:'no-store'})).json() }catch(e){ return }
-  if(!s||s.error){ $('#asof').textContent='geen data'; return }
-  $('#asof').textContent = s.as_of? 'laatste activiteit · '+new Date(s.as_of).toLocaleString('nl-NL') : 'geen data';
-  const f=s.fleet;
-  $('#kpis').innerHTML =
-    `<div class="kpi hero"><div class=l>Realized vandaag</div><div class="v ${cls(f.realized_today)}">${money(f.realized_today)}</div></div>`+
-    kpi('Open posities', f.open_positions)+
-    kpi('Trades vandaag', f.trades_today)+
-    kpi('Win rate', f.win_rate==null?'—':f.win_rate+'%')+
-    kpi('Profit factor', f.profit_factor==null?'—':f.profit_factor);
-  $('#tb').innerHTML = s.accounts.map(a=>{
-    const isopen=open.has(a.account);
-    const opens=a.open.map(o=>`<div class=trow><span class="dir ${o.direction}">${o.direction}</span>
-      <span class=desc>${o.qty}× ${o.symbol} @ ${o.entry_price}${o.framework?' · '+o.framework:''}</span>
-      <span class="pnl muted">open</span></div>`).join('');
-    const closed=a.closed_today.map(c=>`<div class=trow><span class="dir ${c.direction}">${c.direction}</span>
-      <span class=desc>${c.qty}× ${c.symbol} <span class=px>${c.entry_price}→${c.exit_price}</span>${c.reason?`<span class=badge>${c.reason}</span>`:''}</span>
-      <span class="pnl ${cls(c.pnl)}">${money(c.pnl)}</span></div>`).join('');
-    const body=(opens+closed)||'<div class="trow muted"><span class=desc style="grid-column:1/-1">geen trades vandaag</span></div>';
-    return `<tr class="acct${isopen?' open':''}" data-a="${a.account}">
-      <td class=aid><span class=caret>›</span> ${a.account}</td>
-      <td><span class="tag ${a.phase}">${a.phase==='funded'?'Funded':'Eval'}</span></td>
-      <td><span class="pill ${a.open.length?'trade':'flat'}">${a.status}</span></td>
-      <td class=num>${a.open.length||'—'}</td>
-      <td class=num>${(a.wins+a.losses)||'—'}</td>
-      <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):'—'}</td>
-      <td class=num style="text-align:left;color:var(--muted)">${time(a.last_ts)}</td></tr>
-      <tr class=detail style="display:${isopen?'':'none'}"><td colspan=7><div class=trades>${body}</div></td></tr>`;
-  }).join('') || '<tr><td colspan=7 class=muted>geen accounts actief</td></tr>';
-  document.querySelectorAll('.acct').forEach(tr=>tr.onclick=()=>{
-    const a=tr.dataset.a; open.has(a)?open.delete(a):open.add(a);
-    const d=tr.nextElementSibling; d.style.display=d.style.display==='none'?'':'none'; tr.classList.toggle('open');
-  });
+const money=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
+const signed=n=>(n>=0?"+":"−")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
+const cls=n=>n>0?"pos":n<0?"neg":"";
+const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
+const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
+let CMD={accounts:[],assets:[],firms:[],fleet:{}};
+
+function renderKpis(f){
+  const k=[
+    {lab:"Realized P&L",val:f.realized_net==null?"—":signed(f.realized_net),cls:cls(f.realized_net||0),note:(f.trades||0)+" trades · gereconcilieerd"},
+    {lab:"Funded P&L",val:f.funded_net==null?"—":signed(f.funded_net),cls:cls(f.funded_net||0),note:"PA-accounts (compoundend)"},
+    {lab:"Survival buffer",val:f.survival_buffer==null?"—":money0(f.survival_buffer),cls:"gold",note:"som van live buffers"},
+    {lab:"Accounts",val:(f.accounts||0),cls:"aqua",note:(f.breached||0)+" breached"},
+    {lab:"Best asset",val:f.best_asset?f.best_asset+" "+signed(f.best_asset_net):"—",cls:"gold",note:"grootste edge"},
+  ];
+  $("#kpis").innerHTML=k.map(x=>`<div class=kpi><div class=lab>${x.lab}</div><div class="val ${x.cls}">${x.val}</div><div class=note>${x.note}</div></div>`).join("");
 }
-load(); setInterval(load,10000);
+function renderFleet(){
+  const acc=CMD.accounts, order=["Healthy","Watch","Warning","Critical","Breached"];
+  const dist={}; acc.forEach(a=>{if(HEALTH[a.health])dist[a.health]=(dist[a.health]||0)+1});
+  const tot=Object.values(dist).reduce((x,y)=>x+y,0)||1;
+  $("#healthbar").innerHTML=order.filter(h=>dist[h]).map(h=>`<span style="width:${100*dist[h]/tot}%;background:${H(h).c}">${dist[h]}</span>`).join("")||`<span style="width:100%;background:var(--dim)">—</span>`;
+  $("#legend").innerHTML=order.filter(h=>dist[h]).map(h=>`<span><i style="background:${H(h).c}"></i>${h} · ${dist[h]}</span>`).join("");
+  const mx=Math.max(1,...CMD.assets.map(a=>Math.abs(a.net)));
+  $("#attr").innerHTML=CMD.assets.map(a=>{const w=100*Math.abs(a.net)/mx,col=a.net>=0?"var(--ok)":"var(--crit)";
+    return `<div class=a-row><span class="tag ${a.cls}">${a.sym}</span><div class=track><i style="width:${w}%;background:${col}"></i></div><span class="a-val ${cls(a.net)}">${signed(a.net)}</span></div>`}).join("");
+  const w=acc.filter(a=>a.bufpct!=null).sort((x,y)=>x.bufpct-y.bufpct).slice(0,5);
+  $("#watch").innerHTML=w.map(a=>{const h=H(a.health),p=Math.max(0,Math.min(100,a.bufpct));
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(28,63,67,.5);font-family:var(--mono);font-size:12.5px">
+      <b style="width:42px">${a.id}</b><div class=bufbar style="flex:1;width:auto"><i style="width:${p}%;background:${h.c}"></i></div>
+      <span style="width:74px;text-align:right;color:${h.c}">${a.buffer==null?"—":money0(a.buffer)}</span>
+      <span class="pill ${h.cls}" style="width:64px;text-align:center">${a.health}</span></div>`}).join("")||'<div class=calc>—</div>';
+}
+function renderAccts(rows){
+  $("#acctTable tbody").innerHTML=rows.map(a=>{const h=H(a.health),p=a.bufpct==null?0:Math.max(0,Math.min(100,a.bufpct));
+    return `<tr><td class=acct>${a.id} <span class=firmdot>· ${a.firm}</span></td><td>${a.stage}</td>
+      <td class=num>${money(a.current)}</td>
+      <td class=num>${a.floor==null?'<span class=calc>—</span>':money(a.floor)+" "+(a.seed?'<span class=seed>◆</span>':'<span class=calc>○</span>')}</td>
+      <td class=num style="color:${a.buffer==null?'var(--dim)':(a.buffer<0?'var(--crit)':'var(--ink)')}">${a.buffer==null?"—":money(a.buffer)}</td>
+      <td class=num><div class=bufcell>${a.bufpct==null?"—":a.bufpct.toFixed(1)+"%"}<span class=bufbar><i style="width:${p}%;background:${h.c}"></i></span></div></td>
+      <td class="num ${cls(a.net||0)}">${a.net==null?"—":signed(a.net)}</td>
+      <td class=num><span class="pill ${h.cls}">${a.health}</span></td></tr>`}).join("")||'<tr><td colspan=8 class=calc>geen accounts</td></tr>';
+}
+let acctSort={k:"hrank",dir:1};
+function sortAccts(k,t){
+  acctSort=acctSort.k===k?{k,dir:-acctSort.dir}:{k,dir:t==="s"?1:-1};
+  const rows=[...CMD.accounts].sort((a,b)=>{let x=a[k],y=b[k];if(x==null)x=-Infinity;if(y==null)y=-Infinity;
+    return t==="s"?acctSort.dir*String(x).localeCompare(String(y)):acctSort.dir*(x-y)});
+  renderAccts(rows);markSort("#acctTable",k,acctSort.dir);
+}
+function markSort(tbl,k,dir){document.querySelectorAll(tbl+" thead th").forEach(th=>{
+  const base=th.textContent.replace(/[▲▼]\s*$/,"").trim();
+  th.innerHTML=th.dataset.k===k?base+' <span class=ar>'+(dir>0?"▲":"▼")+'</span>':base})}
+function renderFirms(){$("#firmCards").innerHTML=CMD.firms.map(f=>`<div class=card>
+  <div class=ey>${f.name}</div><div class="big ${f.net>0?'pos':(f.net<0?'neg':'')}">${f.net?signed(f.net):"—"}</div>
+  <div class=row><span>Accounts</span><b>${f.accts}</b></div>
+  <div class=row><span>Survival buffer</span><b>${f.buffer?money0(f.buffer):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
+function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class=card>
+  <div class=ey><span class="tag ${a.cls}">${a.sym}</span> ${a.robust?'<span style="color:var(--ok)">funded edge</span>':'<span style="color:var(--warn)">eval-only</span>'}</div>
+  <div class="big ${cls(a.net)}">${signed(a.net)}</div><div class=row><span>${a.engine}</span></div>
+  <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win-rate</span><b>${a.win.toFixed(1)}%</b></div>
+  <div class=row><span>Net ticks</span><b>${signed(a.ticks)}</b></div>
+  <div class=row><span>$ / trade</span><b>${a.n?money0(a.net/a.n):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
+function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
+  <td class=acct><span class="tag ${a.cls}">${a.sym}</span></td><td style="color:var(--muted)">${a.engine}</td>
+  <td class=num>${a.n}</td><td class=num>${a.win.toFixed(1)}%</td>
+  <td class="num ${cls(a.ticks)}">${signed(a.ticks)}</td><td class="num ${cls(a.net)}">${signed(a.net)}</td>
+  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=7 class=calc>geen trades</td></tr>'}
+
+async function loadCommand(){
+  let s;try{s=await(await fetch("/api/command",{cache:"no-store"})).json()}catch(e){return}
+  if(!s||s.error){renderKpis({});return}
+  CMD=s;renderKpis(s.fleet);renderFleet();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();
+  $("#asof").textContent=s.as_of?"· bijgewerkt "+new Date(s.as_of).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}):"";
+  const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";
+}
+async function loadLive(){
+  let s;try{s=await(await fetch("/api/state",{cache:"no-store"})).json()}catch(e){return}
+  if(!s||s.error){$("#livenote").textContent="geen live data";return}
+  const f=s.fleet||{};
+  $("#liveKpis").innerHTML=
+    `<div class=card><div class=ey>Realized vandaag</div><div class="big ${cls(f.realized_today||0)}">${money(f.realized_today||0)}</div>
+      <div class=row><span>Open posities</span><b>${f.open_positions||0}</b></div>
+      <div class=row><span>Trades vandaag</span><b>${f.trades_today||0}</b></div></div>`+
+    `<div class=card><div class=ey>Fleet vandaag</div>
+      <div class=row><span>Win rate</span><b>${f.win_rate==null?"—":f.win_rate+"%"}</b></div>
+      <div class=row><span>Profit factor</span><b>${f.profit_factor==null?"—":f.profit_factor}</b></div>
+      <div class=row><span>Accounts actief</span><b>${f.accounts||0}</b></div></div>`;
+  const rows=s.accounts||[];
+  $("#liveTable tbody").innerHTML=rows.map(a=>`<tr><td class=acct>${a.account}</td>
+    <td>${a.phase==="funded"?"Funded":"Eval"}</td>
+    <td><span class="pill ${a.open.length?'h-ok':'h-idle'}">${a.status}</span></td>
+    <td class=num>${a.open.length||"—"}</td><td class=num>${(a.wins+a.losses)||"—"}</td>
+    <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):"—"}</td></tr>`).join("")||'<tr><td colspan=6 class=calc>geen activiteit vandaag</td></tr>';
+}
+const tabs=[...document.querySelectorAll(".tab")];
+tabs.forEach(t=>t.addEventListener("click",()=>{
+  tabs.forEach(x=>x.setAttribute("aria-selected",x===t));
+  document.querySelectorAll('section[role=tabpanel]').forEach(s=>s.hidden=s.id!==t.dataset.panel);
+  if(t.dataset.panel==="live")loadLive();
+}));
+function tick(){const d=new Date();
+  const t=d.toLocaleTimeString("en-GB",{hour12:false,timeZone:"America/New_York"});
+  $("#clock").textContent=t+" ET · "+d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",timeZone:"America/New_York"})}
+tick();setInterval(tick,1000);
+loadCommand();setInterval(loadCommand,60000);
+setInterval(()=>{if(!$("#live").hidden)loadLive()},15000);
 </script></html>"""
 
 

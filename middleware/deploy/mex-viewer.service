@@ -17,7 +17,11 @@ WorkingDirectory=/root/mex-journal/middleware
 EnvironmentFile=/root/mex-journal/middleware/.env
 Environment=VIEWER_PORT=8080
 Environment=ROUTED_DIR=/root/intent-store
-ExecStart=/usr/bin/python3 -m app.viewer
+Environment=EXPORTS_DIR=/root/exports
+# 209 has an incomplete Fills export — exclude it from the asset rollup until re-exported.
+Environment=DASH_SKIP=209
+# venv python: the /api/command accounts view needs httpx (the live /api/state is stdlib-only).
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.viewer
 Restart=on-failure
 RestartSec=3
 

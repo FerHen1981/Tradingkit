@@ -18,7 +18,6 @@ Env:
 from __future__ import annotations
 
 import base64
-import datetime as dt
 import glob
 import hashlib
 import hmac
@@ -94,7 +93,7 @@ def build_state() -> dict:
             a["closed_today"].append({
                 "symbol": t.symbol, "direction": t.direction, "qty": t.qty,
                 "entry_price": t.entry_price, "exit_price": t.exit_price,
-                "pnl": pnl, "reason": t.reason, "mfe": t.mfe, "mae": t.mae,
+                "pnl": round(pnl, 2), "reason": t.reason, "mfe": t.mfe, "mae": t.mae,
                 "exit_ts": t.exit_ts.isoformat(),
                 "framework": _framework(t.account, product),
             })
@@ -204,17 +203,19 @@ LOGIN_HTML = """<!doctype html><html lang=nl><meta charset=utf-8>
 <title>MEX Traders — inloggen</title>
 <style>
 :root{color-scheme:dark}body{margin:0;height:100vh;display:grid;place-items:center;
-background:#0b0f14;color:#e6edf3;font:16px/1.5 system-ui,sans-serif}
-form{background:#111820;padding:2rem;border-radius:14px;border:1px solid #1f2a37;width:min(90vw,340px)}
-h1{font-size:1.1rem;margin:0 0 1rem;letter-spacing:.02em}
-input{width:100%;box-sizing:border-box;padding:.7rem;margin:.4rem 0 1rem;border-radius:8px;
-border:1px solid #2a3646;background:#0b0f14;color:#e6edf3;font-size:1rem}
-button{width:100%;padding:.7rem;border:0;border-radius:8px;background:#2f81f7;color:#fff;
-font-weight:600;font-size:1rem;cursor:pointer}.err{color:#f85149;font-size:.9rem;margin:.2rem 0 0}
-.brand{opacity:.6;font-size:.8rem;margin-top:1rem;text-align:center}
+background:#0a0e13;color:#e8eef4;font:16px/1.5 system-ui,sans-serif;
+background-image:radial-gradient(900px 400px at 80% -10%,rgba(45,212,191,.08),transparent 60%)}
+form{background:#111a22;padding:2rem;border-radius:16px;border:1px solid #1f2c38;width:min(90vw,340px)}
+h1{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:.01em}
+.sub{color:#5b6b7a;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.2rem}
+input{width:100%;box-sizing:border-box;padding:.75rem;margin:.2rem 0 1rem;border-radius:10px;
+border:1px solid #2a3646;background:#0a0e13;color:#e8eef4;font-size:1rem}
+button{width:100%;padding:.75rem;border:0;border-radius:10px;background:#2dd4bf;color:#04231f;
+font-weight:700;font-size:1rem;cursor:pointer}.err{color:#f7645a;font-size:.9rem;margin:.2rem 0 0}
+.brand{opacity:.5;font-size:.8rem;margin-top:1.1rem;text-align:center}
 </style>
 <form method=post action=/login>
-<h1>🌴 MEX Traders — Fleet Cockpit</h1>
+<h1>🌴 MEX Fleet Cockpit</h1><div class=sub>Owner login</div>
 <!--ERR-->
 <input type=password name=password placeholder=Wachtwoord autofocus>
 <button>Inloggen</button>
@@ -225,83 +226,124 @@ DASH_HTML = """<!doctype html><html lang=nl><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>MEX Fleet Cockpit</title>
 <style>
-:root{color-scheme:dark}
+:root{--ground:#0a0e13;--surface:#111a22;--raised:#16212c;--border:#1f2c38;--text:#e8eef4;
+--muted:#8496a6;--faint:#5b6b7a;--accent:#2dd4bf;--profit:#46c96a;--loss:#f7645a;
+--funded:#58a6ff;--eval:#bc8cff;--tab:"SF Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
 *{box-sizing:border-box}
-body{margin:0;background:#0b0f14;color:#e6edf3;font:15px/1.5 system-ui,-apple-system,sans-serif}
-header{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;padding:1rem 1.25rem;border-bottom:1px solid #1f2a37}
-header h1{font-size:1.05rem;margin:0;letter-spacing:.02em}
-header .as-of{opacity:.55;font-size:.8rem;margin-left:auto}
-.wrap{padding:1.25rem;max-width:1200px;margin:0 auto}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.75rem;margin-bottom:1.25rem}
-.kpi{background:#111820;border:1px solid #1f2a37;border-radius:12px;padding:.9rem 1rem}
-.kpi .l{opacity:.6;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
-.kpi .v{font-size:1.5rem;font-weight:700;margin-top:.2rem}
-.pos{color:#3fb950}.neg{color:#f85149}
-h2{font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;opacity:.6;margin:1.5rem 0 .6rem}
-table{width:100%;border-collapse:collapse;font-size:.9rem}
-th,td{text-align:left;padding:.5rem .6rem;border-bottom:1px solid #1a232e;white-space:nowrap}
-th{opacity:.55;font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-.tag{display:inline-block;padding:.1rem .5rem;border-radius:999px;font-size:.72rem;font-weight:600}
-.tag.trade{background:#1f3a2a;color:#3fb950}.tag.flat{background:#222b36;color:#8b949e}
-.tag.funded{background:#132f4c;color:#58a6ff}.tag.eval{background:#2b2536;color:#bc8cff}
-.dir-BUY{color:#3fb950}.dir-SELL{color:#f85149}
-.acct{cursor:pointer}.acct:hover{background:#0f1620}
-.detail{background:#0d141c}.detail td{padding:.3rem .6rem;font-size:.82rem;opacity:.85}
-.muted{opacity:.5}small{opacity:.5}
+body{margin:0;background:var(--ground);color:var(--text);
+font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;
+background-image:radial-gradient(1200px 500px at 85% -10%,rgba(45,212,191,.06),transparent 60%)}
+.bar{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;padding:.95rem 1.3rem;
+border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(22,33,44,.6),transparent)}
+.mark{display:flex;align-items:center;gap:.6rem;font-weight:700}
+.mark .p{font-size:1.15rem}
+.mark small{display:block;font-weight:500;color:var(--faint);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase}
+.live{display:inline-flex;align-items:center;gap:.4rem;color:var(--accent);font-size:.72rem;font-weight:600;
+letter-spacing:.08em;text-transform:uppercase;border:1px solid rgba(45,212,191,.3);border-radius:999px;padding:.15rem .55rem}
+.live .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(45,212,191,.5)}70%{box-shadow:0 0 0 7px rgba(45,212,191,0)}100%{box-shadow:0 0 0 0 rgba(45,212,191,0)}}
+@media (prefers-reduced-motion:reduce){.live .dot{animation:none}}
+.asof{margin-left:auto;color:var(--muted);font-size:.8rem}
+.wrap{max-width:1180px;margin:0 auto;padding:1.3rem}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.8rem;margin-bottom:1.5rem}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:.95rem 1.1rem}
+.kpi.hero{grid-column:span 2}
+.kpi .l{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em}
+.kpi .v{font-family:var(--tab);font-size:1.65rem;font-weight:700;margin-top:.25rem;font-variant-numeric:tabular-nums}
+.kpi.hero .v{font-size:2.3rem}
+.pos{color:var(--profit)}.neg{color:var(--loss)}
+.eyebrow{color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;margin:1.6rem 0 .7rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.9rem;min-width:640px}
+th,td{padding:.6rem .75rem;text-align:left;white-space:nowrap;border-bottom:1px solid var(--border)}
+thead th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;background:var(--raised)}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-family:var(--tab);font-variant-numeric:tabular-nums}
+.acct{cursor:pointer;transition:background .12s}.acct:hover{background:var(--raised)}
+.acct .caret{color:var(--faint);display:inline-block;width:1em;transition:transform .15s}
+.acct.open .caret{transform:rotate(90deg)}
+.aid{font-family:var(--tab);font-size:.86rem}
+.tag{display:inline-block;padding:.12rem .55rem;border-radius:999px;font-size:.7rem;font-weight:600}
+.tag.funded{background:rgba(88,166,255,.14);color:var(--funded)}
+.tag.eval{background:rgba(188,140,255,.14);color:var(--eval)}
+.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.12rem .55rem;border-radius:999px;font-size:.72rem;font-weight:600}
+.pill::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.pill.trade{background:rgba(70,201,106,.12);color:var(--profit)}
+.pill.flat{background:rgba(132,150,166,.12);color:var(--muted)}
+.detail td{padding:0;background:var(--ground)}
+.trades{padding:.3rem .75rem .6rem 2.1rem;display:flex;flex-direction:column;gap:.1rem}
+.trow{display:grid;grid-template-columns:60px 1fr auto;gap:.8rem;align-items:center;padding:.28rem 0;font-size:.83rem}
+.trow .dir{font-family:var(--tab);font-weight:600;font-size:.78rem}
+.dir.BUY{color:var(--profit)}.dir.SELL{color:var(--loss)}
+.trow .desc{color:var(--muted)}
+.trow .px{font-family:var(--tab);font-variant-numeric:tabular-nums;color:var(--faint);font-size:.78rem}
+.trow .pnl{font-family:var(--tab);font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.badge{font-size:.68rem;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:.02rem .35rem;margin-left:.4rem}
+.foot{color:var(--faint);font-size:.78rem;margin:1.4rem .2rem 2rem;display:flex;gap:1rem;flex-wrap:wrap}
+.foot .k{color:var(--muted)}.muted{color:var(--faint)}
 </style>
-<header>
-  <h1>🌴 MEX Fleet Cockpit</h1>
-  <span id=asof class=as-of>…</span>
-</header>
+<div class=bar>
+  <div class=mark><span class=p>🌴</span><div>MEX Fleet Cockpit<small>Pips &amp; Palm Trees Holding</small></div></div>
+  <span class=live><span class=dot></span>Live</span>
+  <span id=asof class=asof>…</span>
+</div>
 <div class=wrap>
   <div class=kpis id=kpis></div>
-  <h2>Accounts</h2>
-  <table><thead><tr>
+  <div class=eyebrow>Accounts — funded eerst, dan eval · klik een rij open voor de trades</div>
+  <div class="card scroll"><table><thead><tr>
     <th>Account</th><th>Type</th><th>Status</th><th class=num>Open</th>
-    <th class=num>Trades vandaag</th><th class=num>Realized ($)</th><th>Laatste</th>
-  </tr></thead><tbody id=rows></tbody></table>
-  <p><small>Auto-ververst elke 10s · read-only · bron: routed-log</small></p>
+    <th class=num>Trades</th><th class=num>Realized</th><th>Laatste</th>
+  </tr></thead><tbody id=tb></tbody></table></div>
+  <div class=foot>
+    <span><span class=k>Bron:</span> routed-log (live)</span>
+    <span><span class=k>Ververst:</span> elke 10s</span>
+    <span><span class=k>Modus:</span> read-only</span>
+  </div>
 </div>
 <script>
 const $=s=>document.querySelector(s);
-const money=n=>(n>=0?'+':'')+n.toLocaleString('en-US',{style:'currency',currency:'USD'});
+const money=n=>(n>=0?'+':'−')+'$'+Math.abs(n).toLocaleString('nl-NL',{minimumFractionDigits:2,maximumFractionDigits:2});
 const cls=n=>n>0?'pos':n<0?'neg':'';
 const time=s=>s?new Date(s).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}):'—';
-function kpi(l,v,c){return `<div class=kpi><div class=l>${l}</div><div class="v ${c||''}">${v}</div></div>`}
+function kpi(l,v,c){return `<div class="kpi ${c||''}"><div class=l>${l}</div><div class="v ${c==='hero'?cls(0):''}">${v}</div></div>`}
+const open=new Set();
 async function load(){
   let s; try{ s=await (await fetch('/api/state',{cache:'no-store'})).json() }catch(e){ return }
-  if(s.error){ return }
-  $('#asof').textContent = s.as_of? 'laatste activiteit '+new Date(s.as_of).toLocaleString('nl-NL') : 'geen data';
+  if(!s||s.error){ $('#asof').textContent='geen data'; return }
+  $('#asof').textContent = s.as_of? 'laatste activiteit · '+new Date(s.as_of).toLocaleString('nl-NL') : 'geen data';
   const f=s.fleet;
   $('#kpis').innerHTML =
-    kpi('Realized vandaag', money(f.realized_today), cls(f.realized_today))+
+    `<div class="kpi hero"><div class=l>Realized vandaag</div><div class="v ${cls(f.realized_today)}">${money(f.realized_today)}</div></div>`+
     kpi('Open posities', f.open_positions)+
     kpi('Trades vandaag', f.trades_today)+
     kpi('Win rate', f.win_rate==null?'—':f.win_rate+'%')+
-    kpi('Profit factor', f.profit_factor==null?'—':f.profit_factor)+
-    kpi('Accounts', f.accounts);
-  const rows=s.accounts.map((a,i)=>{
-    const open=a.open.map(o=>`<tr class=detail><td></td><td colspan=6>
-      <span class="dir-${o.direction}">${o.direction}</span> ${o.qty}× ${o.symbol}
-      @ ${o.entry_price} ${o.framework?'· '+o.framework:''} <span class=muted>(open)</span></td></tr>`).join('');
-    const closed=a.closed_today.map(c=>`<tr class=detail><td></td><td colspan=6>
-      <span class="dir-${c.direction}">${c.direction}</span> ${c.qty}× ${c.symbol}
-      ${c.entry_price}→${c.exit_price} · <span class="${cls(c.pnl)}">${money(c.pnl)}</span>
-      ${c.reason?'· '+c.reason:''} <span class=muted>${time(c.exit_ts)}</span></td></tr>`).join('');
-    return `<tr class=acct onclick="document.querySelectorAll('.d${i}').forEach(e=>e.style.display=e.style.display=='none'?'':'none')">
-      <td>${a.account}</td>
+    kpi('Profit factor', f.profit_factor==null?'—':f.profit_factor);
+  $('#tb').innerHTML = s.accounts.map(a=>{
+    const isopen=open.has(a.account);
+    const opens=a.open.map(o=>`<div class=trow><span class="dir ${o.direction}">${o.direction}</span>
+      <span class=desc>${o.qty}× ${o.symbol} @ ${o.entry_price}${o.framework?' · '+o.framework:''}</span>
+      <span class="pnl muted">open</span></div>`).join('');
+    const closed=a.closed_today.map(c=>`<div class=trow><span class="dir ${c.direction}">${c.direction}</span>
+      <span class=desc>${c.qty}× ${c.symbol} <span class=px>${c.entry_price}→${c.exit_price}</span>${c.reason?`<span class=badge>${c.reason}</span>`:''}</span>
+      <span class="pnl ${cls(c.pnl)}">${money(c.pnl)}</span></div>`).join('');
+    const body=(opens+closed)||'<div class="trow muted"><span class=desc style="grid-column:1/-1">geen trades vandaag</span></div>';
+    return `<tr class="acct${isopen?' open':''}" data-a="${a.account}">
+      <td class=aid><span class=caret>›</span> ${a.account}</td>
       <td><span class="tag ${a.phase}">${a.phase==='funded'?'Funded':'Eval'}</span></td>
-      <td><span class="tag ${a.open.length?'trade':'flat'}">${a.status}</span></td>
-      <td class=num>${a.open.length||''}</td>
-      <td class=num>${a.wins+a.losses||''}</td>
+      <td><span class="pill ${a.open.length?'trade':'flat'}">${a.status}</span></td>
+      <td class=num>${a.open.length||'—'}</td>
+      <td class=num>${(a.wins+a.losses)||'—'}</td>
       <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):'—'}</td>
-      <td>${time(a.last_ts)}</td></tr>`
-      + `<tbody class=d${i} style=display:none>${open}${closed||'<tr class=detail><td></td><td colspan=6 class=muted>geen trades vandaag</td></tr>'}</tbody>`;
-  }).join('');
-  $('#rows').innerHTML = rows || '<tr><td colspan=7 class=muted>geen accounts actief</td></tr>';
+      <td class=num style="text-align:left;color:var(--muted)">${time(a.last_ts)}</td></tr>
+      <tr class=detail style="display:${isopen?'':'none'}"><td colspan=7><div class=trades>${body}</div></td></tr>`;
+  }).join('') || '<tr><td colspan=7 class=muted>geen accounts actief</td></tr>';
+  document.querySelectorAll('.acct').forEach(tr=>tr.onclick=()=>{
+    const a=tr.dataset.a; open.has(a)?open.delete(a):open.add(a);
+    const d=tr.nextElementSibling; d.style.display=d.style.display==='none'?'':'none'; tr.classList.toggle('open');
+  });
 }
-load(); setInterval(load, 10000);
+load(); setInterval(load,10000);
 </script></html>"""
 
 

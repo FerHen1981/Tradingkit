@@ -78,10 +78,13 @@ async def run() -> dict:
     intents = IntentIndex(intent_dir)
 
     # pair every fills CSV, grouped by account
+    skip = [s.strip() for s in os.environ.get("RECONCILE_SKIP", "").split(",") if s.strip()]
     trades_by_acct = defaultdict(list)
     for path in sorted(glob.glob(os.path.join(exports, "*Fills*.csv"))):   # matches "Fills (11).csv" too
         try:
             for t in pair_fills(parse_fills_csv(path)):
+                if any(s in t.account for s in skip):
+                    continue
                 trades_by_acct[t.account].append(t)
         except Exception as exc:
             log.warning("failed to pair %s: %r", path, exc)

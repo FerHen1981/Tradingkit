@@ -193,6 +193,20 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     return trades
 
 
+def _pearson(x: list[float], y: list[float]) -> "float | None":
+    """Pearson correlation, or None when it's undefined (n<2 or a flat series)."""
+    n = len(x)
+    if n < 2:
+        return None
+    mx, my = sum(x) / n, sum(y) / n
+    cov = sum((a - mx) * (b - my) for a, b in zip(x, y))
+    vx = sum((a - mx) ** 2 for a in x)
+    vy = sum((b - my) ** 2 for b in y)
+    if vx <= 0 or vy <= 0:
+        return None
+    return round(cov / ((vx * vy) ** 0.5), 2)
+
+
 def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None") -> list[dict]:
     """Recent closed trades from the executor's routed-log — used only for dates AFTER the
     last reconciled Fills date, so 'today/this week' populate live while history stays exact."""
@@ -293,7 +307,20 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
         c["n"] += 1
     heatmap = [{"dow": d, "hour": h, "net": v["net"], "n": v["n"]} for (d, h), v in hm.items()]
 
-    return {"assets": assets, "totals": totals, "acct_net": dict(acct_net), "heatmap": heatmap}
+    # correlation of daily net between assets (0-filled on non-trading days = flat that day)
+    by_ad: dict = defaultdict(lambda: defaultdict(float))
+    days: set = set()
+    for t in rows:
+        by_ad[t["sym"]][t["close"]] = round(by_ad[t["sym"]][t["close"]] + t["net"], 2)
+        days.add(t["close"])
+    labels = [a["sym"] for a in assets]
+    day_list = sorted(days)
+    series = {sym: [by_ad[sym].get(d, 0.0) for d in day_list] for sym in labels}
+    matrix = [[1.0 if s1 == s2 else _pearson(series[s1], series[s2]) for s2 in labels] for s1 in labels]
+    correlation = {"labels": labels, "matrix": matrix, "days": len(day_list)}
+
+    return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
+            "heatmap": heatmap, "correlation": correlation}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -374,6 +401,25 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
     # routed-log tail (recent days, no commissions) so it only drives the breakdown cards.
     realized_ledger = round(sum((a["net"] or 0.0) for a in accounts), 2)
 
+    # portfolio: how allocated capital + P&L are distributed, plus asset correlation
+    cap_firm: dict = defaultdict(float)
+    cap_stage: dict = defaultdict(float)
+    for a in accounts:
+        sz = a.get("size") or 0.0
+        cap_firm[a["firm"]] += sz
+        cap_stage[a["stage"]] += sz
+    total_cap = sum(cap_firm.values()) or 1.0
+    alloc_firm = sorted(({"name": k, "capital": round(v, 0), "pct": round(100 * v / total_cap, 1)}
+                         for k, v in cap_firm.items()), key=lambda z: -z["capital"])
+    alloc_stage = [{"name": k, "capital": round(v, 0), "pct": round(100 * v / total_cap, 1)}
+                   for k, v in cap_stage.items()]
+    pos_net = sum(x["net"] for x in assets if x["net"] > 0) or 1.0
+    alloc_asset = [{"sym": x["sym"], "net": x["net"], "cls": x["cls"],
+                    "pct": round(100 * x["net"] / pos_net, 1)} for x in assets]
+    portfolio = {"total_capital": round(total_cap, 0), "alloc_firm": alloc_firm,
+                 "alloc_stage": alloc_stage, "alloc_asset": alloc_asset,
+                 "correlation": ag["correlation"]}
+
     return {
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "window": window,
@@ -399,6 +445,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "assets": assets,
         "firms": firm_rows,
         "heatmap": ag["heatmap"],
+        "portfolio": portfolio,
     }
 
 

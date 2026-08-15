@@ -181,3 +181,24 @@ def test_heatmap_aggregation():
     hm = {(c["dow"], c["hour"]): c for c in ds._aggregate(trades, "all")["heatmap"]}
     assert hm[(0, 9)]["net"] == 70.0 and hm[(0, 9)]["n"] == 2      # 100 − 30, Monday 09h
     assert hm[(2, 14)]["net"] == 50.0 and hm[(2, 14)]["n"] == 1    # Wednesday 14h
+
+
+def test_pearson():
+    assert ds._pearson([1, 2, 3], [2, 4, 6]) == 1.0        # perfectly positive
+    assert ds._pearson([1, 2, 3], [3, 2, 1]) == -1.0       # perfectly negative
+    assert ds._pearson([1, 1, 1], [1, 2, 3]) is None       # flat series → undefined
+    assert ds._pearson([1], [1]) is None                   # n < 2
+
+
+def test_correlation_matrix():
+    d1, d2 = dt.date(2026, 8, 1), dt.date(2026, 8, 2)
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 0, "close": d1},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": -50.0, "ticks": 0, "close": d2},
+        {"acct": "APEX27002500000205", "sym": "ES", "net": 50.0, "ticks": 0, "close": d1},
+        {"acct": "APEX27002500000205", "sym": "ES", "net": -25.0, "ticks": 0, "close": d2},
+    ]
+    corr = ds._aggregate(trades, "all")["correlation"]
+    labels, m = corr["labels"], corr["matrix"]
+    i, j = labels.index("GC"), labels.index("ES")
+    assert m[i][j] == 1.0 and m[i][i] == 1.0 and corr["days"] == 2   # move together → +1

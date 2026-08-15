@@ -389,6 +389,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
     <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=portfolio><span class=lv>L7</span>Portfolio</button>
     <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
     <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
     <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
@@ -432,6 +433,18 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=portfolio hidden>
+    <h2 class=sec>Portfolio &amp; correlation</h2>
+    <p class=sec-note>Allocated capital and P&amp;L spread across the fleet, and how the asset edges move together. Correlation is over daily net (flat days = 0) for the selected window — high positive = edges rise/fall together (concentrated risk), low/negative = diversified.</p>
+    <div class="grid g2">
+      <div class=card><div class=ey>Capital by type</div><div id=allocStage style="margin-top:10px"></div></div>
+      <div class=card><div class=ey>Capital by firm</div><div id=allocFirm style="margin-top:10px"></div></div>
+    </div>
+    <div class="grid g2" style="margin-top:14px">
+      <div class=card><div class=ey>P&amp;L contribution by asset</div><div id=allocAsset style="margin-top:10px"></div></div>
+      <div class=card><div class=ey>Asset correlation <span id=corrDays class=calc></span></div><div id=corrMatrix style="margin-top:10px;overflow-x:auto"></div></div>
+    </div>
   </section>
   <section role=tabpanel id=heatmap hidden>
     <h2 class=sec>Day × hour heatmap</h2>
@@ -569,6 +582,27 @@ function renderPayout(){
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
+function bar(label,pct,right,color){
+  return `<div style="margin:9px 0;font-family:var(--mono);font-size:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:3px;gap:10px"><span style="color:var(--muted)">${label}</span><b style="white-space:nowrap">${right}</b></div>
+    <div style="height:8px;background:rgba(28,63,67,.6);border-radius:4px;overflow:hidden"><i style="display:block;height:100%;width:${Math.max(0,Math.min(100,pct))}%;background:${color}"></i></div></div>`;
+}
+function renderPortfolio(){
+  const p=CMD.portfolio;if(!p)return;
+  const sc={Funded:"var(--aqua)",Eval:"var(--gold)"};
+  $("#allocStage").innerHTML=p.alloc_stage.map(s=>bar(s.name,s.pct,money0(s.capital)+" · "+s.pct+"%",sc[s.name]||"var(--muted)")).join('')||'<div class=calc>—</div>';
+  $("#allocFirm").innerHTML=p.alloc_firm.map(f=>bar(f.name,f.pct,money0(f.capital)+" · "+f.pct+"%","var(--aqua)")).join('')||'<div class=calc>—</div>';
+  $("#allocAsset").innerHTML=p.alloc_asset.map(a=>bar(a.sym,Math.max(0,a.pct),signed(a.net)+(a.pct>0?" · "+a.pct+"%":""),a.net>=0?"var(--ok)":"var(--crit)")).join('')||'<div class=calc>—</div>';
+  const c=p.correlation||{labels:[],matrix:[]};
+  $("#corrDays").textContent=c.days?"· "+c.days+" days":"";
+  if(c.labels.length<2){$("#corrMatrix").innerHTML='<div class=calc>not enough overlapping data</div>';return;}
+  const cell=v=>{if(v==null)return '<td class=hm-empty style="min-width:52px">—</td>';
+    const a=Math.min(1,Math.abs(v));const col=v>=0?`rgba(53,200,138,${(0.1+0.6*a).toFixed(2)})`:`rgba(239,107,83,${(0.1+0.6*a).toFixed(2)})`;
+    return `<td class=hm-cell style="background:${col};min-width:52px">${v.toFixed(2)}</td>`;};
+  let h='<table class=hm><thead><tr><th></th>'+c.labels.map(l=>`<th>${l}</th>`).join('')+'</tr></thead><tbody>';
+  h+=c.matrix.map((row,i)=>`<tr><th>${c.labels[i]}</th>`+row.map(cell).join('')+'</tr>').join('');
+  $("#corrMatrix").innerHTML=h+'</tbody></table>';
+}
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 function renderHeatmap(){
   const cells=CMD.heatmap||[];const grid=$("#hmGrid");
@@ -590,7 +624,7 @@ async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

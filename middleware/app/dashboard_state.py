@@ -67,7 +67,7 @@ _TICK = {"GC": 0.1, "MGC": 0.1, "ES": 0.25, "MES": 0.25, "NQ": 0.25, "MNQ": 0.25
          "YM": 1.0, "MYM": 1.0, "RTY": 0.1, "M2K": 0.1, "CL": 0.01, "MCL": 0.01}
 
 WINDOWS = ("day", "week", "month", "quarter", "rolling", "all")
-_WINDOW_LABEL = {"day": "Today", "week": "This week", "month": "This month",
+_WINDOW_LABEL = {"day": "Last trading day", "week": "This week", "month": "This month",
                  "quarter": "This quarter", "rolling": "Rolling 30d", "all": "All time"}
 
 
@@ -283,7 +283,9 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     today = dt.datetime.now(_ET).date()
     start = _window_start(window, today)
     if window == "day":
-        rows = [t for t in trades if t["close"] == today]
+        # the LAST trading day that actually has trades (not necessarily today)
+        last = max((t["close"] for t in trades), default=today)
+        rows = [t for t in trades if t["close"] == last]
     elif start is not None:
         rows = [t for t in trades if t["close"] >= start]
     else:
@@ -540,6 +542,13 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "heatmap": ag["heatmap"],
         "portfolio": portfolio,
         "calendar": ag["calendar"],
+        "status": {
+            "data_through": max((t["close"] for t in trades), default=None) and
+                            max(t["close"] for t in trades).isoformat(),
+            "trades_total": len(trades),
+            "accounts": len(accounts_src),
+            "notion_ok": bool(os.environ.get("NOTION_TOKEN")) and len(accounts_src) > 0,
+        },
     }
 
 

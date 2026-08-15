@@ -104,9 +104,21 @@ def test_command_state_assembles_without_token():
         assert st["fleet"]["window_net"] == 52.41        # trade-log total
         assert st["fleet"]["trades"] == 2
         assert {a["sym"] for a in st["assets"]} == {"MGC", "MES"}
+        assert st["status"]["trades_total"] == 2 and st["status"]["notion_ok"] is False
+        assert st["status"]["data_through"] == "2026-08-04"   # latest close in the fixtures
     finally:
         os.environ.clear()
         os.environ.update(old)
+
+
+def test_day_window_uses_last_trading_day():
+    base = dt.date(2026, 8, 3)
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 80.0, "ticks": 0, "close": base},
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 10.0, "ticks": 0, "close": base - dt.timedelta(days=1)},
+    ]
+    # "day" is the most recent day WITH trades (base), not today's calendar date
+    assert ds._aggregate(trades, "day")["totals"]["net"] == 80.0
 
 
 def test_seed_property_mapping():

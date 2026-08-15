@@ -27,6 +27,7 @@ import hmac
 import json
 import logging
 import os
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -42,6 +43,7 @@ _PASSWORD = os.environ.get("VIEWER_PASSWORD", "")
 _SECRET = (os.environ.get("VIEWER_SECRET") or _PASSWORD or "mex-dev-secret").encode()
 _API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the iPhone widget etc.
 _STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" fills with a missed exit
+_STARTED = time.monotonic()                                        # for the system-status uptime
 
 
 # ---- state from the routed-log -------------------------------------------------------
@@ -214,7 +216,9 @@ class Handler(BaseHTTPRequestHandler):
             window = q.get("window", ["all"])[0]
             stage = q.get("stage", ["all"])[0]
             try:
-                body = json.dumps(command_state(window, stage)).encode()
+                data = command_state(window, stage)
+                data.setdefault("status", {})["uptime_s"] = round(time.monotonic() - _STARTED)
+                body = json.dumps(data).encode()
             except Exception as exc:
                 log.warning("command state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
@@ -304,14 +308,14 @@ backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .pos{color:var(--ok)}.neg{color:var(--crit)}.gold{color:var(--gold)}.aqua{color:var(--aqua)}
 @media(max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.kpi:last-child{grid-column:1/-1}}
 .tf{display:flex;gap:6px;flex-wrap:wrap;margin:18px 0 -6px}
-.tf button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--mono);font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;padding:6px 12px;border-radius:20px;cursor:pointer}
+.tf button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--mono);font-size:13px;letter-spacing:.8px;text-transform:uppercase;padding:9px 16px;border-radius:20px;cursor:pointer}
 .tf button:hover{color:var(--ink);border-color:#26545a}
 .tf button[aria-pressed="true"]{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600}
 .tf.stage{margin-top:8px}
 .tf.stage button[aria-pressed="true"]{background:var(--aqua);border-color:var(--aqua)}
 .tf button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 nav.tabs{display:flex;gap:4px;margin:20px 0 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.tab{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:12.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:11px 15px;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:13.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:13px 17px;border-bottom:2px solid transparent;margin-bottom:-1px}
 .tab:hover{color:var(--ink)}
 .tab[aria-selected="true"]{color:var(--gold);border-bottom-color:var(--gold)}
 .tab:focus-visible{outline:2px solid var(--aqua);outline-offset:2px;border-radius:4px}
@@ -356,9 +360,9 @@ td .firmdot{color:var(--dim);font-size:11px}
 .bufbar i{display:block;height:100%;border-radius:4px}
 .seed{color:var(--gold);font-size:10px}.calc{color:var(--dim);font-size:10px}
 .stiles{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap;margin:2px 0 16px}
-.stile{background:var(--panel);padding:9px 14px;min-width:92px;flex:1}
-.stile .sl{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
-.stile .sv{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
+.stile{background:var(--panel);padding:12px 17px;min-width:100px;flex:1}
+.stile .sl{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.stile .sv{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
 .tag.micro{background:rgba(63,208,189,.14);color:var(--aqua)}
 .tag.full{background:rgba(132,150,166,.14);color:var(--muted)}
 .healthbar{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:2px 0 10px}
@@ -371,19 +375,19 @@ td .firmdot{color:var(--dim);font-size:11px}
 .attr .track i{display:block;height:100%}
 .attr .a-val{text-align:right;font-variant-numeric:tabular-nums}
 .dir.BUY{color:var(--ok)}.dir.SELL{color:var(--crit)}
-table.hm{border-collapse:collapse;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;margin:2px}
-table.hm th{color:var(--muted);font-weight:500;padding:5px 7px;text-align:center;font-size:10px;letter-spacing:.5px}
+table.hm{border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;margin:2px}
+table.hm th{color:var(--muted);font-weight:500;padding:7px 9px;text-align:center;font-size:11px;letter-spacing:.5px}
 table.hm tbody th{text-align:right;color:var(--ink);position:sticky;left:0;background:var(--panel-2);z-index:1}
-td.hm-cell{padding:6px 8px;text-align:center;color:var(--ink);border:1px solid var(--bg);white-space:nowrap;min-width:46px}
+td.hm-cell{padding:9px 11px;text-align:center;color:var(--ink);border:1px solid var(--bg);white-space:nowrap;min-width:58px}
 td.hm-empty{border:1px solid var(--bg);background:rgba(28,63,67,.22)}
 select.calsel{font-family:var(--mono);font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 select.calsel:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
-table.cal{border-collapse:collapse;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;margin:2px}
-table.cal th{color:var(--muted);font-weight:500;padding:5px 7px;font-size:10px;text-align:center;letter-spacing:.5px}
-table.cal tbody th{text-align:right;color:var(--muted);min-width:34px}
-td.cal-cell{border:1px solid var(--bg);min-width:54px;height:38px;text-align:center;vertical-align:top;padding:3px 6px;color:var(--ink);white-space:nowrap}
+table.cal{border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;margin:2px}
+table.cal th{color:var(--muted);font-weight:500;padding:7px 9px;font-size:11px;text-align:center;letter-spacing:.5px}
+table.cal tbody th{text-align:right;color:var(--muted);min-width:40px}
+td.cal-cell{border:1px solid var(--bg);min-width:66px;height:46px;text-align:center;vertical-align:top;padding:5px 8px;color:var(--ink);white-space:nowrap}
 td.cal-empty{background:rgba(28,63,67,.16);color:var(--dim)}
-.cal-d{display:block;font-size:9px;color:var(--muted);text-align:left;margin-bottom:1px}
+.cal-d{display:block;font-size:10px;color:var(--muted);text-align:left;margin-bottom:2px}
 footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11.5px;line-height:1.7}
 .caption{color:var(--muted)}.caption b{color:var(--ink)}
 .err-banner{background:rgba(239,107,83,.12);border:1px solid rgba(239,107,83,.4);color:var(--crit);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:12.5px;margin:16px 0}
@@ -397,6 +401,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <div class="tf stage" id=stagef></div>
   <div class=kpis id=kpis></div>
   <p class=sec-note style="margin-top:4px">Headline = ledger (all accounts, reconciles with Tradovate). Breakdowns below cover <b id=tflabel style="color:var(--ink)">all time</b>; buffers are live "now" state. <span id=asof></span></p>
+  <div id=topStats></div>
   <nav class=tabs role=tablist aria-label="Command center levels">
     <button class=tab role=tab aria-selected=true  data-panel=fleet><span class=lv>L0</span>Fleet</button>
     <button class=tab role=tab aria-selected=false data-panel=accounts><span class=lv>L2</span>Accounts</button>
@@ -494,6 +499,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     </tr></thead><tbody></tbody></table></div>
   </section>
   <footer>
+    <div id=sysStatus style="margin-bottom:12px"></div>
     <div class=caption><b>Source:</b> Accounts DB (buffers) + local Fills export (asset edge), server-side. <span id=footnet></span></div>
     <div style="margin-top:8px">Live cockpit · <b style="color:var(--aqua)">app.mex-traders.com</b> — no browser scraper. Notion stays the records backend.</div>
   </footer>
@@ -505,6 +511,13 @@ const money0=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFrac
 const signed=n=>(n>=0?"+":"−")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const moneyK=n=>{const a=Math.abs(n),s=n>=0?"+":"−";return a>=1000?s+(a/1000).toFixed(1)+"k":s+Math.round(a);};
 const pfCls=pf=>pf==null?"":(pf>=1?"pos":"neg");
+// perceptual colour scale: √-compressed so small edges stay visible and outliers don't blow out
+function heatColor(v,max){
+  if(!v||!max)return "transparent";
+  const t=Math.min(1,Math.sqrt(Math.abs(v)/max));
+  const a=(0.14+0.62*t).toFixed(2);
+  return v>=0?`rgba(53,200,138,${a})`:`rgba(239,107,83,${a})`;
+}
 function tiles(items){return '<div class=stiles>'+items.map(i=>`<div class=stile><div class=sl>${i.lab}</div><div class="sv ${i.cls||''}">${i.val}</div></div>`).join('')+'</div>';}
 function statItems(s){s=s||{};const win=s.win_pct??s.win_rate??s.win,heat=s.heat??s.mae;
   return [
@@ -520,6 +533,19 @@ function fleetTiles(f){f=f||{};return tiles(statItems(f).concat([
   {lab:"Best day",val:signed(f.best_day||0),cls:"pos"},
   {lab:"Worst day",val:signed(f.worst_day||0),cls:"neg"},
   {lab:"Up / Down",val:(f.up_days||0)+" / "+(f.down_days||0)}]));}
+function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h`:(h?`${h}h ${m}m`:`${m}m`);}
+function sdot(state){const c=state==="ok"?"var(--ok)":state==="warn"?"var(--warn)":"var(--crit)";return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;}
+function renderStatus(){
+  const st=CMD.status||{},f=CMD.fleet||{};
+  const items=[
+    sdot("ok")+"server up "+(st.uptime_s!=null?fmtUptime(st.uptime_s):"—"),
+    sdot(st.data_through?"ok":"warn")+"data through "+(st.data_through||"—"),
+    sdot(st.notion_ok?"ok":"warn")+"Notion "+(st.notion_ok?"connected":"check"),
+    sdot((st.trades_total||0)>0?"ok":"warn")+"trade log "+((st.trades_total||0)>0?st.trades_total+" trades":"empty"),
+    sdot((f.breached||0)===0?"ok":"warn")+((f.breached||0)+" breached"),
+  ];
+  $("#sysStatus").innerHTML='<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted)">'+items.map(i=>`<span>${i}</span>`).join("")+'</div>';
+}
 const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
 const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
@@ -698,8 +724,7 @@ function drawCalendar(){
     for(let i=0;i<7;i++){
       const iso=cur.toISOString().slice(0,10);
       if(iso in series){const v=series[iso];wtot+=v;total+=v;any=true;
-        const a=Math.min(1,Math.abs(v)/mx);const col=v>=0?`rgba(53,200,138,${(0.12+0.6*a).toFixed(2)})`:`rgba(239,107,83,${(0.12+0.6*a).toFixed(2)})`;
-        row+=`<td class=cal-cell style="background:${col}" title="${iso} · ${signed(v)}"><span class=cal-d>${cur.getUTCDate()}</span>${moneyK(v)}</td>`;
+        row+=`<td class=cal-cell style="background:${heatColor(v,mx)}" title="${iso} · ${signed(v)}"><span class=cal-d>${cur.getUTCDate()}</span>${moneyK(v)}</td>`;
       } else {
         row+=`<td class="cal-cell cal-empty"><span class=cal-d>${cur.getUTCDate()}</span></td>`;
       }
@@ -720,9 +745,7 @@ function renderHeatmap(){
   const map={};cells.forEach(c=>map[c.dow+"_"+c.hour]=c);
   const mx=Math.max(1,...cells.map(c=>Math.abs(c.net)));
   const cell=(d,h)=>{const c=map[d+"_"+h];if(!c)return '<td class=hm-empty></td>';
-    const a=Math.min(1,Math.abs(c.net)/mx);
-    const col=c.net>=0?`rgba(53,200,138,${(0.12+0.6*a).toFixed(2)})`:`rgba(239,107,83,${(0.12+0.6*a).toFixed(2)})`;
-    return `<td class=hm-cell style="background:${col}" title="${DOW[d]} ${h}:00 ET · ${c.n} trade(s) · ${signed(c.net)}">${moneyK(c.net)}</td>`;};
+    return `<td class=hm-cell style="background:${heatColor(c.net,mx)}" title="${DOW[d]} ${h}:00 ET · ${c.n} trade(s) · ${signed(c.net)}">${moneyK(c.net)}</td>`;};
   let html='<table class=hm><thead><tr><th></th>'+hours.map(h=>`<th>${h}h</th>`).join('')+'</tr></thead><tbody>';
   html+=dows.map(d=>`<tr><th>${DOW[d]}</th>`+hours.map(h=>cell(d,h)).join('')+'</tr>').join('');
   grid.innerHTML=html+'</tbody></table>';
@@ -732,6 +755,7 @@ async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
+  $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";

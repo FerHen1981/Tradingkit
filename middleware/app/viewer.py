@@ -395,6 +395,9 @@ td .firmdot{color:var(--dim);font-size:11px}
 .stile .sv{font-family:var(--mono);font-size:19px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums}
 .tag.micro{background:rgba(63,208,189,.14);color:var(--aqua)}
 .tag.full{background:rgba(132,150,166,.14);color:var(--muted)}
+.attn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px}
+.attn-h{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13.5px}
+.attn-d{font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-top:4px}
 .healthbar{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:2px 0 10px}
 .healthbar span{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--bg)}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
@@ -434,6 +437,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <div id=topStats></div>
   <nav class=tabs role=tablist aria-label="Command center levels">
     <button class=tab role=tab aria-selected=true  data-panel=fleet><span class=lv>L0</span>Fleet</button>
+    <button class=tab role=tab aria-selected=false data-panel=attention><span class=lv>!</span>Attention</button>
     <button class=tab role=tab aria-selected=false data-panel=accounts><span class=lv>L2</span>Accounts</button>
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
@@ -454,6 +458,11 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
         <div class=row id=feesRow style="margin-top:12px;padding-top:9px;border-top:1px solid var(--line)"><span>Total fees (window)</span><b></b></div></div>
       <div class=card><div class=ey>Watchlist · lowest buffer</div><div id=watch style="margin-top:10px"></div></div>
     </div>
+  </section>
+  <section role=tabpanel id=attention hidden>
+    <h2 class=sec>Needs attention</h2>
+    <p class=sec-note>Ranked live signals across the fleet — breach risk, thin buffers, consistency risk and payout-ready — for the selected window/stage.</p>
+    <div id=attnList></div>
   </section>
   <section role=tabpanel id=accounts hidden>
     <h2 class=sec>Survival cockpit</h2>
@@ -573,15 +582,25 @@ function fleetTiles(f){f=f||{};return tiles(statItems(f).concat([
 function fmtUptime(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}d ${h}h`:(h?`${h}h ${m}m`:`${m}m`);}
 function sdot(state){const c=state==="ok"?"var(--ok)":state==="warn"?"var(--warn)":"var(--crit)";return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:6px;vertical-align:middle"></span>`;}
 function renderStatus(){
-  const st=CMD.status||{},f=CMD.fleet||{};
+  const st=CMD.status||{},f=CMD.fleet||{},at=f.attention||{};
+  const need=(at.critical||0)+(at.warning||0);
   const items=[
     sdot("ok")+"server up "+(st.uptime_s!=null?fmtUptime(st.uptime_s):"—"),
     sdot(st.data_through?"ok":"warn")+"data through "+(st.data_through||"—"),
     sdot(st.notion_ok?"ok":"warn")+"Notion "+(st.notion_ok?"connected":"check"),
     sdot((st.trades_total||0)>0?"ok":"warn")+"trade log "+((st.trades_total||0)>0?st.trades_total+" trades":"empty"),
+    sdot((at.critical||0)>0?"crit":(at.warning||0)>0?"warn":"ok")+(need+" need attention"),
     sdot((f.breached||0)===0?"ok":"warn")+((f.breached||0)+" breached"),
   ];
   $("#sysStatus").innerHTML='<div style="display:flex;gap:20px;flex-wrap:wrap;align-items:center;font-family:var(--mono);font-size:12px;color:var(--muted)">'+items.map(i=>`<span>${i}</span>`).join("")+'</div>';
+}
+function renderAttention(){
+  const items=CMD.attention||[];const box=$("#attnList");
+  if(!items.length){box.innerHTML='<div class=card style="color:var(--ok);font-family:var(--mono);font-size:13px">✓ All clear — nothing needs attention right now.</div>';return;}
+  const col={critical:"var(--crit)",warning:"var(--warn)",info:"var(--aqua)"},pill={critical:"h-crit",warning:"h-warn",info:"h-watch"};
+  box.innerHTML=items.map(i=>`<div class=attn style="border-left:3px solid ${col[i.sev]||'var(--muted)'}">
+    <div class=attn-h><b>${i.account}</b> <span style="color:var(--dim)">· ${i.firm}</span><span class="pill ${pill[i.sev]||'h-idle'}" style="margin-left:auto">${i.title}</span></div>
+    <div class=attn-d>${i.detail}</div></div>`).join("");
 }
 const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
@@ -826,7 +845,7 @@ async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
-  $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();
+  $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();renderAttention();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();renderEquity();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";

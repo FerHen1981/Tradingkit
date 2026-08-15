@@ -239,6 +239,41 @@ def _stats(rows: list[dict]) -> dict:
     }
 
 
+_SEV = {"critical": 0, "warning": 1, "info": 2}
+
+
+def _attention(accounts: list[dict]) -> tuple:
+    """Ranked 'needs attention now' signals: breach risk, thin buffers, consistency, payout-ready."""
+    items: list = []
+
+    def flag(a, sev, title, detail):
+        items.append({"sev": sev, "account": a["id"], "firm": a["firm"], "title": title, "detail": detail})
+
+    for a in accounts:
+        bp, health, pay = a.get("bufpct"), a.get("health"), (a.get("payout") or {})
+        if health == "Breached":
+            flag(a, "critical", "Breached", f"buffer {bp:.0f}%" if bp is not None else "below floor")
+        elif bp is not None and bp < 15:
+            flag(a, "critical", "Near breach", f"buffer {bp:.0f}% (${a.get('buffer') or 0:,.0f})")
+        elif bp is not None and bp < 30:
+            flag(a, "warning", "Thin buffer", f"buffer {bp:.0f}% (${a.get('buffer') or 0:,.0f})")
+        elif bp is not None and bp < 50:
+            flag(a, "info", "Watch buffer", f"buffer {bp:.0f}%")
+        if pay.get("stage") == "Funded":
+            cp = pay.get("consistency_pct")
+            if cp is not None and cp >= 25:
+                flag(a, "warning" if cp > 30 else "info", "Consistency risk", f"best day {cp:.0f}% (limit 30%)")
+            if pay.get("eligible"):
+                flag(a, "info", "Payout ready", f"withdrawable ${pay.get('withdrawable') or 0:,.0f}")
+        elif pay.get("stage") == "Eval":
+            tgt, prof = pay.get("target"), pay.get("profit")
+            if tgt and prof is not None and 0 < prof < tgt and prof >= 0.8 * tgt:
+                flag(a, "info", "Near eval target", f"${prof:,.0f} / ${tgt:,.0f}")
+    items.sort(key=lambda x: _SEV.get(x["sev"], 3))
+    counts = {s: sum(1 for x in items if x["sev"] == s) for s in ("critical", "warning", "info")}
+    return items, counts
+
+
 def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None") -> list[dict]:
     """Recent closed trades from the executor's routed-log — used only for dates AFTER the
     last reconciled Fills date, so 'today/this week' populate live while history stays exact."""
@@ -531,6 +566,8 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
                  "alloc_stage": alloc_stage, "alloc_asset": alloc_asset,
                  "correlation": ag["correlation"]}
 
+    attention, attn_counts = _attention(accounts)
+
     return {
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "window": window,
@@ -561,6 +598,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
             "fees": atot.get("comm", 0.0),
             "withdrawable": total_withdrawable,
             "payout_eligible": payout_eligible,
+            "attention": attn_counts,
         },
         "accounts": accounts,
         "assets": assets,
@@ -569,6 +607,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "portfolio": portfolio,
         "calendar": ag["calendar"],
         "equity": ag["equity"],
+        "attention": attention,
         "status": {
             "data_through": max((t["close"] for t in trades), default=None) and
                             max(t["close"] for t in trades).isoformat(),

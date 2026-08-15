@@ -260,3 +260,22 @@ def test_equity_curve_and_projection():
     assert eq["exp_day"] == 40.0                                      # mean daily net
     assert len(eq["proj"]) == 15 and eq["proj"][0]["k"] == 1
     assert eq["proj"][0]["hi"] >= eq["proj"][0]["mid"] >= eq["proj"][0]["lo"]
+
+
+def test_attention_feed_ranking():
+    accts = [
+        {"id": "211", "firm": "Apex", "health": "Breached", "bufpct": -30.0, "buffer": -761, "payout": {"stage": "Eval"}},
+        {"id": "016", "firm": "Apex", "health": "Watch", "bufpct": 45.0, "buffer": 1900,
+         "payout": {"stage": "Funded", "consistency_pct": 33, "eligible": False}},
+        {"id": "013", "firm": "Apex", "health": "Healthy", "bufpct": 214.0, "buffer": 5370,
+         "payout": {"stage": "Funded", "consistency_pct": 12, "eligible": True, "withdrawable": 2870}},
+        {"id": "214", "firm": "Apex", "health": "Healthy", "bufpct": 100.0, "buffer": 2500,
+         "payout": {"stage": "Eval", "target": 3000, "profit": 2600, "eligible": False}},
+    ]
+    items, counts = ds._attention(accts)
+    assert items[0]["sev"] == "critical" and items[0]["account"] == "211"   # breach ranks first
+    titles = {(i["account"], i["title"]) for i in items}
+    assert ("016", "Watch buffer") in titles and ("016", "Consistency risk") in titles
+    assert ("013", "Payout ready") in titles
+    assert ("214", "Near eval target") in titles                            # 2600 ≥ 0.8·3000
+    assert counts["critical"] == 1 and counts["warning"] >= 1

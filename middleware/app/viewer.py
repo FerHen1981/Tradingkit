@@ -243,12 +243,17 @@ class Handler(BaseHTTPRequestHandler):
                         "buffer": round(f.get("survival_buffer") or 0, 2),
                     }
                 allc = command_state("all")
+                wkall = command_state("week")["fleet"]
+                dyall = command_state("day")["fleet"]
                 spark = [c["cum"] for c in allc["equity"]["curve"]][-12:] or [0]
                 widget = {
                     "goal": float(os.environ.get("WIDGET_GOAL", "0")),
                     "dataThrough": allc.get("status", {}).get("data_through") or "",
                     "spark": spark,
                     "stacks": {"all": stack("all"), "funded": stack("funded"), "eval": stack("eval")},
+                    "week": {"net": round(wkall.get("window_net") or 0, 2), "trades": wkall.get("trades") or 0,
+                             "winrate": wkall.get("win_rate") or 0, "pf": wkall.get("pf") or 0},
+                    "today": round(dyall.get("window_net") or 0, 2),
                 }
                 body = json.dumps(widget).encode()
             except Exception as exc:

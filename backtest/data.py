@@ -65,6 +65,12 @@ def _derive(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def resample_tf(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
+    """Aggregate to a canonical timeframe label (1m,5m,10m,15m,30m,1h,2h,3h,4h,1d)."""
+    from .config import tf_minutes
+    return resample(df, tf_minutes(timeframe))
+
+
 def resample(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
     """Aggregate 1-minute bars to N-minute bars, aligned to each session's
     18:00 ET open (bars never span the session boundary or the maintenance

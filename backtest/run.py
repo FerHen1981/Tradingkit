@@ -62,6 +62,8 @@ def main():
     ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
     ap.add_argument("--unit-mode", choices=["Ticks", "Points", "%", "ATR"],
                     help="override distance unit (use ATR to port a config across instruments)")
+    ap.add_argument("--tf", help="timeframe(s) to aggregate the 1m source to; comma-list sweeps "
+                    "(e.g. 5m,15m,1h). Choices: 1m,5m,10m,15m,30m,1h,2h,3h,4h,1d")
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
@@ -89,9 +91,36 @@ def main():
             ap.error("provide one of --preset NAME, --all, or --spec PATH")
         jobs = [(n, PRESETS[n]) for n in names]
 
-    presets = [n for n, _ in jobs]   # for the single-preset guards below
+    # Timeframe(s) to run: --tf wins; else a spec's timeframe; else 1m. A
+    # comma-list sweeps (e.g. --tf 5m,15m,1h) — one job per (strategy x timeframe).
+    from .config import TIMEFRAMES
+    if args.tf:
+        tfs = [t.strip().lower() for t in args.tf.split(",") if t.strip()]
+    elif args.spec and rspec.timeframe:
+        tfs = [str(rspec.timeframe).lower()]
+    else:
+        tfs = ["1m"]
+    for t in tfs:
+        if t not in TIMEFRAMES:
+            ap.error(f"unknown timeframe {t!r}; known: {list(TIMEFRAMES)}")
+
+    # Resample the 1m source once per distinct timeframe (cached).
+    _dfcache: dict[str, "object"] = {}
+    def df_for(tf):
+        if tf not in _dfcache:
+            d = df if tf == "1m" else data_mod.resample_tf(df, tf)
+            print(f"  [{tf}] {len(d):,} bars")
+            _dfcache[tf] = d
+        return _dfcache[tf]
+
+    # Expand jobs across timeframes; label with @tf when sweeping >1.
+    tag = (lambda name, tf: f"{name}@{tf}") if len(tfs) > 1 else (lambda name, tf: name)
+    expanded = [(tag(name, tf), cfg, tf) for name, cfg in jobs for tf in tfs]
+    single = len(expanded) == 1
+
     out = {}
-    for name, cfg in jobs:
+    for name, cfg, tf in expanded:
+        dtf = df_for(tf)
         if args.firm:
             from .firms import program, to_overlay
             p = program(args.firm)
@@ -106,9 +135,9 @@ def main():
         if args.unit_mode:
             cfg = cfg.with_(unit_mode=args.unit_mode)
         if args.funnel:
-            ind = ind_mod.compute(df, cfg)
+            ind = ind_mod.compute(dtf, cfg)
             t0 = time.time()
-            outs = run_funnel(cfg, df, ind, step_sessions=args.funnel_step,
+            outs = run_funnel(cfg, dtf, ind, step_sessions=args.funnel_step,
                               horizon_sessions=args.funnel_horizon)
             s = summarize(outs)
             print(f"\n{'='*70}\n{name}  [EVAL FUNNEL]  ({time.time()-t0:.1f}s)")
@@ -117,10 +146,10 @@ def main():
                   f"BREACH={s['breach']}  TIMEOUT={s['timeout']}  median trades={s['median_trades_to_resolve']}")
             out[name] = s
             continue
-        res, dt = run_one(df, cfg, args.research)
+        res, dt = run_one(dtf, cfg, args.research)
         _print_report(name, res, args.research, dt)
         out[name] = kpis(res)
-        if args.trades_out and len(presets) == 1:
+        if args.trades_out and single:
             trades_frame(res).to_csv(args.trades_out, index=False)
             print(f"  trades written to {args.trades_out}")
     if args.json_out:

@@ -180,3 +180,27 @@ def test_example_file_to_config():
     cfg, unmapped = spec_to_config(validate_file(path, REG))
     assert cfg.name == "El_Toro_v7_PAonly"
     assert cfg.use_gap_filter and cfg.use_vwap_veto
+
+
+# --- timeframe ------------------------------------------------------------- #
+def test_tf_minutes_vocabulary():
+    from backtest.config import TIMEFRAMES, tf_minutes
+    assert TIMEFRAMES["1m"] == 1 and TIMEFRAMES["1h"] == 60
+    assert tf_minutes("4h") == 240 and tf_minutes("1d") == 1440
+    assert tf_minutes("15M") == 15   # case-insensitive
+
+
+def test_tf_minutes_unknown():
+    from backtest.config import tf_minutes
+    with pytest.raises(KeyError):
+        tf_minutes("7m")
+
+
+def test_spec_timeframe_valid():
+    r = validate_spec(_spec(timeframe="15m"), REG)
+    assert r.timeframe == "15m"
+
+
+def test_spec_timeframe_invalid():
+    with pytest.raises(SpecError, match="unknown timeframe"):
+        validate_spec(_spec(timeframe="7m"), REG)

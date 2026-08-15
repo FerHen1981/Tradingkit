@@ -49,6 +49,7 @@ class ResolvedSpec:
     groups: dict[str, dict[str, Any]]   # group -> {param: value}, defaults filled
     families: dict[str, str] = field(default_factory=dict)  # group -> "price_action"|"classic"
     base_preset: str | None = None                          # optional engine Config to start from
+    timeframe: str | None = None                            # optional aggregation timeframe (1m..1d)
     explicit: dict[str, set] = field(default_factory=dict)  # group -> {params the spec set by hand}
 
 
@@ -102,6 +103,12 @@ def validate_spec(spec: dict, registry: dict | None = None) -> ResolvedSpec:
     policy = dict(registry.get("policy") or {})
     policy.update(spec.get("policy") or {})
 
+    timeframe = spec.get("timeframe")
+    if timeframe is not None:
+        from .config import TIMEFRAMES
+        if str(timeframe).lower() not in TIMEFRAMES:
+            raise SpecError(f"unknown timeframe {timeframe!r}; known: {list(TIMEFRAMES)}")
+
     spec_groups = spec.get("groups")
     if not isinstance(spec_groups, dict) or not spec_groups:
         raise SpecError("spec must declare a non-empty 'groups' mapping")
@@ -145,7 +152,8 @@ def validate_spec(spec: dict, registry: dict | None = None) -> ResolvedSpec:
 
     return ResolvedSpec(name=name, base_asset=spec.get("base_asset"),
                         policy=policy, groups=resolved, families=families,
-                        base_preset=spec.get("base_preset"), explicit=explicit)
+                        base_preset=spec.get("base_preset"), timeframe=timeframe,
+                        explicit=explicit)
 
 
 def _validate_value(gname: str, pname: str, pdef: dict, val: Any) -> None:

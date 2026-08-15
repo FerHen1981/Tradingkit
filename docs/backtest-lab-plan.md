@@ -121,6 +121,11 @@ can't accidentally overfit on a knob that isn't declared, and every value it tri
   `catalog` step validates columns and computes the manifest.
 - **Formats**: CSV works today; add optional **Parquet** for the big multi-year/tick files
   (smaller, faster). Resampling (`data.resample`) already exists for tf changes.
+- **Timeframe as a dimension**: you deliver ONE 1-minute source per asset; the engines
+  aggregate it on the fly to any canonical timeframe — `1m,5m,10m,15m,30m,1h,2h,3h,4h,1d`
+  (session-aligned to the 18:00 ET open). A spec can pin `timeframe:`, and the runner sweeps
+  a comma-list (`--tf 5m,15m,1h`) → one job per (strategy × timeframe). Combined with
+  assets × specs × lenses, this is where the combinatorial backtest surface comes from.
 - **No secrets, git-ignored**: `/data/lab/` lives on the VPS only; big files never go in git
   (like `*.db`, `.env` today). Repo carries code + registry + specs; server carries the data.
 

@@ -66,6 +66,22 @@ def contract(symbol: str) -> Contract:
     return CONTRACTS[key]
 
 
+# Canonical timeframe vocabulary: label -> minutes. The engines aggregate the
+# 1-minute source up to any of these (session-aligned to the 18:00 ET open).
+# 1d = one trade-date bar (elapsed//1440 folds a whole session into one bucket).
+TIMEFRAMES = {
+    "1m": 1, "5m": 5, "10m": 10, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "3h": 180, "4h": 240, "1d": 1440,
+}
+
+
+def tf_minutes(label: str) -> int:
+    key = str(label).strip().lower()
+    if key not in TIMEFRAMES:
+        raise KeyError(f"unknown timeframe {label!r}; known: {list(TIMEFRAMES)}")
+    return TIMEFRAMES[key]
+
+
 @dataclass(frozen=True)
 class Config:
     name: str

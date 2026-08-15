@@ -49,6 +49,8 @@ class Payout:
     withdrawable: float          # only > 0 when it's a PA account AND every rule is met
     eligible: bool
     above_safety: float = 0.0    # $ above the safety net (the *potential*, gated by the rules)
+    days_to_go: int = 0          # trading days still needed
+    safety_gap: float = 0.0      # $ still needed to reach the safety-net balance
     rules: list = field(default_factory=list)
 
 
@@ -72,29 +74,36 @@ def evaluate(size, starting, current, stage, daily_pnl: dict) -> Payout | None:
         passed = target is not None and profit >= target
         rules.append(Rule("Profit target", None if target is None else passed,
                            f"${profit:,.0f} / ${target:,.0f}" if target else f"${profit:,.0f}"))
-        rules.append(Rule("Niet breached", current > starting - APEX_DD.get(size, 0),
-                          "boven de floor" if current > starting - APEX_DD.get(size, 0) else "breached"))
+        rules.append(Rule("Not breached", current > starting - APEX_DD.get(size, 0),
+                          "above the floor" if current > starting - APEX_DD.get(size, 0) else "breached"))
         return Payout("Eval", profit, target, trading_days,
                       None if consistency is None else round(100 * consistency, 1),
-                      None, 0.0, passed, rules=rules)   # eval = geen PA → nooit uitkeerbaar
+                      None, 0.0, passed, rules=rules)   # eval = not a PA → never withdrawable
 
     # funded payout checklist
     safety = SAFETY_NET.get(size, 0)
     safety_bal = starting + safety
     above_safety = round(max(0.0, current - safety_bal), 2)     # the potential (gated by rules)
+    days_to_go = max(0, MIN_TRADING_DAYS - trading_days)
+    safety_gap = round(max(0.0, safety_bal - current), 2)
     meets_days = trading_days >= MIN_TRADING_DAYS
     meets_cons = consistency is None or consistency <= CONSISTENCY_LIMIT
     meets_safety = current >= safety_bal
 
-    rules.append(Rule(f"≥ {MIN_TRADING_DAYS} handelsdagen", meets_days,
-                      f"{trading_days} / {MIN_TRADING_DAYS} dagen (≥ ${MIN_DAY_PROFIT:.0f})"))
-    rules.append(Rule("30% consistency", meets_cons,
-                      "n.v.t." if consistency is None else f"beste dag {100*consistency:.0f}% van winst (≤ 30%)"))
-    rules.append(Rule("Safety-net balans", meets_safety,
-                      f"${current:,.0f} / ${safety_bal:,.0f}"))
+    rules.append(Rule("Trading days", meets_days,
+                      f"{trading_days}/{MIN_TRADING_DAYS} met"
+                      if meets_days else f"{days_to_go} more to go ({trading_days}/{MIN_TRADING_DAYS})"))
+    rules.append(Rule("Consistency", meets_cons,
+                      "n/a" if consistency is None else
+                      (f"best day {100*consistency:.0f}% (under 30%)" if meets_cons
+                       else f"best day {100*consistency:.0f}% — spread more (max 30%)")))
+    rules.append(Rule("Safety net", meets_safety,
+                      f"balance ${current:,.0f} above ${safety_bal:,.0f}"
+                      if meets_safety else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}"))
     # PA account AND every rule met → withdrawable; otherwise no pay day (0).
     eligible = meets_days and meets_cons and meets_safety and above_safety > 0
     withdrawable = above_safety if eligible else 0.0
     return Payout("Funded", profit, None, trading_days,
                   None if consistency is None else round(100 * consistency, 1),
-                  round(safety_bal, 2), withdrawable, eligible, above_safety=above_safety, rules=rules)
+                  round(safety_bal, 2), withdrawable, eligible, above_safety=above_safety,
+                  days_to_go=days_to_go, safety_gap=safety_gap, rules=rules)

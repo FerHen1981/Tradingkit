@@ -100,7 +100,9 @@ def test_command_state_assembles_without_token():
         os.environ.pop("NOTION_TOKEN", None)
         st = ds.command_state("all")
         assert st["window"] == "all" and st["accounts"] == []
-        assert st["fleet"]["trades"] == 2 and st["fleet"]["realized_net"] == 52.41
+        assert st["fleet"]["realized_net"] == 0.0        # ledger (no accounts without a token)
+        assert st["fleet"]["window_net"] == 52.41        # trade-log total
+        assert st["fleet"]["trades"] == 2
         assert {a["sym"] for a in st["assets"]} == {"GC", "ES"}
     finally:
         os.environ.clear()

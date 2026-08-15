@@ -56,8 +56,8 @@ _TICK = {"GC": 0.1, "MGC": 0.1, "ES": 0.25, "MES": 0.25, "NQ": 0.25, "MNQ": 0.25
          "YM": 1.0, "MYM": 1.0, "RTY": 0.1, "M2K": 0.1, "CL": 0.01, "MCL": 0.01}
 
 WINDOWS = ("day", "week", "month", "quarter", "rolling", "all")
-_WINDOW_LABEL = {"day": "Vandaag", "week": "Deze week", "month": "Deze maand",
-                 "quarter": "Dit kwartaal", "rolling": "Rolling 30d", "all": "Alles"}
+_WINDOW_LABEL = {"day": "Today", "week": "This week", "month": "This month",
+                 "quarter": "This quarter", "rolling": "Rolling 30d", "all": "All time"}
 
 
 # ---- timeframe -----------------------------------------------------------------------
@@ -355,6 +355,11 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
                   "buffer": v["buffer"] or None} for k, v in firms.items()]
     firm_rows.sort(key=lambda x: -x["net"])
 
+    # headline = ledger truth (sum of account Net PnL) → reconciles with the accounts table,
+    # the firm rollup and Tradovate. The trade-log total (window_net) can include the live
+    # routed-log tail (recent days, no commissions) so it only drives the breakdown cards.
+    realized_ledger = round(sum((a["net"] or 0.0) for a in accounts), 2)
+
     return {
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "window": window,
@@ -362,7 +367,8 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "windows": list(WINDOWS),
         "stage": stage,
         "fleet": {
-            "realized_net": atot["net"],
+            "realized_net": realized_ledger,        # ledger truth — reconciles with firms/Tradovate
+            "window_net": atot["net"],              # trade-log over the window (recent days = live est.)
             "funded_net": funded_net,
             "survival_buffer": fleet_buffer,
             "accounts": len(accounts),

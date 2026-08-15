@@ -232,7 +232,7 @@ class Handler(BaseHTTPRequestHandler):
                 cookie = f"mexsession={_token()}; HttpOnly; Path=/; Max-Age=604800; SameSite=Lax"
                 return self._send(303, b"", "text/plain", {"Location": "/", "Set-Cookie": cookie})
             return self._send(200, LOGIN_HTML.replace("<!--ERR-->",
-                              '<p class="err">Onjuist wachtwoord</p>').encode(), "text/html; charset=utf-8")
+                              '<p class="err">Incorrect password</p>').encode(), "text/html; charset=utf-8")
         return self._send(404, b"not found", "text/plain")
 
 
@@ -263,8 +263,8 @@ font-weight:700;font-size:1rem;cursor:pointer}.err{color:#ef6b53;font-size:.9rem
 <form method=post action=/login>
 <h1>🌴 MEX Command Center</h1><div class=sub>Owner login</div>
 <!--ERR-->
-<input type=password name=password placeholder=Wachtwoord autofocus>
-<button>Inloggen</button>
+<input type=password name=password placeholder=Password autofocus>
+<button>Sign in</button>
 <div class=brand>Pips &amp; Palm Trees Holding</div>
 </form></html>"""
 
@@ -377,7 +377,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <div class=tf id=tf></div>
   <div class="tf stage" id=stagef></div>
   <div class=kpis id=kpis></div>
-  <p class=sec-note style="margin-top:4px">P&amp;L over <b id=tflabel style="color:var(--ink)">alles</b> · gereconcilieerd uit de Fills-export. Buffers zijn live "nu"-state (window-onafhankelijk). <span id=asof></span></p>
+  <p class=sec-note style="margin-top:4px">Headline = ledger (all accounts, reconciles with Tradovate). Breakdowns below cover <b id=tflabel style="color:var(--ink)">all time</b>; buffers are live "now" state. <span id=asof></span></p>
   <nav class=tabs role=tablist aria-label="Command center levels">
     <button class=tab role=tab aria-selected=true  data-panel=fleet><span class=lv>L0</span>Fleet</button>
     <button class=tab role=tab aria-selected=false data-panel=accounts><span class=lv>L2</span>Accounts</button>
@@ -389,17 +389,17 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </nav>
   <section role=tabpanel id=fleet>
     <h2 class=sec>Fleet health</h2>
-    <p class=sec-note>Alle accounts in één oogopslag — verdeeld naar survival-status.</p>
+    <p class=sec-note>Every account at a glance — split by survival status.</p>
     <div class=healthbar id=healthbar></div><div class=legend id=legend></div>
     <div class="grid g2" style="margin-top:22px">
-      <div class=card><div class=ey>P&amp;L attributie · per asset</div><div class=attr id=attr></div>
-        <div class=row id=feesRow style="margin-top:12px;padding-top:9px;border-top:1px solid var(--line)"><span>Fees totaal (window)</span><b></b></div></div>
-      <div class=card><div class=ey>Watchlist · laagste buffer</div><div id=watch style="margin-top:10px"></div></div>
+      <div class=card><div class=ey>P&amp;L attribution · by asset</div><div class=attr id=attr></div>
+        <div class=row id=feesRow style="margin-top:12px;padding-top:9px;border-top:1px solid var(--line)"><span>Total fees (window)</span><b></b></div></div>
+      <div class=card><div class=ey>Watchlist · lowest buffer</div><div id=watch style="margin-top:10px"></div></div>
     </div>
   </section>
   <section role=tabpanel id=accounts hidden>
     <h2 class=sec>Survival cockpit</h2>
-    <p class=sec-note>Per account: waar staat de floor, hoeveel buffer tot breach. <span class=seed>◆ goud</span> = exacte Tradovate-seed · <span class=calc>○ grijs</span> = gereconstrueerd. Net P&amp;L = grootboek-totaal (Notion). Klik een kop om te sorteren.</p>
+    <p class=sec-note>Per account: where the floor sits, how much buffer to breach. <span class=seed>◆ gold</span> = exact Tradovate seed · <span class=calc>○ grey</span> = reconstructed. Net P&amp;L = ledger total (Notion). Click a header to sort.</p>
     <div class=tablewrap><table id=acctTable><thead><tr>
       <th data-k=id data-t=s>Account</th><th data-k=stage data-t=s>Type</th>
       <th data-k=current data-t=n>Current</th><th data-k=floor data-t=n>DD Floor</th>
@@ -408,18 +408,18 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=firms hidden>
-    <h2 class=sec>Per prop-firm</h2>
-    <p class=sec-note>Rollup per firma — kapitaal, buffer en resultaat.</p>
+    <h2 class=sec>By prop firm</h2>
+    <p class=sec-note>Rollup per firm — capital, buffer and result.</p>
     <div class="grid g3" id=firmCards></div>
   </section>
   <section role=tabpanel id=strategies hidden>
-    <h2 class=sec>Per strategie-engine</h2>
-    <p class=sec-note>Eén engine, per asset ingesteld met de "El ___"-varianten. Gevalideerde funded edges: GC + ES; NQ = variance-lottery (eval-only).</p>
+    <h2 class=sec>By strategy engine</h2>
+    <p class=sec-note>One engine, tuned per asset with the "El ___" variants. Validated funded edges: GC + ES; NQ = variance lottery (eval-only).</p>
     <div class="grid g3" id=stratCards></div>
   </section>
   <section role=tabpanel id=assets hidden>
-    <h2 class=sec>Per asset · uitvoeringskwaliteit</h2>
-    <p class=sec-note>De pips-en-ticks-doorsnede: netto, ticks en trefkans per markt.</p>
+    <h2 class=sec>By asset · execution quality</h2>
+    <p class=sec-note>The pips-and-ticks cut: net, ticks and hit-rate per market.</p>
     <div class=tablewrap><table id=assetTable><thead><tr>
       <th data-k=sym data-t=s>Asset</th><th data-k=engine data-t=s>Engine</th>
       <th data-k=n data-t=n>Trades</th><th data-k=win data-t=n>Win %</th>
@@ -428,23 +428,23 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=payout hidden>
-    <h2 class=sec>Payout &amp; regels</h2>
-    <p class=sec-note>Wat is direct uitkeerbaar en welke regels resten. Apex-regels: ≥8 handelsdagen (≥$50/dag) · 30% consistency (beste dag ≤30% van winst) · safety-net balans. <span class=calc>Configureerbaar — verifieer tegen Apex' actuele voorwaarden.</span></p>
+    <h2 class=sec>Payout &amp; rules</h2>
+    <p class=sec-note>What's withdrawable now and what's left to satisfy — PA (funded) accounts only. Apex rules: ≥8 trading days (≥$50/day) · 30% consistency (best day ≤30% of profit) · safety-net balance. <span class=calc>Configurable — verify against Apex's current terms.</span></p>
     <div class="grid g2" id=payoutKpis style="margin-bottom:18px"></div>
     <div class="grid g3" id=payoutCards></div>
   </section>
   <section role=tabpanel id=live hidden>
     <h2 class=sec>Live · intraday</h2>
-    <p class=sec-note id=livenote>Open posities en vandaag gesloten trades — uit de routed-log, elke 15s.</p>
+    <p class=sec-note id=livenote>Open positions and trades closed today — from the routed log, every 15s.</p>
     <div class="grid g2" id=liveKpis style="margin-bottom:18px"></div>
     <div class=tablewrap><table id=liveTable style="min-width:640px"><thead><tr>
       <th>Account</th><th>Type</th><th>Status</th><th class=num>Open</th>
-      <th class=num>Trades</th><th class=num>Realized vandaag</th>
+      <th class=num>Trades</th><th class=num>Realized today</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <footer>
-    <div class=caption><b>Bron:</b> Accounts DB (buffers) + lokale Fills-export (asset-edge), server-side. <span id=footnet></span></div>
-    <div style="margin-top:8px">Live cockpit · <b style="color:var(--aqua)">app.mex-traders.com</b> — geen browser-scraper. Notion blijft de records-backend.</div>
+    <div class=caption><b>Source:</b> Accounts DB (buffers) + local Fills export (asset edge), server-side. <span id=footnet></span></div>
+    <div style="margin-top:8px">Live cockpit · <b style="color:var(--aqua)">app.mex-traders.com</b> — no browser scraper. Notion stays the records backend.</div>
   </footer>
 </div>
 <script>
@@ -456,14 +456,14 @@ const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
 const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
 let CMD={accounts:[],assets:[],firms:[],fleet:{}};
-const WLAB={day:"Dag",week:"Week",month:"Maand",quarter:"Kwartaal",rolling:"Rolling",all:"Alles"};
+const WLAB={day:"Day",week:"Week",month:"Month",quarter:"Quarter",rolling:"Rolling",all:"All"};
 let WIN="all";
 function renderTf(){
   $("#tf").innerHTML=Object.keys(WLAB).map(w=>`<button data-w="${w}" aria-pressed="${w===WIN}">${WLAB[w]}</button>`).join("");
   $("#tf").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
     WIN=b.dataset.w;$("#tf").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));loadCommand();}));
 }
-const SLAB={all:"Alle types",funded:"Funded",eval:"Eval"};
+const SLAB={all:"All types",funded:"Funded",eval:"Eval"};
 let STAGE="all";
 function renderStage(){
   $("#stagef").innerHTML=Object.keys(SLAB).map(s=>`<button data-s="${s}" aria-pressed="${s===STAGE}">${SLAB[s]}</button>`).join("");
@@ -473,11 +473,11 @@ function renderStage(){
 
 function renderKpis(f){
   const k=[
-    {lab:"Realized P&L",val:f.realized_net==null?"—":signed(f.realized_net),cls:cls(f.realized_net||0),note:(f.trades||0)+" trades · gereconcilieerd"},
-    {lab:"Funded P&L",val:f.funded_net==null?"—":signed(f.funded_net),cls:cls(f.funded_net||0),note:"PA-accounts (compoundend)"},
-    {lab:"Survival buffer",val:f.survival_buffer==null?"—":money0(f.survival_buffer),cls:"gold",note:"som van live buffers"},
+    {lab:"Realized P&L",val:f.realized_net==null?"—":signed(f.realized_net),cls:cls(f.realized_net||0),note:"ledger · reconciles"},
+    {lab:"Funded P&L",val:f.funded_net==null?"—":signed(f.funded_net),cls:cls(f.funded_net||0),note:"PA accounts (compounding)"},
+    {lab:"Survival buffer",val:f.survival_buffer==null?"—":money0(f.survival_buffer),cls:"gold",note:"sum of live buffers"},
     {lab:"Accounts",val:(f.accounts||0),cls:"aqua",note:(f.breached||0)+" breached"},
-    {lab:"Best asset",val:f.best_asset?f.best_asset+" "+signed(f.best_asset_net):"—",cls:"gold",note:"grootste edge"},
+    {lab:"Best asset",val:f.best_asset?f.best_asset+" "+signed(f.best_asset_net):"—",cls:"gold",note:"largest edge"},
   ];
   $("#kpis").innerHTML=k.map(x=>`<div class=kpi><div class=lab>${x.lab}</div><div class="val ${x.cls}">${x.val}</div><div class=note>${x.note}</div></div>`).join("");
 }
@@ -506,7 +506,7 @@ function renderAccts(rows){
       <td class=num style="color:${a.buffer==null?'var(--dim)':(a.buffer<0?'var(--crit)':'var(--ink)')}">${a.buffer==null?"—":money(a.buffer)}</td>
       <td class=num><div class=bufcell>${a.bufpct==null?"—":a.bufpct.toFixed(1)+"%"}<span class=bufbar><i style="width:${p}%;background:${h.c}"></i></span></div></td>
       <td class="num ${cls(a.net||0)}">${a.net==null?"—":signed(a.net)}</td>
-      <td class=num><span class="pill ${h.cls}">${a.health}</span></td></tr>`}).join("")||'<tr><td colspan=8 class=calc>geen accounts</td></tr>';
+      <td class=num><span class="pill ${h.cls}">${a.health}</span></td></tr>`}).join("")||'<tr><td colspan=8 class=calc>no accounts</td></tr>';
 }
 let acctSort={k:"hrank",dir:1};
 function sortAccts(k,t){
@@ -522,10 +522,11 @@ function renderFirms(){$("#firmCards").innerHTML=CMD.firms.map(f=>`<div class=ca
   <div class=ey>${f.name}</div><div class="big ${f.net>0?'pos':(f.net<0?'neg':'')}">${f.net?signed(f.net):"—"}</div>
   <div class=row><span>Accounts</span><b>${f.accts}</b></div>
   <div class=row><span>Survival buffer</span><b>${f.buffer?money0(f.buffer):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
+// (strategy card labels below)
 function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class=card>
   <div class=ey><span class="tag ${a.cls}">${a.sym}</span> ${a.robust?'<span style="color:var(--ok)">funded edge</span>':'<span style="color:var(--warn)">eval-only</span>'}</div>
   <div class="big ${cls(a.net)}">${signed(a.net)}</div><div class=row><span>${a.engine}</span></div>
-  <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win-rate</span><b>${a.win.toFixed(1)}%</b></div>
+  <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win rate</span><b>${a.win.toFixed(1)}%</b></div>
   <div class=row><span>Net ticks</span><b>${signed(a.ticks)}</b></div>
   <div class=row><span>$ / trade</span><b>${a.n?money0(a.net/a.n):"—"}</b></div>
   <div class=row><span>Fees</span><b style="color:var(--warn)">${a.comm?"−"+money0(a.comm):"—"}${a.fees_pct!=null?' ('+a.fees_pct+'%)':''}</b></div>
@@ -536,26 +537,25 @@ function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
   <td class="num ${cls(a.ticks)}">${signed(a.ticks)}</td><td class="num ${cls(a.net)}">${signed(a.net)}</td>
   <td class=num style="color:var(--warn)">${a.comm?'−'+money0(a.comm):'—'}${a.fees_pct!=null?' <span class=calc>('+a.fees_pct+'%)</span>':''}</td>
   <td class=num>${a.mfe!=null?a.mfe+'t / '+(a.mae!=null?a.mae+'t':'—'):'<span class=calc>—</span>'}</td>
-  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=9 class=calc>geen trades</td></tr>'}
+  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=9 class=calc>no trades</td></tr>'}
 function renderPayout(){
   const f=CMD.fleet||{};
+  const funded=CMD.accounts.filter(a=>a.payout&&a.payout.stage==='Funded');   // PA accounts only
+  const notElig=funded.filter(a=>!a.payout.eligible).length;
   $("#payoutKpis").innerHTML=
-    `<div class=card><div class=ey>Direct uitkeerbaar · funded</div><div class="big pos">${money0(f.withdrawable||0)}</div>
+    `<div class=card><div class=ey>Withdrawable now</div><div class="big pos">${money0(f.withdrawable||0)}</div>
       <div class=row><span>Accounts eligible</span><b>${f.payout_eligible||0}</b></div></div>`+
-    `<div class=card><div class=ey>Fleet-winst</div><div class="big ${cls(f.realized_net||0)}">${signed(f.realized_net||0)}</div>
-      <div class=row><span>Funded P&amp;L</span><b>${signed(f.funded_net||0)}</b></div></div>`;
-  const rows=CMD.accounts.filter(a=>a.payout);
-  $("#payoutCards").innerHTML=rows.map(a=>{const p=a.payout;
-    const chk=(p.rules||[]).map(r=>{const c=r.ok===true?'var(--ok)':r.ok===false?'var(--crit)':'var(--dim)';
-      const ic=r.ok===true?'✓':r.ok===false?'✕':'·';
-      return `<div class=row><span>${r.name}</span><b style="color:${c}">${ic} ${r.detail}</b></div>`}).join('');
-    const head=p.stage==='Funded'
-      ? (p.eligible
-          ? `<div class="big pos">${money0(p.withdrawable)}</div><div class=ey>uitkeerbaar · <span style="color:var(--ok)">ELIGIBLE</span></div>`
-          : `<div class="big" style="color:var(--warn)">Geen pay&nbsp;day</div><div class=ey>${p.above_safety>0?'potentieel '+money0(p.above_safety)+' · regels open':'onder safety-net'}</div>`)
-      : `<div class="big">${signed(p.profit)}</div><div class=ey>eval · target ${p.target?money0(p.target):'—'}${p.eligible?' · <span style="color:var(--ok)">GEHAALD</span>':''}</div>`;
+    `<div class=card><div class=ey>Funded accounts</div><div class="big">${funded.length}</div>
+      <div class=row><span>Not yet eligible</span><b>${notElig}</b></div>
+      <div class=row><span>Funded P&amp;L (ledger)</span><b class="${cls(f.funded_net||0)}">${signed(f.funded_net||0)}</b></div></div>`;
+  $("#payoutCards").innerHTML=funded.map(a=>{const p=a.payout;
+    const chk=(p.rules||[]).map(r=>{const c=r.ok?'var(--ok)':'var(--warn)';
+      return `<div class=row><span style="color:var(--muted)">${r.name}</span><b style="font-weight:500;color:var(--ink)"><span style="color:${c}">●</span> ${r.detail}</b></div>`}).join('');
+    const head=p.eligible
+      ? `<div class="big pos" style="font-size:23px">${money0(p.withdrawable)}</div><div class=ey style="color:var(--ok)">withdrawable · eligible</div>`
+      : `<div style="font-family:var(--mono);font-size:15px;color:var(--muted);margin:8px 0 3px">Not yet eligible</div><div class=ey>${p.above_safety>0?'potential '+money0(p.above_safety)+' at payout':'below safety net'}</div>`;
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
-      ${head}<div style="margin-top:8px">${chk}</div></div>`}).join('')||'<div class=calc>geen accounts</div>';
+      ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
 
 async function loadCommand(){
@@ -564,27 +564,27 @@ async function loadCommand(){
   CMD=s;renderKpis(s.fleet);renderFleet();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
-  $("#asof").textContent=s.as_of?"· bijgewerkt "+new Date(s.as_of).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}):"";
+  $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";
 }
 async function loadLive(){
   let s;try{s=await(await fetch("/api/state",{cache:"no-store"})).json()}catch(e){return}
-  if(!s||s.error){$("#livenote").textContent="geen live data";return}
+  if(!s||s.error){$("#livenote").textContent="no live data";return}
   const f=s.fleet||{};
   $("#liveKpis").innerHTML=
-    `<div class=card><div class=ey>Realized vandaag</div><div class="big ${cls(f.realized_today||0)}">${money(f.realized_today||0)}</div>
-      <div class=row><span>Open posities</span><b>${f.open_positions||0}</b></div>
-      <div class=row><span>Trades vandaag</span><b>${f.trades_today||0}</b></div></div>`+
-    `<div class=card><div class=ey>Fleet vandaag</div>
+    `<div class=card><div class=ey>Realized today</div><div class="big ${cls(f.realized_today||0)}">${money(f.realized_today||0)}</div>
+      <div class=row><span>Open positions</span><b>${f.open_positions||0}</b></div>
+      <div class=row><span>Trades today</span><b>${f.trades_today||0}</b></div></div>`+
+    `<div class=card><div class=ey>Fleet today</div>
       <div class=row><span>Win rate</span><b>${f.win_rate==null?"—":f.win_rate+"%"}</b></div>
       <div class=row><span>Profit factor</span><b>${f.profit_factor==null?"—":f.profit_factor}</b></div>
-      <div class=row><span>Accounts actief</span><b>${f.accounts||0}</b></div></div>`;
+      <div class=row><span>Accounts active</span><b>${f.accounts||0}</b></div></div>`;
   const rows=s.accounts||[];
   $("#liveTable tbody").innerHTML=rows.map(a=>`<tr><td class=acct>${a.account}</td>
     <td>${a.phase==="funded"?"Funded":"Eval"}</td>
     <td><span class="pill ${a.open.length?'h-ok':'h-idle'}">${a.status}</span></td>
     <td class=num>${a.open.length||"—"}</td><td class=num>${(a.wins+a.losses)||"—"}</td>
-    <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):"—"}</td></tr>`).join("")||'<tr><td colspan=6 class=calc>geen activiteit vandaag</td></tr>';
+    <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):"—"}</td></tr>`).join("")||'<tr><td colspan=6 class=calc>no activity today</td></tr>';
 }
 const tabs=[...document.querySelectorAll(".tab")];
 tabs.forEach(t=>t.addEventListener("click",()=>{

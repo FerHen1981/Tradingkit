@@ -62,6 +62,12 @@ export default config({
         }),
         body: fields.mdx({
           label: "Vrije tekst onderaan",
+          options: {
+            image: {
+              directory: "public/media/home",
+              publicPath: "/media/home/",
+            },
+          },
         }),
       },
     }),
@@ -102,7 +108,19 @@ export default config({
           label: "Uitsluiten van zoekmachines",
           defaultValue: false,
         }),
-        content: fields.mdx({ label: "Inhoud" }),
+        content: fields.mdx({
+          label: "Inhoud",
+          options: {
+            // Without this, an image dropped into the editor is written next to
+            // the .mdx file in src/content — where the static build never serves
+            // it. Pointing at public/ makes an upload land somewhere the site
+            // can actually reach.
+            image: {
+              directory: "public/media/pages",
+              publicPath: "/media/pages/",
+            },
+          },
+        }),
       },
     }),
 
@@ -122,7 +140,19 @@ export default config({
         mark: fields.text({ label: "Markering", description: "Kort teken of emoji." }),
         order: fields.integer({ label: "Volgorde", defaultValue: 100 }),
         draft: fields.checkbox({ label: "Concept", defaultValue: false }),
-        content: fields.mdx({ label: "Toelichting" }),
+        content: fields.mdx({
+          label: "Toelichting",
+          options: {
+            // Without this, an image dropped into the editor is written next to
+            // the .mdx file in src/content — where the static build never serves
+            // it. Pointing at public/ makes an upload land somewhere the site
+            // can actually reach.
+            image: {
+              directory: "public/media/pillars",
+              publicPath: "/media/pillars/",
+            },
+          },
+        }),
       },
     }),
 
@@ -154,7 +184,15 @@ export default config({
           defaultValue: "done",
         }),
         draft: fields.checkbox({ label: "Concept", defaultValue: false }),
-        content: fields.mdx({ label: "Toelichting" }),
+        content: fields.mdx({
+          label: "Toelichting",
+          options: {
+            image: {
+              directory: "public/media/journey",
+              publicPath: "/media/journey/",
+            },
+          },
+        }),
       },
     }),
   },

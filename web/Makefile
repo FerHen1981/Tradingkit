@@ -1,7 +1,7 @@
 # Convenience targets for the web stack. Everything here also works as plain
 # npm / python commands — see README.md.
 
-.PHONY: help install dev-mex dev-ppt build test check-tokens check clean
+.PHONY: help install dev-mex dev-ppt build test check-tokens check-glossary check clean
 
 help:
 	@echo "install       install site dependencies (npm workspaces)"
@@ -10,6 +10,7 @@ help:
 	@echo "build         build both static sites"
 	@echo "test          run the portal test suite"
 	@echo "check-tokens  fail if the portal's palette drifted from the brand tokens"
+	@echo "check-glossary fail on a broken source id or a dead term reference"
 	@echo "check         test + check-tokens + build"
 
 install:
@@ -30,7 +31,10 @@ test:
 check-tokens:
 	python3 scripts/check_tokens.py
 
-check: test check-tokens build
+check-glossary:
+	python3 scripts/check_glossary.py
+
+check: test check-tokens check-glossary build
 
 clean:
 	rm -rf sites/*/dist sites/*/.astro node_modules

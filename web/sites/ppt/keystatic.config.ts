@@ -18,11 +18,148 @@ export default config({
   ui: {
     brand: { name: "Pips & Palm Trees" },
     navigation: {
-      Schrijven: ["posts"],
+      Schrijven: ["posts", "guides"],
+      Naslag: ["glossary"],
       "Vaste pagina's": ["pages"],
     },
   },
   collections: {
+    glossary: collection({
+      label: "Begrippen",
+      slugField: "term",
+      path: "src/content/glossary/*",
+      format: { contentField: "content" },
+      columns: ["term", "category"],
+      schema: {
+        term: fields.slug({
+          name: { label: "Begrip", validation: { isRequired: true } },
+          slug: {
+            label: "URL",
+            description: "Wijzig dit niet meer nadat het begrip gedeeld is.",
+          },
+        }),
+        short: fields.text({
+          label: "Korte definitie",
+          description:
+            "Eén zin. Dit staat in het overzicht en in de zoekresultaten.",
+          multiline: true,
+          validation: { isRequired: true, length: { max: 300 } },
+        }),
+        category: fields.select({
+          label: "Categorie",
+          options: [
+            { label: "Futures & contracten", value: "futures" },
+            { label: "Handel & uitvoering", value: "handel" },
+            { label: "Risico & statistiek", value: "risico" },
+            { label: "Prop firms", value: "propfirms" },
+            { label: "Regelgeving & toezicht", value: "regels" },
+            { label: "Emigratie & fiscaal", value: "emigratie" },
+          ],
+          defaultValue: "handel",
+        }),
+        aliases: fields.array(fields.text({ label: "Synoniem" }), {
+          label: "Synoniemen",
+          description:
+            "Engelse varianten en andere schrijfwijzen. Worden meegenomen in het zoeken.",
+          itemLabel: (props) => props.value,
+        }),
+        authority: fields.checkbox({
+          label: "Steunt op een officiële bron",
+          description:
+            "Aanvinken wanneer de definitie op een toezichthouder, beurs of wet steunt — niet wanneer het alleen praktijkgebruik is.",
+          defaultValue: false,
+        }),
+        sources: fields.array(fields.text({ label: "Bron-id" }), {
+          label: "Bronnen",
+          description:
+            "Id's uit src/data/sources.json, bijvoorbeeld cftc-glossary.",
+          itemLabel: (props) => props.value,
+        }),
+        related: fields.array(fields.text({ label: "Slug" }), {
+          label: "Zie ook",
+          description: "Slugs van verwante begrippen.",
+          itemLabel: (props) => props.value,
+        }),
+        updated: fields.date({ label: "Bijgewerkt op" }),
+        draft: fields.checkbox({ label: "Concept", defaultValue: false }),
+        content: fields.mdx({
+          label: "Toelichting",
+          options: {
+            image: {
+              directory: "public/media/begrippen",
+              publicPath: "/media/begrippen/",
+            },
+          },
+        }),
+      },
+    }),
+
+    guides: collection({
+      label: "Gidsen",
+      slugField: "title",
+      path: "src/content/guides/*",
+      format: { contentField: "content" },
+      columns: ["title", "topic"],
+      entryLayout: "content",
+      schema: {
+        title: fields.slug({
+          name: { label: "Titel", validation: { isRequired: true } },
+        }),
+        summary: fields.text({
+          label: "Samenvatting",
+          multiline: true,
+          validation: { isRequired: true, length: { max: 300 } },
+        }),
+        topic: fields.select({
+          label: "Onderwerp",
+          options: [
+            { label: "Emigratie", value: "emigratie" },
+            { label: "Trading", value: "trading" },
+            { label: "Bedrijf & structuur", value: "bedrijf" },
+            { label: "Geld & administratie", value: "geld" },
+          ],
+          defaultValue: "emigratie",
+        }),
+        level: fields.select({
+          label: "Niveau",
+          options: [
+            { label: "Start hier", value: "start" },
+            { label: "Verdieping", value: "verdieping" },
+            { label: "Gevorderd", value: "gevorderd" },
+          ],
+          defaultValue: "start",
+        }),
+        order: fields.integer({
+          label: "Volgorde",
+          description: "Lager komt eerder in het leerpad.",
+          defaultValue: 100,
+        }),
+        updated: fields.date({
+          label: "Bijgewerkt op",
+          defaultValue: { kind: "today" },
+          validation: { isRequired: true },
+        }),
+        takeaways: fields.array(fields.text({ label: "Punt" }), {
+          label: "Wat je hierna weet",
+          itemLabel: (props) => props.value,
+        }),
+        sources: fields.array(fields.text({ label: "Bron-id" }), {
+          label: "Bronnen",
+          itemLabel: (props) => props.value,
+        }),
+        draft: fields.checkbox({ label: "Concept", defaultValue: false }),
+        content: fields.mdx({
+          label: "Inhoud",
+          options: {
+            image: {
+              directory: "public/media/gidsen",
+              publicPath: "/media/gidsen/",
+            },
+          },
+        }),
+      },
+    }),
+
     posts: collection({
       label: "Posts",
       slugField: "title",

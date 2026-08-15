@@ -20,10 +20,10 @@ export const site = {
   },
 
   nav: [
-    { label: "Alles", href: "/blog" },
-    { label: "Tips", href: "/tags/tips" },
-    { label: "Emigratie", href: "/tags/emigratie" },
-    { label: "Trading", href: "/tags/trading" },
+    { label: "Start hier", href: "/start-hier" },
+    { label: "Gidsen", href: "/gidsen" },
+    { label: "Begrippen", href: "/begrippen" },
+    { label: "Blog", href: "/blog" },
     { label: "Over mij", href: "/over" },
   ],
 
@@ -34,10 +34,18 @@ export const site = {
       {
         title: "Lezen",
         items: [
+          { label: "Start hier", href: "/start-hier" },
+          { label: "Gidsen", href: "/gidsen" },
           { label: "Alle posts", href: "/blog" },
+          { label: "RSS", href: "/rss.xml" },
+        ],
+      },
+      {
+        title: "Naslag",
+        items: [
+          { label: "Begrippenlijst", href: "/begrippen" },
           { label: "Tips & tricks", href: "/tags/tips" },
           { label: "Emigratie", href: "/tags/emigratie" },
-          { label: "RSS", href: "/rss.xml" },
         ],
       },
       {

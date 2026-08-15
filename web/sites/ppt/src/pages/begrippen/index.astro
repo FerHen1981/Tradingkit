@@ -1,0 +1,301 @@
+---
+import Base from "../../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+
+import {
+  allTerms,
+  byLetter,
+  categoryLabel,
+  CATEGORIES,
+  searchIndex,
+} from "../../lib/glossary";
+
+const terms = await allTerms();
+const groups = byLetter(terms);
+const index = searchIndex(terms);
+
+const withAuthority = terms.filter((t) => t.data.authority).length;
+
+/**
+ * schema.org DefinedTermSet. A glossary is one of the few content types search
+ * engines have a purpose-built vocabulary for, and using it is what lets a term
+ * surface as an answer rather than as a page in a list.
+ */
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "DefinedTermSet",
+  name: "Begrippenlijst — Pips & Palm Trees",
+  description:
+    "Begrippen uit de handel in futures en valuta, prop-firm voorwaarden, toezicht en emigratie, met bronvermelding.",
+  hasDefinedTerm: terms.map((t) => ({
+    "@type": "DefinedTerm",
+    name: t.data.term,
+    description: t.data.short,
+    url: new URL(`/begrippen/${t.id}`, Astro.site ?? "https://www.pipsandpalmtrees.com").href,
+  })),
+};
+---
+
+<Base
+  title="Begrippenlijst"
+  description={`${terms.length} begrippen uit de handel in futures en valuta, prop-firm voorwaarden, toezicht en emigratie — met bronvermelding.`}
+>
+  <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} is:inline />
+
+  <Hero
+    eyebrow="Naslag"
+    headline="Begrippenlijst"
+    lead={`${terms.length} begrippen uit het handelen, de regelgeving en de verhuizing. Waar een toezichthouder, beurs of wet het begrip definieert, staat die bron erbij — en waar dat niet zo is, staat dat er ook.`}
+    size="md"
+  />
+
+  <div class="wrap tools">
+    <div class="search">
+      <label class="visually-hidden" for="q">Zoek een begrip</label>
+      <input
+        type="search"
+        id="q"
+        placeholder="Zoek op begrip, synoniem of omschrijving…"
+        autocomplete="off"
+        data-search
+      />
+      <p class="search__count" data-count aria-live="polite">
+        {terms.length} begrippen · {withAuthority} met officiële bron
+      </p>
+    </div>
+
+    <div class="filters" role="group" aria-label="Filter op categorie">
+      <button class="chip is-on" type="button" data-cat="all">Alles</button>
+      {CATEGORIES.map((c) => (
+        <button class="chip" type="button" data-cat={c.key}>{c.label}</button>
+      ))}
+    </div>
+  </div>
+
+  <div class="wrap list">
+    <p class="empty" data-empty hidden>
+      Geen begrip gevonden. Probeer een andere term, of mail me — als het
+      ontbreekt, voeg ik het toe.
+    </p>
+
+    {groups.map((group) => (
+      <section class="group" data-group={group.letter}>
+        <h2 class="group__letter" aria-hidden="true">{group.letter}</h2>
+        <ul class="group__terms">
+          {group.terms.map((t) => (
+            <li class="entry" data-id={t.id} data-cat={t.data.category}>
+              <a class="entry__link" href={`/begrippen/${t.id}`}>
+                <span class="entry__term">
+                  {t.data.term}
+                  {t.data.authority && (
+                    <span class="entry__badge" title="Definitie steunt op een officiële bron">
+                      bron
+                    </span>
+                  )}
+                </span>
+                <span class="entry__short">{t.data.short}</span>
+                <span class="entry__cat">{categoryLabel(t.data.category)}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+  </div>
+
+  <div class="wrap wrap--narrow">
+    <Callout variant="legal">
+      Deze lijst legt begrippen uit. Zij is geen beleggings-, fiscaal of juridisch
+      advies, en de omschrijvingen zijn geen vervanging van de bron waarnaar ze
+      verwijzen. Regels en tarieven veranderen — bij elk begrip staat wanneer wij
+      de bron voor het laatst hebben nagelopen.
+    </Callout>
+  </div>
+
+  <script is:inline define:vars={{ index }}>
+    (function () {
+      const input = document.querySelector("[data-search]");
+      const count = document.querySelector("[data-count]");
+      const empty = document.querySelector("[data-empty]");
+      const entries = Array.from(document.querySelectorAll(".entry"));
+      const groups = Array.from(document.querySelectorAll(".group"));
+      const chips = Array.from(document.querySelectorAll(".chip"));
+      const lookup = new Map(index.map((i) => [i.id, i.haystack]));
+
+      let query = "";
+      let category = "all";
+
+      function apply() {
+        let visible = 0;
+
+        for (const entry of entries) {
+          const matchesCat = category === "all" || entry.dataset.cat === category;
+          const haystack = lookup.get(entry.dataset.id) || "";
+          const matchesQuery = !query || haystack.includes(query);
+          const show = matchesCat && matchesQuery;
+          entry.hidden = !show;
+          if (show) visible++;
+        }
+
+        // A letter heading with nothing under it is noise, so hide the whole
+        // group once all of its terms are filtered away.
+        for (const group of groups) {
+          const any = Array.from(group.querySelectorAll(".entry")).some((e) => !e.hidden);
+          group.hidden = !any;
+        }
+
+        empty.hidden = visible > 0;
+        count.textContent =
+          visible === entries.length
+            ? `${entries.length} begrippen`
+            : `${visible} van ${entries.length} begrippen`;
+      }
+
+      input?.addEventListener("input", (event) => {
+        query = event.target.value.trim().toLowerCase();
+        apply();
+      });
+
+      for (const chip of chips) {
+        chip.addEventListener("click", () => {
+          category = chip.dataset.cat;
+          chips.forEach((c) => c.classList.toggle("is-on", c === chip));
+          apply();
+        });
+      }
+    })();
+  </script>
+</Base>
+
+<style>
+  .tools {
+    display: grid;
+    gap: var(--sp-4);
+    padding-top: var(--sp-6);
+  }
+
+  .search input {
+    width: 100%;
+    font: inherit;
+    font-size: var(--t-lead);
+    padding: 0.8rem 1rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .search input::placeholder { color: var(--dim); }
+
+  .search__count {
+    margin: var(--sp-2) 0 0;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--dim);
+  }
+
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2);
+  }
+
+  .chip {
+    font: inherit;
+    font-size: var(--t-small);
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    padding: 0.35rem 0.9rem;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .chip:hover { color: var(--ink); border-color: var(--line-strong); }
+
+  .chip.is-on {
+    color: var(--brand-petrol);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+
+  .list { padding-block: var(--sp-6) var(--sp-8); }
+
+  .empty {
+    color: var(--muted);
+    padding: var(--sp-6) 0;
+  }
+
+  .group { margin-bottom: var(--sp-6); }
+
+  .group__letter {
+    font-family: var(--mono);
+    font-size: var(--t-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    color: var(--accent);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: var(--sp-2);
+    margin-bottom: var(--sp-2);
+  }
+
+  .group__terms {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .entry__link {
+    display: grid;
+    gap: var(--sp-1);
+    padding: var(--sp-3) var(--sp-3) var(--sp-3) 0;
+    text-decoration: none;
+    color: inherit;
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+  }
+
+  @media (min-width: 860px) {
+    .entry__link {
+      grid-template-columns: 15rem 1fr 12rem;
+      gap: var(--sp-4);
+      align-items: baseline;
+    }
+  }
+
+  .entry__link:hover .entry__term { color: var(--accent); }
+
+  .entry__term {
+    font-weight: 600;
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+  }
+
+  .entry__badge {
+    font-family: var(--mono);
+    font-size: 0.5625rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    border: 1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+    border-radius: var(--radius-pill);
+    padding: 0.05rem 0.4rem;
+  }
+
+  .entry__short {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+
+  .entry__cat {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--dim);
+  }
+
+  @media (min-width: 860px) {
+    .entry__cat { text-align: right; }
+  }
+</style>

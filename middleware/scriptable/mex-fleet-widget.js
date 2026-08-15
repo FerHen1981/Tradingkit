@@ -60,6 +60,7 @@ if (param === "week") {
 
 const w = new ListWidget()
 w.url = DASHBOARD
+w.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000)   // hint iOS to refresh ~5 min (iOS decides the real cadence)
 w.setPadding(13, 13, 11, 13)
 const bg = new LinearGradient(); bg.locations = [0, 1]; bg.startPoint = new Point(0, 0); bg.endPoint = new Point(1, 1)
 bg.colors = [new Color("#0B2428"), new Color("#06171A")]; w.backgroundGradient = bg

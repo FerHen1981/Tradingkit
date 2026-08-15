@@ -227,9 +227,11 @@ class Handler(BaseHTTPRequestHandler):
             if not _api_authorized(self.path, self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
             try:
+                al = command_state("all")
+                alf = al["fleet"]
                 wk = command_state("week")["fleet"]
                 dy = command_state("day")["fleet"]
-                spark = [c["cum"] for c in command_state("rolling")["equity"]["curve"]][-12:] or [0]
+                spark = [c["cum"] for c in al["equity"]["curve"]][-12:] or [0]
                 widget = {
                     "todayPnl": round(dy.get("window_net") or 0, 2),
                     "goal": float(os.environ.get("WIDGET_GOAL", "0")),
@@ -238,6 +240,13 @@ class Handler(BaseHTTPRequestHandler):
                     "winrate": wk.get("win_rate") or 0,
                     "pf": wk.get("pf") or 0,
                     "spark": spark,
+                    "totalPnl": round(alf.get("realized_net") or 0, 2),
+                    "accounts": alf.get("accounts") or 0,
+                    "breached": alf.get("breached") or 0,
+                    "buffer": round(alf.get("survival_buffer") or 0, 2),
+                    "bestAsset": alf.get("best_asset") or "—",
+                    "bestAssetNet": round(alf.get("best_asset_net") or 0, 2),
+                    "dataThrough": al.get("status", {}).get("data_through") or "",
                 }
                 body = json.dumps(widget).encode()
             except Exception as exc:

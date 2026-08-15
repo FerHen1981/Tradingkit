@@ -1,130 +1,123 @@
-// MEX Fleet — Scriptable home-screen widget (iOS)
-// Shows the live fleet from the cockpit's /api/state: realized today, open positions,
-// trades, win rate. Read-only. Works as Small or Medium widget.
-//
-// Setup (once):
-//   1. Server: set VIEWER_API_TOKEN=<a-long-random-string> in the middleware .env and
-//      restart mex-viewer (so the widget can read without the owner password).
-//   2. iPhone: install "Scriptable" (App Store) → new script → paste this file.
-//   3. Fill BASE + TOKEN below.
-//   4. Home screen → add a Scriptable widget (Small or Medium) → pick this script.
-//      Optionally set "When Interacting: Run Script" or leave "Open URL" via the tap below.
+// MEX Fleet — Scriptable widget (small + medium)
+// Install: Scriptable → + → paste → name "MEX Fleet". Home screen → Scriptable widget → pick it.
+// Data comes from the cockpit's /api/widget. Set TOKEN once the site login is enabled.
 
-const BASE  = "https://app.mex-traders.com";     // your cockpit URL
-const TOKEN = "PASTE_YOUR_VIEWER_API_TOKEN";      // == VIEWER_API_TOKEN on the server
+const ENDPOINT = "https://app.mex-traders.com/api/widget"
+const TOKEN    = ""      // when VIEWER_PASSWORD is set, put the VIEWER_API_TOKEN here
+const DEMO     = false
 
-// ---- palette (matches the cockpit) ----
 const C = {
-  bgTop:  new Color("#0a0e13"),
-  bgBot:  new Color("#16212c"),
-  text:   new Color("#e8eef4"),
-  muted:  new Color("#8496a6"),
-  faint:  new Color("#5b6b7a"),
-  accent: new Color("#2dd4bf"),
-  profit: new Color("#46c96a"),
-  loss:   new Color("#f7645a"),
-};
-
-const money = n => (n >= 0 ? "+" : "−") + "$" + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
-const pnlColor = n => (n > 0 ? C.profit : n < 0 ? C.loss : C.muted);
-
-async function getState() {
-  const req = new Request(`${BASE}/api/state?token=${encodeURIComponent(TOKEN)}`);
-  req.timeoutInterval = 12;
-  return await req.loadJSON();
+  txt:   new Color("#EAF4F1"),
+  sub:   new Color("#84A8A3"),
+  dim:   new Color("#5C807C"),
+  gold:  new Color("#F0B64D"),
+  aqua:  new Color("#3FD0BD"),
+  ok:    new Color("#35C88A"),
+  bad:   new Color("#EF6B53"),
+  line:  new Color("#1C3F43"),
 }
 
-function bg(w) {
-  const g = new LinearGradient();
-  g.colors = [C.bgTop, C.bgBot];
-  g.locations = [0, 1];
-  w.backgroundGradient = g;
-}
-
-function header(w) {
-  const row = w.addStack();
-  row.centerAlignContent();
-  const title = row.addText("🌴 MEX FLEET");
-  title.font = Font.semiboldSystemFont(11);
-  title.textColor = C.muted;
-  row.addSpacer();
-  const dot = row.addText("● live");
-  dot.font = Font.mediumSystemFont(9);
-  dot.textColor = C.accent;
-}
-
-function stat(stack, label, value, color) {
-  const col = stack.addStack();
-  col.layoutVertically();
-  const v = col.addText(String(value));
-  v.font = Font.semiboldSystemFont(15);
-  v.textColor = color || C.text;
-  const l = col.addText(label);
-  l.font = Font.systemFont(9);
-  l.textColor = C.faint;
-}
-
-async function build() {
-  const w = new ListWidget();
-  bg(w);
-  w.setPadding(14, 15, 14, 15);
-  w.url = BASE;                       // tap opens the full cockpit
-
-  let s;
-  try { s = await getState(); } catch (e) { s = null; }
-
-  header(w);
-
-  if (!s || s.error || !s.fleet) {
-    w.addSpacer(6);
-    const t = w.addText(TOKEN.startsWith("PASTE") ? "Set BASE + TOKEN" : "Geen verbinding");
-    t.font = Font.mediumSystemFont(13);
-    t.textColor = C.loss;
-    return w;
+async function getData() {
+  if (!DEMO) {
+    const url = ENDPOINT + (TOKEN ? (ENDPOINT.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : "")
+    try { const j = await new Request(url).loadJSON(); if (j && !j.error) return j } catch (e) {}
   }
-
-  const f = s.fleet;
-  w.addSpacer(8);
-
-  // hero: realized today
-  const hero = w.addText(money(f.realized_today));
-  hero.font = Font.boldSystemFont(config.widgetFamily === "small" ? 26 : 34);
-  hero.textColor = pnlColor(f.realized_today);
-  const cap = w.addText("realized vandaag");
-  cap.font = Font.systemFont(10);
-  cap.textColor = C.muted;
-
-  w.addSpacer(config.widgetFamily === "small" ? 6 : 12);
-
-  if (config.widgetFamily === "small") {
-    const row = w.addStack();
-    stat(row, "open", f.open_positions);
-    row.addSpacer();
-    stat(row, "win%", f.win_rate == null ? "—" : f.win_rate);
-  } else {
-    const row = w.addStack();
-    row.spacing = 18;
-    stat(row, "open posities", f.open_positions);
-    stat(row, "trades", f.trades_today);
-    stat(row, "win rate", f.win_rate == null ? "—" : f.win_rate + "%");
-    stat(row, "profit factor", f.profit_factor == null ? "—" : f.profit_factor);
-    row.addSpacer();
-  }
-
-  w.addSpacer(6);
-  const ago = s.as_of ? new Date(s.as_of).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" }) : "—";
-  const foot = w.addText("bijgewerkt " + ago);
-  foot.font = Font.systemFont(8);
-  foot.textColor = C.faint;
-
-  return w;
+  return { todayPnl: 140, goal: 250, weekPnl: 620, trades: 14, winrate: 57, pf: 1.85,
+           spark: [30, 45, 38, 60, 52, 70, 64, 82, 78], totalPnl: 22088, accounts: 24,
+           breached: 1, buffer: 58155, bestAsset: "MGC", bestAssetNet: 11712, dataThrough: "" }
 }
 
-const widget = await build();
-widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);  // hint iOS to refresh ~5 min
-if (config.runsInWidget) {
-  Script.setWidget(widget);
+const num = (n, f) => (n === null || n === undefined || isNaN(n)) ? f : n
+const money = n => (n >= 0 ? "+$" : "−$") + Math.abs(Math.round(n)).toLocaleString("en-US")
+const moneyK = n => { const a = Math.abs(n); const s = n >= 0 ? "+$" : "−$"
+  return a >= 1000 ? s + (a / 1000).toFixed(1) + "k" : s + Math.round(a) }
+
+function sparkline(vals, w, h, col) {
+  const dc = new DrawContext(); dc.size = new Size(w, h); dc.opaque = false; dc.respectScreenScale = true
+  if (!vals || vals.length < 2) return dc.getImage()
+  const mn = Math.min(...vals), mx = Math.max(...vals), p = new Path()
+  vals.forEach((v, i) => {
+    const x = i / (vals.length - 1) * w
+    const y = h - ((v - mn) / (mx - mn || 1)) * (h - 4) - 2
+    i === 0 ? p.move(new Point(x, y)) : p.addLine(new Point(x, y))
+  })
+  dc.addPath(p); dc.setStrokeColor(col); dc.setLineWidth(3); dc.strokePath()
+  return dc.getImage()
+}
+
+const d = await getData()
+const today = num(d.todayPnl, 0), week = num(d.weekPnl, 0), total = num(d.totalPnl, 0)
+const wr = num(d.winrate, 0), pf = num(d.pf, 0), trades = num(d.trades, 0)
+const accounts = num(d.accounts, 0), breached = num(d.breached, 0), buffer = num(d.buffer, 0)
+const fam = config.widgetFamily || "medium"
+
+const w = new ListWidget()
+const bg = new LinearGradient()
+bg.locations = [0, 1]; bg.startPoint = new Point(0, 0); bg.endPoint = new Point(1, 1)
+bg.colors = [new Color("#0B2428"), new Color("#06171A")]
+w.backgroundGradient = bg
+
+const todayCol = today >= 0 ? C.ok : C.bad
+
+function statusDot(stack) {
+  const dot = stack.addText("●")
+  dot.font = Font.systemFont(9)
+  dot.textColor = breached > 0 ? C.bad : C.ok
+}
+
+function kv(stack, k, v, col) {
+  const r = stack.addStack(); r.layoutHorizontally()
+  const a = r.addText(k); a.font = Font.systemFont(11); a.textColor = C.sub
+  r.addSpacer()
+  const b = r.addText(v); b.font = Font.boldSystemFont(11); b.textColor = col || C.txt
+  stack.addSpacer(2)
+}
+
+if (fam === "small") {
+  w.setPadding(13, 13, 11, 13)
+  const head = w.addStack(); head.layoutHorizontally(); head.centerAlignContent()
+  const t = head.addText("MEX FLEET"); t.font = Font.boldSystemFont(10); t.textColor = C.aqua
+  head.addSpacer(); statusDot(head)
+  w.addSpacer(4)
+  const lbl = w.addText("Today"); lbl.font = Font.systemFont(9); lbl.textColor = C.sub
+  const pnl = w.addText(money(today)); pnl.font = Font.boldSystemFont(23); pnl.textColor = todayCol
+  w.addSpacer(4)
+  w.addImage(sparkline(d.spark, 120, 24, C.gold))
+  w.addSpacer(6)
+  kv(w, "Week", moneyK(week), week >= 0 ? C.ok : C.bad)
+  kv(w, "WR / PF", wr + "% · " + pf.toFixed(2), pf >= 1 ? C.ok : C.sub)
+  kv(w, "At risk", breached + " breached", breached > 0 ? C.bad : C.sub)
 } else {
-  await widget.presentMedium();   // preview when run inside the app
+  w.setPadding(15, 17, 13, 17)
+  const head = w.addStack(); head.layoutHorizontally(); head.centerAlignContent()
+  const t = head.addText("MEX FLEET"); t.font = Font.boldSystemFont(12); t.textColor = C.aqua
+  head.addSpacer()
+  const tot = head.addText(moneyK(total) + " all-time"); tot.font = Font.systemFont(10); tot.textColor = C.sub
+  head.addSpacer(6); statusDot(head)
+  w.addSpacer(8)
+
+  const top = w.addStack(); top.layoutHorizontally(); top.centerAlignContent()
+  const left = top.addStack(); left.layoutVertically()
+  const lbl = left.addText("Today"); lbl.font = Font.systemFont(10); lbl.textColor = C.sub
+  const pnl = left.addText(money(today)); pnl.font = Font.boldSystemFont(26); pnl.textColor = todayCol
+  top.addSpacer()
+  const right = top.addStack(); right.layoutVertically(); right.bottomAlignContent()
+  right.addImage(sparkline(d.spark, 120, 40, C.gold))
+  w.addSpacer(10)
+
+  const grid = w.addStack(); grid.layoutHorizontally()
+  const c1 = grid.addStack(); c1.layoutVertically()
+  kv(c1, "Week", moneyK(week), week >= 0 ? C.ok : C.bad)
+  kv(c1, "Trades", String(trades), C.txt)
+  grid.addSpacer(18)
+  const c2 = grid.addStack(); c2.layoutVertically()
+  kv(c2, "Win rate", wr + "%", wr >= 50 ? C.ok : C.sub)
+  kv(c2, "Profit factor", pf.toFixed(2), pf >= 1.5 ? C.ok : (pf >= 1 ? C.txt : C.sub))
+  grid.addSpacer(18)
+  const c3 = grid.addStack(); c3.layoutVertically()
+  kv(c3, "Accounts", String(accounts), C.txt)
+  kv(c3, "Breached", String(breached), breached > 0 ? C.bad : C.ok)
 }
-Script.complete();
+
+if (config.runsInWidget) { Script.setWidget(w) } else { fam === "small" ? await w.presentSmall() : await w.presentMedium() }
+Script.complete()

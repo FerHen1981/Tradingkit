@@ -39,6 +39,8 @@ def test_funded_too_few_days():
     p = evaluate(50000, 50000, 53000, "Funded", _days([1500, 1500]))   # 2 days only
     assert p.trading_days == 2 and p.eligible is False
     assert any(r.name.startswith("≥") and r.ok is False for r in p.rules)
+    # not all rules met → no pay day: withdrawable is 0, potential is tracked separately
+    assert p.withdrawable == 0.0 and p.above_safety == 400.0
 
 
 def test_funded_consistency_fail():

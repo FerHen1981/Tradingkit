@@ -532,7 +532,9 @@ function renderPayout(){
       const ic=r.ok===true?'✓':r.ok===false?'✕':'·';
       return `<div class=row><span>${r.name}</span><b style="color:${c}">${ic} ${r.detail}</b></div>`}).join('');
     const head=p.stage==='Funded'
-      ? `<div class="big ${p.withdrawable>0?'pos':''}">${money0(p.withdrawable)}</div><div class=ey>uitkeerbaar${p.eligible?' · <span style="color:var(--ok)">ELIGIBLE</span>':''}</div>`
+      ? (p.eligible
+          ? `<div class="big pos">${money0(p.withdrawable)}</div><div class=ey>uitkeerbaar · <span style="color:var(--ok)">ELIGIBLE</span></div>`
+          : `<div class="big" style="color:var(--warn)">Geen pay&nbsp;day</div><div class=ey>${p.above_safety>0?'potentieel '+money0(p.above_safety)+' · regels open':'onder safety-net'}</div>`)
       : `<div class="big">${signed(p.profit)}</div><div class=ey>eval · target ${p.target?money0(p.target):'—'}${p.eligible?' · <span style="color:var(--ok)">GEHAALD</span>':''}</div>`;
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:8px">${chk}</div></div>`}).join('')||'<div class=calc>geen accounts</div>';

@@ -1,0 +1,28 @@
+---
+term: Tick
+short: "De kleinste prijsbeweging die een contract kan maken — de eenheid waarin een markt letterlijk beweegt."
+category: futures
+aliases:
+  - minimum price fluctuation
+  - minimale prijsstap
+authority: true
+sources:
+  - cme-ticks
+  - cme-rulebook-gold
+related:
+  - tickwaarde
+  - punt
+  - pip
+  - slippage
+updated: 2026-08-15
+draft: false
+---
+
+CME Group definieert een tick als de minimale prijsfluctuatie van een contract.
+Die stap wordt door de beurs vastgesteld en verschilt per product, gekozen om
+voldoende liquiditeit en krappe spreads te houden.
+
+Een prijs kan dus niet "een beetje" bewegen: hij springt van tick naar tick. Voor
+de E-mini S&P 500 is die stap 0,25 indexpunt, voor goud tien dollarcent per troy
+ounce. Alles wat je over uitvoeringskwaliteit wilt zeggen — spread, slippage,
+het verschil tussen twee brokers — meet je uiteindelijk in ticks.

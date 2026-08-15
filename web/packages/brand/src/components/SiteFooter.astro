@@ -50,7 +50,7 @@ const year = new Date().getFullYear();
 
 <footer class="foot">
   <div class="wrap">
-    <div class="foot__top">
+    <div class="foot__top" style={`--foot-cols:${columns.length}`}>
       <div class="foot__brand">
         <span class="brand">
           <span class="brand__mark">{mark}</span>
@@ -106,8 +106,13 @@ const year = new Date().getFullYear();
     .foot__top { grid-template-columns: repeat(2, 1fr); }
   }
 
+  /* Het aantal kolommen komt uit de site-config en verschilt per site, dus het
+     raster telt mee in plaats van drie kolommen aan te nemen — anders valt een
+     vierde kolom naar een eigen rij. */
   @media (min-width: 900px) {
-    .foot__top { grid-template-columns: 1.6fr repeat(3, 1fr); }
+    .foot__top {
+      grid-template-columns: minmax(14rem, 1.5fr) repeat(var(--foot-cols, 3), minmax(0, 1fr));
+    }
   }
 
   .brand {

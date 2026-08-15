@@ -5,7 +5,7 @@ Drie dingen, één huisstijl:
 | Wat | Waar | Wat het is |
 |---|---|---|
 | `sites/mex` | www.mex-traders.com | Corporate site. Statisch. |
-| `sites/ppt` | www.pipsandpalmtrees.com | Blog/vlog. Statisch. |
+| `sites/ppt` | www.pipsandpalmtrees.com | Blog, gidsen en begrippenlijst. Statisch. |
 | `portal` | app.mex-traders.com | Besloten dashboard. Draait op de VPS. |
 
 `packages/brand` bevat de gedeelde huisstijl — kleuren, typografie, ritme en de
@@ -40,6 +40,36 @@ is, wordt er geen verbinding met YouTube gemaakt en worden er dus ook geen
 cookies geplaatst — dat is precies waarom de site geen cookiebanner nodig heeft.
 
 Voor de corporate site werkt het identiek met `npm run dev:mex`.
+
+### Een begrip toevoegen aan de begrippenlijst
+
+In dezelfde admin, onder **Naslag → Begrippen**. Een begrip bestaat uit één zin
+(die staat in het overzicht en in de zoekresultaten), een categorie, eventuele
+synoniemen, en een langere toelichting.
+
+Twee velden verdienen aandacht:
+
+- **Steunt op een officiële bron.** Alleen aanvinken wanneer een toezichthouder,
+  beurs of wet het begrip daadwerkelijk definieert. De pagina toont dan een
+  badge, en die badge moet iets waard blijven.
+- **Bronnen.** Vul id's in uit `sites/ppt/src/data/sources.json`. Staat je bron
+  daar nog niet, voeg hem daar dan eerst toe — één plek, zodat een dode link
+  maar één keer gerepareerd hoeft te worden en elke citatie dezelfde vorm heeft.
+
+`make check-glossary` faalt op een onbekend bron-id, een verwijzing naar een
+begrip dat niet bestaat, en op een begrip dat wel de badge draagt maar geen bron
+heeft. Zet dat in CI naast `check-tokens`.
+
+### Een gids schrijven
+
+Onder **Schrijven → Gidsen**. Gidsen staan op onderwerp in plaats van op datum
+en worden bijgewerkt in plaats van opnieuw geschreven — vandaar het verplichte
+veld "bijgewerkt op", dat op de pagina zichtbaar is.
+
+`order` bepaalt de plek in het leerpad op `/start-hier`. Dat pad verwijst naar
+gidsen op hun slug; verwijder je er een, dan verdwijnt die stap stilzwijgend uit
+het pad in plaats van de build te breken. Controleer `/start-hier` dus even na
+het verwijderen of hernoemen van een gids.
 
 ### Vanaf je telefoon publiceren
 
@@ -184,13 +214,14 @@ driverniveau — zelfs een programmeerfout kan er niet in schrijven.
 ## Ontwikkelen
 
 ```bash
-make install       # dependencies
-make dev-mex       # corporate site + CMS
-make dev-ppt       # blog + CMS
-make build         # beide sites statisch bouwen
-make test          # portal-tests
-make check-tokens  # faalt als het palet van het portal is afgeweken
-make check         # alle drie
+make install        # dependencies
+make dev-mex        # corporate site + CMS
+make dev-ppt        # blog + CMS
+make build          # beide sites statisch bouwen
+make test           # portal-tests
+make check-tokens   # faalt als het palet van het portal is afgeweken
+make check-glossary # faalt op een kapot bron-id of een dode verwijzing
+make check          # alles
 ```
 
 ### Waarom het palet twee keer bestaat

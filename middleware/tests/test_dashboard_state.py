@@ -169,3 +169,15 @@ def test_routed_trades_after_date():
     assert len(r) == 1 and r[0]["sym"] == "GC" and r[0]["net"] == 320.0 and r[0]["ticks"] == 40
     assert r[0]["mfe"] == 40 and r[0]["mae"] == 3 and r[0]["comm"] == 0.0   # excursions from the log
     assert ds._load_routed_trades(d, [], dt.date(2026, 8, 14)) == []   # not after Aug-14
+
+
+def test_heatmap_aggregation():
+    today = dt.datetime.now(ds._ET).date()
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today, "hour": 9, "dow": 0},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": -30.0, "ticks": -3, "close": today, "hour": 9, "dow": 0},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 50.0, "ticks": 5, "close": today, "hour": 14, "dow": 2},
+    ]
+    hm = {(c["dow"], c["hour"]): c for c in ds._aggregate(trades, "all")["heatmap"]}
+    assert hm[(0, 9)]["net"] == 70.0 and hm[(0, 9)]["n"] == 2      # 100 − 30, Monday 09h
+    assert hm[(2, 14)]["net"] == 50.0 and hm[(2, 14)]["n"] == 1    # Wednesday 14h

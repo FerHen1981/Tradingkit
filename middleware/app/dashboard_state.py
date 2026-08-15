@@ -186,9 +186,10 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
         net = round(t.gross_pnl - t.commissions, 2)
         move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
         ticks = round(move / t.tick_size) if t.tick_size else 0
-        close = t.exit_ts.astimezone(_ET).date()
+        et = t.exit_ts.astimezone(_ET)
         trades.append({"acct": t.account, "sym": sym, "net": net, "ticks": ticks,
-                       "close": close, "comm": round(t.commissions, 2), "mfe": None, "mae": None})
+                       "close": et.date(), "hour": et.hour, "dow": et.weekday(),
+                       "comm": round(t.commissions, 2), "mfe": None, "mae": None})
     return trades
 
 
@@ -214,7 +215,8 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
             continue
         if any(s in t.account for s in skip):
             continue
-        close = t.exit_ts.astimezone(_ET).date()
+        et = t.exit_ts.astimezone(_ET)
+        close = et.date()
         if after is not None and close <= after:
             continue                                 # already covered by the Fills export
         product = _sym_root(t.symbol)
@@ -226,7 +228,8 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
         else:
             ticks = 0
         out.append({"acct": t.account, "sym": sym, "net": round(t.pnl, 2), "ticks": ticks,
-                    "close": close, "comm": 0.0, "mfe": t.mfe, "mae": t.mae})
+                    "close": close, "hour": et.hour, "dow": et.weekday(),
+                    "comm": 0.0, "mfe": t.mfe, "mae": t.mae})
     return out
 
 
@@ -279,7 +282,18 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
               "n": sum(x["n"] for x in assets),
               "wins": sum(x["wins"] for x in assets),
               "comm": round(sum(x["comm"] for x in assets), 2)}
-    return {"assets": assets, "totals": totals, "acct_net": dict(acct_net)}
+
+    # heatmap: net + count per (weekday 0=Mon, hour ET) over the same filtered rows
+    hm: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
+    for t in rows:
+        if t.get("hour") is None or t.get("dow") is None:
+            continue
+        c = hm[(t["dow"], t["hour"])]
+        c["net"] = round(c["net"] + t["net"], 2)
+        c["n"] += 1
+    heatmap = [{"dow": d, "hour": h, "net": v["net"], "n": v["n"]} for (d, h), v in hm.items()]
+
+    return {"assets": assets, "totals": totals, "acct_net": dict(acct_net), "heatmap": heatmap}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -384,6 +398,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "accounts": accounts,
         "assets": assets,
         "firms": firm_rows,
+        "heatmap": ag["heatmap"],
     }
 
 

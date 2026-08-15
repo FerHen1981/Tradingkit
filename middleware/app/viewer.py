@@ -365,6 +365,11 @@ td .firmdot{color:var(--dim);font-size:11px}
 .attr .track i{display:block;height:100%}
 .attr .a-val{text-align:right;font-variant-numeric:tabular-nums}
 .dir.BUY{color:var(--ok)}.dir.SELL{color:var(--crit)}
+table.hm{border-collapse:collapse;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;margin:2px}
+table.hm th{color:var(--muted);font-weight:500;padding:5px 7px;text-align:center;font-size:10px;letter-spacing:.5px}
+table.hm tbody th{text-align:right;color:var(--ink);position:sticky;left:0;background:var(--panel-2);z-index:1}
+td.hm-cell{padding:6px 8px;text-align:center;color:var(--ink);border:1px solid var(--bg);white-space:nowrap;min-width:46px}
+td.hm-empty{border:1px solid var(--bg);background:rgba(28,63,67,.22)}
 footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11.5px;line-height:1.7}
 .caption{color:var(--muted)}.caption b{color:var(--ink)}
 .err-banner{background:rgba(239,107,83,.12);border:1px solid rgba(239,107,83,.4);color:var(--crit);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:12.5px;margin:16px 0}
@@ -384,6 +389,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
     <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
     <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
     <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
   </nav>
@@ -427,6 +433,11 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
+  <section role=tabpanel id=heatmap hidden>
+    <h2 class=sec>Day × hour heatmap</h2>
+    <p class=sec-note>Net P&amp;L by weekday × hour of day (ET) over the selected window. Green = net positive, red = negative; deeper = bigger. Hover a cell for the trade count.</p>
+    <div class=tablewrap><div id=hmGrid></div></div>
+  </section>
   <section role=tabpanel id=payout hidden>
     <h2 class=sec>Payout &amp; rules</h2>
     <p class=sec-note>What's withdrawable now and what's left to satisfy — PA (funded) accounts only. Apex rules: ≥8 trading days (≥$50/day) · 30% consistency (best day ≤30% of profit) · safety-net balance. <span class=calc>Configurable — verify against Apex's current terms.</span></p>
@@ -452,6 +463,7 @@ const $=s=>document.querySelector(s);
 const money=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
 const money0=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const signed=n=>(n>=0?"+":"−")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
+const moneyK=n=>{const a=Math.abs(n),s=n>=0?"+":"−";return a>=1000?s+(a/1000).toFixed(1)+"k":s+Math.round(a);};
 const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
 const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
@@ -557,12 +569,28 @@ function renderPayout(){
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
+const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function renderHeatmap(){
+  const cells=CMD.heatmap||[];const grid=$("#hmGrid");
+  if(!cells.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';return;}
+  const hours=[...new Set(cells.map(c=>c.hour))].sort((a,b)=>a-b);
+  const dows=[...new Set(cells.map(c=>c.dow))].sort((a,b)=>a-b);
+  const map={};cells.forEach(c=>map[c.dow+"_"+c.hour]=c);
+  const mx=Math.max(1,...cells.map(c=>Math.abs(c.net)));
+  const cell=(d,h)=>{const c=map[d+"_"+h];if(!c)return '<td class=hm-empty></td>';
+    const a=Math.min(1,Math.abs(c.net)/mx);
+    const col=c.net>=0?`rgba(53,200,138,${(0.12+0.6*a).toFixed(2)})`:`rgba(239,107,83,${(0.12+0.6*a).toFixed(2)})`;
+    return `<td class=hm-cell style="background:${col}" title="${DOW[d]} ${h}:00 ET · ${c.n} trade(s) · ${signed(c.net)}">${moneyK(c.net)}</td>`;};
+  let html='<table class=hm><thead><tr><th></th>'+hours.map(h=>`<th>${h}h</th>`).join('')+'</tr></thead><tbody>';
+  html+=dows.map(d=>`<tr><th>${DOW[d]}</th>`+hours.map(h=>cell(d,h)).join('')+'</tr>').join('');
+  grid.innerHTML=html+'</tbody></table>';
+}
 
 async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

@@ -24,3 +24,12 @@ results/*/
 
 # User-built strategies from the Lab 4th-variant builder (kept local to the VPS)
 backtest/specs/custom_*.yaml
+
+# Web (Astro sites)
+node_modules/
+web/sites/*/dist/
+web/sites/*/.astro/
+web/**/.env
+web/portal/users.yaml
+web/portal/*.db
+.wrangler/

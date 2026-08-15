@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <p class="eyebrow">Fleet</p>
+    <h1>Prestatie-overzicht</h1>
+  </div>
+  <p class="fresh">
+    <span class="dot"></span>
+    Momentopname {{ freshness }}
+  </p>
+</div>
+
+{% if unit_mode %}
+  <div class="notice notice--info">
+    <p>
+      <strong>Unit-weergave.</strong> Alle waarden staan in ticks en
+      R-multiples. Een R is de opbrengst gedeeld door het risico dat voor die
+      trade is aangegaan, en is daarmee de enige grootheid die over markten heen
+      optelbaar is. Bedragen en rekeninggegevens maken geen deel uit van deze
+      weergave.
+    </p>
+  </div>
+{% endif %}
+
+{% if not has_data %}
+  <div class="notice notice--bad">
+    <p>
+      <strong>Nog geen gegevens.</strong> Er is nog geen momentopname van het
+      handelsjournaal, of die bevat nog geen gereconcilieerde transacties.
+    </p>
+  </div>
+{% else %}
+
+{% set h = data.headline %}
+<div class="strip" style="--cols: {{ 6 if not unit_mode else 5 }}">
+  <div class="tile tile--hero">
+    <span class="tile__label">Netto resultaat</span>
+    <span class="tile__value num {{ 'pos' if h.r_total and h.r_total > 0 else 'neg' if h.r_total and h.r_total < 0 else '' }}">
+      {{ h.r_total | r }}
+    </span>
+    <span class="tile__note">risico-genormaliseerd over alle markten</span>
+  </div>
+
+  {% if not unit_mode %}
+    <div class="tile tile--money">
+      <span class="tile__label">Netto (USD)</span>
+      <span class="tile__value num {{ 'pos' if h.net_usd > 0 else 'neg' if h.net_usd < 0 else '' }}">
+        {{ h.net_usd | money }}
+      </span>
+      <span class="tile__note">gerealiseerd, na kosten</span>
+    </div>
+  {% endif %}
+
+  <div class="tile">
+    <span class="tile__label">Trades</span>
+    <span class="tile__value num">{{ h.trades | count }}</span>
+    <span class="tile__note">gereconcilieerd</span>
+  </div>
+
+  <div class="tile">
+    <span class="tile__label">Win-rate</span>
+    <span class="tile__value num">{{ h.win_rate | pct }}</span>
+    <span class="tile__note">verwachting per trade {{ h.expectancy_r | r(2) }}</span>
+  </div>
+
+  <div class="tile">
+    <span class="tile__label">Profit factor</span>
+    <span class="tile__value num accent">{{ h.profit_factor | ratio }}</span>
+    <span class="tile__note">bruto winst / bruto verlies, in R</span>
+  </div>
+
+  <div class="tile">
+    <span class="tile__label">Gem. slippage</span>
+    <span class="tile__value num accent-2">{{ h.avg_slippage_ticks | slip }}</span>
+    <span class="tile__note">intentie versus werkelijke fill</span>
+  </div>
+</div>
+
+{% if not curve.empty %}
+<section class="panel">
+  <div class="panel__head">
+    <h2>Cumulatieve R</h2>
+    <span class="panel__note">per maand, doorlopend opgeteld</span>
+  </div>
+
+  <svg viewBox="0 0 {{ curve.width }} {{ curve.height }}" class="curve" role="img"
+       aria-label="Cumulatieve R per maand">
+    <g class="grid">
+      {% for y, value in curve.ticks %}
+        <line x1="46" x2="740" y1="{{ y }}" y2="{{ y }}"></line>
+        <text x="36" y="{{ y }}" dy="0.32em" text-anchor="end">{{ value | round | int }}</text>
+      {% endfor %}
+    </g>
+    <line class="base" x1="46" x2="740" y1="{{ curve.baseline_y }}" y2="{{ curve.baseline_y }}"></line>
+    <path class="area" d="{{ curve.area }}"></path>
+    <path class="line" d="{{ curve.line }}" vector-effect="non-scaling-stroke"></path>
+    <circle class="end" cx="{{ curve.end[0] }}" cy="{{ curve.end[1] }}" r="4"></circle>
+    <g class="xlab">
+      {% for x, label in curve.x_labels %}
+        <text x="{{ x }}" y="{{ curve.height - 8 }}" text-anchor="middle">{{ label }}</text>
+      {% endfor %}
+    </g>
+  </svg>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel__head">
+    <h2>Per markt</h2>
+    <span class="panel__note">
+      netto in de eigen eenheid van elke markt — niet optelbaar over rijen heen
+    </span>
+  </div>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Markt</th>
+          <th scope="col" class="r">Trades</th>
+          <th scope="col" class="r">Win %</th>
+          <th scope="col" class="r">Netto</th>
+          <th scope="col" class="r">R totaal</th>
+          <th scope="col" class="r">PF</th>
+          <th scope="col" class="r">Slippage</th>
+          <th scope="col" class="r">Hold</th>
+          {% if not unit_mode %}<th scope="col" class="r">Netto USD</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in data.markets %}
+          <tr>
+            <th scope="row"><span class="sym">{{ m.symbol }}</span> {{ m.label }}</th>
+            <td class="r num">{{ m.trades | count }}</td>
+            <td class="r num">{{ m.win_rate | pct }}</td>
+            <td class="r num {{ 'pos' if m.net_units > 0 else 'neg' if m.net_units < 0 else '' }}">
+              {{ m.net_units | units(m.unit) }}
+            </td>
+            <td class="r num {{ 'pos' if m.r_total and m.r_total > 0 else 'neg' if m.r_total and m.r_total < 0 else '' }}">
+              {{ m.r_total | r }}
+            </td>
+            <td class="r num">{{ m.profit_factor | ratio }}</td>
+            <td class="r num accent-2">{{ m.slippage_ticks | slip }}</td>
+            <td class="r num dim">{{ m.avg_hold_min | ratio(0) }} min</td>
+            {% if not unit_mode %}
+              <td class="r num {{ 'pos' if m.net_usd > 0 else 'neg' if m.net_usd < 0 else '' }}">
+                {{ m.net_usd | money }}
+              </td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="panel__head">
+    <h2>Rekeningen</h2>
+    <span class="panel__note">
+      {% if unit_mode %}
+        aantallen per fase — identificerende gegevens zijn geen onderdeel van
+        deze weergave
+      {% else %}
+        actuele stand per rekening
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="scroll">
+    <table>
+      {% if unit_mode %}
+        <thead><tr><th scope="col">Fase</th><th scope="col" class="r">Aantal</th></tr></thead>
+        <tbody>
+          {% for a in data.accounts %}
+            <tr><th scope="row">{{ a.phase }}</th><td class="r num">{{ a.count | count }}</td></tr>
+          {% else %}
+            <tr><td colspan="2" class="dim">Geen rekeninggegevens beschikbaar.</td></tr>
+          {% endfor %}
+        </tbody>
+      {% else %}
+        <thead>
+          <tr>
+            <th scope="col">Rekening</th>
+            <th scope="col" class="r">Gerealiseerd</th>
+            <th scope="col" class="r">Open</th>
+            <th scope="col" class="r">Totale waarde</th>
+            <th scope="col" class="r">Bijgewerkt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in data.accounts %}
+            <tr>
+              <th scope="row" class="mono">{{ a.account }}</th>
+              <td class="r num {{ 'pos' if a.realized and a.realized > 0 else 'neg' if a.realized and a.realized < 0 else '' }}">{{ a.realized | money }}</td>
+              <td class="r num">{{ a.open_pnl | money }}</td>
+              <td class="r num">{{ a.total_val | money(2, false) }}</td>
+              <td class="r num dim">{{ a.ts | clock }}</td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="dim">Geen rekeninggegevens beschikbaar.</td></tr>
+          {% endfor %}
+        </tbody>
+      {% endif %}
+    </table>
+  </div>
+</section>
+
+{% endif %}
+{% endblock %}

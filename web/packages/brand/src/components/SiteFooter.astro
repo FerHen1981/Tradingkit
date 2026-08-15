@@ -1,0 +1,211 @@
+---
+/**
+ * Shared footer. Carries the legal identity of the publishing entity and the
+ * standing disclaimer — both non-negotiable on every page of a site that
+ * discusses trading results.
+ */
+interface NavItem {
+  label: string;
+  href: string;
+}
+
+interface Column {
+  title: string;
+  items: NavItem[];
+}
+
+interface Props {
+  mark: string;
+  word: string;
+  /** One-line positioning statement under the mark. */
+  tagline: string;
+  columns: Column[];
+  /** Registered entity line, e.g. "MEX Traders N.V. · Willemstad, Curaçao". */
+  entity: string;
+  /** Chamber of commerce / registration number, if published. */
+  registration?: string;
+  /**
+   * Standing disclaimer. Defaults to the proprietary-trading wording: it
+   * states plainly that no third-party money is managed and nothing on the
+   * site is advice or an offer — the position that keeps a results-showing
+   * site out of regulated-activity territory.
+   */
+  disclaimer?: string;
+  legal: NavItem[];
+}
+
+const {
+  mark,
+  word,
+  tagline,
+  columns,
+  entity,
+  registration,
+  disclaimer = "Wij handelen uitsluitend met eigen kapitaal. Wij beheren geen gelden van derden, verlenen geen beleggingsadvies en doen geen aanbod tot het aangaan van een beleggingsdienst. Alle op deze site getoonde resultaten zijn historisch, betreffen eigen handelsrekeningen en vormen geen indicatie voor toekomstige resultaten. Handelen in futures en valuta brengt aanzienlijk risico met zich mee.",
+  legal,
+} = Astro.props;
+
+const year = new Date().getFullYear();
+---
+
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__top">
+      <div class="foot__brand">
+        <span class="brand">
+          <span class="brand__mark">{mark}</span>
+          <span class="brand__word">{word}</span>
+        </span>
+        <p class="foot__tagline">{tagline}</p>
+      </div>
+
+      {columns.map((col) => (
+        <nav class="foot__col" aria-label={col.title}>
+          <h2 class="foot__coltitle">{col.title}</h2>
+          <ul>
+            {col.items.map((item) => (
+              <li>
+                <a href={item.href}>{item.label}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ))}
+    </div>
+
+    <div class="foot__legal">
+      <p class="foot__disclaimer">{disclaimer}</p>
+      <div class="foot__meta">
+        <span>© {year} {entity}</span>
+        {registration && <span>{registration}</span>}
+        <span class="foot__links">
+          {legal.map((item) => (
+            <a href={item.href}>{item.label}</a>
+          ))}
+        </span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .foot {
+    margin-top: var(--section-y);
+    border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 55%, transparent);
+    padding-block: var(--sp-7) var(--sp-6);
+  }
+
+  .foot__top {
+    display: grid;
+    gap: var(--sp-6);
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 640px) {
+    .foot__top { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (min-width: 900px) {
+    .foot__top { grid-template-columns: 1.6fr repeat(3, 1fr); }
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+  }
+
+  .brand__mark {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 1.0625rem;
+    color: var(--brand-petrol);
+    background: var(--accent);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .brand__word {
+    font-family: var(--mono);
+    font-size: var(--t-small);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .foot__tagline {
+    margin: var(--sp-3) 0 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+    max-width: 34ch;
+  }
+
+  .foot__coltitle {
+    font-family: var(--mono);
+    font-size: var(--t-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 500;
+    margin-bottom: var(--sp-3);
+  }
+
+  .foot__col ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-2);
+  }
+
+  .foot__col a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.875rem;
+  }
+
+  .foot__col a:hover {
+    color: var(--ink);
+  }
+
+  .foot__legal {
+    margin-top: var(--sp-7);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--line);
+  }
+
+  .foot__disclaimer {
+    color: var(--dim);
+    font-size: 0.78125rem;
+    line-height: 1.65;
+    max-width: 92ch;
+    margin-bottom: var(--sp-4);
+  }
+
+  .foot__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-2) var(--sp-5);
+    align-items: center;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--dim);
+  }
+
+  .foot__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-4);
+    margin-left: auto;
+  }
+
+  .foot__links a {
+    color: var(--dim);
+    text-decoration: none;
+  }
+
+  .foot__links a:hover {
+    color: var(--accent);
+  }
+</style>

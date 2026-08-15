@@ -1,0 +1,29 @@
+# Writes the public stats snapshot the marketing sites render.
+#
+#   sudo cp mex-publish.service mex-publish.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now mex-publish.timer
+#
+# A timer rather than a cron line, so the run is logged in the journal and a
+# failure is visible in `systemctl status`.
+
+[Unit]
+Description=Publish the public MEX stats snapshot
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mex
+Group=mex
+WorkingDirectory=/opt/mex/web/portal
+EnvironmentFile=/etc/mex-portal/portal.env
+ExecStart=/opt/mex/web/portal/.venv/bin/python -m app.publish
+
+# The publish job also commits and pushes, so the site rebuilds. Drop this line
+# if you would rather review the change and push by hand.
+ExecStartPost=/opt/mex/web/portal/deploy/publish-push.sh
+
+Nice=10
+NoNewPrivileges=true
+PrivateTmp=true
+SyslogIdentifier=mex-publish

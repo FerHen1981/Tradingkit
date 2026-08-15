@@ -1,0 +1,94 @@
+---
+/**
+ * Every <head> in the group. Owns metadata, social cards, canonical URLs and
+ * the pre-paint theme restore. Sites pass their own identity via props so the
+ * component stays brand-shared but site-neutral.
+ */
+interface Props {
+  title: string;
+  description: string;
+  /** Site name appended after the page title, e.g. "MEX Traders". */
+  siteName: string;
+  /** Absolute site origin, used to build canonical + OG URLs. */
+  origin: string;
+  /** Path of the current page, e.g. "/over". */
+  path: string;
+  /** Site-relative or absolute social image. */
+  image?: string;
+  /** Emoji favicon — cheap, sharp at every size, no asset pipeline. */
+  favicon?: string;
+  locale?: string;
+  /** Blog posts set this so search engines see an article, not a page. */
+  type?: "website" | "article";
+  publishedAt?: Date;
+  /** RSS feed to advertise, if the site has one. */
+  feed?: string;
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description,
+  siteName,
+  origin,
+  path,
+  image = "/og-default.png",
+  favicon = "🌴",
+  locale = "nl_NL",
+  type = "website",
+  publishedAt,
+  feed,
+  noindex = false,
+} = Astro.props;
+
+const canonical = new URL(path, origin).href;
+const ogImage = new URL(image, origin).href;
+const fullTitle = title === siteName ? title : `${title} · ${siteName}`;
+const faviconHref = `data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">${favicon}</text></svg>`
+)}`;
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{fullTitle}</title>
+<meta name="description" content={description} />
+<link rel="canonical" href={canonical} />
+<link rel="icon" href={faviconHref} />
+{noindex && <meta name="robots" content="noindex, nofollow" />}
+
+<meta property="og:type" content={type} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:site_name" content={siteName} />
+<meta property="og:image" content={ogImage} />
+<meta property="og:locale" content={locale} />
+{publishedAt && (
+  <meta property="article:published_time" content={publishedAt.toISOString()} />
+)}
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImage} />
+
+{feed && (
+  <link rel="alternate" type="application/rss+xml" title={siteName} href={feed} />
+)}
+
+<meta name="generator" content={Astro.generator} />
+
+{/* Restore the reader's theme choice before first paint — no flash. */}
+<script is:inline>
+  (function () {
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "light" || t === "dark") {
+        document.documentElement.dataset.theme = t;
+      }
+    } catch (e) {
+      /* private mode / storage disabled — fall back to the OS preference */
+    }
+  })();
+</script>

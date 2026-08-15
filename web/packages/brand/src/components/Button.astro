@@ -1,0 +1,108 @@
+---
+/**
+ * Link-shaped and button-shaped actions share one appearance. Renders an <a>
+ * when given href, a <button> otherwise — never an anchor with a click handler.
+ */
+interface Props {
+  href?: string;
+  variant?: "primary" | "secondary" | "ghost";
+  type?: "button" | "submit";
+  size?: "md" | "lg";
+  /** Set for links that leave the site; adds rel and a visual cue. */
+  external?: boolean;
+  disabled?: boolean;
+}
+
+const {
+  href,
+  variant = "primary",
+  type = "button",
+  size = "md",
+  external = false,
+  disabled = false,
+} = Astro.props;
+
+const Tag = href ? "a" : "button";
+const attrs = href
+  ? {
+      href,
+      ...(external ? { rel: "noopener noreferrer", target: "_blank" } : {}),
+    }
+  : { type, disabled };
+---
+
+<Tag class:list={["btn", `btn--${variant}`, `btn--${size}`]} {...attrs}>
+  <slot />
+  {external && (
+    <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true" class="btn__ext">
+      <path
+        d="M7 17 17 7M9 7h8v8"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  )}
+</Tag>
+
+<style>
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    font-family: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    line-height: 1;
+    padding: 0.7rem 1.15rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .btn--lg {
+    font-size: 0.9375rem;
+    padding: 0.85rem 1.5rem;
+  }
+
+  .btn--primary {
+    background: var(--accent);
+    color: var(--brand-petrol);
+  }
+
+  .btn--primary:hover { filter: brightness(1.08); }
+
+  .btn--secondary {
+    background: transparent;
+    border-color: var(--line-strong);
+    color: var(--ink);
+  }
+
+  .btn--secondary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .btn--ghost {
+    background: transparent;
+    color: var(--muted);
+    padding-inline: var(--sp-2);
+  }
+
+  .btn--ghost:hover { color: var(--ink); }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn__ext { opacity: 0.7; }
+</style>

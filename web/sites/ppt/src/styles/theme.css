@@ -1,0 +1,54 @@
+/* --------------------------------------------------------------------------
+   pipsandpalmtrees.com — site theme
+
+   Same bones as the corporate site, different temperature. This is the whole
+   point of the shared package: a second brand is a token override plus its own
+   content, not a second codebase.
+
+   What changes: the accent warms from trading-desk gold to a sunlit amber, the
+   secondary accent moves from aqua to palm green, headings take a serif so long
+   reads feel editorial rather than institutional, and the measure widens.
+   What does not change: surfaces, ink, spacing, radii, components.
+   -------------------------------------------------------------------------- */
+
+:root {
+  --accent: #f2a541;
+  --accent-dim: #b07726;
+  --accent-2: #5fc9a0;
+
+  /* Editorial pages breathe wider than corporate ones. */
+  --measure: 72ch;
+  --width-narrow: 760px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --accent-dim: #8f5f1c;
+    --accent-2: #14805f;
+  }
+}
+
+:root[data-theme="light"] {
+  --accent-dim: #8f5f1c;
+  --accent-2: #14805f;
+}
+
+:root[data-theme="dark"] {
+  --accent-dim: #b07726;
+  --accent-2: #5fc9a0;
+}
+
+/* Headings in serif — the single strongest signal that this is somebody
+   writing, not a company publishing. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.prose {
+  line-height: 1.78;
+}

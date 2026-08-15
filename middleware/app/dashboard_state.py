@@ -388,6 +388,25 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
         "acct_day": {k: {i: dict(c) for i, c in v.items()} for k, v in cal_acct.items()},
     }
 
+    # equity curve (cumulative net + drawdown from peak) + a forward risk/expectancy band:
+    # project H trading days from daily expectancy ± volatility (√-time widening cone).
+    eq_days = sorted(cal_day.items())
+    cum = peak = 0.0
+    curve = []
+    for iso, v in eq_days:
+        cum = round(cum + v["net"], 2)
+        peak = max(peak, cum)
+        curve.append({"d": iso, "cum": cum, "dd": round(cum - peak, 2)})
+    dn = [v["net"] for _, v in eq_days]
+    m = len(dn)
+    mean = sum(dn) / m if m else 0.0
+    std = (sum((x - mean) ** 2 for x in dn) / m) ** 0.5 if m else 0.0
+    proj = [{"k": k, "mid": round(cum + mean * k, 2),
+             "lo": round(cum + mean * k - std * k ** 0.5, 2),
+             "hi": round(cum + mean * k + std * k ** 0.5, 2)} for k in range(1, 16)]
+    equity = {"curve": curve, "proj": proj, "exp_day": round(mean, 2), "std_day": round(std, 2),
+              "max_dd": round(min((c["dd"] for c in curve), default=0.0), 2)}
+
     # per-account + fleet CIO stats (PF, win%, expectancy, heat) over the filtered rows
     acct_stats = {k: _stats(v) for k, v in acct_rows.items()}
     day_nets = [v["net"] for v in cal_day.values()]
@@ -400,7 +419,7 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
 
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
             "heatmap": heatmap, "correlation": correlation, "calendar": calendar,
-            "acct_stats": acct_stats, "stats": stats}
+            "equity": equity, "acct_stats": acct_stats, "stats": stats}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -549,6 +568,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "heatmap": ag["heatmap"],
         "portfolio": portfolio,
         "calendar": ag["calendar"],
+        "equity": ag["equity"],
         "status": {
             "data_through": max((t["close"] for t in trades), default=None) and
                             max(t["close"] for t in trades).isoformat(),

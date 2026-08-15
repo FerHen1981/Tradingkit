@@ -223,6 +223,27 @@ class Handler(BaseHTTPRequestHandler):
                 log.warning("command state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/api/widget":
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            try:
+                wk = command_state("week")["fleet"]
+                dy = command_state("day")["fleet"]
+                spark = [c["cum"] for c in command_state("rolling")["equity"]["curve"]][-12:] or [0]
+                widget = {
+                    "todayPnl": round(dy.get("window_net") or 0, 2),
+                    "goal": float(os.environ.get("WIDGET_GOAL", "0")),
+                    "weekPnl": round(wk.get("window_net") or 0, 2),
+                    "trades": wk.get("trades") or 0,
+                    "winrate": wk.get("win_rate") or 0,
+                    "pf": wk.get("pf") or 0,
+                    "spark": spark,
+                }
+                body = json.dumps(widget).encode()
+            except Exception as exc:
+                log.warning("widget build failed: %r", exc)
+                body = json.dumps({"error": str(exc)}).encode()
+            return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain")
         return self._send(404, b"not found", "text/plain")
@@ -408,6 +429,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
     <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=equity><span class=lv>L9</span>Equity</button>
     <button class=tab role=tab aria-selected=false data-panel=calendar><span class=lv>L8</span>Calendar</button>
     <button class=tab role=tab aria-selected=false data-panel=portfolio><span class=lv>L7</span>Portfolio</button>
     <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
@@ -454,6 +476,12 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th>PF</th><th>Exp.</th><th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=equity hidden>
+    <h2 class=sec>Equity &amp; drawdown</h2>
+    <p class=sec-note>Cumulative net over the window (gold line) with drawdown from peak, and a forward <b style="color:var(--aqua)">risk/potential band</b> — projected 15 trading days out from daily expectancy ± volatility (the cone widens with √time). Dashed line = expected path.</p>
+    <div id=eqStats></div>
+    <div class=card style="padding:12px 14px"><div id=eqChart></div></div>
   </section>
   <section role=tabpanel id=calendar hidden>
     <h2 class=sec>Performance calendar</h2>
@@ -680,6 +708,42 @@ function renderPortfolio(){
   h+=c.matrix.map((row,i)=>`<tr><th>${c.labels[i]}</th>`+row.map(cell).join('')+'</tr>').join('');
   $("#corrMatrix").innerHTML=h+'</tbody></table>';
 }
+function renderEquity(){
+  const eq=CMD.equity;const box=$("#eqChart");if(!eq)return;
+  const cur=eq.curve||[],proj=eq.proj||[];
+  if(cur.length<2){box.innerHTML='<div class=calc style="padding:16px">not enough days in this window</div>';$("#eqStats").innerHTML='';return;}
+  const W=900,H=300,pL=10,pR=10,pT=14,pB=14,nH=cur.length,nP=proj.length,total=nH+nP;
+  const xs=i=>pL+(i/(total-1))*(W-pL-pR);
+  const vals=[0,...cur.map(c=>c.cum),...proj.map(p=>p.lo),...proj.map(p=>p.hi)];
+  let ymin=Math.min(...vals),ymax=Math.max(...vals);if(ymin===ymax){ymin-=1;ymax+=1;}
+  const pd=(ymax-ymin)*0.08;ymin-=pd;ymax+=pd;
+  const ys=v=>pT+(1-(v-ymin)/(ymax-ymin))*(H-pT-pB);
+  const y0=ys(0).toFixed(1);
+  const hp=cur.map((c,i)=>`${i?'L':'M'}${xs(i).toFixed(1)} ${ys(c.cum).toFixed(1)}`).join(' ');
+  const areaH=`M${xs(0).toFixed(1)} ${y0} `+cur.map((c,i)=>`L${xs(i).toFixed(1)} ${ys(c.cum).toFixed(1)}`).join(' ')+` L${xs(nH-1).toFixed(1)} ${y0} Z`;
+  const lastX=xs(nH-1),lastY=ys(cur[nH-1].cum);
+  const hi=proj.map((p,i)=>`L${xs(nH+i).toFixed(1)} ${ys(p.hi).toFixed(1)}`).join(' ');
+  const lo=proj.slice().reverse().map((p,i)=>`L${xs(total-1-i).toFixed(1)} ${ys(p.lo).toFixed(1)}`).join(' ');
+  const cone=`M${lastX.toFixed(1)} ${lastY.toFixed(1)} ${hi} ${lo} Z`;
+  const mid=`M${lastX.toFixed(1)} ${lastY.toFixed(1)} `+proj.map((p,i)=>`L${xs(nH+i).toFixed(1)} ${ys(p.mid).toFixed(1)}`).join(' ');
+  box.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
+    <line x1="${pL}" y1="${y0}" x2="${W-pR}" y2="${y0}" stroke="#1c3f43" stroke-dasharray="3 4"/>
+    <line x1="${lastX.toFixed(1)}" y1="${pT}" x2="${lastX.toFixed(1)}" y2="${H-pB}" stroke="#1c3f43" stroke-dasharray="2 4"/>
+    <path d="${areaH}" fill="rgba(240,182,77,.12)"/>
+    <path d="${cone}" fill="rgba(63,208,189,.12)"/>
+    <path d="${mid}" fill="none" stroke="#3fd0bd" stroke-width="1.4" stroke-dasharray="5 3" opacity=".85"/>
+    <path d="${hp}" fill="none" stroke="#f0b64d" stroke-width="2.2"/>
+    <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="4" fill="#f0b64d"/></svg>`;
+  const lastCum=cur[nH-1].cum,lp=proj[proj.length-1]||{mid:lastCum,lo:lastCum,hi:lastCum};
+  $("#eqStats").innerHTML=tiles([
+    {lab:"Equity (cum)",val:signed(lastCum),cls:cls(lastCum)},
+    {lab:"Max drawdown",val:money0(eq.max_dd),cls:"neg"},
+    {lab:"Exp / day",val:money0(eq.exp_day),cls:cls(eq.exp_day)},
+    {lab:"Std / day",val:money0(eq.std_day)},
+    {lab:"Proj +"+nP+"d",val:signed(lp.mid),cls:cls(lp.mid-lastCum)},
+    {lab:"Range +"+nP+"d",val:money0(lp.lo)+" … "+money0(lp.hi)},
+  ]);
+}
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function calSeries(){
   const cal=CMD.calendar;if(!cal)return {};
@@ -758,7 +822,7 @@ async function loadCommand(){
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
   $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();renderEquity();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

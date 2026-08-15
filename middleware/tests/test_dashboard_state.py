@@ -245,3 +245,18 @@ def test_product_taxonomy_micro_vs_full():
     assert ds._prod("MGC")[0] == "MGC" and ds._prod("MGC")[2] is True and ds._prod("MGC")[4] is True
     assert ds._prod("GC")[0] == "GC" and ds._prod("GC")[2] is False and ds._prod("GC")[4] is False
     assert ds._prod("MES")[2] is True and ds._prod("ES")[2] is False
+
+
+def test_equity_curve_and_projection():
+    d1, d2, d3 = dt.date(2026, 8, 3), dt.date(2026, 8, 4), dt.date(2026, 8, 5)
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 100.0, "ticks": 0, "close": d1},
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": -40.0, "ticks": 0, "close": d2},
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 60.0, "ticks": 0, "close": d3},
+    ]
+    eq = ds._aggregate(trades, "all")["equity"]
+    assert [c["cum"] for c in eq["curve"]] == [100.0, 60.0, 120.0]   # running cumulative
+    assert eq["curve"][1]["dd"] == -40.0 and eq["max_dd"] == -40.0    # drawdown from peak 100
+    assert eq["exp_day"] == 40.0                                      # mean daily net
+    assert len(eq["proj"]) == 15 and eq["proj"][0]["k"] == 1
+    assert eq["proj"][0]["hi"] >= eq["proj"][0]["mid"] >= eq["proj"][0]["lo"]

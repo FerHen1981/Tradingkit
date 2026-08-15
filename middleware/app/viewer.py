@@ -70,6 +70,15 @@ def build_state() -> dict:
     as_of = max((e.ts for e in events), default=None)
     today = as_of.date() if as_of else None
 
+    # last exit per (account, symbol): a later close on the same instrument means an earlier
+    # still-"open" fill is a phantom (its exit was missed or mismatched in the log).
+    last_close: dict = {}
+    for t in trades:
+        if t.closed and t.exit_ts:
+            k = (t.account, t.symbol)
+            if k not in last_close or t.exit_ts > last_close[k]:
+                last_close[k] = t.exit_ts
+
     accounts: dict[str, dict] = {}
 
     def acct(a: str) -> dict:
@@ -88,6 +97,9 @@ def build_state() -> dict:
         if not t.closed:
             # hide a stale "open": a fill whose exit was never logged (would show a phantom
             # position while the account is actually flat). Genuine intraday opens are recent.
+            lc = last_close.get((t.account, t.symbol))
+            if lc and t.entry_ts and t.entry_ts < lc:
+                continue     # a later trade on this instrument already closed → missed exit
             if as_of and t.entry_ts and (as_of - t.entry_ts).total_seconds() > _STALE_OPEN_H * 3600:
                 continue
             a["open"].append({
@@ -380,7 +392,8 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <p class=sec-note>Alle accounts in één oogopslag — verdeeld naar survival-status.</p>
     <div class=healthbar id=healthbar></div><div class=legend id=legend></div>
     <div class="grid g2" style="margin-top:22px">
-      <div class=card><div class=ey>P&amp;L attributie · per asset</div><div class=attr id=attr></div></div>
+      <div class=card><div class=ey>P&amp;L attributie · per asset</div><div class=attr id=attr></div>
+        <div class=row id=feesRow style="margin-top:12px;padding-top:9px;border-top:1px solid var(--line)"><span>Fees totaal (window)</span><b></b></div></div>
       <div class=card><div class=ey>Watchlist · laagste buffer</div><div id=watch style="margin-top:10px"></div></div>
     </div>
   </section>
@@ -411,7 +424,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th data-k=sym data-t=s>Asset</th><th data-k=engine data-t=s>Engine</th>
       <th data-k=n data-t=n>Trades</th><th data-k=win data-t=n>Win %</th>
       <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
-      <th data-k=edge data-t=s>Edge</th>
+      <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=payout hidden>
@@ -483,6 +496,7 @@ function renderFleet(){
       <b style="width:42px">${a.id}</b><div class=bufbar style="flex:1;width:auto"><i style="width:${p}%;background:${h.c}"></i></div>
       <span style="width:74px;text-align:right;color:${h.c}">${a.buffer==null?"—":money0(a.buffer)}</span>
       <span class="pill ${h.cls}" style="width:64px;text-align:center">${a.health}</span></div>`}).join("")||'<div class=calc>—</div>';
+  const fb=document.querySelector("#feesRow b");if(fb)fb.textContent="−"+money0((CMD.fleet||{}).fees||0);
 }
 function renderAccts(rows){
   $("#acctTable tbody").innerHTML=rows.map(a=>{const h=H(a.health),p=a.bufpct==null?0:Math.max(0,Math.min(100,a.bufpct));
@@ -513,12 +527,16 @@ function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class
   <div class="big ${cls(a.net)}">${signed(a.net)}</div><div class=row><span>${a.engine}</span></div>
   <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win-rate</span><b>${a.win.toFixed(1)}%</b></div>
   <div class=row><span>Net ticks</span><b>${signed(a.ticks)}</b></div>
-  <div class=row><span>$ / trade</span><b>${a.n?money0(a.net/a.n):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
+  <div class=row><span>$ / trade</span><b>${a.n?money0(a.net/a.n):"—"}</b></div>
+  <div class=row><span>Fees</span><b style="color:var(--warn)">${a.comm?"−"+money0(a.comm):"—"}${a.fees_pct!=null?' ('+a.fees_pct+'%)':''}</b></div>
+  <div class=row><span>MFE / MAE</span><b>${a.mfe!=null?a.mfe+"t / "+(a.mae!=null?a.mae+"t":"—"):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
 function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
   <td class=acct><span class="tag ${a.cls}">${a.sym}</span></td><td style="color:var(--muted)">${a.engine}</td>
   <td class=num>${a.n}</td><td class=num>${a.win.toFixed(1)}%</td>
   <td class="num ${cls(a.ticks)}">${signed(a.ticks)}</td><td class="num ${cls(a.net)}">${signed(a.net)}</td>
-  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=7 class=calc>geen trades</td></tr>'}
+  <td class=num style="color:var(--warn)">${a.comm?'−'+money0(a.comm):'—'}${a.fees_pct!=null?' <span class=calc>('+a.fees_pct+'%)</span>':''}</td>
+  <td class=num>${a.mfe!=null?a.mfe+'t / '+(a.mae!=null?a.mae+'t':'—'):'<span class=calc>—</span>'}</td>
+  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=9 class=calc>geen trades</td></tr>'}
 function renderPayout(){
   const f=CMD.fleet||{};
   $("#payoutKpis").innerHTML=

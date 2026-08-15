@@ -42,8 +42,19 @@ def test_trades_dedup_and_pnl():
     assert by["GC"]["robust"] is True
     assert by["ES"]["net"] == 13.75 and by["ES"]["ticks"] == 11
     assert ag["totals"]["n"] == 2 and ag["totals"]["net"] == 52.41
+    assert by["GC"]["comm"] == 1.34 and ag["totals"]["comm"] == 1.34   # 0.67 + 0.67
     assert ag["acct_net"]["PAAPEX2700250000018"] == 38.66
     assert ag["acct_net"]["APEX27002500000205"] == 13.75
+
+
+def test_aggregate_fees_and_excursions():
+    today = dt.datetime.now(ds._ET).date()
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today, "comm": 5.0, "mfe": 40, "mae": 3},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 50.0, "ticks": 5, "close": today, "comm": 3.0, "mfe": 20, "mae": 7},
+    ]
+    gc = ds._aggregate(trades, "all")["assets"][0]
+    assert gc["comm"] == 8.0 and gc["mfe"] == 30.0 and gc["mae"] == 5.0    # avg excursions
 
 
 def test_skip_filters_account():
@@ -154,4 +165,5 @@ def test_routed_trades_after_date():
         f.write("\n".join(lines) + "\n")
     r = ds._load_routed_trades(d, [], dt.date(2026, 8, 13))       # Aug-14 close is after Aug-13
     assert len(r) == 1 and r[0]["sym"] == "GC" and r[0]["net"] == 320.0 and r[0]["ticks"] == 40
+    assert r[0]["mfe"] == 40 and r[0]["mae"] == 3 and r[0]["comm"] == 0.0   # excursions from the log
     assert ds._load_routed_trades(d, [], dt.date(2026, 8, 14)) == []   # not after Aug-14

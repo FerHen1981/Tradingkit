@@ -187,8 +187,8 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
         move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
         ticks = round(move / t.tick_size) if t.tick_size else 0
         close = t.exit_ts.astimezone(_ET).date()
-        trades.append({"acct": t.account, "sym": sym, "net": net,
-                       "ticks": ticks, "close": close})
+        trades.append({"acct": t.account, "sym": sym, "net": net, "ticks": ticks,
+                       "close": close, "comm": round(t.commissions, 2), "mfe": None, "mae": None})
     return trades
 
 
@@ -225,8 +225,8 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
             ticks = round(move / tick)
         else:
             ticks = 0
-        out.append({"acct": t.account, "sym": sym, "net": round(t.pnl, 2),
-                    "ticks": ticks, "close": close})
+        out.append({"acct": t.account, "sym": sym, "net": round(t.pnl, 2), "ticks": ticks,
+                    "close": close, "comm": 0.0, "mfe": t.mfe, "mae": t.mae})
     return out
 
 
@@ -242,7 +242,8 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     if stage in ("funded", "eval"):
         rows = [t for t in rows if _phase(t["acct"]).lower() == stage]
 
-    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0})
+    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0,
+                                                "comm": 0.0, "mfe": [], "mae": []})
     acct_net: dict[str, float] = defaultdict(float)
     for t in rows:
         a = agg[t["sym"]]
@@ -250,22 +251,34 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
         a["wins"] += 1 if t["net"] > 0 else 0
         a["net"] = round(a["net"] + t["net"], 2)
         a["ticks"] += t["ticks"]
+        a["comm"] = round(a["comm"] + t.get("comm", 0.0), 2)
+        if t.get("mfe") is not None:
+            a["mfe"].append(t["mfe"])
+        if t.get("mae") is not None:
+            a["mae"].append(t["mae"])
         acct_net[t["acct"]] = round(acct_net[t["acct"]] + t["net"], 2)   # full id — 013 collision-safe
+
+    def _avg(xs):
+        return round(sum(xs) / len(xs), 1) if xs else None
 
     assets = []
     for sym, a in agg.items():
+        gross = round(a["net"] + a["comm"], 2)
         assets.append({
             "sym": sym, "engine": _ENGINE.get(sym, "—"),
             "n": a["n"], "wins": a["wins"],
             "win": round(100 * a["wins"] / a["n"], 1) if a["n"] else 0.0,
             "ticks": int(a["ticks"]), "net": a["net"],
+            "comm": a["comm"], "fees_pct": round(100 * a["comm"] / gross, 1) if gross > 0 else None,
+            "mfe": _avg(a["mfe"]), "mae": _avg(a["mae"]),
             "robust": sym in _FUNDED_EDGE, "edge": _EDGE_LABEL.get(sym, "—"),
             "cls": {"GC": "gc", "ES": "es"}.get(sym, "nq"),
         })
     assets.sort(key=lambda x: -x["net"])
     totals = {"net": round(sum(x["net"] for x in assets), 2),
               "n": sum(x["n"] for x in assets),
-              "wins": sum(x["wins"] for x in assets)}
+              "wins": sum(x["wins"] for x in assets),
+              "comm": round(sum(x["comm"] for x in assets), 2)}
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net)}
 
 
@@ -358,6 +371,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
             "win_rate": round(100 * atot["wins"] / atot["n"], 1) if atot["n"] else None,
             "best_asset": best["sym"] if best else None,
             "best_asset_net": best["net"] if best else None,
+            "fees": atot.get("comm", 0.0),
             "withdrawable": total_withdrawable,
             "payout_eligible": payout_eligible,
         },

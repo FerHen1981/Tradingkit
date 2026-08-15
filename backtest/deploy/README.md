@@ -35,3 +35,17 @@ upload panel. Upload a raw export straight from the browser; it is normalized
 and cataloged server-side into `/data/lab/datasets/<name>/`.
 
 Update later: `cd /root/mex-journal && git pull && sudo systemctl restart mex-lab`.
+
+## 5. Auto-deploy (optional — install once, then pushes deploy themselves)
+So you never have to `git pull && restart` by hand again: a timer fast-forwards
+the dev branch every 2 min and restarts `mex-lab` only when the remote moved.
+```bash
+sudo cp /root/mex-journal/backtest/deploy/mex-lab-autopull.service /etc/systemd/system/
+sudo cp /root/mex-journal/backtest/deploy/mex-lab-autopull.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mex-lab-autopull.timer
+# see it work:
+systemctl list-timers mex-lab-autopull --no-pager
+journalctl -u mex-lab-autopull --no-pager -n 10
+```
+Safe by design: `git pull --ff-only` (never rewrites), restart only on change.

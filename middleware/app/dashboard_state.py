@@ -319,8 +319,24 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     matrix = [[1.0 if s1 == s2 else _pearson(series[s1], series[s2]) for s2 in labels] for s1 in labels]
     correlation = {"labels": labels, "matrix": matrix, "days": len(day_list)}
 
+    # calendar: daily net for the whole fleet, per asset/strategy, and per account
+    cal_day: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
+    cal_asset: dict = defaultdict(lambda: defaultdict(float))
+    cal_acct: dict = defaultdict(lambda: defaultdict(float))
+    for t in rows:
+        iso = t["close"].isoformat()
+        cal_day[iso]["net"] = round(cal_day[iso]["net"] + t["net"], 2)
+        cal_day[iso]["n"] += 1
+        cal_asset[t["sym"]][iso] = round(cal_asset[t["sym"]][iso] + t["net"], 2)
+        cal_acct[t["acct"][-3:]][iso] = round(cal_acct[t["acct"][-3:]][iso] + t["net"], 2)
+    calendar = {
+        "by_day": [{"d": k, "net": v["net"], "n": v["n"]} for k, v in sorted(cal_day.items())],
+        "asset_day": {k: dict(v) for k, v in cal_asset.items()},
+        "acct_day": {k: dict(v) for k, v in cal_acct.items()},
+    }
+
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
-            "heatmap": heatmap, "correlation": correlation}
+            "heatmap": heatmap, "correlation": correlation, "calendar": calendar}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -446,6 +462,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "firms": firm_rows,
         "heatmap": ag["heatmap"],
         "portfolio": portfolio,
+        "calendar": ag["calendar"],
     }
 
 

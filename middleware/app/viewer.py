@@ -70,14 +70,14 @@ def build_state() -> dict:
     as_of = max((e.ts for e in events), default=None)
     today = as_of.date() if as_of else None
 
-    # last exit per (account, symbol): a later close on the same instrument means an earlier
-    # still-"open" fill is a phantom (its exit was missed or mismatched in the log).
+    # last exit per account: any later close means an earlier still-"open" fill is a phantom
+    # (its exit was missed/mismatched in the log). These strategies hold one position per
+    # account at a time, so account-level is safe and catches contract-roll symbol changes.
     last_close: dict = {}
     for t in trades:
         if t.closed and t.exit_ts:
-            k = (t.account, t.symbol)
-            if k not in last_close or t.exit_ts > last_close[k]:
-                last_close[k] = t.exit_ts
+            if t.account not in last_close or t.exit_ts > last_close[t.account]:
+                last_close[t.account] = t.exit_ts
 
     accounts: dict[str, dict] = {}
 
@@ -97,9 +97,9 @@ def build_state() -> dict:
         if not t.closed:
             # hide a stale "open": a fill whose exit was never logged (would show a phantom
             # position while the account is actually flat). Genuine intraday opens are recent.
-            lc = last_close.get((t.account, t.symbol))
+            lc = last_close.get(t.account)
             if lc and t.entry_ts and t.entry_ts < lc:
-                continue     # a later trade on this instrument already closed → missed exit
+                continue     # account traded past this open → its exit was missed
             if as_of and t.entry_ts and (as_of - t.entry_ts).total_seconds() > _STALE_OPEN_H * 3600:
                 continue
             a["open"].append({
@@ -370,6 +370,14 @@ table.hm th{color:var(--muted);font-weight:500;padding:5px 7px;text-align:center
 table.hm tbody th{text-align:right;color:var(--ink);position:sticky;left:0;background:var(--panel-2);z-index:1}
 td.hm-cell{padding:6px 8px;text-align:center;color:var(--ink);border:1px solid var(--bg);white-space:nowrap;min-width:46px}
 td.hm-empty{border:1px solid var(--bg);background:rgba(28,63,67,.22)}
+select.calsel{font-family:var(--mono);font-size:12px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+select.calsel:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
+table.cal{border-collapse:collapse;font-family:var(--mono);font-size:11px;font-variant-numeric:tabular-nums;margin:2px}
+table.cal th{color:var(--muted);font-weight:500;padding:5px 7px;font-size:10px;text-align:center;letter-spacing:.5px}
+table.cal tbody th{text-align:right;color:var(--muted);min-width:34px}
+td.cal-cell{border:1px solid var(--bg);min-width:54px;height:38px;text-align:center;vertical-align:top;padding:3px 6px;color:var(--ink);white-space:nowrap}
+td.cal-empty{background:rgba(28,63,67,.16);color:var(--dim)}
+.cal-d{display:block;font-size:9px;color:var(--muted);text-align:left;margin-bottom:1px}
 footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:11.5px;line-height:1.7}
 .caption{color:var(--muted)}.caption b{color:var(--ink)}
 .err-banner{background:rgba(239,107,83,.12);border:1px solid rgba(239,107,83,.4);color:var(--crit);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:12.5px;margin:16px 0}
@@ -389,6 +397,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
     <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=calendar><span class=lv>L8</span>Calendar</button>
     <button class=tab role=tab aria-selected=false data-panel=portfolio><span class=lv>L7</span>Portfolio</button>
     <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
     <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
@@ -433,6 +442,15 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=calendar hidden>
+    <h2 class=sec>Performance calendar</h2>
+    <p class=sec-note>Daily net P&amp;L with weekly and total roll-up, over the selected window. Pick a level to drill into one strategy/asset or a single account.</p>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <select id=calDim class=calsel></select>
+      <span id=calTotal class=calc></span>
+    </div>
+    <div class=tablewrap><div id=calGrid></div></div>
   </section>
   <section role=tabpanel id=portfolio hidden>
     <h2 class=sec>Portfolio &amp; correlation</h2>
@@ -603,6 +621,56 @@ function renderPortfolio(){
   h+=c.matrix.map((row,i)=>`<tr><th>${c.labels[i]}</th>`+row.map(cell).join('')+'</tr>').join('');
   $("#corrMatrix").innerHTML=h+'</tbody></table>';
 }
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function calSeries(){
+  const cal=CMD.calendar;if(!cal)return {};
+  const v=$("#calDim").value||"all";
+  if(v==="all"){const m={};(cal.by_day||[]).forEach(x=>m[x.d]=x.net);return m;}
+  const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
+  return (k==="asset"?(cal.asset_day||{}):(cal.acct_day||{}))[name]||{};
+}
+function renderCalendar(){
+  const cal=CMD.calendar;if(!cal)return;const sel=$("#calDim");
+  const assets=Object.keys(cal.asset_day||{}).sort(),accts=Object.keys(cal.acct_day||{}).sort();
+  const sig=assets.join(",")+"|"+accts.join(",");
+  if(sel.dataset.sig!==sig){
+    const prev=sel.value;
+    let o='<option value="all">All (fleet)</option>';
+    if(assets.length)o+='<optgroup label="Strategy / Asset">'+assets.map(a=>`<option value="asset:${a}">${a}</option>`).join('')+'</optgroup>';
+    if(accts.length)o+='<optgroup label="Account">'+accts.map(a=>`<option value="acct:${a}">${a}</option>`).join('')+'</optgroup>';
+    sel.innerHTML=o;sel.dataset.sig=sig;
+    if(prev&&[...sel.options].some(op=>op.value===prev))sel.value=prev;
+    sel.onchange=drawCalendar;
+  }
+  drawCalendar();
+}
+function drawCalendar(){
+  const series=calSeries();const dates=Object.keys(series).sort();const grid=$("#calGrid");
+  if(!dates.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';$("#calTotal").textContent='';return;}
+  const parse=s=>{const p=s.split("-").map(Number);return new Date(Date.UTC(p[0],p[1]-1,p[2]));};
+  const last=parse(dates[dates.length-1]);const cur=parse(dates[0]);
+  cur.setUTCDate(cur.getUTCDate()-((cur.getUTCDay()+6)%7));           // back to Monday
+  const mx=Math.max(1,...Object.values(series).map(v=>Math.abs(v)));
+  let html='<table class=cal><thead><tr><th></th>'+["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<th>${d}</th>`).join('')+'<th>Week</th></tr></thead><tbody>';
+  let total=0;
+  while(cur<=last){
+    const wkMonth=MON[cur.getUTCMonth()],wkDate=cur.getUTCDate();
+    let wtot=0,row='',any=false;
+    for(let i=0;i<7;i++){
+      const iso=cur.toISOString().slice(0,10);
+      if(iso in series){const v=series[iso];wtot+=v;total+=v;any=true;
+        const a=Math.min(1,Math.abs(v)/mx);const col=v>=0?`rgba(53,200,138,${(0.12+0.6*a).toFixed(2)})`:`rgba(239,107,83,${(0.12+0.6*a).toFixed(2)})`;
+        row+=`<td class=cal-cell style="background:${col}" title="${iso} · ${signed(v)}"><span class=cal-d>${cur.getUTCDate()}</span>${moneyK(v)}</td>`;
+      } else {
+        row+=`<td class="cal-cell cal-empty"><span class=cal-d>${cur.getUTCDate()}</span></td>`;
+      }
+      cur.setUTCDate(cur.getUTCDate()+1);
+    }
+    html+=`<tr><th>${wkDate<=7?wkMonth:''}</th>${row}<td class=num style="color:${wtot>=0?'var(--ok)':'var(--crit)'}">${any&&wtot?moneyK(wtot):'—'}</td></tr>`;
+  }
+  grid.innerHTML=html+'</tbody></table>';
+  $("#calTotal").innerHTML='Total: <b class="'+(total>=0?'pos':'neg')+'">'+signed(total)+'</b>';
+}
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 function renderHeatmap(){
   const cells=CMD.heatmap||[];const grid=$("#hmGrid");
@@ -624,7 +692,7 @@ async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

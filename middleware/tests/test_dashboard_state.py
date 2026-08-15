@@ -202,3 +202,19 @@ def test_correlation_matrix():
     labels, m = corr["labels"], corr["matrix"]
     i, j = labels.index("GC"), labels.index("ES")
     assert m[i][j] == 1.0 and m[i][i] == 1.0 and corr["days"] == 2   # move together → +1
+
+
+def test_calendar_aggregation():
+    d1, d2 = dt.date(2026, 8, 3), dt.date(2026, 8, 4)
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 0, "close": d1},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": -40.0, "ticks": 0, "close": d2},
+        {"acct": "APEX27002500000205", "sym": "ES", "net": 25.0, "ticks": 0, "close": d1},
+    ]
+    cal = ds._aggregate(trades, "all")["calendar"]
+    byd = {x["d"]: x for x in cal["by_day"]}
+    assert byd["2026-08-03"]["net"] == 125.0 and byd["2026-08-03"]["n"] == 2   # fleet total
+    assert byd["2026-08-04"]["net"] == -40.0
+    assert cal["asset_day"]["GC"]["2026-08-03"] == 100.0                       # by asset
+    assert cal["acct_day"]["018"]["2026-08-04"] == -40.0                       # by account
+    assert cal["acct_day"]["205"]["2026-08-03"] == 25.0

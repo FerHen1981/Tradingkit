@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from .datasets import write_catalog
+from .insights import build_journey
 from .normalize import to_canonical
 from .paths import datasets_dir, ensure_dirs, results_dir
 from .runs import load_index
@@ -138,6 +139,9 @@ class Handler(BaseHTTPRequestHandler):
             rid = (q.get("id") or [""])[0]
             det = _run_detail(rid)
             return self._json(det or {"error": "not found"}, 200 if det else 404)
+        if u.path == "/api/journey":
+            strat = (q.get("strategy") or [""])[0]
+            return self._json(build_journey(_runs(), strat or None))
         return self._send(404, "not found", "text/plain")
 
     # -- POST --
@@ -227,6 +231,17 @@ text-transform:uppercase;letter-spacing:.5px;cursor:pointer}tr:hover td{backgrou
 .foot{color:var(--sub);font-size:12px;margin-top:20px;border-top:1px solid #12262b;padding-top:10px}
 #drop{border:1px dashed #1c3d43;border-radius:10px;padding:14px;text-align:center;color:var(--sub);flex:1;min-width:220px}
 .hidden{display:none}#msg{font-size:12px}
+.lens{border:1px solid #16343a;border-radius:10px;padding:12px 14px;margin-top:10px;background:#08202400}
+.lens h3{margin:0 0 2px;font-size:14px;color:var(--gold)}.lens .q{color:var(--sub);font-size:12px;margin-bottom:8px}
+.ins{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px;border-top:1px solid #0f2a2f}
+.ins:first-of-type{border-top:none}.dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}
+.t-good{background:var(--ok)}.t-warn{background:var(--watch)}.t-bad{background:var(--crit)}.t-info{background:var(--sub)}
+.verdict{border-radius:10px;padding:12px 14px;font-weight:600;border:1px solid}
+.v-good{background:#0e2a22;border-color:#1c5a48;color:var(--ok)}
+.v-warn{background:#2a2210;border-color:#5a4a1c;color:var(--watch)}
+.v-bad{background:#2a1512;border-color:#5a231c;color:var(--crit)}
+.v-info{background:#0e2428;border-color:#1c3d43;color:var(--sub)}
+.lensrow{font-size:11px;color:var(--sub);margin-top:6px}
 """
 
 _JS = r"""
@@ -261,12 +276,29 @@ function fillKpis(){
     +kpi((STATS.strategies||[]).length,'strategies')+kpi(bl,'best PF')
     +kpi((STATS.latest&&STATS.latest.timeframe)||'—','latest TF');
 }
+function renderJourney(j){
+  const v=j.verdict||{};$('#verdict').innerHTML=`<div class="verdict v-${v.tone||'info'}">${v.text||''}</div>`;
+  $('#lenses').innerHTML=(j.lenses||[]).map(L=>{
+    const ins=(L.insights||[]).map(i=>`<div class=ins><span class="dot t-${i.tone}"></span><span>${i.text}</span></div>`).join('');
+    const tfs=(L.runs||[]).map(r=>r.timeframe).join(', ');
+    return `<div class=lens><h3>${L.lens.toUpperCase()}</h3><div class=q>${L.question}</div>${ins}
+      ${tfs?`<div class=lensrow>runs: ${tfs}</div>`:''}</div>`}).join('');
+}
+async function loadJourney(strat){
+  if(!strat){$('#verdict').innerHTML='';$('#lenses').innerHTML='<div class=muted>No strategy yet.</div>';return}
+  const j=await (await fetch('/api/journey?strategy='+encodeURIComponent(strat))).json();renderJourney(j);
+}
+$('#jStrat').addEventListener('change',e=>loadJourney(e.target.value));
 async function load(){
   const j=await (await fetch('/api/runs')).json();RUNS=j.runs||[];STATS=j.stats||{};
   opt($('#fAsset'),STATS.assets||[]);opt($('#fStrat'),STATS.strategies||[]);
   opt($('#fTf'),[...new Set(RUNS.map(r=>r.timeframe).filter(Boolean))]);
   opt($('#fLens'),[...new Set(RUNS.map(r=>r.lens).filter(Boolean))]);
   fillKpis();render();
+  // Journey strategy picker
+  const strats=STATS.strategies||[];const js=$('#jStrat');const cur=js.value;
+  js.innerHTML=strats.map(s=>`<option>${s}</option>`).join('');
+  const pick=cur&&strats.includes(cur)?cur:strats[0];if(pick){js.value=pick;loadJourney(pick);} else loadJourney(null);
   $('#sub').textContent='LAB_DIR '+(j.status.lab_dir||'')+(j.status.auth?' · secured':' · open');
   $('#foot').textContent='uptime '+Math.round((j.status.uptime_s||0)/60)+'m · reads index.json';
 }
@@ -315,6 +347,15 @@ PAGE_HTML = f"""<!doctype html><html><head><meta charset=utf-8><meta name=viewpo
     <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
     <button class=go id=upbtn>Upload</button>
   </div><div id=msg class=muted style="margin-top:8px"></div>
+</div>
+
+<div class=panel id=journey>
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <b>Journey</b>
+    <select id=jStrat style="min-width:200px"></select>
+  </div>
+  <div id=verdict style="margin:10px 0"></div>
+  <div id=lenses></div>
 </div>
 
 <div class=bar>

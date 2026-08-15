@@ -193,12 +193,12 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
 
     trades: list[dict] = []
     for t in pair_fills(fills):
-        sym = _prod(t.product)[0]
+        p = _prod(t.product)
         net = round(t.gross_pnl - t.commissions, 2)
         move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
         ticks = round(move / t.tick_size) if t.tick_size else 0
         et = t.exit_ts.astimezone(_ET)
-        trades.append({"acct": t.account, "sym": sym, "net": net, "ticks": ticks,
+        trades.append({"acct": t.account, "sym": p[0], "strat": p[3], "net": net, "ticks": ticks,
                        "close": et.date(), "hour": et.hour, "dow": et.weekday(),
                        "comm": round(t.commissions, 2), "mfe": None, "mae": None})
     return trades
@@ -216,6 +216,28 @@ def _pearson(x: list[float], y: list[float]) -> "float | None":
     if vx <= 0 or vy <= 0:
         return None
     return round(cov / ((vx * vy) ** 0.5), 2)
+
+
+def _hm_cells(rows: list[dict]) -> list[dict]:
+    """weekday × hour net+count cells for a slice of trades."""
+    hm: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
+    for t in rows:
+        if t.get("hour") is None or t.get("dow") is None:
+            continue
+        c = hm[(t["dow"], t["hour"])]
+        c["net"] = round(c["net"] + t["net"], 2)
+        c["n"] += 1
+    return [{"dow": d, "hour": h, "net": v["net"], "n": v["n"]} for (d, h), v in hm.items()]
+
+
+def _day_cells(rows: list[dict]) -> dict:
+    """{date-iso: {net, n}} for a slice of trades."""
+    d: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
+    for t in rows:
+        c = d[t["close"].isoformat()]
+        c["net"] = round(c["net"] + t["net"], 2)
+        c["n"] += 1
+    return {k: dict(v) for k, v in d.items()}
 
 
 def _stats(rows: list[dict]) -> dict:
@@ -301,14 +323,15 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
         if after is not None and close <= after:
             continue                                 # already covered by the Fills export
         product = _sym_root(t.symbol)
-        sym = _prod(product)[0]
+        p = _prod(product)
+        sym = p[0]
         tick = _TICK.get(product.upper()) or _TICK.get(sym, 0)
         if tick and t.entry_price is not None and t.exit_price is not None:
             move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
             ticks = round(move / tick)
         else:
             ticks = 0
-        out.append({"acct": t.account, "sym": sym, "net": round(t.pnl, 2), "ticks": ticks,
+        out.append({"acct": t.account, "sym": sym, "strat": p[3], "net": round(t.pnl, 2), "ticks": ticks,
                     "close": close, "hour": et.hour, "dow": et.weekday(),
                     "comm": 0.0, "mfe": t.mfe, "mae": t.mae})
     return out
@@ -378,15 +401,22 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
               "wins": sum(x["wins"] for x in assets),
               "comm": round(sum(x["comm"] for x in assets), 2)}
 
-    # heatmap: net + count per (weekday 0=Mon, hour ET) over the same filtered rows
-    hm: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
+    # group the filtered rows once, then build heatmap + calendar per dimension (all / asset /
+    # strategy / account) so both grids share the same drill-down filter.
+    by_asset: dict = defaultdict(list)
+    by_strat: dict = defaultdict(list)
+    by_acct: dict = defaultdict(list)
     for t in rows:
-        if t.get("hour") is None or t.get("dow") is None:
-            continue
-        c = hm[(t["dow"], t["hour"])]
-        c["net"] = round(c["net"] + t["net"], 2)
-        c["n"] += 1
-    heatmap = [{"dow": d, "hour": h, "net": v["net"], "n": v["n"]} for (d, h), v in hm.items()]
+        by_asset[t["sym"]].append(t)
+        by_strat[t.get("strat") or "—"].append(t)
+        by_acct[t["acct"][-3:]].append(t)
+
+    heatmap = {
+        "all": _hm_cells(rows),
+        "asset": {k: _hm_cells(v) for k, v in by_asset.items()},
+        "strat": {k: _hm_cells(v) for k, v in by_strat.items()},
+        "acct": {k: _hm_cells(v) for k, v in by_acct.items()},
+    }
 
     # correlation of daily net between assets (0-filled on non-trading days = flat that day)
     by_ad: dict = defaultdict(lambda: defaultdict(float))
@@ -400,32 +430,18 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     matrix = [[1.0 if s1 == s2 else _pearson(series[s1], series[s2]) for s2 in labels] for s1 in labels]
     correlation = {"labels": labels, "matrix": matrix, "days": len(day_list)}
 
-    # calendar: daily net for the whole fleet, per asset/strategy, and per account
-    def _cd():
-        return defaultdict(lambda: {"net": 0.0, "n": 0})
-    cal_day = _cd()
-    cal_asset: dict = defaultdict(_cd)
-    cal_acct: dict = defaultdict(_cd)
-
-    def _add(bucket, iso, net):
-        c = bucket[iso]
-        c["net"] = round(c["net"] + net, 2)
-        c["n"] += 1
-
-    for t in rows:
-        iso = t["close"].isoformat()
-        _add(cal_day, iso, t["net"])
-        _add(cal_asset[t["sym"]], iso, t["net"])
-        _add(cal_acct[t["acct"][-3:]], iso, t["net"])
+    # calendar: daily net for the whole fleet, and per asset / strategy / account
+    day_all = _day_cells(rows)
     calendar = {
-        "by_day": [{"d": k, "net": v["net"], "n": v["n"]} for k, v in sorted(cal_day.items())],
-        "asset_day": {k: {i: dict(c) for i, c in v.items()} for k, v in cal_asset.items()},
-        "acct_day": {k: {i: dict(c) for i, c in v.items()} for k, v in cal_acct.items()},
+        "by_day": [{"d": k, "net": v["net"], "n": v["n"]} for k, v in sorted(day_all.items())],
+        "asset_day": {k: _day_cells(v) for k, v in by_asset.items()},
+        "strat_day": {k: _day_cells(v) for k, v in by_strat.items()},
+        "acct_day": {k: _day_cells(v) for k, v in by_acct.items()},
     }
 
     # equity curve (cumulative net + drawdown from peak) + a forward risk/expectancy band:
     # project H trading days from daily expectancy ± volatility (√-time widening cone).
-    eq_days = sorted(cal_day.items())
+    eq_days = sorted(day_all.items())
     cum = peak = 0.0
     curve = []
     for iso, v in eq_days:
@@ -442,9 +458,10 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     equity = {"curve": curve, "proj": proj, "exp_day": round(mean, 2), "std_day": round(std, 2),
               "max_dd": round(min((c["dd"] for c in curve), default=0.0), 2)}
 
-    # per-account + fleet CIO stats (PF, win%, expectancy, heat) over the filtered rows
+    # per-account, per-strategy + fleet CIO stats (PF, win%, expectancy, heat)
     acct_stats = {k: _stats(v) for k, v in acct_rows.items()}
-    day_nets = [v["net"] for v in cal_day.values()]
+    strat_stats = {k: _stats(v) for k, v in by_strat.items()}
+    day_nets = [v["net"] for v in day_all.values()]
     stats = _stats(rows)
     stats.update(best_day=max(day_nets) if day_nets else 0.0,
                  worst_day=min(day_nets) if day_nets else 0.0,
@@ -454,7 +471,7 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
 
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
             "heatmap": heatmap, "correlation": correlation, "calendar": calendar,
-            "equity": equity, "acct_stats": acct_stats, "stats": stats}
+            "equity": equity, "acct_stats": acct_stats, "strat_stats": strat_stats, "stats": stats}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -607,6 +624,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "portfolio": portfolio,
         "calendar": ag["calendar"],
         "equity": ag["equity"],
+        "strat_stats": ag["strat_stats"],
         "attention": attention,
         "status": {
             "data_through": max((t["close"] for t in trades), default=None) and

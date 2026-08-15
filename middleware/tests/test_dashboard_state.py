@@ -190,9 +190,22 @@ def test_heatmap_aggregation():
         {"acct": "PAAPEX2700250000018", "sym": "GC", "net": -30.0, "ticks": -3, "close": today, "hour": 9, "dow": 0},
         {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 50.0, "ticks": 5, "close": today, "hour": 14, "dow": 2},
     ]
-    hm = {(c["dow"], c["hour"]): c for c in ds._aggregate(trades, "all")["heatmap"]}
+    hm = {(c["dow"], c["hour"]): c for c in ds._aggregate(trades, "all")["heatmap"]["all"]}
     assert hm[(0, 9)]["net"] == 70.0 and hm[(0, 9)]["n"] == 2      # 100 − 30, Monday 09h
     assert hm[(2, 14)]["net"] == 50.0 and hm[(2, 14)]["n"] == 1    # Wednesday 14h
+
+
+def test_dimension_breakdowns():
+    today = dt.datetime.now(ds._ET).date()
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "strat": "El Tesoro — MGC", "net": 100.0, "ticks": 0, "close": today, "hour": 9, "dow": 0},
+        {"acct": "APEX27002500000205", "sym": "MES", "strat": "El Rey — MES", "net": 40.0, "ticks": 0, "close": today, "hour": 9, "dow": 0},
+    ]
+    ag = ds._aggregate(trades, "all")
+    assert set(ag["heatmap"].keys()) == {"all", "asset", "strat", "acct"}     # heatmap now filterable
+    assert "MGC" in ag["heatmap"]["asset"] and "El Tesoro — MGC" in ag["heatmap"]["strat"]
+    assert "El Rey — MES" in ag["calendar"]["strat_day"]                       # calendar splits strategy
+    assert ag["strat_stats"]["El Tesoro — MGC"]["net"] == 100.0               # per-strategy stats
 
 
 def test_pearson():

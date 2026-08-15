@@ -525,6 +525,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=heatmap hidden>
     <h2 class=sec>Day × hour heatmap</h2>
     <p class=sec-note>Weekday × hour of day (ET) over the selected window. Cell shows total net; <b style="color:var(--ink)">colour = expectancy</b> (net per trade) so quality reads apart from size. Hover for count + expectancy.</p>
+    <div style="margin-bottom:12px"><select id=hmDim class=calsel></select></div>
     <div class=tablewrap><div id=hmGrid></div></div>
   </section>
   <section role=tabpanel id=payout hidden>
@@ -775,28 +776,21 @@ function calSeries(){
   const v=$("#calDim").value||"all";
   if(v==="all"){const m={};(cal.by_day||[]).forEach(x=>m[x.d]={net:x.net,n:x.n});return m;}
   const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
-  return (k==="asset"?(cal.asset_day||{}):(cal.acct_day||{}))[name]||{};
+  return ((k==="asset"?cal.asset_day:k==="strat"?cal.strat_day:cal.acct_day)||{})[name]||{};
 }
 function calStatsFor(){
   const v=$("#calDim").value||"all";
   if(v==="all")return CMD.fleet||{};
   const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
   if(k==="asset")return (CMD.assets||[]).find(a=>a.sym===name)||{};
+  if(k==="strat")return (CMD.strat_stats||{})[name]||{};
   return (CMD.accounts||[]).find(a=>a.id===name)||{};
 }
 function renderCalendar(){
   const cal=CMD.calendar;if(!cal)return;const sel=$("#calDim");
-  const assets=Object.keys(cal.asset_day||{}).sort(),accts=Object.keys(cal.acct_day||{}).sort();
-  const sig=assets.join(",")+"|"+accts.join(",");
-  if(sel.dataset.sig!==sig){
-    const prev=sel.value;
-    let o='<option value="all">All (fleet)</option>';
-    if(assets.length)o+='<optgroup label="Strategy / Asset">'+assets.map(a=>`<option value="asset:${a}">${a}</option>`).join('')+'</optgroup>';
-    if(accts.length)o+='<optgroup label="Account">'+accts.map(a=>`<option value="acct:${a}">${a}</option>`).join('')+'</optgroup>';
-    sel.innerHTML=o;sel.dataset.sig=sig;
-    if(prev&&[...sel.options].some(op=>op.value===prev))sel.value=prev;
-    sel.onchange=drawCalendar;
-  }
+  const st=Object.keys(cal.strat_day||{}).sort(),as=Object.keys(cal.asset_day||{}).sort(),ac=Object.keys(cal.acct_day||{}).sort();
+  const sig="c|"+st.join(",")+"|"+as.join(",")+"|"+ac.join(",");
+  if(sel.dataset.sig!==sig){dimOptions(sel,[["strat","Strategy",st],["asset","Asset",as],["acct","Account",ac]],sel.value);sel.dataset.sig=sig;sel.onchange=drawCalendar;}
   drawCalendar();
 }
 function drawCalendar(){
@@ -827,9 +821,29 @@ function drawCalendar(){
   $("#calTotal").innerHTML='Total: <b class="'+(total>=0?'pos':'neg')+'">'+signed(total)+'</b>';
 }
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function dimOptions(sel,dims,prev){          // dims: [[key,label,names[]],...]
+  let o='<option value="all">All (fleet)</option>';
+  dims.forEach(([k,lab,names])=>{if(names.length)o+=`<optgroup label="${lab}">`+names.map(n=>`<option value="${k}:${n}">${n}</option>`).join('')+'</optgroup>';});
+  sel.innerHTML=o;
+  if(prev&&[...sel.options].some(op=>op.value===prev))sel.value=prev;
+}
+function hmCells(){
+  const hm=CMD.heatmap;if(!hm)return [];
+  const v=$("#hmDim").value||"all";
+  if(v==="all")return hm.all||[];
+  const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
+  return ((k==="asset"?hm.asset:k==="strat"?hm.strat:hm.acct)||{})[name]||[];
+}
 function renderHeatmap(){
-  const cells=CMD.heatmap||[];const grid=$("#hmGrid");
-  if(!cells.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';return;}
+  const hm=CMD.heatmap;if(!hm||!hm.all)return;const sel=$("#hmDim");
+  const st=Object.keys(hm.strat||{}).sort(),as=Object.keys(hm.asset||{}).sort(),ac=Object.keys(hm.acct||{}).sort();
+  const sig="h|"+st.join(",")+"|"+as.join(",")+"|"+ac.join(",");
+  if(sel.dataset.sig!==sig){dimOptions(sel,[["strat","Strategy",st],["asset","Asset",as],["acct","Account",ac]],sel.value);sel.dataset.sig=sig;sel.onchange=drawHeatmap;}
+  drawHeatmap();
+}
+function drawHeatmap(){
+  const cells=hmCells();const grid=$("#hmGrid");
+  if(!cells.length){grid.innerHTML='<div class=calc style="padding:16px">no trades for this selection</div>';return;}
   const hours=[...new Set(cells.map(c=>c.hour))].sort((a,b)=>a-b);
   const dows=[...new Set(cells.map(c=>c.dow))].sort((a,b)=>a-b);
   const map={};cells.forEach(c=>map[c.dow+"_"+c.hour]=c);

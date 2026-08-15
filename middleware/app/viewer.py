@@ -448,7 +448,6 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=fleet>
     <h2 class=sec>Fleet health</h2>
     <p class=sec-note>Every account at a glance — split by survival status.</p>
-    <div id=fleetStats></div>
     <div class=healthbar id=healthbar></div><div class=legend id=legend></div>
     <div class="grid g2" style="margin-top:22px">
       <div class=card><div class=ey>P&amp;L attribution · by asset</div><div class=attr id=attr></div>
@@ -517,7 +516,6 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=heatmap hidden>
     <h2 class=sec>Day × hour heatmap</h2>
     <p class=sec-note>Weekday × hour of day (ET) over the selected window. Cell shows total net; <b style="color:var(--ink)">colour = expectancy</b> (net per trade) so quality reads apart from size. Hover for count + expectancy.</p>
-    <div id=hmStats></div>
     <div class=tablewrap><div id=hmGrid></div></div>
   </section>
   <section role=tabpanel id=payout hidden>
@@ -615,7 +613,6 @@ function renderKpis(f){
   $("#kpis").innerHTML=k.map(x=>`<div class=kpi><div class=lab>${x.lab}</div><div class="val ${x.cls}">${x.val}</div><div class=note>${x.note}</div></div>`).join("");
 }
 function renderFleet(){
-  $("#fleetStats").innerHTML=fleetTiles(CMD.fleet||{});
   const acc=CMD.accounts, order=["Healthy","Watch","Warning","Critical","Breached"];
   const dist={}; acc.forEach(a=>{if(HEALTH[a.health])dist[a.health]=(dist[a.health]||0)+1});
   const tot=Object.values(dist).reduce((x,y)=>x+y,0)||1;
@@ -812,7 +809,6 @@ function drawCalendar(){
 }
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 function renderHeatmap(){
-  $("#hmStats").innerHTML=fleetTiles(CMD.fleet||{});
   const cells=CMD.heatmap||[];const grid=$("#hmGrid");
   if(!cells.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';return;}
   const hours=[...new Set(cells.map(c=>c.hour))].sort((a,b)=>a-b);

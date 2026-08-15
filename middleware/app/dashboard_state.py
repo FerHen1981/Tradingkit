@@ -366,19 +366,26 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     correlation = {"labels": labels, "matrix": matrix, "days": len(day_list)}
 
     # calendar: daily net for the whole fleet, per asset/strategy, and per account
-    cal_day: dict = defaultdict(lambda: {"net": 0.0, "n": 0})
-    cal_asset: dict = defaultdict(lambda: defaultdict(float))
-    cal_acct: dict = defaultdict(lambda: defaultdict(float))
+    def _cd():
+        return defaultdict(lambda: {"net": 0.0, "n": 0})
+    cal_day = _cd()
+    cal_asset: dict = defaultdict(_cd)
+    cal_acct: dict = defaultdict(_cd)
+
+    def _add(bucket, iso, net):
+        c = bucket[iso]
+        c["net"] = round(c["net"] + net, 2)
+        c["n"] += 1
+
     for t in rows:
         iso = t["close"].isoformat()
-        cal_day[iso]["net"] = round(cal_day[iso]["net"] + t["net"], 2)
-        cal_day[iso]["n"] += 1
-        cal_asset[t["sym"]][iso] = round(cal_asset[t["sym"]][iso] + t["net"], 2)
-        cal_acct[t["acct"][-3:]][iso] = round(cal_acct[t["acct"][-3:]][iso] + t["net"], 2)
+        _add(cal_day, iso, t["net"])
+        _add(cal_asset[t["sym"]], iso, t["net"])
+        _add(cal_acct[t["acct"][-3:]], iso, t["net"])
     calendar = {
         "by_day": [{"d": k, "net": v["net"], "n": v["n"]} for k, v in sorted(cal_day.items())],
-        "asset_day": {k: dict(v) for k, v in cal_asset.items()},
-        "acct_day": {k: dict(v) for k, v in cal_acct.items()},
+        "asset_day": {k: {i: dict(c) for i, c in v.items()} for k, v in cal_asset.items()},
+        "acct_day": {k: {i: dict(c) for i, c in v.items()} for k, v in cal_acct.items()},
     }
 
     # per-account + fleet CIO stats (PF, win%, expectancy, heat) over the filtered rows

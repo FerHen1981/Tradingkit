@@ -457,7 +457,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=calendar hidden>
     <h2 class=sec>Performance calendar</h2>
-    <p class=sec-note>Daily net P&amp;L with weekly and total roll-up, over the selected window. Pick a level to drill into one strategy/asset or a single account.</p>
+    <p class=sec-note>Daily net P&amp;L with weekly and total roll-up, over the selected window. <b style="color:var(--ink)">Colour = expectancy</b> (net per trade). Pick a level to drill into one strategy/asset or a single account.</p>
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
       <select id=calDim class=calsel></select>
       <span id=calTotal class=calc></span>
@@ -479,7 +479,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=heatmap hidden>
     <h2 class=sec>Day × hour heatmap</h2>
-    <p class=sec-note>Net P&amp;L by weekday × hour of day (ET) over the selected window. Green = net positive, red = negative; deeper = bigger. Hover a cell for the trade count.</p>
+    <p class=sec-note>Weekday × hour of day (ET) over the selected window. Cell shows total net; <b style="color:var(--ink)">colour = expectancy</b> (net per trade) so quality reads apart from size. Hover for count + expectancy.</p>
     <div id=hmStats></div>
     <div class=tablewrap><div id=hmGrid></div></div>
   </section>
@@ -511,12 +511,14 @@ const money0=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFrac
 const signed=n=>(n>=0?"+":"−")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const moneyK=n=>{const a=Math.abs(n),s=n>=0?"+":"−";return a>=1000?s+(a/1000).toFixed(1)+"k":s+Math.round(a);};
 const pfCls=pf=>pf==null?"":(pf>=1?"pos":"neg");
-// perceptual colour scale: √-compressed so small edges stay visible and outliers don't blow out
-function heatColor(v,max){
-  if(!v||!max)return "transparent";
-  const t=Math.min(1,Math.sqrt(Math.abs(v)/max));
+// colour by EXPECTANCY per cell (net ÷ trades) on a √-compressed scale — quality per trade,
+// not just total size, so a busy cell and a one-lucky-trade cell read differently.
+function heatColor(net,n,maxExp){
+  const e=n?net/n:net;
+  if(!e||!maxExp)return "transparent";
+  const t=Math.min(1,Math.sqrt(Math.abs(e)/maxExp));
   const a=(0.14+0.62*t).toFixed(2);
-  return v>=0?`rgba(53,200,138,${a})`:`rgba(239,107,83,${a})`;
+  return e>=0?`rgba(53,200,138,${a})`:`rgba(239,107,83,${a})`;
 }
 function tiles(items){return '<div class=stiles>'+items.map(i=>`<div class=stile><div class=sl>${i.lab}</div><div class="sv ${i.cls||''}">${i.val}</div></div>`).join('')+'</div>';}
 function statItems(s){s=s||{};const win=s.win_pct??s.win_rate??s.win,heat=s.heat??s.mae;
@@ -682,7 +684,7 @@ const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","De
 function calSeries(){
   const cal=CMD.calendar;if(!cal)return {};
   const v=$("#calDim").value||"all";
-  if(v==="all"){const m={};(cal.by_day||[]).forEach(x=>m[x.d]=x.net);return m;}
+  if(v==="all"){const m={};(cal.by_day||[]).forEach(x=>m[x.d]={net:x.net,n:x.n});return m;}
   const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
   return (k==="asset"?(cal.asset_day||{}):(cal.acct_day||{}))[name]||{};
 }
@@ -715,7 +717,7 @@ function drawCalendar(){
   const parse=s=>{const p=s.split("-").map(Number);return new Date(Date.UTC(p[0],p[1]-1,p[2]));};
   const last=parse(dates[dates.length-1]);const cur=parse(dates[0]);
   cur.setUTCDate(cur.getUTCDate()-((cur.getUTCDay()+6)%7));           // back to Monday
-  const mx=Math.max(1,...Object.values(series).map(v=>Math.abs(v)));
+  const mx=Math.max(1e-9,...Object.values(series).map(c=>Math.abs(c.n?c.net/c.n:c.net)));  // max |expectancy|
   let html='<table class=cal><thead><tr><th></th>'+["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<th>${d}</th>`).join('')+'<th>Week</th></tr></thead><tbody>';
   let total=0;
   while(cur<=last){
@@ -723,8 +725,8 @@ function drawCalendar(){
     let wtot=0,row='',any=false;
     for(let i=0;i<7;i++){
       const iso=cur.toISOString().slice(0,10);
-      if(iso in series){const v=series[iso];wtot+=v;total+=v;any=true;
-        row+=`<td class=cal-cell style="background:${heatColor(v,mx)}" title="${iso} · ${signed(v)}"><span class=cal-d>${cur.getUTCDate()}</span>${moneyK(v)}</td>`;
+      if(iso in series){const c=series[iso],v=c.net;wtot+=v;total+=v;any=true;
+        row+=`<td class=cal-cell style="background:${heatColor(c.net,c.n,mx)}" title="${iso} · ${signed(v)} · ${c.n} trade(s) · exp ${money0(c.n?v/c.n:v)}"><span class=cal-d>${cur.getUTCDate()}</span>${moneyK(v)}</td>`;
       } else {
         row+=`<td class="cal-cell cal-empty"><span class=cal-d>${cur.getUTCDate()}</span></td>`;
       }
@@ -743,9 +745,9 @@ function renderHeatmap(){
   const hours=[...new Set(cells.map(c=>c.hour))].sort((a,b)=>a-b);
   const dows=[...new Set(cells.map(c=>c.dow))].sort((a,b)=>a-b);
   const map={};cells.forEach(c=>map[c.dow+"_"+c.hour]=c);
-  const mx=Math.max(1,...cells.map(c=>Math.abs(c.net)));
+  const mx=Math.max(1e-9,...cells.map(c=>Math.abs(c.n?c.net/c.n:c.net)));   // max |expectancy|
   const cell=(d,h)=>{const c=map[d+"_"+h];if(!c)return '<td class=hm-empty></td>';
-    return `<td class=hm-cell style="background:${heatColor(c.net,mx)}" title="${DOW[d]} ${h}:00 ET · ${c.n} trade(s) · ${signed(c.net)}">${moneyK(c.net)}</td>`;};
+    return `<td class=hm-cell style="background:${heatColor(c.net,c.n,mx)}" title="${DOW[d]} ${h}:00 ET · ${c.n} trade(s) · ${signed(c.net)} · exp ${money0(c.n?c.net/c.n:c.net)}">${moneyK(c.net)}</td>`;};
   let html='<table class=hm><thead><tr><th></th>'+hours.map(h=>`<th>${h}h</th>`).join('')+'</tr></thead><tbody>';
   html+=dows.map(d=>`<tr><th>${DOW[d]}</th>`+hours.map(h=>cell(d,h)).join('')+'</tr>').join('');
   grid.innerHTML=html+'</tbody></table>';

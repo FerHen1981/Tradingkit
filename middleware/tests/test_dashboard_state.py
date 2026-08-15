@@ -227,9 +227,9 @@ def test_calendar_aggregation():
     byd = {x["d"]: x for x in cal["by_day"]}
     assert byd["2026-08-03"]["net"] == 125.0 and byd["2026-08-03"]["n"] == 2   # fleet total
     assert byd["2026-08-04"]["net"] == -40.0
-    assert cal["asset_day"]["GC"]["2026-08-03"] == 100.0                       # by asset
-    assert cal["acct_day"]["018"]["2026-08-04"] == -40.0                       # by account
-    assert cal["acct_day"]["205"]["2026-08-03"] == 25.0
+    assert cal["asset_day"]["GC"]["2026-08-03"] == {"net": 100.0, "n": 1}      # by asset (net + count)
+    assert cal["acct_day"]["018"]["2026-08-04"] == {"net": -40.0, "n": 1}      # by account
+    assert cal["acct_day"]["205"]["2026-08-03"] == {"net": 25.0, "n": 1}
 
 
 def test_stats_metrics():

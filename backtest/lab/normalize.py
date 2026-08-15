@@ -1,0 +1,116 @@
+"""Normalize a broker/platform CSV export into the canonical Lab schema.
+
+Canonical output columns:
+    DateTime (with tz offset attached), Open, High, Low, Close, Volume, Delta
+    (+ optional BuyVolume, SellVolume, CVD_close)
+
+Handles the gotchas seen in Quantower/ATAS exports:
+  * a UTF-8 BOM on the header
+  * decimal-COMMA numbers ("2316,25" -> 2316.25)
+  * a SEPARATE tz-offset column (DateTime + UTC -> "DD-MM-YYYY HH:MM:SS -04:00",
+    the offset-attached format backtest.data.load expects)
+  * duplicate headers (first occurrence wins) and a trailing empty column
+
+Streaming (stdlib csv) so a multi-million-row file normalizes with flat memory.
+"""
+from __future__ import annotations
+
+import csv
+from pathlib import Path
+
+_DT = "DateTime"
+_TZ = "UTC"
+
+# canonical name -> acceptable source names (first present wins)
+_REQUIRED = {
+    "Open":   ["Open"],
+    "High":   ["High"],
+    "Low":    ["Low"],
+    "Close":  ["Close"],
+    "Volume": ["Volume(from bar)", "Volume"],   # bar volume preferred (always populated)
+    "Delta":  ["Delta"],
+}
+_OPTIONAL = {
+    "BuyVolume":  ["Buy (Ask) volume"],
+    "SellVolume": ["Sell (Bid) volume"],
+    "CVD_close":  ["Cumulative delta (By volume)_Close"],
+}
+
+
+def _first_index(idx: dict[str, int], names: list[str]):
+    for n in names:
+        if n in idx:
+            return idx[n]
+    return None
+
+
+def to_canonical(src: str | Path, dst: str | Path,
+                 datetime_col: str = _DT, tz_col: str = _TZ) -> tuple[str, int]:
+    """Rewrite `src` into the canonical schema at `dst`. Returns (dst, rows)."""
+    src, dst = Path(src), Path(dst)
+    with open(src, newline="", encoding="utf-8-sig") as fin:
+        r = csv.reader(fin)
+        header = next(r)
+        idx: dict[str, int] = {}
+        for i, name in enumerate(header):
+            idx.setdefault(name.strip(), i)          # first occurrence wins
+
+        if datetime_col not in idx:
+            raise ValueError(f"export has no {datetime_col!r} column (have {header[:6]}...)")
+        dt_i = idx[datetime_col]
+        tz_i = idx.get(tz_col)
+
+        req_i = {}
+        for canon, srcs in _REQUIRED.items():
+            j = _first_index(idx, srcs)
+            if j is None:
+                raise ValueError(f"export missing a source column for {canon!r} "
+                                 f"(tried {srcs})")
+            req_i[canon] = j
+        opt_i = {canon: _first_index(idx, srcs) for canon, srcs in _OPTIONAL.items()}
+        opt_i = {c: j for c, j in opt_i.items() if j is not None}
+
+        out_cols = ["DateTime", *_REQUIRED.keys(), *opt_i.keys()]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        n = 0
+        with open(dst, "w", newline="", encoding="utf-8") as fout:
+            w = csv.writer(fout)
+            w.writerow(out_cols)
+            for row in r:
+                if not row or len(row) <= dt_i:
+                    continue
+                dt = row[dt_i].strip()
+                if tz_i is not None and len(row) > tz_i:
+                    dt = f"{dt} {row[tz_i].strip()}"
+                out = [dt]
+                for canon in _REQUIRED:
+                    out.append(_num(row, req_i[canon]))
+                for canon in opt_i:
+                    out.append(_num(row, opt_i[canon]))
+                w.writerow(out)
+                n += 1
+    return str(dst), n
+
+
+def _num(row: list[str], i: int) -> str:
+    """Cell value with decimal-comma -> decimal-point; blank stays blank."""
+    if i is None or i >= len(row):
+        return ""
+    v = row[i].strip()
+    return v.replace(",", ".") if v else ""
+
+
+def _main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser(description="Normalize a platform CSV export to the Lab schema.")
+    ap.add_argument("src")
+    ap.add_argument("dst")
+    ap.add_argument("--datetime-col", default=_DT)
+    ap.add_argument("--tz-col", default=_TZ)
+    a = ap.parse_args()
+    dst, n = to_canonical(a.src, a.dst, datetime_col=a.datetime_col, tz_col=a.tz_col)
+    print(f"normalized {n:,} rows -> {dst}")
+
+
+if __name__ == "__main__":
+    _main()

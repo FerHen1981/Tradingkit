@@ -143,6 +143,8 @@ def _load_accounts(token: str) -> list[dict]:
                     "firm": (_sel(p.get("Prop Firm")) or "—"),
                     "stage": _phase(full),
                     "current": round(current, 2),
+                    "starting": round(starting, 2),
+                    "size": _num(p.get("Account Size")),
                     "buffer": None if buffer is None else round(buffer, 2),
                     "floor": None if buffer is None else round(current - buffer, 2),
                     "bufpct": _num(p.get("DD Buffer %")),
@@ -266,6 +268,20 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
     accounts = [dict(a) for a in accounts_src
                 if stage == "all" or a["stage"].lower() == stage]
     funded_net = round(sum((a["net"] or 0.0) for a in accounts if a["stage"] == "Funded"), 2)
+
+    # payout & rules: from each account's ALL-TIME daily realized P&L (window-independent)
+    import dataclasses
+    from .payout_rules import evaluate as _eval_payout
+    daily: dict = defaultdict(lambda: defaultdict(float))
+    for t in trades:
+        daily[t["acct"]][t["close"]] = round(daily[t["acct"]][t["close"]] + t["net"], 2)
+    for a in accounts:
+        p = _eval_payout(a.get("size"), a.get("starting"), a.get("current"),
+                         a["stage"], dict(daily.get(a["full"], {})))
+        a["payout"] = dataclasses.asdict(p) if p else None
+    _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
+    total_withdrawable = round(sum(p["withdrawable"] for p in _funded_p), 2)
+    payout_eligible = sum(1 for p in _funded_p if p["eligible"])
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)
     breached = sum(1 for a in accounts if a["health"] == "Breached")
     best = assets[0] if assets else None
@@ -297,6 +313,8 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
             "win_rate": round(100 * atot["wins"] / atot["n"], 1) if atot["n"] else None,
             "best_asset": best["sym"] if best else None,
             "best_asset_net": best["net"] if best else None,
+            "withdrawable": total_withdrawable,
+            "payout_eligible": payout_eligible,
         },
         "accounts": accounts,
         "assets": assets,

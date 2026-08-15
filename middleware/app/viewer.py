@@ -367,6 +367,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=firms><span class=lv>L1</span>Firms</button>
     <button class=tab role=tab aria-selected=false data-panel=strategies><span class=lv>L3</span>Strategies</button>
     <button class=tab role=tab aria-selected=false data-panel=assets><span class=lv>L4</span>Assets</button>
+    <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
     <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
   </nav>
   <section role=tabpanel id=fleet>
@@ -407,6 +408,12 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=payout hidden>
+    <h2 class=sec>Payout &amp; regels</h2>
+    <p class=sec-note>Wat is direct uitkeerbaar en welke regels resten. Apex-regels: ≥8 handelsdagen (≥$50/dag) · 30% consistency (beste dag ≤30% van winst) · safety-net balans. <span class=calc>Configureerbaar — verifieer tegen Apex' actuele voorwaarden.</span></p>
+    <div class="grid g2" id=payoutKpis style="margin-bottom:18px"></div>
+    <div class="grid g3" id=payoutCards></div>
   </section>
   <section role=tabpanel id=live hidden>
     <h2 class=sec>Live · intraday</h2>
@@ -507,12 +514,30 @@ function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
   <td class=num>${a.n}</td><td class=num>${a.win.toFixed(1)}%</td>
   <td class="num ${cls(a.ticks)}">${signed(a.ticks)}</td><td class="num ${cls(a.net)}">${signed(a.net)}</td>
   <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=7 class=calc>geen trades</td></tr>'}
+function renderPayout(){
+  const f=CMD.fleet||{};
+  $("#payoutKpis").innerHTML=
+    `<div class=card><div class=ey>Direct uitkeerbaar · funded</div><div class="big pos">${money0(f.withdrawable||0)}</div>
+      <div class=row><span>Accounts eligible</span><b>${f.payout_eligible||0}</b></div></div>`+
+    `<div class=card><div class=ey>Fleet-winst</div><div class="big ${cls(f.realized_net||0)}">${signed(f.realized_net||0)}</div>
+      <div class=row><span>Funded P&amp;L</span><b>${signed(f.funded_net||0)}</b></div></div>`;
+  const rows=CMD.accounts.filter(a=>a.payout);
+  $("#payoutCards").innerHTML=rows.map(a=>{const p=a.payout;
+    const chk=(p.rules||[]).map(r=>{const c=r.ok===true?'var(--ok)':r.ok===false?'var(--crit)':'var(--dim)';
+      const ic=r.ok===true?'✓':r.ok===false?'✕':'·';
+      return `<div class=row><span>${r.name}</span><b style="color:${c}">${ic} ${r.detail}</b></div>`}).join('');
+    const head=p.stage==='Funded'
+      ? `<div class="big ${p.withdrawable>0?'pos':''}">${money0(p.withdrawable)}</div><div class=ey>uitkeerbaar${p.eligible?' · <span style="color:var(--ok)">ELIGIBLE</span>':''}</div>`
+      : `<div class="big">${signed(p.profit)}</div><div class=ey>eval · target ${p.target?money0(p.target):'—'}${p.eligible?' · <span style="color:var(--ok)">GEHAALD</span>':''}</div>`;
+    return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
+      ${head}<div style="margin-top:8px">${chk}</div></div>`}).join('')||'<div class=calc>geen accounts</div>';
+}
 
 async function loadCommand(){
   let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· bijgewerkt "+new Date(s.as_of).toLocaleTimeString("nl-NL",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

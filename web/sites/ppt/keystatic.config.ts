@@ -87,7 +87,19 @@ export default config({
           description: "Concepten verschijnen niet op de live site.",
           defaultValue: false,
         }),
-        content: fields.mdx({ label: "Inhoud" }),
+        content: fields.mdx({
+          label: "Inhoud",
+          options: {
+            // Without this, an image dropped into the editor is written next to
+            // the .mdx file in src/content — where the static build never serves
+            // it. Pointing at public/ makes an upload land somewhere the site
+            // can actually reach.
+            image: {
+              directory: "public/media/posts",
+              publicPath: "/media/posts/",
+            },
+          },
+        }),
       },
     }),
 
@@ -112,7 +124,15 @@ export default config({
           label: "Uitsluiten van zoekmachines",
           defaultValue: false,
         }),
-        content: fields.mdx({ label: "Inhoud" }),
+        content: fields.mdx({
+          label: "Inhoud",
+          options: {
+            image: {
+              directory: "public/media/pages",
+              publicPath: "/media/pages/",
+            },
+          },
+        }),
       },
     }),
   },

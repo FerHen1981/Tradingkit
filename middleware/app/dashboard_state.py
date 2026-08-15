@@ -39,15 +39,26 @@ _API = "https://api.notion.com/v1"
 _VER = "2022-06-28"
 _ACCOUNTS_DB = os.environ.get("NOTION_ACCOUNTS_DB", "1ddb61ea444d8119aea2fd0d11de4493")
 
-# product root -> display asset · engine family · funded-edge flag
-_ROOT2ASSET = {"GC": "GC", "MGC": "GC", "ES": "ES", "MES": "ES",
-               "NQ": "NQ", "MNQ": "NQ", "YM": "YM", "MYM": "YM",
-               "RTY": "RTY", "M2K": "RTY", "CL": "CL", "MCL": "CL"}
-_ENGINE = {"GC": "El Tesoro / El Minero", "ES": "El Rey / El León",
-           "NQ": "El Toro / Matador / Dorado / Patrón", "YM": "El Yankee"}
-_FUNDED_EDGE = {"GC", "ES"}          # validated funded edges; NQ/YM = eval-only variance
-_EDGE_LABEL = {"GC": "Funded workhorse", "ES": "Cleanest OOS",
-               "NQ": "Variance-lottery (eval)", "YM": "Variance-lottery (eval)"}
+# product root -> (label, market, is_micro, engine, funded_edge, edge_label, cls). Kept at the
+# ACTUAL traded product so micro (MGC/MES = funded) and full-size (GC/ES = eval) stay distinct.
+# Extend this one table to add a market/contract; nothing else needs to change.
+_PRODUCT = {
+    "MGC": ("MGC", "Gold", True,  "El Tesoro — MGC",  True,  "Funded workhorse",  "gc"),
+    "GC":  ("GC",  "Gold", False, "El Minero — GC",   False, "Eval (full-size)",  "gc"),
+    "MES": ("MES", "ES",   True,  "El Rey — MES",     True,  "Cleanest OOS",      "es"),
+    "ES":  ("ES",  "ES",   False, "El León — ES",     False, "Eval (full-size)",  "es"),
+    "MNQ": ("MNQ", "NQ",   True,  "El Toro / Matador / Dorado / Patrón", False, "Variance (eval)", "nq"),
+    "NQ":  ("NQ",  "NQ",   False, "El Toro / Matador / Dorado / Patrón", False, "Variance (eval)", "nq"),
+    "MYM": ("MYM", "YM",   True,  "El Yankee — YM",   False, "Variance (eval)",   "nq"),
+    "YM":  ("YM",  "YM",   False, "El Yankee — YM",   False, "Variance (eval)",   "nq"),
+    "RTY": ("RTY", "RTY",  False, "—", False, "—", "nq"), "M2K": ("M2K", "RTY", True, "—", False, "—", "nq"),
+    "CL":  ("CL",  "CL",   False, "—", False, "—", "nq"), "MCL": ("MCL", "CL",  True, "—", False, "—", "nq"),
+}
+
+
+def _prod(root: str) -> tuple:
+    r = (root or "").upper()
+    return _PRODUCT.get(r, (r, r, False, "—", False, "—", "nq"))
 
 _HEALTH_RANK = {"Healthy": 5, "Watch": 4, "Warning": 3, "Critical": 2, "Breached": 1}
 
@@ -182,7 +193,7 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
 
     trades: list[dict] = []
     for t in pair_fills(fills):
-        sym = _ROOT2ASSET.get(t.product.upper(), t.product.upper())
+        sym = _prod(t.product)[0]
         net = round(t.gross_pnl - t.commissions, 2)
         move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
         ticks = round(move / t.tick_size) if t.tick_size else 0
@@ -205,6 +216,27 @@ def _pearson(x: list[float], y: list[float]) -> "float | None":
     if vx <= 0 or vy <= 0:
         return None
     return round(cov / ((vx * vy) ** 0.5), 2)
+
+
+def _stats(rows: list[dict]) -> dict:
+    """The CIO metric set for any slice of trades: PF, win%, expectancy, avg win/loss, heat."""
+    n = len(rows)
+    gw = round(sum(t["net"] for t in rows if t["net"] > 0), 2)
+    gl = round(-sum(t["net"] for t in rows if t["net"] < 0), 2)
+    wins = sum(1 for t in rows if t["net"] > 0)
+    losers = sum(1 for t in rows if t["net"] < 0)
+    net = round(sum(t["net"] for t in rows), 2)
+    maes = [t["mae"] for t in rows if t.get("mae") is not None]
+    return {
+        "n": n, "wins": wins,
+        "win_pct": round(100 * wins / n, 1) if n else 0.0,
+        "net": net, "gross_win": gw, "gross_loss": gl,
+        "pf": round(gw / gl, 2) if gl > 0 else (None if gw == 0 else 99.99),
+        "expectancy": round(net / n, 2) if n else 0.0,
+        "avg_win": round(gw / wins, 2) if wins else 0.0,
+        "avg_loss": round(gl / losers, 2) if losers else 0.0,
+        "heat": round(sum(maes) / len(maes), 1) if maes else None,   # avg MAE ticks
+    }
 
 
 def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None") -> list[dict]:
@@ -234,7 +266,7 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
         if after is not None and close <= after:
             continue                                 # already covered by the Fills export
         product = _sym_root(t.symbol)
-        sym = _ROOT2ASSET.get(product.upper(), product.upper())
+        sym = _prod(product)[0]
         tick = _TICK.get(product.upper()) or _TICK.get(sym, 0)
         if tick and t.entry_price is not None and t.exit_price is not None:
             move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
@@ -259,13 +291,20 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     if stage in ("funded", "eval"):
         rows = [t for t in rows if _phase(t["acct"]).lower() == stage]
 
-    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0,
-                                                "comm": 0.0, "mfe": [], "mae": []})
+    agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "losers": 0, "net": 0.0,
+                                                "ticks": 0, "comm": 0.0, "gw": 0.0, "gl": 0.0,
+                                                "mfe": [], "mae": []})
     acct_net: dict[str, float] = defaultdict(float)
+    acct_rows: dict[str, list] = defaultdict(list)
     for t in rows:
         a = agg[t["sym"]]
         a["n"] += 1
-        a["wins"] += 1 if t["net"] > 0 else 0
+        if t["net"] > 0:
+            a["wins"] += 1
+            a["gw"] = round(a["gw"] + t["net"], 2)
+        elif t["net"] < 0:
+            a["losers"] += 1
+            a["gl"] = round(a["gl"] - t["net"], 2)
         a["net"] = round(a["net"] + t["net"], 2)
         a["ticks"] += t["ticks"]
         a["comm"] = round(a["comm"] + t.get("comm", 0.0), 2)
@@ -274,6 +313,7 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
         if t.get("mae") is not None:
             a["mae"].append(t["mae"])
         acct_net[t["acct"]] = round(acct_net[t["acct"]] + t["net"], 2)   # full id — 013 collision-safe
+        acct_rows[t["acct"][-3:]].append(t)
 
     def _avg(xs):
         return round(sum(xs) / len(xs), 1) if xs else None
@@ -281,15 +321,19 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     assets = []
     for sym, a in agg.items():
         gross = round(a["net"] + a["comm"], 2)
+        label, market, micro, engine, robust, edge, cls = _prod(sym)
         assets.append({
-            "sym": sym, "engine": _ENGINE.get(sym, "—"),
+            "sym": sym, "market": market, "micro": micro, "engine": engine,
             "n": a["n"], "wins": a["wins"],
             "win": round(100 * a["wins"] / a["n"], 1) if a["n"] else 0.0,
             "ticks": int(a["ticks"]), "net": a["net"],
+            "pf": round(a["gw"] / a["gl"], 2) if a["gl"] > 0 else (None if a["gw"] == 0 else 99.99),
+            "expectancy": round(a["net"] / a["n"], 2) if a["n"] else 0.0,
+            "avg_win": round(a["gw"] / a["wins"], 2) if a["wins"] else 0.0,
+            "avg_loss": round(a["gl"] / a["losers"], 2) if a["losers"] else 0.0,
             "comm": a["comm"], "fees_pct": round(100 * a["comm"] / gross, 1) if gross > 0 else None,
             "mfe": _avg(a["mfe"]), "mae": _avg(a["mae"]),
-            "robust": sym in _FUNDED_EDGE, "edge": _EDGE_LABEL.get(sym, "—"),
-            "cls": {"GC": "gc", "ES": "es"}.get(sym, "nq"),
+            "robust": robust, "edge": edge, "cls": cls,
         })
     assets.sort(key=lambda x: -x["net"])
     totals = {"net": round(sum(x["net"] for x in assets), 2),
@@ -335,8 +379,19 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
         "acct_day": {k: dict(v) for k, v in cal_acct.items()},
     }
 
+    # per-account + fleet CIO stats (PF, win%, expectancy, heat) over the filtered rows
+    acct_stats = {k: _stats(v) for k, v in acct_rows.items()}
+    day_nets = [v["net"] for v in cal_day.values()]
+    stats = _stats(rows)
+    stats.update(best_day=max(day_nets) if day_nets else 0.0,
+                 worst_day=min(day_nets) if day_nets else 0.0,
+                 up_days=sum(1 for x in day_nets if x > 0),
+                 down_days=sum(1 for x in day_nets if x < 0),
+                 trading_days=len(day_nets))
+
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
-            "heatmap": heatmap, "correlation": correlation, "calendar": calendar}
+            "heatmap": heatmap, "correlation": correlation, "calendar": calendar,
+            "acct_stats": acct_stats, "stats": stats}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -383,6 +438,18 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
     accounts = [dict(a) for a in accounts_src
                 if stage == "all" or a["stage"].lower() == stage]
     funded_net = round(sum((a["net"] or 0.0) for a in accounts if a["stage"] == "Funded"), 2)
+
+    # attach CIO stats (PF, win%, expectancy, trade count) per account from the trade log
+    _ast = ag["acct_stats"]
+    for a in accounts:
+        s = _ast.get(a["id"]) or {}
+        a["pf"] = s.get("pf")
+        a["win_pct"] = s.get("win_pct")
+        a["expectancy"] = s.get("expectancy")
+        a["avg_win"] = s.get("avg_win")
+        a["avg_loss"] = s.get("avg_loss")
+        a["heat"] = s.get("heat")
+        a["trades"] = s.get("n", 0)
 
     # payout & rules: from each account's ALL-TIME daily realized P&L (window-independent)
     import dataclasses
@@ -449,8 +516,18 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
             "survival_buffer": fleet_buffer,
             "accounts": len(accounts),
             "breached": breached,
-            "trades": atot["n"],
-            "win_rate": round(100 * atot["wins"] / atot["n"], 1) if atot["n"] else None,
+            "trades": ag["stats"]["n"],
+            "win_rate": ag["stats"]["win_pct"],
+            "pf": ag["stats"]["pf"],
+            "expectancy": ag["stats"]["expectancy"],
+            "avg_win": ag["stats"]["avg_win"],
+            "avg_loss": ag["stats"]["avg_loss"],
+            "heat": ag["stats"]["heat"],
+            "best_day": ag["stats"]["best_day"],
+            "worst_day": ag["stats"]["worst_day"],
+            "up_days": ag["stats"]["up_days"],
+            "down_days": ag["stats"]["down_days"],
+            "trading_days": ag["stats"]["trading_days"],
             "best_asset": best["sym"] if best else None,
             "best_asset_net": best["net"] if best else None,
             "fees": atot.get("comm", 0.0),

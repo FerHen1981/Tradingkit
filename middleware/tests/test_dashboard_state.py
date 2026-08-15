@@ -38,11 +38,11 @@ def test_trades_dedup_and_pnl():
     assert len(trades) == 2                            # deduped, not 3
     ag = ds._aggregate(trades, "all")
     by = {a["sym"]: a for a in ag["assets"]}
-    assert by["GC"]["n"] == 1 and by["GC"]["net"] == 38.66 and by["GC"]["ticks"] == 40
-    assert by["GC"]["robust"] is True
-    assert by["ES"]["net"] == 13.75 and by["ES"]["ticks"] == 11
+    assert by["MGC"]["n"] == 1 and by["MGC"]["net"] == 38.66 and by["MGC"]["ticks"] == 40
+    assert by["MGC"]["micro"] is True and by["MGC"]["robust"] is True   # MGC = micro, funded edge
+    assert by["MES"]["net"] == 13.75 and by["MES"]["ticks"] == 11 and by["MES"]["micro"] is True
     assert ag["totals"]["n"] == 2 and ag["totals"]["net"] == 52.41
-    assert by["GC"]["comm"] == 1.34 and ag["totals"]["comm"] == 1.34   # 0.67 + 0.67
+    assert by["MGC"]["comm"] == 1.34 and ag["totals"]["comm"] == 1.34   # 0.67 + 0.67
     assert ag["acct_net"]["PAAPEX2700250000018"] == 38.66
     assert ag["acct_net"]["APEX27002500000205"] == 13.75
 
@@ -63,7 +63,7 @@ def test_skip_filters_account():
     _write(d, "20260803_205_Fills.csv", _ES)
     trades = ds._load_trades(d, skip=["205"])          # drop the ES account
     ag = ds._aggregate(trades, "all")
-    assert {a["sym"] for a in ag["assets"]} == {"GC"} and ag["totals"]["n"] == 1
+    assert {a["sym"] for a in ag["assets"]} == {"MGC"} and ag["totals"]["n"] == 1
 
 
 def test_window_start_boundaries():
@@ -103,7 +103,7 @@ def test_command_state_assembles_without_token():
         assert st["fleet"]["realized_net"] == 0.0        # ledger (no accounts without a token)
         assert st["fleet"]["window_net"] == 52.41        # trade-log total
         assert st["fleet"]["trades"] == 2
-        assert {a["sym"] for a in st["assets"]} == {"GC", "ES"}
+        assert {a["sym"] for a in st["assets"]} == {"MGC", "MES"}
     finally:
         os.environ.clear()
         os.environ.update(old)
@@ -127,7 +127,7 @@ def test_global_pairing_across_files():
     _write(d, "20260804b_Fills.csv", [_GC[1]])   # only the SELL (close), later snapshot
     trades = ds._load_trades(d, skip=[])
     assert len(trades) == 1                        # globally paired, not lost
-    assert trades[0]["sym"] == "GC" and trades[0]["net"] == 38.66
+    assert trades[0]["sym"] == "MGC" and trades[0]["net"] == 38.66
 
 
 def test_aggregate_stage_filter():
@@ -166,7 +166,7 @@ def test_routed_trades_after_date():
     with open(os.path.join(d, "routed_20260814.jsonl"), "w") as f:
         f.write("\n".join(lines) + "\n")
     r = ds._load_routed_trades(d, [], dt.date(2026, 8, 13))       # Aug-14 close is after Aug-13
-    assert len(r) == 1 and r[0]["sym"] == "GC" and r[0]["net"] == 320.0 and r[0]["ticks"] == 40
+    assert len(r) == 1 and r[0]["sym"] == "MGC" and r[0]["net"] == 320.0 and r[0]["ticks"] == 40
     assert r[0]["mfe"] == 40 and r[0]["mae"] == 3 and r[0]["comm"] == 0.0   # excursions from the log
     assert ds._load_routed_trades(d, [], dt.date(2026, 8, 14)) == []   # not after Aug-14
 
@@ -218,3 +218,18 @@ def test_calendar_aggregation():
     assert cal["asset_day"]["GC"]["2026-08-03"] == 100.0                       # by asset
     assert cal["acct_day"]["018"]["2026-08-04"] == -40.0                       # by account
     assert cal["acct_day"]["205"]["2026-08-03"] == 25.0
+
+
+def test_stats_metrics():
+    rows = [{"net": 100.0, "mae": 5}, {"net": 50.0, "mae": 3}, {"net": -40.0, "mae": 10}]
+    s = ds._stats(rows)
+    assert s["n"] == 3 and s["wins"] == 2 and s["win_pct"] == 66.7
+    assert s["gross_win"] == 150.0 and s["gross_loss"] == 40.0 and s["pf"] == 3.75
+    assert s["expectancy"] == 36.67 and s["avg_win"] == 75.0 and s["avg_loss"] == 40.0
+    assert s["heat"] == 6.0                                # avg MAE (5+3+10)/3
+
+
+def test_product_taxonomy_micro_vs_full():
+    assert ds._prod("MGC")[0] == "MGC" and ds._prod("MGC")[2] is True and ds._prod("MGC")[4] is True
+    assert ds._prod("GC")[0] == "GC" and ds._prod("GC")[2] is False and ds._prod("GC")[4] is False
+    assert ds._prod("MES")[2] is True and ds._prod("ES")[2] is False

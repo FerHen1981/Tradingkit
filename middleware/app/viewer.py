@@ -355,6 +355,12 @@ td .firmdot{color:var(--dim);font-size:11px}
 .bufbar{width:66px;height:6px;border-radius:4px;background:rgba(28,63,67,.8);overflow:hidden;flex:none}
 .bufbar i{display:block;height:100%;border-radius:4px}
 .seed{color:var(--gold);font-size:10px}.calc{color:var(--dim);font-size:10px}
+.stiles{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap;margin:2px 0 16px}
+.stile{background:var(--panel);padding:9px 14px;min-width:92px;flex:1}
+.stile .sl{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.stile .sv{font-family:var(--mono);font-size:16px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
+.tag.micro{background:rgba(63,208,189,.14);color:var(--aqua)}
+.tag.full{background:rgba(132,150,166,.14);color:var(--muted)}
 .healthbar{display:flex;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--line);margin:2px 0 10px}
 .healthbar span{display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--bg)}
 .legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
@@ -406,6 +412,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=fleet>
     <h2 class=sec>Fleet health</h2>
     <p class=sec-note>Every account at a glance — split by survival status.</p>
+    <div id=fleetStats></div>
     <div class=healthbar id=healthbar></div><div class=legend id=legend></div>
     <div class="grid g2" style="margin-top:22px">
       <div class=card><div class=ey>P&amp;L attribution · by asset</div><div class=attr id=attr></div>
@@ -420,7 +427,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th data-k=id data-t=s>Account</th><th data-k=stage data-t=s>Type</th>
       <th data-k=current data-t=n>Current</th><th data-k=floor data-t=n>DD Floor</th>
       <th data-k=buffer data-t=n>Buffer $</th><th data-k=bufpct data-t=n>Buffer %</th>
-      <th data-k=net data-t=n>Net P&amp;L</th><th data-k=hrank data-t=n>Health</th>
+      <th data-k=net data-t=n>Net P&amp;L</th><th data-k=win_pct data-t=n>Win %</th><th data-k=pf data-t=n>PF</th><th data-k=hrank data-t=n>Health</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=firms hidden>
@@ -439,7 +446,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <div class=tablewrap><table id=assetTable><thead><tr>
       <th data-k=sym data-t=s>Asset</th><th data-k=engine data-t=s>Engine</th>
       <th data-k=n data-t=n>Trades</th><th data-k=win data-t=n>Win %</th>
-      <th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
+      <th>PF</th><th>Exp.</th><th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
@@ -450,6 +457,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <select id=calDim class=calsel></select>
       <span id=calTotal class=calc></span>
     </div>
+    <div id=calStats></div>
     <div class=tablewrap><div id=calGrid></div></div>
   </section>
   <section role=tabpanel id=portfolio hidden>
@@ -467,6 +475,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=heatmap hidden>
     <h2 class=sec>Day × hour heatmap</h2>
     <p class=sec-note>Net P&amp;L by weekday × hour of day (ET) over the selected window. Green = net positive, red = negative; deeper = bigger. Hover a cell for the trade count.</p>
+    <div id=hmStats></div>
     <div class=tablewrap><div id=hmGrid></div></div>
   </section>
   <section role=tabpanel id=payout hidden>
@@ -495,6 +504,22 @@ const money=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{minimumFract
 const money0=n=>(n<0?"−$":"$")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const signed=n=>(n>=0?"+":"−")+Math.abs(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const moneyK=n=>{const a=Math.abs(n),s=n>=0?"+":"−";return a>=1000?s+(a/1000).toFixed(1)+"k":s+Math.round(a);};
+const pfCls=pf=>pf==null?"":(pf>=1?"pos":"neg");
+function tiles(items){return '<div class=stiles>'+items.map(i=>`<div class=stile><div class=sl>${i.lab}</div><div class="sv ${i.cls||''}">${i.val}</div></div>`).join('')+'</div>';}
+function statItems(s){s=s||{};const win=s.win_pct??s.win_rate??s.win,heat=s.heat??s.mae;
+  return [
+    {lab:"Trades",val:s.trades??s.n??0},
+    {lab:"Win %",val:win!=null?win+"%":"—"},
+    {lab:"Profit factor",val:s.pf==null?"—":s.pf,cls:pfCls(s.pf)},
+    {lab:"Expectancy",val:s.expectancy!=null?money0(s.expectancy):"—",cls:cls(s.expectancy||0)},
+    {lab:"Avg win",val:s.avg_win!=null?money0(s.avg_win):"—",cls:"pos"},
+    {lab:"Avg loss",val:s.avg_loss!=null?money0(s.avg_loss):"—",cls:"neg"},
+    {lab:"Heat (MAE)",val:heat!=null?heat+"t":"—"}];
+}
+function fleetTiles(f){f=f||{};return tiles(statItems(f).concat([
+  {lab:"Best day",val:signed(f.best_day||0),cls:"pos"},
+  {lab:"Worst day",val:signed(f.worst_day||0),cls:"neg"},
+  {lab:"Up / Down",val:(f.up_days||0)+" / "+(f.down_days||0)}]));}
 const cls=n=>n>0?"pos":n<0?"neg":"";
 const HEALTH={Healthy:{c:"var(--ok)",cls:"h-ok",r:5},Watch:{c:"var(--watch)",cls:"h-watch",r:4},Warning:{c:"var(--warn)",cls:"h-warn",r:3},Critical:{c:"var(--crit)",cls:"h-crit",r:2},Breached:{c:"var(--dead)",cls:"h-dead",r:1}};
 const H=h=>HEALTH[h]||{c:"var(--dim)",cls:"h-idle",r:0};
@@ -525,6 +550,7 @@ function renderKpis(f){
   $("#kpis").innerHTML=k.map(x=>`<div class=kpi><div class=lab>${x.lab}</div><div class="val ${x.cls}">${x.val}</div><div class=note>${x.note}</div></div>`).join("");
 }
 function renderFleet(){
+  $("#fleetStats").innerHTML=fleetTiles(CMD.fleet||{});
   const acc=CMD.accounts, order=["Healthy","Watch","Warning","Critical","Breached"];
   const dist={}; acc.forEach(a=>{if(HEALTH[a.health])dist[a.health]=(dist[a.health]||0)+1});
   const tot=Object.values(dist).reduce((x,y)=>x+y,0)||1;
@@ -549,7 +575,9 @@ function renderAccts(rows){
       <td class=num style="color:${a.buffer==null?'var(--dim)':(a.buffer<0?'var(--crit)':'var(--ink)')}">${a.buffer==null?"—":money(a.buffer)}</td>
       <td class=num><div class=bufcell>${a.bufpct==null?"—":a.bufpct.toFixed(1)+"%"}<span class=bufbar><i style="width:${p}%;background:${h.c}"></i></span></div></td>
       <td class="num ${cls(a.net||0)}">${a.net==null?"—":signed(a.net)}</td>
-      <td class=num><span class="pill ${h.cls}">${a.health}</span></td></tr>`}).join("")||'<tr><td colspan=8 class=calc>no accounts</td></tr>';
+      <td class=num>${a.win_pct!=null?a.win_pct+'%':'—'}</td>
+      <td class="num ${pfCls(a.pf)}">${a.pf==null?'—':a.pf}</td>
+      <td class=num><span class="pill ${h.cls}">${a.health}</span></td></tr>`}).join("")||'<tr><td colspan=10 class=calc>no accounts</td></tr>';
 }
 let acctSort={k:"hrank",dir:1};
 function sortAccts(k,t){
@@ -567,20 +595,23 @@ function renderFirms(){$("#firmCards").innerHTML=CMD.firms.map(f=>`<div class=ca
   <div class=row><span>Survival buffer</span><b>${f.buffer?money0(f.buffer):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
 // (strategy card labels below)
 function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class=card>
-  <div class=ey><span class="tag ${a.cls}">${a.sym}</span> ${a.robust?'<span style="color:var(--ok)">funded edge</span>':'<span style="color:var(--warn)">eval-only</span>'}</div>
+  <div class=ey><span class="tag ${a.cls}">${a.sym}</span> <span class="tag ${a.micro?'micro':'full'}">${a.micro?'micro':'full'}</span> ${a.robust?'<span style="color:var(--ok)">funded edge</span>':'<span style="color:var(--warn)">eval</span>'}</div>
   <div class="big ${cls(a.net)}">${signed(a.net)}</div><div class=row><span>${a.engine}</span></div>
   <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win rate</span><b>${a.win.toFixed(1)}%</b></div>
+  <div class=row><span>Profit factor</span><b class="${pfCls(a.pf)}">${a.pf==null?'—':a.pf}</b></div>
+  <div class=row><span>Expectancy</span><b class="${cls(a.expectancy)}">${money0(a.expectancy)}</b></div>
+  <div class=row><span>Avg win / loss</span><b>${money0(a.avg_win)} / ${money0(a.avg_loss)}</b></div>
   <div class=row><span>Net ticks</span><b>${signed(a.ticks)}</b></div>
-  <div class=row><span>$ / trade</span><b>${a.n?money0(a.net/a.n):"—"}</b></div>
   <div class=row><span>Fees</span><b style="color:var(--warn)">${a.comm?"−"+money0(a.comm):"—"}${a.fees_pct!=null?' ('+a.fees_pct+'%)':''}</b></div>
-  <div class=row><span>MFE / MAE</span><b>${a.mfe!=null?a.mfe+"t / "+(a.mae!=null?a.mae+"t":"—"):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
+  <div class=row><span>MFE / MAE (heat)</span><b>${a.mfe!=null?a.mfe+"t / "+(a.mae!=null?a.mae+"t":"—"):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
 function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
-  <td class=acct><span class="tag ${a.cls}">${a.sym}</span></td><td style="color:var(--muted)">${a.engine}</td>
+  <td class=acct><span class="tag ${a.cls}">${a.sym}</span> <span class="tag ${a.micro?'micro':'full'}">${a.micro?'micro':'full'}</span></td><td style="color:var(--muted)">${a.engine}</td>
   <td class=num>${a.n}</td><td class=num>${a.win.toFixed(1)}%</td>
+  <td class="num ${pfCls(a.pf)}">${a.pf==null?'—':a.pf}</td><td class="num ${cls(a.expectancy)}">${money0(a.expectancy)}</td>
   <td class="num ${cls(a.ticks)}">${signed(a.ticks)}</td><td class="num ${cls(a.net)}">${signed(a.net)}</td>
   <td class=num style="color:var(--warn)">${a.comm?'−'+money0(a.comm):'—'}${a.fees_pct!=null?' <span class=calc>('+a.fees_pct+'%)</span>':''}</td>
   <td class=num>${a.mfe!=null?a.mfe+'t / '+(a.mae!=null?a.mae+'t':'—'):'<span class=calc>—</span>'}</td>
-  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=9 class=calc>no trades</td></tr>'}
+  <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=11 class=calc>no trades</td></tr>'}
 function renderPayout(){
   const f=CMD.fleet||{};
   const funded=CMD.accounts.filter(a=>a.payout&&a.payout.stage==='Funded');   // PA accounts only
@@ -629,6 +660,13 @@ function calSeries(){
   const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
   return (k==="asset"?(cal.asset_day||{}):(cal.acct_day||{}))[name]||{};
 }
+function calStatsFor(){
+  const v=$("#calDim").value||"all";
+  if(v==="all")return CMD.fleet||{};
+  const i=v.indexOf(":"),k=v.slice(0,i),name=v.slice(i+1);
+  if(k==="asset")return (CMD.assets||[]).find(a=>a.sym===name)||{};
+  return (CMD.accounts||[]).find(a=>a.id===name)||{};
+}
 function renderCalendar(){
   const cal=CMD.calendar;if(!cal)return;const sel=$("#calDim");
   const assets=Object.keys(cal.asset_day||{}).sort(),accts=Object.keys(cal.acct_day||{}).sort();
@@ -645,6 +683,7 @@ function renderCalendar(){
   drawCalendar();
 }
 function drawCalendar(){
+  $("#calStats").innerHTML=tiles(statItems(calStatsFor()));
   const series=calSeries();const dates=Object.keys(series).sort();const grid=$("#calGrid");
   if(!dates.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';$("#calTotal").textContent='';return;}
   const parse=s=>{const p=s.split("-").map(Number);return new Date(Date.UTC(p[0],p[1]-1,p[2]));};
@@ -673,6 +712,7 @@ function drawCalendar(){
 }
 const DOW=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 function renderHeatmap(){
+  $("#hmStats").innerHTML=fleetTiles(CMD.fleet||{});
   const cells=CMD.heatmap||[];const grid=$("#hmGrid");
   if(!cells.length){grid.innerHTML='<div class=calc style="padding:16px">no trades in this window</div>';return;}
   const hours=[...new Set(cells.map(c=>c.hour))].sort((a,b)=>a-b);

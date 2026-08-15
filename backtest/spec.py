@@ -48,6 +48,8 @@ class ResolvedSpec:
     policy: dict[str, Any]
     groups: dict[str, dict[str, Any]]   # group -> {param: value}, defaults filled
     families: dict[str, str] = field(default_factory=dict)  # group -> "price_action"|"classic"
+    base_preset: str | None = None                          # optional engine Config to start from
+    explicit: dict[str, set] = field(default_factory=dict)  # group -> {params the spec set by hand}
 
 
 # --------------------------------------------------------------------------- #
@@ -112,6 +114,7 @@ def validate_spec(spec: dict, registry: dict | None = None) -> ResolvedSpec:
     pa_only = bool(policy.get("price_action_only", False))
     resolved: dict[str, dict[str, Any]] = {}
     families: dict[str, str] = {}
+    explicit: dict[str, set] = {}
 
     for gname, overrides in spec_groups.items():
         if gname not in groups_reg:
@@ -136,11 +139,13 @@ def validate_spec(spec: dict, registry: dict | None = None) -> ResolvedSpec:
             _validate_value(gname, pname, pdefs[pname], val)
             values[pname] = val
         resolved[gname] = values
+        explicit[gname] = set(overrides.keys())
 
     _check_constraints(registry.get("constraints") or [], resolved)
 
     return ResolvedSpec(name=name, base_asset=spec.get("base_asset"),
-                        policy=policy, groups=resolved, families=families)
+                        policy=policy, groups=resolved, families=families,
+                        base_preset=spec.get("base_preset"), explicit=explicit)
 
 
 def _validate_value(gname: str, pname: str, pdef: dict, val: Any) -> None:
@@ -212,3 +217,76 @@ def _check_constraints(constraints: list[str], resolved: dict) -> None:
 # --------------------------------------------------------------------------- #
 def validate_file(path: str | Path, registry: dict | None = None) -> ResolvedSpec:
     return validate_spec(load_spec(path), registry)
+
+
+# --------------------------------------------------------------------------- #
+# Spec -> engine Config
+# --------------------------------------------------------------------------- #
+# Registry (group, param) -> Config field. ONLY params the engine already
+# implements (engine: implemented|partial). Everything else stays unmapped and
+# is reported, so a spec can never *silently* change behaviour the engine ignores.
+_PARAM_MAP: dict[tuple[str, str], str] = {
+    ("fvg", "gap_min_ticks"):        "gap_min_ticks",
+    ("fvg", "gap_max_ticks"):        "gap_max_ticks",
+    ("cvd_delta", "cvd_trend_count"): "cvd_trend_count",
+    ("market_structure", "pivot_k"): "pivot_k",
+    ("swing_stops", "pivot_k"):      "pivot_k",       # same field; constraint keeps them equal
+    ("swing_stops", "stop_buffer_ticks"): "swing_buf_ticks",
+    ("atr", "length"):               "atr_len",
+}
+# Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
+_TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
+
+
+def spec_to_config(rspec: ResolvedSpec):
+    """Turn a validated spec into an engine Config.
+
+    Returns (Config, unmapped) where `unmapped` lists group.param that the spec
+    set by hand but the engine does not yet wire (engine: todo) — the caller
+    should surface these so nothing is silently dropped.
+
+    The spec is declarative for the INDICATOR layer: including a group toggles
+    its filter on and its (explicit or registry-default) values become
+    authoritative; omitting a governable group toggles that filter off. Non-
+    indicator mechanics (entry/TP/sizing/account phase) come from `base_preset`
+    or Config defaults and are set later by the engine lens.
+    """
+    from dataclasses import replace
+    from .config import Config, PRESETS, contract as get_contract
+
+    if rspec.base_preset:
+        if rspec.base_preset not in PRESETS:
+            raise SpecError(f"unknown base_preset {rspec.base_preset!r}; "
+                            f"known: {sorted(PRESETS)}")
+        base = PRESETS[rspec.base_preset]
+    else:
+        base = Config(name=rspec.name)
+
+    g = rspec.groups
+    over: dict[str, Any] = {"name": rspec.name}
+    if rspec.base_asset:
+        over["contract"] = get_contract(rspec.base_asset)
+
+    # Group-presence toggles (declarative on/off for the indicator filters).
+    over["use_gap_filter"] = "fvg" in g
+    over["use_cvd_filter"] = "cvd_delta" in g
+    if "cvd_delta" in g:
+        over["use_cvd_streak"] = True
+    over["stop_swing"] = "swing_stops" in g
+    over["use_vwap_veto"] = "vwap" in g and bool(g["vwap"].get("vwap_veto", True))
+
+    # Direct param maps (resolved values include registry defaults).
+    for (grp, param), field_name in _PARAM_MAP.items():
+        if grp in g and param in g[grp]:
+            over[field_name] = g[grp][param]
+
+    cfg = replace(base, **over)
+
+    # Report explicit params the engine does not (yet) wire.
+    unmapped: list[str] = []
+    for grp, params in rspec.explicit.items():
+        for p in params:
+            if (grp, p) in _PARAM_MAP or (grp, p) in _TOGGLE_CONSUMED:
+                continue
+            unmapped.append(f"{grp}.{p}")
+    return cfg, sorted(unmapped)

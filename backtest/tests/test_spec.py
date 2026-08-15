@@ -6,6 +6,7 @@ import pytest
 
 from backtest.spec import (
     REGISTRY_PATH, SpecError, load_registry, validate_spec, validate_file,
+    spec_to_config,
 )
 
 REG = load_registry()
@@ -125,3 +126,57 @@ def test_constraint_skipped_when_group_unused():
     # macd not in spec -> its constraint must not fire
     r = validate_spec(_spec(), REG)
     assert "macd" not in r.groups
+
+
+# --- spec -> Config -------------------------------------------------------- #
+def test_to_config_maps_indicators():
+    s = _spec(groups={
+        "fvg": {"gap_min_ticks": 9, "gap_max_ticks": 12},
+        "market_structure": {"pivot_k": 3},
+        "swing_stops": {"pivot_k": 3, "stop_buffer_ticks": 4},
+        "cvd_delta": {"cvd_trend_count": 4},
+        "vwap": {"vwap_veto": True},
+    })
+    cfg, unmapped = spec_to_config(validate_spec(s, REG))
+    assert cfg.gap_min_ticks == 9 and cfg.gap_max_ticks == 12
+    assert cfg.pivot_k == 3 and cfg.swing_buf_ticks == 4
+    assert cfg.use_gap_filter and cfg.use_cvd_filter and cfg.stop_swing and cfg.use_vwap_veto
+    assert cfg.cvd_trend_count == 4
+
+
+def test_to_config_toggles_off_absent_groups():
+    # base spec has no cvd_delta / vwap -> those filters must be OFF
+    cfg, _ = spec_to_config(validate_spec(_spec(), REG))
+    assert cfg.use_cvd_filter is False and cfg.use_vwap_veto is False
+    assert cfg.use_gap_filter is True and cfg.stop_swing is True
+
+
+def test_to_config_reports_unmapped():
+    s = _spec(groups={"fvg": {"gap_min_ticks": 9, "mitigation_mode": "touch", "expiry_bars": 20}})
+    _, unmapped = spec_to_config(validate_spec(s, REG))
+    assert "fvg.mitigation_mode" in unmapped and "fvg.expiry_bars" in unmapped
+    assert "fvg.gap_min_ticks" not in unmapped   # this one IS wired
+
+
+def test_to_config_base_preset_supplies_mechanics():
+    s = _spec(base_preset="EL_TORO")
+    cfg, _ = spec_to_config(validate_spec(s, REG))
+    assert cfg.tp_fixed_ticks == 122.0        # from the preset (non-registry mechanic)
+    assert cfg.gap_min_ticks == 9             # indicator layer still from the spec
+
+
+def test_to_config_unknown_preset_rejected():
+    with pytest.raises(SpecError, match="unknown base_preset"):
+        spec_to_config(validate_spec(_spec(base_preset="NOPE"), REG))
+
+
+def test_to_config_contract_from_asset():
+    cfg, _ = spec_to_config(validate_spec(_spec(base_asset="ES"), REG))
+    assert cfg.contract.symbol == "ES"
+
+
+def test_example_file_to_config():
+    path = os.path.join(os.path.dirname(REGISTRY_PATH), "specs", "el_toro_pa.yaml")
+    cfg, unmapped = spec_to_config(validate_file(path, REG))
+    assert cfg.name == "El_Toro_v7_PAonly"
+    assert cfg.use_gap_filter and cfg.use_vwap_veto

@@ -56,6 +56,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--preset", choices=list(PRESETS))
+    ap.add_argument("--spec", help="path to a strategy spec YAML (validated against registry.yaml)")
     ap.add_argument("--all", action="store_true", help="run both presets")
     ap.add_argument("--firm", help="prop-firm program key (e.g. apex_100k_eod, topstep_50k_eval) — overlays that firm's account rules; see backtest/firms.py")
     ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
@@ -73,10 +74,24 @@ def main():
     df = data_mod.load(args.data)
     print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
-    presets = list(PRESETS) if args.all else [args.preset]
+    # Build the list of (name, cfg) jobs — either from a spec or from presets.
+    if args.spec:
+        from .spec import validate_file, spec_to_config
+        rspec = validate_file(args.spec)
+        spec_cfg, unmapped = spec_to_config(rspec)
+        if unmapped:
+            print(f"  NOTE: spec set params the engine does not yet wire (ignored): "
+                  f"{', '.join(unmapped)}")
+        jobs = [(spec_cfg.name, spec_cfg)]
+    else:
+        names = list(PRESETS) if args.all else [args.preset]
+        if names == [None]:
+            ap.error("provide one of --preset NAME, --all, or --spec PATH")
+        jobs = [(n, PRESETS[n]) for n in names]
+
+    presets = [n for n, _ in jobs]   # for the single-preset guards below
     out = {}
-    for name in presets:
-        cfg = PRESETS[name]
+    for name, cfg in jobs:
         if args.firm:
             from .firms import program, to_overlay
             p = program(args.firm)

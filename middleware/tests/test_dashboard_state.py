@@ -115,3 +115,26 @@ def test_global_pairing_across_files():
     trades = ds._load_trades(d, skip=[])
     assert len(trades) == 1                        # globally paired, not lost
     assert trades[0]["sym"] == "GC" and trades[0]["net"] == 38.66
+
+
+def test_aggregate_stage_filter():
+    today = dt.datetime.now(ds._ET).date()
+    trades = [
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today},
+        {"acct": "APEX27002500000205", "sym": "ES", "net": 40.0, "ticks": 4, "close": today},
+    ]
+    assert ds._aggregate(trades, "all", "all")["totals"]["net"] == 140.0
+    assert ds._aggregate(trades, "all", "funded")["totals"]["net"] == 100.0   # PA only
+    assert ds._aggregate(trades, "all", "eval")["totals"]["net"] == 40.0      # APEX only
+
+
+def test_seed_additions_and_archive():
+    from app.seed_accounts import SEEDS, ARCHIVE
+    assert "APEX27002500000212" in SEEDS and SEEDS["APEX27002500000212"]["Account Size"] == 250000
+    for acct in ("APEX27002500000215", "APEX27002500000216", "APEX27002500000217",
+                 "APEX27002500000218", "APEX27002500000219", "APEX27002500000220",
+                 "APEX27002500000221", "APEX27002500000222"):
+        assert acct in SEEDS
+    assert SEEDS["APEX27002500000218"]["DD Amount $"] == 2000      # intraday-trail $2k
+    assert SEEDS["APEX27002500000213"]["DD Floor $"] == 50192.25   # breached floor
+    assert "APEX27002500000207" in ARCHIVE

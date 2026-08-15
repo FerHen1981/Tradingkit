@@ -186,7 +186,7 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     return trades
 
 
-def _aggregate(trades: list[dict], window: str) -> dict:
+def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     today = dt.datetime.now(_ET).date()
     start = _window_start(window, today)
     if window == "day":
@@ -195,6 +195,8 @@ def _aggregate(trades: list[dict], window: str) -> dict:
         rows = [t for t in trades if t["close"] >= start]
     else:
         rows = trades
+    if stage in ("funded", "eval"):
+        rows = [t for t in rows if _phase(t["acct"]).lower() == stage]
 
     agg: dict[str, dict] = defaultdict(lambda: {"n": 0, "wins": 0, "net": 0.0, "ticks": 0})
     acct_net: dict[str, float] = defaultdict(float)
@@ -252,15 +254,17 @@ def _sources() -> tuple[list[dict], list[dict]]:
 
 # ---- assemble ------------------------------------------------------------------------
 
-def command_state(window: str = "all") -> dict:
+def command_state(window: str = "all", stage: str = "all") -> dict:
     window = window if window in WINDOWS else "all"
+    stage = stage if stage in ("funded", "eval") else "all"
     trades, accounts_src = _sources()
-    ag = _aggregate(trades, window)
+    ag = _aggregate(trades, window, stage)
     assets, atot = ag["assets"], ag["totals"]
 
     # accounts: live buffers + ledger Net P&L (from Notion — always matches Current/Tradovate).
     # acct_net (from the trade log) drives the window-scoped performance cards, not this column.
-    accounts = [dict(a) for a in accounts_src]
+    accounts = [dict(a) for a in accounts_src
+                if stage == "all" or a["stage"].lower() == stage]
     funded_net = round(sum((a["net"] or 0.0) for a in accounts if a["stage"] == "Funded"), 2)
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)
     breached = sum(1 for a in accounts if a["health"] == "Breached")
@@ -282,6 +286,7 @@ def command_state(window: str = "all") -> dict:
         "window": window,
         "window_label": _WINDOW_LABEL.get(window, window),
         "windows": list(WINDOWS),
+        "stage": stage,
         "fleet": {
             "realized_net": atot["net"],
             "funded_net": funded_net,

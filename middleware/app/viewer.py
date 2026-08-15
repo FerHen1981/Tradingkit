@@ -193,9 +193,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/command":
             if not _api_authorized(self.path, self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
-            window = parse_qs(urlparse(self.path).query).get("window", ["all"])[0]
+            q = parse_qs(urlparse(self.path).query)
+            window = q.get("window", ["all"])[0]
+            stage = q.get("stage", ["all"])[0]
             try:
-                body = json.dumps(command_state(window)).encode()
+                body = json.dumps(command_state(window, stage)).encode()
             except Exception as exc:
                 log.warning("command state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
@@ -257,7 +259,7 @@ DASH_HTML = r"""<!doctype html><html lang=en><meta charset=utf-8>
   --bg:#06171a;--panel:#0b2428;--panel-2:#0f2e33;--line:#1c3f43;
   --ink:#eaf4f1;--muted:#84a8a3;--dim:#5c807c;
   --gold:#f0b64d;--gold-dim:#a9823a;--aqua:#3fd0bd;
-  --ok:#35c88a;--watch:#4fbfc0;--warn:#f0a53a;--crit:#ef6b53;--dead:#c0455a;
+  --ok:#35c88a;--watch:#f2a03a;--warn:#ef8b3a;--crit:#ef6b53;--dead:#c0455a;
   --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   --radius:10px;color-scheme:dark}
@@ -288,6 +290,8 @@ backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .tf button{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-family:var(--mono);font-size:11.5px;letter-spacing:.8px;text-transform:uppercase;padding:6px 12px;border-radius:20px;cursor:pointer}
 .tf button:hover{color:var(--ink);border-color:#26545a}
 .tf button[aria-pressed="true"]{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600}
+.tf.stage{margin-top:8px}
+.tf.stage button[aria-pressed="true"]{background:var(--aqua);border-color:var(--aqua)}
 .tf button:focus-visible{outline:2px solid var(--aqua);outline-offset:2px}
 nav.tabs{display:flex;gap:4px;margin:20px 0 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .tab{appearance:none;border:0;background:transparent;cursor:pointer;font-family:var(--mono);font-size:12.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);padding:11px 15px;border-bottom:2px solid transparent;margin-bottom:-1px}
@@ -354,6 +358,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
 </div></header>
 <div class=wrap>
   <div class=tf id=tf></div>
+  <div class="tf stage" id=stagef></div>
   <div class=kpis id=kpis></div>
   <p class=sec-note style="margin-top:4px">P&amp;L over <b id=tflabel style="color:var(--ink)">alles</b> · gereconcilieerd uit de Fills-export. Buffers zijn live "nu"-state (window-onafhankelijk). <span id=asof></span></p>
   <nav class=tabs role=tablist aria-label="Command center levels">
@@ -433,6 +438,13 @@ function renderTf(){
   $("#tf").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
     WIN=b.dataset.w;$("#tf").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));loadCommand();}));
 }
+const SLAB={all:"Alle types",funded:"Funded",eval:"Eval"};
+let STAGE="all";
+function renderStage(){
+  $("#stagef").innerHTML=Object.keys(SLAB).map(s=>`<button data-s="${s}" aria-pressed="${s===STAGE}">${SLAB[s]}</button>`).join("");
+  $("#stagef").querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{
+    STAGE=b.dataset.s;$("#stagef").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));loadCommand();}));
+}
 
 function renderKpis(f){
   const k=[
@@ -497,7 +509,7 @@ function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
   <td class=num style="text-align:left;color:${a.robust?'var(--ok)':'var(--warn)'}">${a.edge}</td></tr>`).join("")||'<tr><td colspan=7 class=calc>geen trades</td></tr>'}
 
 async function loadCommand(){
-  let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN),{cache:"no-store"})).json()}catch(e){return}
+  let s;try{s=await(await fetch("/api/command?window="+encodeURIComponent(WIN)+"&stage="+encodeURIComponent(STAGE),{cache:"no-store"})).json()}catch(e){return}
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();
@@ -534,7 +546,7 @@ function tick(){const d=new Date();
   const t=d.toLocaleTimeString("en-GB",{hour12:false,timeZone:"America/New_York"});
   $("#clock").textContent=t+" ET · "+d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",timeZone:"America/New_York"})}
 tick();setInterval(tick,1000);
-renderTf();loadCommand();setInterval(loadCommand,60000);
+renderTf();renderStage();loadCommand();setInterval(loadCommand,60000);
 setInterval(()=>{if(!$("#live").hidden)loadLive()},15000);
 </script></html>"""
 

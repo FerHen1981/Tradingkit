@@ -26,6 +26,16 @@ _ACCOUNTS_DB = os.environ.get("NOTION_ACCOUNTS_DB", "1ddb61ea444d8119aea2fd0d11d
 
 _SELECT = {"Prop Firm", "Drawdown Rule", "Status"}     # everything else is a number
 
+_APEX = "Apex Trader Funding"
+
+
+def _eval(size, starting, dd, floor, status="Eval to Start"):
+    """A fresh/known Apex eval row: metadata + exact DRAWDOWN AUTO floor."""
+    return {"Prop Firm": _APEX, "Account Size": size, "Starting Balance": starting,
+            "Drawdown Rule": "Trailing Equity Peak", "Status": status,
+            "DD Amount $": dd, "DD Floor $": floor}
+
+
 # account title -> properties to set. Floors are the exact Tradovate DRAWDOWN AUTO values.
 SEEDS: dict[str, dict] = {
     # funded floor seeds (metadata already present)
@@ -34,18 +44,27 @@ SEEDS: dict[str, dict] = {
     "PAAPEX2700250000016": {"DD Floor $": 50100.00, "DD Amount $": 2500},
     "PAAPEX2700250000017": {"DD Floor $": 48553.15, "DD Amount $": 2500},
     "PAAPEX2700250000018": {"DD Floor $": 50100.00, "DD Amount $": 2500},
-    # prefill bare rows (+ floor where known exactly)
-    "PAAPEX2700250000021": {"Prop Firm": "Apex Trader Funding", "Account Size": 50000,
-                            "Starting Balance": 50000, "Drawdown Rule": "Trailing Equity Peak",
-                            "Status": "Funded Account", "DD Amount $": 2500, "DD Floor $": 47939.98},
-    "APEX27002500000214": {"Prop Firm": "Apex Trader Funding", "Account Size": 50000,
-                           "Starting Balance": 50000, "Drawdown Rule": "Trailing Equity Peak",
-                           "Status": "Active Eval", "DD Amount $": 2500, "DD Floor $": 50534.50},
-    "APEX27002500000213": {"Prop Firm": "Apex Trader Funding", "Account Size": 50000,
-                           "Starting Balance": 50000, "Drawdown Rule": "Trailing Equity Peak",
-                           "Status": "Active Eval", "DD Amount $": 2500},
+    "PAAPEX2700250000021": {"Prop Firm": _APEX, "Account Size": 50000, "Starting Balance": 50000,
+                            "Drawdown Rule": "Trailing Equity Peak", "Status": "Funded Account",
+                            "DD Amount $": 2500, "DD Floor $": 47939.98},
+    "APEX27002500000214": _eval(50000, 50000, 2500, 50534.50, status="Active Eval"),
+    # 213 is being auto-liquidated (floor 50,192.25 > current 50,059.50 → breached, 13-08).
+    "APEX27002500000213": _eval(50000, 50000, 2500, 50192.25, status="Breached"),
+    # newly added accounts (no activity yet) — fresh floors from the Tradovate grid.
+    "APEX27002500000212": _eval(250000, 250000, 6500, 243500.00),   # 250k, DD 6.5k
+    "APEX27002500000215": _eval(50000, 50000, 2500, 47500.00),
+    "APEX27002500000216": _eval(50000, 50000, 2500, 47500.00),
+    "APEX27002500000217": _eval(50000, 50000, 2500, 47500.00),
+    "APEX27002500000218": _eval(50000, 50000, 2000, 48000.00),       # intraday-trail $2k evals
+    "APEX27002500000219": _eval(50000, 50000, 2000, 48000.00),
+    "APEX27002500000220": _eval(50000, 50000, 2000, 48000.00),
+    "APEX27002500000221": _eval(50000, 50000, 2000, 48000.00),
+    "APEX27002500000222": _eval(50000, 50000, 2000, 48000.00),
     # 209 deliberately omitted — incomplete Fills export; seed after a full re-export.
 }
+
+# accounts to hide (archived — no longer exist)
+ARCHIVE = ["APEX27002500000207"]
 
 
 def _headers(token: str) -> dict:
@@ -92,7 +111,7 @@ async def run() -> dict:
                 break
             cursor = data.get("next_cursor")
 
-        summary = {"written": 0, "missing": 0, "apply": apply}
+        summary = {"written": 0, "archived": 0, "missing": 0, "apply": apply}
         for acct, fields in SEEDS.items():
             pid = pages.get(acct)
             if not pid:
@@ -108,6 +127,22 @@ async def run() -> dict:
                                     json={"properties": props})
             pr.raise_for_status()
             summary["written"] += 1
+            if throttle:
+                await asyncio.sleep(throttle)
+
+        for acct in ARCHIVE:
+            pid = pages.get(acct)
+            if not pid:
+                summary["missing"] += 1
+                log.warning("account not found in DB: %s", acct)
+                continue
+            log.info("%s ← ARCHIVE (hide)%s", acct, "" if apply else "  [DRY]")
+            if not apply:
+                continue
+            pr = await client.patch(f"{_API}/pages/{pid}", headers=_headers(token),
+                                    json={"properties": {"Archived": {"checkbox": True}}})
+            pr.raise_for_status()
+            summary["archived"] += 1
             if throttle:
                 await asyncio.sleep(throttle)
     log.info("seed run: %s", summary)

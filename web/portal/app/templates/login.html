@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Inloggen{% endblock %}
+
+{% block content %}
+<div class="auth">
+  <p class="eyebrow">Besloten toegang</p>
+  <h1>Inloggen op het portal</h1>
+
+  {% if sent %}
+    <div class="notice notice--ok">
+      <p><strong>Kijk in uw mailbox.</strong></p>
+      <p>
+        Als dit adres toegang heeft, is er zojuist een link verstuurd. Die werkt
+        vijftien minuten en kan één keer worden gebruikt.
+      </p>
+    </div>
+    <p class="auth__again"><a href="/login">Opnieuw aanvragen</a></p>
+  {% else %}
+    <p class="auth__lead">
+      Er zijn geen wachtwoorden. Vul het adres in waarvoor toegang is verleend
+      en u ontvangt een eenmalige link.
+    </p>
+
+    {% if error %}
+      <div class="notice notice--bad"><p>{{ error }}</p></div>
+    {% endif %}
+
+    <form method="post" action="/login" class="auth__form">
+      <label for="email">E-mailadres</label>
+      <input
+        type="email"
+        id="email"
+        name="email"
+        required
+        autocomplete="email"
+        autofocus
+        placeholder="naam@voorbeeld.nl"
+      >
+      <button type="submit" class="btn btn--primary">Stuur mij een link</button>
+    </form>
+  {% endif %}
+
+  <p class="auth__note">
+    Toegang wordt uitsluitend op uitnodiging verstrekt en is persoonlijk. Deel
+    uw link niet — wie hem heeft, komt binnen.
+  </p>
+</div>
+{% endblock %}

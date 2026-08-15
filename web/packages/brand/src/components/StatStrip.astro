@@ -1,0 +1,63 @@
+---
+/**
+ * The KPI row from the mockup: hairline-separated tiles that read as one
+ * instrument panel rather than as loose boxes. The 1px grid gap over a
+ * bordered container is what produces the seams.
+ */
+import StatTile from "./StatTile.astro";
+
+interface Item {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: "" | "pos" | "neg" | "accent" | "accent-2";
+  hero?: boolean;
+}
+
+interface Props {
+  items: Item[];
+  /** Line under the strip explaining provenance and delay of the figures. */
+  source?: string;
+}
+
+const { items, source } = Astro.props;
+---
+
+<div class="strip" style={`--cols:${Math.min(items.length, 5)}`}>
+  {items.map((item) => <StatTile {...item} />)}
+</div>
+{source && <p class="strip__source">{source}</p>}
+
+<style>
+  .strip {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  @media (min-width: 900px) {
+    .strip {
+      grid-template-columns: repeat(var(--cols), 1fr);
+    }
+  }
+
+  /* An odd tile in a 2-column layout spans the full width instead of
+     leaving a hole. */
+  @media (max-width: 899px) {
+    .strip > :last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .strip__source {
+    margin-top: var(--sp-3);
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    line-height: 1.6;
+    color: var(--dim);
+  }
+</style>

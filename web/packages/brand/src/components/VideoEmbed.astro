@@ -1,0 +1,130 @@
+---
+/**
+ * Facade embed for the vlog. A normal YouTube iframe pulls roughly a megabyte
+ * of script and sets cookies on page load, on every page that mentions a
+ * video. This renders a poster plus a play button and only creates the iframe
+ * on click — which also means no third-party cookie is set unless the reader
+ * actually chooses to watch, so the site stays banner-free.
+ */
+interface Props {
+  /** YouTube video id, not a full URL. */
+  id: string;
+  title: string;
+  /** Override the auto-derived poster if you have a better still. */
+  poster?: string;
+  provider?: "youtube" | "vimeo";
+}
+
+const { id, title, poster, provider = "youtube" } = Astro.props;
+
+const thumb =
+  poster ??
+  (provider === "youtube"
+    ? `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`
+    : undefined);
+
+const src =
+  provider === "youtube"
+    ? `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`
+    : `https://player.vimeo.com/video/${id}?autoplay=1`;
+---
+
+<figure class="video">
+  <button
+    class="video__facade"
+    type="button"
+    data-embed-src={src}
+    aria-label={`Video afspelen: ${title}`}
+  >
+    {thumb && <img src={thumb} alt="" loading="lazy" decoding="async" />}
+    <span class="video__play" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="26" height="26">
+        <path d="M8 5.5v13l11-6.5z" fill="currentColor" />
+      </svg>
+    </span>
+  </button>
+  <figcaption>{title}</figcaption>
+</figure>
+
+<style>
+  .video {
+    margin: var(--sp-6) 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--surface);
+  }
+
+  .video__facade {
+    position: relative;
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    padding: 0;
+    border: 0;
+    background: var(--surface-2);
+    cursor: pointer;
+  }
+
+  .video__facade img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .video__play {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    width: 64px;
+    height: 64px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--brand-petrol) 78%, transparent);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding-left: 3px;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+
+  .video__facade:hover .video__play {
+    transform: scale(1.07);
+    background: var(--accent);
+    color: var(--brand-petrol);
+  }
+
+  .video :global(iframe) {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border: 0;
+    display: block;
+  }
+
+  figcaption {
+    font-size: var(--t-small);
+    color: var(--muted);
+    padding: var(--sp-3) var(--sp-4);
+    border-top: 1px solid var(--line);
+  }
+</style>
+
+<script>
+  document.querySelectorAll(".video__facade").forEach((facade) => {
+    facade.addEventListener(
+      "click",
+      () => {
+        const src = facade.getAttribute("data-embed-src");
+        if (!src) return;
+        const frame = document.createElement("iframe");
+        frame.src = src;
+        frame.title = facade.getAttribute("aria-label") ?? "";
+        frame.allow =
+          "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+        frame.allowFullscreen = true;
+        facade.replaceWith(frame);
+      },
+      { once: true }
+    );
+  });
+</script>

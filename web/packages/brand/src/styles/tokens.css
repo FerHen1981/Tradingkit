@@ -1,0 +1,175 @@
+/* ==========================================================================
+   MEX GROUP — huisstijl tokens
+   --------------------------------------------------------------------------
+   The single source of truth for colour, type and rhythm across
+   mex-traders.com, pipsandpalmtrees.com and app.mex-traders.com.
+
+   Palette is lifted verbatim from the approved "MEX Command Center" mockup:
+   deep petrol ground, gold as the one authoritative accent, aqua as the
+   secondary/live accent. Semantic green/red are reserved for P&L and are
+   never used as chrome — that discipline is what makes a number readable
+   at a glance on a trading surface.
+
+   A site may override --accent / --accent-2 and the surface ramp in its own
+   theme file; it must not invent new raw hex values in components.
+   ========================================================================== */
+
+:root {
+  /* ---- brand constants (never change per site) ---- */
+  --brand-gold: #f0b64d;
+  --brand-gold-dim: #a9823a;
+  --brand-aqua: #3fd0bd;
+  --brand-petrol: #06171a;
+
+  /* ---- surfaces: ground -> raised ---- */
+  --bg: #06171a;
+  --surface: #0b2428;
+  --surface-2: #0f2e33;
+  --surface-3: #123a40;
+  --line: #1c3f43;
+  --line-strong: #26545a;
+
+  /* ---- ink ---- */
+  --ink: #eaf4f1;
+  --muted: #84a8a3;
+  --dim: #5c807c;
+
+  /* ---- accents (site-overridable) ---- */
+  --accent: var(--brand-gold);
+  --accent-dim: var(--brand-gold-dim);
+  --accent-2: var(--brand-aqua);
+
+  /* ---- semantic: reserved for performance data only ---- */
+  --pos: #35c88a;
+  --neg: #ef6b53;
+  --warn: #f0a53a;
+  --neutral: #4fbfc0;
+
+  /* ---- type ---- */
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  /* Fluid type scale — clamp(min, preferred, max). One scale, both sites. */
+  --t-eyebrow: 0.6875rem;   /* 11px, uppercase, tracked */
+  --t-small: 0.8125rem;     /* 13px */
+  --t-body: 1rem;
+  --t-lead: clamp(1.0625rem, 0.98rem + 0.42vw, 1.25rem);
+  --t-h3: clamp(1.125rem, 1.05rem + 0.36vw, 1.3125rem);
+  --t-h2: clamp(1.375rem, 1.18rem + 0.95vw, 1.9375rem);
+  --t-h1: clamp(1.875rem, 1.42rem + 2.25vw, 3.25rem);
+  --t-display: clamp(2.25rem, 1.5rem + 3.6vw, 4.25rem);
+
+  --track-eyebrow: 0.14em;
+  --track-tight: -0.015em;
+
+  /* ---- rhythm ---- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+  --sp-9: 6rem;
+  --section-y: clamp(3.5rem, 2rem + 6vw, 6.5rem);
+
+  /* ---- shape ---- */
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ---- layout ---- */
+  --measure: 68ch;          /* prose line length */
+  --width: 1180px;          /* page frame, matches the mockup */
+  --width-narrow: 780px;
+
+  /* ---- depth (used sparingly; a flat surface reads more serious) ---- */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px -12px rgba(0, 0, 0, 0.5);
+
+  --focus: 2px solid var(--accent-2);
+  --focus-offset: 2px;
+
+  /* ---- chart layer ----
+     Charts get their own series token rather than reusing --accent-2, because
+     the brand aqua measures 1.91:1 against a white surface — below the 3:1
+     floor a data mark needs. Dark mode keeps the brand hue; light mode steps
+     to a darker teal from the same family (verified 3:1+). */
+  --chart-series: var(--brand-aqua);
+  --chart-grid: var(--line);
+  --chart-axis: var(--dim);
+
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+   Light mode. The brand's canonical expression is dark, but long-form reading
+   and printing deserve a real light palette rather than an inverted hack.
+   Only tokens are redefined — no component ever needs a light-mode branch.
+   Explicit [data-theme] wins in both directions so a manual toggle works.
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fbfaf6;
+    --surface: #ffffff;
+    --surface-2: #f3f1ea;
+    --surface-3: #eae7dd;
+    --line: #ddd8cb;
+    --line-strong: #c6c0ae;
+    --ink: #10201f;
+    --muted: #55706c;
+    --dim: #7d918e;
+    --accent-dim: #8a6828;
+    --pos: #1a8f5c;
+    --neg: #c2402c;
+    --warn: #a8701a;
+    --shadow: 0 1px 2px rgba(16, 32, 31, 0.06), 0 12px 32px -14px rgba(16, 32, 31, 0.18);
+    --chart-series: #0f8f80;
+    --chart-grid: #ddd8cb;
+    --chart-axis: #7d918e;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #fbfaf6;
+  --surface: #ffffff;
+  --surface-2: #f3f1ea;
+  --surface-3: #eae7dd;
+  --line: #ddd8cb;
+  --line-strong: #c6c0ae;
+  --ink: #10201f;
+  --muted: #55706c;
+  --dim: #7d918e;
+  --accent-dim: #8a6828;
+  --pos: #1a8f5c;
+  --neg: #c2402c;
+  --warn: #a8701a;
+  --shadow: 0 1px 2px rgba(16, 32, 31, 0.06), 0 12px 32px -14px rgba(16, 32, 31, 0.18);
+  --chart-series: #0f8f80;
+  --chart-grid: #ddd8cb;
+  --chart-axis: #7d918e;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #06171a;
+  --surface: #0b2428;
+  --surface-2: #0f2e33;
+  --surface-3: #123a40;
+  --line: #1c3f43;
+  --line-strong: #26545a;
+  --ink: #eaf4f1;
+  --muted: #84a8a3;
+  --dim: #5c807c;
+  --accent-dim: var(--brand-gold-dim);
+  --pos: #35c88a;
+  --neg: #ef6b53;
+  --warn: #f0a53a;
+  --chart-series: var(--brand-aqua);
+  --chart-grid: #1c3f43;
+  --chart-axis: #5c807c;
+  color-scheme: dark;
+}

@@ -15,3 +15,12 @@ venv/
 # Outputs
 *.out
 trades*.csv
+
+# Web (Astro sites + portal)
+node_modules/
+web/sites/*/dist/
+web/sites/*/.astro/
+web/**/.env
+web/portal/users.yaml
+web/portal/*.db
+.wrangler/

@@ -95,10 +95,10 @@ def catalog(csv_path: str | Path, symbol: str = "", timeframe: str = "1m") -> di
 
 def write_catalog(csv_path: str | Path, symbol: str = "", timeframe: str = "1m",
                   dest_dir: str | Path | None = None) -> Path:
-    """Catalog a file and drop its manifest.json next to it (or under datasets/<name>/)."""
+    """Catalog a file and drop its manifest.json beside it (or in `dest_dir`)."""
     csv_path = Path(csv_path)
     m = catalog(csv_path, symbol=symbol, timeframe=timeframe)
-    dest = Path(dest_dir) if dest_dir else datasets_dir() / m["name"]
+    dest = Path(dest_dir) if dest_dir else csv_path.parent
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "manifest.json").write_text(json.dumps(m, indent=2))
     return dest / "manifest.json"

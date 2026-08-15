@@ -1,0 +1,25 @@
+# El Toro with the REAL engine mechanics (TP/entry/sizing) inherited from the
+# EL_TORO preset, and the indicator layer declared here. Compare this against
+# el_toro_pa.yaml (which runs on default mechanics) to see how much the preset's
+# fixed-TP / sizing carries the edge vs the price-action filters alone.
+name: El_Toro_true
+base_asset: NQ
+base_preset: EL_TORO        # inherit Fixed 122-tick TP, entry, sizing, etc.
+
+policy:
+  price_action_only: false  # preset mechanics are not "indicator groups"; allow the mix
+  max_active_groups: 6
+
+groups:
+  fvg:
+    gap_min_ticks: 9
+    gap_max_ticks: 12
+  market_structure:
+    pivot_k: 3
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 2
+  cvd_delta:
+    cvd_trend_count: 4
+  vwap:
+    vwap_veto: true

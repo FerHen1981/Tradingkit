@@ -1,6 +1,9 @@
 // MEX Fleet — Scriptable widget (small). Tap opens the dashboard.
-// Place 4 small widgets, each with a different Parameter: all · funded · eval · week
-//   (long-press widget → Edit Widget → Parameter). Empty parameter = "all".
+// TWO ways to pick which stack a widget shows (all · funded · eval · week):
+//   1. Script NAME — name the script "All Mex" / "Funded Mex" / "Eval Mex" / "Week Mex"
+//      and the code auto-detects the mode from the name. Paste the SAME code in all 4.
+//   2. Widget Parameter — long-press widget → Edit Widget → Parameter = all|funded|eval|week
+//      (overrides the name). Empty parameter + unknown name = "all".
 // Numbers match the dashboard exactly: realized = ledger per stage; week = the Week window.
 
 const ENDPOINT  = "https://app.mex-traders.com/api/widget"
@@ -42,7 +45,19 @@ function sparkline(vals, w, h, col) {
 }
 
 const d = await getData()
-const param = (args.widgetParameter || "all").toString().trim().toLowerCase()
+
+// Mode: explicit Parameter wins; else derive from the script's name; else "all".
+function detectMode() {
+  const p = (args.widgetParameter || "").toString().trim().toLowerCase()
+  if (["all", "funded", "eval", "week"].includes(p)) return p
+  let nm = ""
+  try { nm = (Script.name() || "").toLowerCase() } catch (e) {}
+  if (nm.includes("week"))  return "week"
+  if (nm.includes("fund"))  return "funded"
+  if (nm.includes("eval"))  return "eval"
+  return "all"
+}
+const param = detectMode()
 
 // pick the view: all/funded/eval (stage stacks) or week
 let title, lbl, big, breached, rows

@@ -38,35 +38,42 @@ Mapping to what already exists:
 
 This is the governance layer. Proposal: **a Parameter Registry + declarative strategy specs.**
 
-### 2a. Parameter Registry (`backtest/registry.yaml`) — single source of truth
+### 2a. Parameter Registry (`backtest/registry.yaml`) — single source of truth ✅ drafted
 Today the "allowed variables" are implicit in the `Config` dataclass fields, and concrete
-values live in hard-coded presets (`EL_TORO`, …). We lift that into one explicit registry that,
-per parameter, declares:
+values live in hard-coded presets (`EL_TORO`, …). We lift that into one explicit registry
+(**`backtest/registry.yaml`**, first draft committed) with **two families** and, per parameter,
+default + allowed range/step + a governance type. The philosophy is literal here: the engine
+gets no exact instruction, only a **playing field** it may analyse and optimize within.
 
-```yaml
-groups:
-  fvg:                       # a price-action "indicator block"
-    price_action: true       # PA-only policy can forbid non-PA blocks
-    params:
-      use_gap_filter:   { type: bool,  default: true }
-      gap_min_ticks:    { type: float, default: 9.0,  min: 3,  max: 20, step: 0.5 }
-      gap_max_ticks:    { type: float, default: 12.0, min: 6,  max: 30, step: 0.5 }
-  swing_stop:
-    price_action: true
-    params:
-      pivot_k:          { type: int,   default: 3, min: 1, max: 8 }
-      max_stop_ticks:   { type: float, default: 72, min: 20, max: 160, step: 2 }
-  cvd:
-    price_action: true       # order-flow = still PA-adjacent; tag as you prefer
-    params:
-      use_cvd_filter:   { type: bool, default: true }
-      cvd_trend_count:  { type: int,  default: 4, min: 1, max: 10 }
-  # …vwap_veto, breakeven, trail, tp, sizing, day_exit, mae_guard…
-```
+**Family A — Price action / order flow** (`price_action: true`): FVG, CVD/Delta (streak +
+divergence), oscillator divergence, market structure (BOS/CHoCH), liquidity (EQH/EQL),
+premium-discount/OTE, order/breaker blocks, session VWAP, swing stops, ICT Silver Bullet
+(time-gated FVG), kill zones, footprint (data-gated on a bid/ask feed).
 
-The registry mirrors the existing `Config` fields 1:1 but adds **metadata**: type, default,
-**allowed range/step or enum**, and a `price_action` tag per group. This is exactly the knob
-that answers *"which variables, with which values."*
+**Family B — Classic long-term** (`price_action: false`): EMA/SMA (50/200 golden cross),
+RSI, MACD, Bollinger, ADX/DMI, ATR, Stochastic, Ichimoku, Supertrend, Donchian, Keltner —
+canonical defaults from authoritative sources, with conventional ranges.
+
+Two governance flags per parameter/group make your "operate within parameters" rule enforceable:
+- **`type: opt` vs `type: fixed`** — `opt` params the optimizer may explore within `[min,max,step]`;
+  `fixed` params (ICT time windows, Ichimoku 9/26/52, OTE "ideal" 0.705, watched 50/200 MAs) are
+  **switches you A/B-test, never optimizer free variables** — so the optimizer never burns budget
+  re-discovering that a watched value was watched.
+- **`provenance: sourced` vs `folklore` (vs `mixed`)** — honest labels. `sourced` = a real,
+  widely-cited default (RSI 14, footprint 3:1 / stacked-3, ATR-scaled gap ≈25% of ATR).
+  `folklore` = ICT/discretionary convention with no published edge (Silver Bullet windows, OTE
+  0.705, order-block "freshness") — allowed, but flagged so you know what you're testing.
+
+Research finding baked into the ranges: **analysts rarely tune lookback lengths, they tune
+thresholds/multipliers** — so lengths get narrow ranges + coarse steps (a 47 vs 50 EMA is noise
+and invites overfit), while decision thresholds (RSI 70/30→80/20) and multipliers (ATR-stop
+1.5–4×, Supertrend/BB mult) get the wider ranges. The file also carries **hard constraints**
+(`macd.slow > macd.fast`, `rsi.overbought > rsi.oversold`, shared `pivot_k`, …) the engine
+enforces as guards, not just ranges.
+
+The registry mirrors the existing `Config` fields where they already exist (`engine: implemented|
+partial|todo` marks each group) but adds the metadata layer. This is exactly the knob that
+answers *"which variables, with which values."*
 
 ### 2b. Strategy spec = a validated point in that space (`specs/<name>.yaml`)
 A strategy is a declarative file: which indicator groups are ON + their chosen values.

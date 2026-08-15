@@ -15,3 +15,9 @@ venv/
 # Outputs
 *.out
 trades*.csv
+
+# Backtest Lab data room (server-side; never in git)
+data/lab/
+lab_data/
+*.parquet
+results/*/

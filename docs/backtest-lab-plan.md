@@ -110,11 +110,29 @@ can't accidentally overfit on a knob that isn't declared, and every value it tri
     EURUSD_1m_2018-2025/
     BTCUSD_1m_2020-2025/
   results/
-    <run_id>/                  # run_id = hash(spec + dataset + lens + engine_git_sha)
+    <run_id>/                  # immutable per-run folder
       run.json                 # the full resolved config + provenance
       kpis.json  trades.csv  equity.csv  funnel.csv  payouts.csv
   index.json                   # registry of all runs (the cockpit reads this)
 ```
+
+**run_id — recognizable, with the asset in the name** (`backtest/lab/runs.py`):
+```
+NQ_El-Toro-v7-PAonly_15m_eval_20260815_a1b2c3
+│  │                  │   │    │        └ 6-char fingerprint(spec/preset + asset + tf + lens + unit + data)
+│  │                  │   │    └ run date (UTC)
+│  │                  │   └ lens: classic | eval | native(→funded)
+│  │                  └ timeframe
+│  └ strategy (slugged)
+└ asset
+```
+The prefix stays human-scannable across hundreds of runs; the fingerprint makes
+identical runs collapse and different ones never collide. `--lab` on the runner
+writes `results/<run_id>/` + upserts `index.json`.
+
+**Status:** ✅ built — `backtest/lab/` (paths, datasets catalog, runs registry),
+`python -m backtest.lab.catalog <csv> --symbol NQ` writes a `manifest.json`,
+`backtest.run --lab` records each run. 7 tests passing.
 
 - **Ingestion**: `data.py` already accepts `DateTime, OHLC, Volume, Delta` (+ optional
   `CVD_close, BuyVolume, SellVolume`). You just drop a big file + a manifest; a small
@@ -128,6 +146,11 @@ can't accidentally overfit on a knob that isn't declared, and every value it tri
   assets × specs × lenses, this is where the combinatorial backtest surface comes from.
 - **No secrets, git-ignored**: `/data/lab/` lives on the VPS only; big files never go in git
   (like `*.db`, `.env` today). Repo carries code + registry + specs; server carries the data.
+- **Upload via the dashboard** (planned, cockpit step): a `POST /api/upload` on `bck` takes a
+  multipart file → drops it in `datasets/<name>/data.csv` → auto-runs the catalog step →
+  appends to the datasets index. Owner-auth (same signed-cookie as the live cockpit), chunked
+  for big files, `.csv`/`.parquet` only, column-validated before it's accepted. So you deliver
+  a file straight from the browser/phone instead of scp-ing to the VPS.
 
 ---
 

@@ -51,6 +51,10 @@ _EDGE_LABEL = {"GC": "Funded workhorse", "ES": "Cleanest OOS",
 
 _HEALTH_RANK = {"Healthy": 5, "Watch": 4, "Warning": 3, "Critical": 2, "Breached": 1}
 
+# tick size per product root — to score ticks on routed-log trades (which carry only prices)
+_TICK = {"GC": 0.1, "MGC": 0.1, "ES": 0.25, "MES": 0.25, "NQ": 0.25, "MNQ": 0.25,
+         "YM": 1.0, "MYM": 1.0, "RTY": 0.1, "M2K": 0.1, "CL": 0.01, "MCL": 0.01}
+
 WINDOWS = ("day", "week", "month", "quarter", "rolling", "all")
 _WINDOW_LABEL = {"day": "Vandaag", "week": "Deze week", "month": "Deze maand",
                  "quarter": "Dit kwartaal", "rolling": "Rolling 30d", "all": "Alles"}
@@ -188,6 +192,44 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     return trades
 
 
+def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None") -> list[dict]:
+    """Recent closed trades from the executor's routed-log — used only for dates AFTER the
+    last reconciled Fills date, so 'today/this week' populate live while history stays exact."""
+    from .routed_journal import parse_routed_lines, pair_events, _recent_routed_files
+    from .journal_sync import _sym_root
+    days = int(os.environ.get("DASH_ROUTED_DAYS", "14"))
+    lines: list[str] = []
+    for path in _recent_routed_files(routed_dir, days):
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines.extend(f)
+        except OSError:
+            pass
+    if not lines:
+        return []
+    events, amap = parse_routed_lines(lines)
+    out: list[dict] = []
+    for t in pair_events(events, amap):
+        if not t.closed or t.pnl is None or t.exit_ts is None:
+            continue
+        if any(s in t.account for s in skip):
+            continue
+        close = t.exit_ts.astimezone(_ET).date()
+        if after is not None and close <= after:
+            continue                                 # already covered by the Fills export
+        product = _sym_root(t.symbol)
+        sym = _ROOT2ASSET.get(product.upper(), product.upper())
+        tick = _TICK.get(product.upper()) or _TICK.get(sym, 0)
+        if tick and t.entry_price is not None and t.exit_price is not None:
+            move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
+            ticks = round(move / tick)
+        else:
+            ticks = 0
+        out.append({"acct": t.account, "sym": sym, "net": round(t.pnl, 2),
+                    "ticks": ticks, "close": close})
+    return out
+
+
 def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     today = dt.datetime.now(_ET).date()
     start = _window_start(window, today)
@@ -239,8 +281,11 @@ def _sources() -> tuple[list[dict], list[dict]]:
         return _cache["trades"], _cache["accounts"]
 
     exports = os.environ.get("EXPORTS_DIR", "/root/exports")
+    routed_dir = os.environ.get("ROUTED_DIR", os.environ.get("INTENT_DIR", "/root/intent-store"))
     skip = [s.strip() for s in os.environ.get("DASH_SKIP", "").split(",") if s.strip()]
     trades = _load_trades(exports, skip)
+    max_fills = max((t["close"] for t in trades), default=None)     # hand recent days to the live log
+    trades = trades + _load_routed_trades(routed_dir, skip, max_fills)
 
     accounts: list[dict] = []
     token = os.environ.get("NOTION_TOKEN", "")

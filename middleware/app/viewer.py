@@ -41,6 +41,7 @@ _DAYS = int(os.environ.get("ROUTED_DAYS", "2"))
 _PASSWORD = os.environ.get("VIEWER_PASSWORD", "")
 _SECRET = (os.environ.get("VIEWER_SECRET") or _PASSWORD or "mex-dev-secret").encode()
 _API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the iPhone widget etc.
+_STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" fills with a missed exit
 
 
 # ---- state from the routed-log -------------------------------------------------------
@@ -85,6 +86,10 @@ def build_state() -> dict:
         if ts and (a["last_ts"] is None or ts > a["last_ts"]):
             a["last_ts"] = ts
         if not t.closed:
+            # hide a stale "open": a fill whose exit was never logged (would show a phantom
+            # position while the account is actually flat). Genuine intraday opens are recent.
+            if as_of and t.entry_ts and (as_of - t.entry_ts).total_seconds() > _STALE_OPEN_H * 3600:
+                continue
             a["open"].append({
                 "symbol": t.symbol, "direction": t.direction, "qty": t.qty,
                 "entry_price": t.entry_price, "entry_ts": t.entry_ts.isoformat() if t.entry_ts else None,

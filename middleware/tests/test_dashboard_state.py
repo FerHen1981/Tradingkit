@@ -138,3 +138,20 @@ def test_seed_additions_and_archive():
     assert SEEDS["APEX27002500000218"]["DD Amount $"] == 2000      # intraday-trail $2k
     assert SEEDS["APEX27002500000213"]["DD Floor $"] == 50192.25   # breached floor
     assert "APEX27002500000207" in ARCHIVE
+
+
+def test_routed_trades_after_date():
+    import json
+    d = tempfile.mkdtemp()
+    fill = {"title": "FILL LONG MGC1!", "description": "PA018-0k-260814 | 8ct @ 4110.7 | SL 4100.0 | TP 4135.0"}
+    exit_ = {"title": "EXIT MGC1!", "description": "PA018-0k-260814 | long closed @ 4114.7 | TRAIL | PnL +$320.0 | MFE 40t · MAE 3t"}
+    lines = [
+        json.dumps({"kind": "pmt", "account": "PAAPEX2700250000018", "body": "{}"}),
+        json.dumps({"kind": "discord", "ts": "2026-08-14T14:50:00+00:00", "body": json.dumps({"embeds": [fill]})}),
+        json.dumps({"kind": "discord", "ts": "2026-08-14T15:20:00+00:00", "body": json.dumps({"embeds": [exit_]})}),
+    ]
+    with open(os.path.join(d, "routed_20260814.jsonl"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    r = ds._load_routed_trades(d, [], dt.date(2026, 8, 13))       # Aug-14 close is after Aug-13
+    assert len(r) == 1 and r[0]["sym"] == "GC" and r[0]["net"] == 320.0 and r[0]["ticks"] == 40
+    assert ds._load_routed_trades(d, [], dt.date(2026, 8, 14)) == []   # not after Aug-14

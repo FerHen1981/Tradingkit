@@ -111,23 +111,33 @@ async def run() -> dict:
                 break
             cursor = data.get("next_cursor")
 
-        summary = {"written": 0, "archived": 0, "missing": 0, "apply": apply}
+        summary = {"written": 0, "created": 0, "archived": 0, "missing": 0, "apply": apply}
         for acct, fields in SEEDS.items():
-            pid = pages.get(acct)
-            if not pid:
-                summary["missing"] += 1
-                log.warning("account not found in DB: %s", acct)
-                continue
             props = {k: to_property(k, v) for k, v in fields.items()}
             plan = ", ".join(f"{k}={v}" for k, v in fields.items())
-            log.info("%s ← %s%s", acct, plan, "" if apply else "  [DRY]")
-            if not apply:
+            pid = pages.get(acct)
+            if pid:
+                log.info("%s ← %s%s", acct, plan, "" if apply else "  [DRY]")
+                if apply:
+                    pr = await client.patch(f"{_API}/pages/{pid}", headers=_headers(token),
+                                            json={"properties": props})
+                    pr.raise_for_status()
+                    summary["written"] += 1
+            elif "Starting Balance" in fields:
+                # brand-new account row — create it (title + metadata)
+                create = {"Account ID": {"title": [{"text": {"content": acct}}]}, **props}
+                log.info("%s ← CREATE %s%s", acct, plan, "" if apply else "  [DRY]")
+                if apply:
+                    pr = await client.post(f"{_API}/pages", headers=_headers(token),
+                                           json={"parent": {"database_id": _ACCOUNTS_DB},
+                                                 "properties": create})
+                    pr.raise_for_status()
+                    summary["created"] += 1
+            else:
+                summary["missing"] += 1
+                log.warning("account not found and no metadata to create: %s", acct)
                 continue
-            pr = await client.patch(f"{_API}/pages/{pid}", headers=_headers(token),
-                                    json={"properties": props})
-            pr.raise_for_status()
-            summary["written"] += 1
-            if throttle:
+            if apply and throttle:
                 await asyncio.sleep(throttle)
 
         for acct in ARCHIVE:

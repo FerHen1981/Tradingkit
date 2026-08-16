@@ -71,6 +71,34 @@ def resample_tf(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return resample(df, tf_minutes(timeframe))
 
 
+def _as_ts(value, tz):
+    ts = pd.Timestamp(value)
+    return ts.tz_localize(tz) if ts.tz is None else ts.tz_convert(tz)
+
+
+def slice_dates(df: pd.DataFrame, since=None, until=None) -> pd.DataFrame:
+    """Keep rows with `since` <= et < `until` (either bound optional)."""
+    et = df["et"]
+    tz = et.dt.tz
+    mask = pd.Series(True, index=df.index)
+    if since is not None:
+        mask &= et >= _as_ts(since, tz)
+    if until is not None:
+        mask &= et < _as_ts(until, tz)
+    return df[mask].reset_index(drop=True)
+
+
+def holdout_split(df: pd.DataFrame, days: int):
+    """Split into (in_sample, out_of_sample, cutoff): OOS = the last `days` days
+    of the data span. The generator searches on in-sample and verifies once on OOS.
+    """
+    et = df["et"]
+    cutoff = et.iloc[-1] - pd.Timedelta(days=int(days))
+    is_df = df[et <= cutoff].reset_index(drop=True)
+    oos_df = df[et > cutoff].reset_index(drop=True)
+    return is_df, oos_df, cutoff
+
+
 def resample(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
     """Aggregate 1-minute bars to N-minute bars, aligned to each session's
     18:00 ET open (bars never span the session boundary or the maintenance

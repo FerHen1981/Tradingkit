@@ -456,7 +456,7 @@ async function showDetail(id){
   d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
       <b>${r.strategy||''} · ${r.timeframe||''} · ${r.lens||''}</b>${badge}</div>
     <div class=lensrow style="margin-top:8px">run_id: ${r.run_id||''}</div>
-    <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars · source ${r.source||''}</div>
+    <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars${r.segment&&r.segment!=='all'?' · <b style="color:var(--gold)">'+r.segment.toUpperCase()+'</b> (holdout '+(r.holdout_days||0)+'d)':''} · source ${r.source||''}</div>
     ${grp}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;

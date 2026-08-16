@@ -68,6 +68,12 @@ def main():
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
     ap.add_argument("--funded", action="store_true", help="funded-account payout overlay (3rd lens): simulate payouts over time")
+    ap.add_argument("--since", help="only use data on/after this date (YYYY-MM-DD)")
+    ap.add_argument("--until", help="only use data before this date (YYYY-MM-DD)")
+    ap.add_argument("--holdout-days", type=int, default=0,
+                    help="hold out the last N days as out-of-sample")
+    ap.add_argument("--segment", choices=["all", "is", "oos"], default="all",
+                    help="with --holdout-days: run in-sample (is), out-of-sample (oos), or all")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
     ap.add_argument("--funnel-horizon", type=int, default=20, help="sessions per eval before TIMEOUT")
     ap.add_argument("--trades-out", help="write the trade list CSV to this path")
@@ -79,6 +85,19 @@ def main():
     print(f"loading {args.data} ...")
     df = data_mod.load(args.data)
     print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+
+    # Date window / in-sample vs out-of-sample split (the generator searches on
+    # IS and verifies once on the OOS holdout).
+    if args.since or args.until:
+        df = data_mod.slice_dates(df, args.since, args.until)
+        print(f"  windowed -> {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    _segment = "all"
+    if args.holdout_days and args.segment != "all":
+        is_df, oos_df, cut = data_mod.holdout_split(df, args.holdout_days)
+        df = is_df if args.segment == "is" else oos_df
+        _segment = args.segment
+        print(f"  segment={args.segment} (holdout {args.holdout_days}d, cutoff {cut}) "
+              f"-> {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
     # Build the list of (name, cfg) jobs — either from a spec or from presets.
     if args.spec:
@@ -160,11 +179,12 @@ def main():
         else:
             fp_src, source = {"preset": base_name}, f"preset:{base_name}"
             kind = "preset"
-        fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens,
+        fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens, "segment": _segment,
                           "unit_mode": cfg.unit_mode, "data": os.path.basename(args.data)})
         rid = make_run_id(asset, base_name, tf, lens, fp)
         meta = {"run_id": rid, "asset": asset, "strategy": base_name, "timeframe": tf,
-                "lens": lens, "source": source, "kind": kind,
+                "lens": lens, "segment": _segment, "holdout_days": args.holdout_days or 0,
+                "source": source, "kind": kind,
                 "data_file": os.path.basename(args.data), "window": _window,
                 "settings": _settings(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}

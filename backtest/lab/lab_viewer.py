@@ -123,6 +123,9 @@ class Handler(BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(u.query)
         if u.path == "/healthz":
             return self._send(200, "ok", "text/plain")
+        if u.path == "/favicon.svg":
+            return self._send(200, _FAVICON, "image/svg+xml",
+                              {"Cache-Control": "public, max-age=86400"})
         if u.path == "/login":
             return self._send(200, LOGIN_HTML)
         if not _authed(self):
@@ -207,42 +210,85 @@ def main():
 # Templates (MEX house style)
 # --------------------------------------------------------------------------- #
 _CSS = """
-:root{--bg:#06171a;--panel:#0b2428;--edge:#123;--txt:#eaf4f1;--sub:#84a8a3;
---gold:#f0b64d;--aqua:#3fd0bd;--ok:#35c88a;--crit:#ef6b53;--watch:#f2a03a}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);
-font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-a{color:var(--aqua)}.wrap{max-width:1180px;margin:0 auto;padding:20px}
-h1{font-size:18px;margin:0;color:var(--aqua);letter-spacing:.5px}
-.muted{color:var(--sub)}.kpis{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0}
-.kpi{background:var(--panel);border:1px solid #16343a;border-radius:12px;padding:12px 16px;min-width:130px}
-.kpi .v{font-size:22px;font-weight:700}.kpi .l{font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.6px}
+:root{
+ --abyss:#030F28;--deep:#081D46;--surface:#0E2A5E;--line:rgba(242,235,218,.17);
+ --sand:#F2EBDA;--sub:rgba(242,235,218,.60);--dim:rgba(242,235,218,.42);
+ --gold:#E8B54F;--gold2:#B98526;--azure:#5AA2FF;--rose:#E0796E;
+ --panel:rgba(14,42,94,.42);
+ --display:'Bricolage Grotesque',system-ui,sans-serif;
+ --body:'Instrument Sans',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+body{margin:0;color:var(--sand);font-family:var(--body);font-size:14px;line-height:1.55;background:var(--abyss)}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:
+ radial-gradient(1000px 560px at 84% -10%,rgba(232,181,79,.16),transparent 60%),
+ radial-gradient(820px 620px at -2% 40%,rgba(90,162,255,.13),transparent 62%),
+ linear-gradient(180deg,#030F28,#061735 45%,#030F28)}
+a{color:var(--azure)}.wrap{max-width:1180px;margin:0 auto;padding:22px}
+.brand{display:flex;align-items:center;gap:9px}
+.brand .wm{font-family:var(--display);font-weight:800;letter-spacing:-.03em;font-size:18px;color:var(--sand)}
+.brand .wm em{font-style:normal;font-weight:400;letter-spacing:.10em;margin-left:.35em;color:var(--sub)}
+.tag-lab{font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);border:1px solid var(--line);padding:3px 8px;border-radius:2px;margin-left:12px}
+.muted{color:var(--sub);font-family:var(--mono);font-size:11px;letter-spacing:.04em}
+.kpis{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px 18px;min-width:130px}
+.kpi .v{font-family:var(--display);font-size:26px;font-weight:600;letter-spacing:-.02em;color:var(--gold)}
+.kpi .l{font-family:var(--mono);font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.14em;margin-top:6px}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}
-select,input,button{background:var(--panel);color:var(--txt);border:1px solid #1c3d43;
-border-radius:8px;padding:7px 10px;font-size:13px}button{cursor:pointer}
-button.go{background:var(--aqua);color:#04222; border:none;font-weight:700}
+select,input,button{background:var(--deep);color:var(--sand);border:1px solid var(--line);border-radius:2px;padding:8px 11px;font-size:13px;font-family:var(--body)}
+button{cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+button.go{background:linear-gradient(120deg,var(--gold),#F3CE7C);color:#0B1428;border:none;font-weight:700}
+button.go:hover{filter:brightness(1.06)}
 table{width:100%;border-collapse:collapse;margin-top:8px}
-th,td{padding:8px 10px;text-align:right;border-bottom:1px solid #122c31;white-space:nowrap}
-th:first-child,td:first-child{text-align:left}th{color:var(--sub);font-size:11px;
-text-transform:uppercase;letter-spacing:.5px;cursor:pointer}tr:hover td{background:#0e2a2f}
-.pill{padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
-.pos{color:var(--ok)}.neg{color:var(--crit)}.tag{background:#123;color:var(--sub);padding:2px 8px;border-radius:6px;font-size:11px}
-.panel{background:var(--panel);border:1px solid #16343a;border-radius:12px;padding:16px;margin-top:16px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid rgba(242,235,218,.08);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--sub);font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.12em;cursor:pointer}
+tr:hover td{background:rgba(14,42,94,.5)}
+.pill{padding:2px 8px;border-radius:2px;font-family:var(--mono);font-size:10px}
+.pos{color:var(--azure)}.neg{color:var(--rose)}
+.tag{background:var(--deep);color:var(--sub);padding:2px 8px;border-radius:2px;font-family:var(--mono);font-size:10px;letter-spacing:.06em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;margin-top:16px}
 .up{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.foot{color:var(--sub);font-size:12px;margin-top:20px;border-top:1px solid #12262b;padding-top:10px}
-#drop{border:1px dashed #1c3d43;border-radius:10px;padding:14px;text-align:center;color:var(--sub);flex:1;min-width:220px}
+.foot{color:var(--dim);font-family:var(--mono);font-size:11px;margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+#drop{border:1px dashed var(--line);border-radius:3px;padding:14px;text-align:center;color:var(--sub);flex:1;min-width:220px;cursor:pointer}
 .hidden{display:none}#msg{font-size:12px}
-.lens{border:1px solid #16343a;border-radius:10px;padding:12px 14px;margin-top:10px;background:#08202400}
-.lens h3{margin:0 0 2px;font-size:14px;color:var(--gold)}.lens .q{color:var(--sub);font-size:12px;margin-bottom:8px}
-.ins{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px;border-top:1px solid #0f2a2f}
-.ins:first-of-type{border-top:none}.dot{width:8px;height:8px;border-radius:50%;margin-top:6px;flex:none}
-.t-good{background:var(--ok)}.t-warn{background:var(--watch)}.t-bad{background:var(--crit)}.t-info{background:var(--sub)}
-.verdict{border-radius:10px;padding:12px 14px;font-weight:600;border:1px solid}
-.v-good{background:#0e2a22;border-color:#1c5a48;color:var(--ok)}
-.v-warn{background:#2a2210;border-color:#5a4a1c;color:var(--watch)}
-.v-bad{background:#2a1512;border-color:#5a231c;color:var(--crit)}
-.v-info{background:#0e2428;border-color:#1c3d43;color:var(--sub)}
-.lensrow{font-size:11px;color:var(--sub);margin-top:6px}
+.lens{border:1px solid var(--line);border-radius:4px;padding:14px 16px;margin-top:10px;background:rgba(8,29,70,.32)}
+.lens h3{margin:0 0 2px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--gold);letter-spacing:-.01em}
+.lens .q{color:var(--sub);font-size:12px;margin-bottom:8px}
+.ins{display:flex;gap:9px;align-items:flex-start;padding:5px 0;font-size:13px;border-top:1px solid rgba(242,235,218,.07)}
+.ins:first-of-type{border-top:none}.dot{width:7px;height:7px;border-radius:50%;margin-top:6px;flex:none}
+.t-good{background:var(--azure)}.t-warn{background:var(--gold)}.t-bad{background:var(--rose)}.t-info{background:var(--sub)}
+.verdict{border-radius:3px;padding:12px 14px;font-weight:600;border:1px solid}
+.v-good{background:rgba(90,162,255,.10);border-color:rgba(90,162,255,.40);color:var(--azure)}
+.v-warn{background:rgba(232,181,79,.10);border-color:rgba(232,181,79,.40);color:var(--gold)}
+.v-bad{background:rgba(224,121,110,.10);border-color:rgba(224,121,110,.40);color:var(--rose)}
+.v-info{background:rgba(14,42,94,.50);border-color:var(--line);color:var(--sub)}
+.lensrow{font-family:var(--mono);font-size:10px;color:var(--sub);margin-top:6px;letter-spacing:.06em}
 """
+
+# Brand mark (the gold "M") for the header, and the favicon (served at /favicon.svg).
+_MARK = ('<svg viewBox="0 0 100 100" width="22" height="22" aria-hidden="true">'
+         '<defs><linearGradient id="navgold" x1="0" y1="0" x2="1" y2="1">'
+         '<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
+         '<path d="M7,71.3 L93,71.3 L93,74.8 L7,74.8 Z" fill="#F2EBDA" opacity=".42"/>'
+         '<path d="M19.1,16 L30.35,16 L30.35,66 L19.1,66 Z M69.65,16 L80.9,16 L80.9,66 L69.65,66 Z '
+         'M19.1,16 L30.86,16 L47.63,71.3 L35.88,71.3 Z M67.88,16 L80.9,16 L48.67,71.3 L35.65,71.3 Z" '
+         'fill="url(#navgold)"/></svg>')
+_BRAND = f'<a class=brand href="/">{_MARK}<span class=wm>MEX<em>TRADERS</em></span></a>'
+_FAVICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+            '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+            '<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
+            '<rect width="100" height="100" rx="20" fill="#030F28"/>'
+            '<path d="M4,68.78 L96,68.78 L96,74.86 L4,74.86 Z" fill="#F2EBDA" opacity=".5"/>'
+            '<path d="M10.45,-2 L24.85,-2 L24.85,62 L10.45,62 Z M75.15,-2 L89.55,-2 L89.55,62 L75.15,62 Z '
+            'M10.45,-2 L25.5,-2 L46.97,68.78 L31.92,68.78 Z M72.89,-2 L89.55,-2 L48.3,68.78 L31.64,68.78 Z" '
+            'fill="url(#g)"/></svg>')
+_HEAD = ('<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">'
+         '<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
+         '<link rel=preconnect href="https://fonts.googleapis.com">'
+         '<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>'
+         '<link rel=stylesheet href="https://fonts.googleapis.com/css2?'
+         'family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&'
+         'family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">')
 
 _JS = r"""
 const $=s=>document.querySelector(s), money=n=>(n>=0?'+$':'-$')+Math.abs(Math.round(n)).toLocaleString('en-US');
@@ -324,19 +370,21 @@ $('#upbtn').addEventListener('click',async()=>{
 load();
 """
 
-LOGIN_HTML = f"""<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>MEX Lab</title><style>{_CSS}</style></head><body><div class=wrap>
-<h1>MEX · Backtest Lab</h1><div class=panel style="max-width:340px">
+LOGIN_HTML = f"""<!doctype html><html><head>{_HEAD}
+<title>MEX Traders · Lab</title><style>{_CSS}</style></head><body><div class=wrap>
+<div style="display:flex;align-items:center">{_BRAND}<span class=tag-lab>Backtest Lab</span></div>
+<div class=panel style="max-width:340px">
 <form method=post action=/login><div class=muted style="margin-bottom:8px">Owner login</div>
-<div style="color:var(--crit);font-size:12px;margin-bottom:6px"><!--ERR--></div>
+<div style="color:var(--rose);font-size:12px;margin-bottom:6px"><!--ERR--></div>
 <input type=password name=password placeholder=Password autofocus style="width:100%">
 <button class=go style="width:100%;margin-top:8px">Enter</button></form></div>
 <div class=foot>Set LAB_PASSWORD to enable the gate.</div></div></body></html>"""
 
-PAGE_HTML = f"""<!doctype html><html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>MEX Lab</title><style>{_CSS}</style></head><body><div class=wrap>
-<div style="display:flex;justify-content:space-between;align-items:baseline">
-  <h1>MEX · Backtest Lab</h1><span class=muted id=sub></span></div>
+PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
+<title>MEX Traders · Lab</title><style>{_CSS}</style></head><body><div class=wrap>
+<div style="display:flex;justify-content:space-between;align-items:center">
+  <div style="display:flex;align-items:center">{_BRAND}<span class=tag-lab>Backtest Lab</span></div>
+  <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">

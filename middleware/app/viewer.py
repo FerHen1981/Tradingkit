@@ -260,6 +260,9 @@ class Handler(BaseHTTPRequestHandler):
                 log.warning("widget build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/favicon.svg":
+            return self._send(200, _FAVICON_SVG, "image/svg+xml",
+                              {"Cache-Control": "public, max-age=86400"})
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain")
         return self._send(404, b"not found", "text/plain")
@@ -285,54 +288,86 @@ def serve() -> None:
     srv.serve_forever()
 
 
-LOGIN_HTML = """<!doctype html><html lang=nl><meta charset=utf-8>
+# MEX brand assets (served/inlined by the cockpit).
+_FAVICON_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+                b'<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
+                b'<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
+                b'<rect width="100" height="100" fill="#030F28"/>'
+                b'<path d="M2,69.95 L98,69.95 L98,75.08 L2,75.08 Z" fill="#F2EBDA" opacity=".52"/>'
+                b'<path d="M15.57,79 L20.56,41.48 L40.10,69.95 L51.24,69.95 L79.08,41.65 L84.37,79 L96.64,79 '
+                b'L87.66,15.59 L46.15,57.80 L46.50,57.80 L12.69,8.52 L3.32,79 Z" fill="url(#g)"/></svg>')
+
+_MARK = ('<svg viewBox="0 0 100 100" width="26" height="26" aria-hidden="true" style="flex:none">'
+         '<defs><linearGradient id="mexg" x1="0" y1="0" x2="1" y2="1">'
+         '<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
+         '<path d="M-10.55,69.29 L100.15,69.29 L100.15,72.93 L-10.55,72.93 Z" fill="#F2EBDA" opacity=".42"/>'
+         '<path d="M16.85,78 L21.65,41.87 L40.46,69.29 L51.20,69.29 L78,42.03 L83.10,78 L94.92,78 '
+         'L86.27,16.94 L46.29,57.59 L46.63,57.59 L14.07,10.13 L5.05,78 Z" fill="url(#mexg)"/></svg>')
+
+_FONTS = ('<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
+          '<link rel=preconnect href="https://fonts.googleapis.com">'
+          '<link rel=preconnect href="https://fonts.gstatic.com" crossorigin>'
+          '<link rel=stylesheet href="https://fonts.googleapis.com/css2?'
+          'family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&'
+          'family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">')
+
+LOGIN_HTML = ("""<!doctype html><html lang=nl><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
-<title>MEX Traders — inloggen</title>
+<title>MEX Traders — inloggen</title>""" + _FONTS + """
 <style>
 :root{color-scheme:dark}body{margin:0;height:100vh;display:grid;place-items:center;
-background:#06171a;color:#eaf4f1;font:16px/1.5 system-ui,sans-serif;
-background-image:radial-gradient(900px 400px at 80% -10%,rgba(63,208,189,.09),transparent 60%)}
-form{background:#0b2428;padding:2rem;border-radius:16px;border:1px solid #1c3f43;width:min(90vw,340px)}
-h1{font-size:1.05rem;margin:0 0 .3rem;letter-spacing:.01em}
-.sub{color:#84a8a3;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.2rem}
-input{width:100%;box-sizing:border-box;padding:.75rem;margin:.2rem 0 1rem;border-radius:10px;
-border:1px solid #26545a;background:#06171a;color:#eaf4f1;font-size:1rem}
-button{width:100%;padding:.75rem;border:0;border-radius:10px;background:#f0b64d;color:#06171a;
-font-weight:700;font-size:1rem;cursor:pointer}.err{color:#ef6b53;font-size:.9rem;margin:.2rem 0 0}
-.brand{opacity:.5;font-size:.8rem;margin-top:1.1rem;text-align:center}
+background:#030F28;color:#F2EBDA;font:16px/1.6 'Instrument Sans',system-ui,sans-serif;
+background-image:radial-gradient(1000px 560px at 82% -8%,rgba(232,181,79,.18),transparent 60%),radial-gradient(820px 620px at 2% 42%,rgba(90,162,255,.14),transparent 62%)}
+form{background:rgba(14,42,94,.42);padding:2rem;border-radius:4px;border:1px solid rgba(242,235,218,.17);width:min(90vw,340px)}
+.lg{display:flex;align-items:center;gap:9px;margin-bottom:1.1rem}
+.lg .wm{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.03em;font-size:18px}
+.lg .wm em{font-style:normal;font-weight:400;letter-spacing:.10em;margin-left:.35em;color:rgba(242,235,218,.6)}
+h1{font-size:1rem;margin:0 0 .3rem;font-family:'Bricolage Grotesque',sans-serif;font-weight:600}
+.sub{color:rgba(242,235,218,.6);font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:1.2rem}
+input{width:100%;box-sizing:border-box;padding:.75rem;margin:.2rem 0 1rem;border-radius:2px;
+border:1px solid rgba(242,235,218,.17);background:#081D46;color:#F2EBDA;font-size:1rem}
+button{width:100%;padding:.75rem;border:0;border-radius:2px;background:linear-gradient(120deg,#E8B54F,#F3CE7C);color:#0B1428;
+font-weight:700;font-size:1rem;cursor:pointer;font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:.08em}
+.err{color:#E0796E;font-size:.9rem;margin:.2rem 0 0}
+.brand{opacity:.5;font-size:.8rem;margin-top:1.1rem;text-align:center;font-family:'JetBrains Mono',monospace}
 </style>
 <form method=post action=/login>
-<h1>🌴 MEX Command Center</h1><div class=sub>Owner login</div>
+<div class=lg>""" + _MARK + """<span class=wm>MEX<em>TRADERS</em></span></div>
+<h1>Command Center</h1><div class=sub>Owner login</div>
 <!--ERR-->
 <input type=password name=password placeholder=Password autofocus>
 <button>Sign in</button>
 <div class=brand>Pips &amp; Palm Trees Holding</div>
-</form></html>"""
+</form></html>""")
 
 DASH_HTML = r"""<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">
 <title>MEX Command Center</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel=preconnect href="https://fonts.googleapis.com"><link rel=preconnect href="https://fonts.gstatic.com" crossorigin>
+<link rel=stylesheet href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
 <style>
 :root{
-  --bg:#06171a;--panel:#0b2428;--panel-2:#0f2e33;--line:#1c3f43;
-  --ink:#eaf4f1;--muted:#84a8a3;--dim:#5c807c;
-  --gold:#f0b64d;--gold-dim:#a9823a;--aqua:#3fd0bd;
-  --ok:#35c88a;--watch:#f2a03a;--warn:#ef8b3a;--crit:#ef6b53;--dead:#c0455a;
-  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  --radius:10px;color-scheme:dark}
+  --bg:#030F28;--panel:#081D46;--panel-2:#0E2A5E;--line:rgba(242,235,218,.17);
+  --ink:#F2EBDA;--muted:rgba(242,235,218,.60);--dim:rgba(242,235,218,.42);
+  --gold:#E8B54F;--gold-dim:#B98526;--aqua:#5AA2FF;
+  --ok:#5AA2FF;--watch:#E8B54F;--warn:#E8B54F;--crit:#E0796E;--dead:#E0796E;
+  --mono:'JetBrains Mono',ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:'Instrument Sans',system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --display:'Bricolage Grotesque',var(--sans);
+  --radius:4px;color-scheme:dark}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
-background-image:radial-gradient(1200px 500px at 85% -10%,rgba(63,208,189,.07),transparent 60%),
-radial-gradient(900px 400px at 5% 0%,rgba(240,182,77,.05),transparent 55%);background-attachment:fixed}
+background-image:radial-gradient(1100px 620px at 82% -8%,rgba(232,181,79,.16),transparent 60%),
+radial-gradient(900px 700px at 2% 42%,rgba(90,162,255,.13),transparent 62%);background-attachment:fixed}
 .wrap{max-width:1180px;margin:0 auto;padding:0 20px 64px}
 header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(6,23,26,.97),rgba(6,23,26,.86));
 backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .bar{max-width:1180px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
-.brand{display:flex;align-items:baseline;gap:10px;margin-right:auto}
-.brand .mark{font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:.5px;color:var(--bg);background:var(--gold);padding:3px 9px;border-radius:6px}
-.brand .name{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
-.brand .sub{font-family:var(--mono);font-size:13px;letter-spacing:3px;color:var(--aqua);text-transform:uppercase}
+.brand{display:flex;align-items:center;gap:10px;margin-right:auto}
+.brand .name{font-family:var(--display);font-weight:800;letter-spacing:-.02em;font-size:18px;color:var(--ink)}
+.brand .name em{font-style:normal;font-weight:400;letter-spacing:.10em;margin-left:.35em;color:var(--muted)}
+.brand .sub{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--gold);text-transform:uppercase;border:1px solid var(--line);padding:3px 8px;border-radius:2px}
 .clock{font-family:var(--mono);font-size:12.5px;color:var(--dim);letter-spacing:1px;display:flex;align-items:center;gap:8px}
 .live{width:7px;height:7px;border-radius:50%;background:var(--ok);animation:pulse 2.4s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(53,200,138,.55)}70%{box-shadow:0 0 0 7px rgba(53,200,138,0)}100%{box-shadow:0 0 0 0 rgba(53,200,138,0)}}
@@ -433,7 +468,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
 .err-banner{background:rgba(239,107,83,.12);border:1px solid rgba(239,107,83,.4);color:var(--crit);padding:10px 14px;border-radius:8px;font-family:var(--mono);font-size:12.5px;margin:16px 0}
 </style>
 <header><div class=bar>
-  <div class=brand><span class=mark>MEX</span><span class=name>Traders</span><span class=sub>· Command Center</span></div>
+  <div class=brand><svg viewBox="0 0 100 100" width="26" height="26" aria-hidden="true" style="flex:none"><defs><linearGradient id="mexg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs><path d="M-10.55,69.29 L100.15,69.29 L100.15,72.93 L-10.55,72.93 Z" fill="#F2EBDA" opacity=".42"/><path d="M16.85,78 L21.65,41.87 L40.46,69.29 L51.20,69.29 L78,42.03 L83.10,78 L94.92,78 L86.27,16.94 L46.29,57.59 L46.63,57.59 L14.07,10.13 L5.05,78 Z" fill="url(#mexg)"/></svg><span class=name>MEX<em>TRADERS</em></span><span class=sub>Command Center</span></div>
   <div class=clock><span class=live></span><span id=clock>—</span></div>
 </div></header>
 <div class=wrap>

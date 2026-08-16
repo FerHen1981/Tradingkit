@@ -168,8 +168,8 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
     bad = [t for t in tfs if t not in TIMEFRAMES]
     if not tfs or bad:
         return {"error": f"bad timeframe(s): {bad or tf!r}"}, 400
-    if lens not in ("research", "funnel"):
-        return {"error": "lens must be research or funnel"}, 400
+    if lens not in ("research", "funnel", "funded"):
+        return {"error": "lens must be research, funnel or funded"}, 400
 
     cmd = [sys.executable, "-m", "backtest.run", "--data", ds[dataset]["file"],
            "--tf", ",".join(tfs), "--lab"]
@@ -184,7 +184,7 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
         if f.suffix != ".yaml" or f.parent != _specs_dir().resolve() or not f.exists():
             return {"error": f"unknown spec {name!r}"}, 400
         cmd += ["--spec", f"backtest/specs/{f.name}"]
-    cmd += ["--research"] if lens == "research" else ["--funnel"]
+    cmd += {"research": ["--research"], "funnel": ["--funnel"], "funded": ["--funded"]}[lens]
 
     job_id = uuid.uuid4().hex[:12]
     with _JOBS_LOCK:
@@ -555,6 +555,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <select id=wLens>
       <option value=research>Classic (edge)</option>
       <option value=funnel>Eval (funnel)</option>
+      <option value=funded>Funded (payouts)</option>
     </select>
     <button class=go id=wRun>Run</button>
   </div>

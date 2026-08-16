@@ -134,14 +134,34 @@ def eval_insights(runs: list[dict]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 def funded_insights(runs: list[dict]) -> list[dict]:
     if not runs:
-        return [_insight("info", "Funded lens not run yet — the payout overlay (min trading days, "
-                                 "consistency, safety-net → payout timeline) is the next build.")]
+        return [_insight("info", "Funded lens not run yet — run it to simulate the payout timeline "
+                                 "(>=8 days, 30% consistency, safety-net, laddered caps).")]
     out = []
-    for r in runs:
+    for r in sorted(runs, key=_tf_key):
         k = _k(r)
-        out.append(_insight("info", f"{r.get('timeframe')}: funded run recorded "
-                                    f"({k.get('payouts', '—')} payouts, "
-                                    f"{_money(k.get('withdrawable', 0))} withdrawable)."))
+        tf = r.get("timeframe")
+        payouts = k.get("payouts")
+        if payouts is None:
+            out.append(_insight("info", f"{tf}: funded run recorded."))
+            continue
+        if k.get("breached"):
+            out.append(_insight("bad",
+                f"{tf}: account BREACHED after {k.get('trading_days', '—')} days — "
+                f"{k.get('breach_reason', 'floor hit')}. "
+                f"{payouts} payout(s), {_money(k.get('withdrawable', 0))} before the blow-up."))
+            continue
+        if payouts == 0:
+            d2p = k.get("days_to_first_payout")
+            out.append(_insight("warn",
+                f"{tf}: survived but never cleared a payout "
+                f"({k.get('qualifying_days', 0)} qualifying days"
+                f"{', needs 8' if (k.get('qualifying_days') or 0) < 8 else ''})."))
+            continue
+        tone = "good" if (k.get("per_month") or 0) > 0 else "warn"
+        out.append(_insight(tone,
+            f"{tf}: {payouts} payouts, {_money(k.get('withdrawable', 0))} withdrawn "
+            f"(~{_money(k.get('per_month', 0))}/mo over {k.get('months', '—')} mo); "
+            f"first payout after {k.get('days_to_first_payout', '—')} days."))
     return out
 
 
@@ -186,7 +206,17 @@ def _verdict(by_lens: dict[str, list[dict]]) -> dict:
                                "100+ trade sample. Not a fleet candidate.")
     best = max(real, key=lambda r: _k(r).get("profit_factor", 0))
     tf = best.get("timeframe")
+    funded = by_lens.get("funded", [])
+    paid = [r for r in funded if (_k(r).get("payouts") or 0) > 0 and not _k(r).get("breached")]
+    if paid:
+        top = max(paid, key=lambda r: _k(r).get("per_month", 0))
+        return _insight("good", f"Edge on {tf}, and the funded lens pays: "
+                                f"~{_money(_k(top).get('per_month', 0))}/mo on {top.get('timeframe')}. "
+                                f"Fleet candidate — validate robustness before promoting.")
+    if funded:
+        return _insight("warn", f"Edge on {tf}, but the funded lens doesn't pay yet "
+                                f"(no clean payout / breached). Tune before funding.")
     if not by_lens.get("eval"):
         return _insight("warn", f"Edge on {tf} (PF {_k(best).get('profit_factor', 0):.2f}) — "
                                 f"now run the eval lens to see if it funds reliably.")
-    return _insight("good", f"Edge on {tf}; eval + funded lenses next to confirm it funds and pays.")
+    return _insight("good", f"Edge on {tf}; run the funded lens to confirm it pays out.")

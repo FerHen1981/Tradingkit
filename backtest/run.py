@@ -67,6 +67,7 @@ def main():
                     "(e.g. 5m,15m,1h). Choices: 1m,5m,10m,15m,30m,1h,2h,3h,4h,1d")
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
+    ap.add_argument("--funded", action="store_true", help="funded-account payout overlay (3rd lens): simulate payouts over time")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
     ap.add_argument("--funnel-horizon", type=int, default=20, help="sessions per eval before TIMEOUT")
     ap.add_argument("--trades-out", help="write the trade list CSV to this path")
@@ -174,6 +175,22 @@ def main():
                   f"BREACH={s['breach']}  TIMEOUT={s['timeout']}  median trades={s['median_trades_to_resolve']}")
             out[name] = s
             _record(base_name, cfg, tf, "eval", s, None)
+            continue
+        if args.funded:
+            from .funded import daily_from_trades, simulate_funded, summarize as fsum
+            t0 = time.time()
+            res, _ = run_one(dtf, cfg, research=True)   # no halts; overlay applied post-hoc
+            fr = simulate_funded(daily_from_trades(res.trades),
+                                 account_size=cfg.initial_capital or 50_000)
+            s = fsum(fr)
+            print(f"\n{'='*70}\n{name}  [FUNDED OVERLAY]  ({time.time()-t0:.1f}s)")
+            print(f"  payouts={s['payouts']}  withdrawn=${s['withdrawable']:,.0f}  "
+                  f"~${s['per_month']:,.0f}/mo over {s['months']} mo  "
+                  f"{'BREACHED: '+s['breach_reason'] if s['breached'] else 'survived'}")
+            print(f"  trading days={s['trading_days']} (qual {s['qualifying_days']})  "
+                  f"first payout after {s['days_to_first_payout']} days")
+            out[name] = s
+            _record(base_name, cfg, tf, "funded", s, None)
             continue
         res, dt = run_one(dtf, cfg, args.research)
         _print_report(name, res, args.research, dt)

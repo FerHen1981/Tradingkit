@@ -57,7 +57,22 @@ def test_build_journey_three_lenses_ordered():
     assert j["strategy"] == "El_Toro" and j["assets"] == ["NQ"]
     # funded has no runs -> placeholder insight, not a crash
     funded = [l for l in j["lenses"] if l["lens"] == "funded"][0]
-    assert funded["insights"] and "overlay" in funded["insights"][0]["text"]
+    assert funded["insights"] and "Funded lens not run" in funded["insights"][0]["text"]
+
+
+def test_funded_insights_and_verdict():
+    from backtest.lab.insights import funded_insights, build_journey
+    paid = [_run("5m", "funded", payouts=19, withdrawable=32500, per_month=4971,
+                 months=6.5, breached=False, trading_days=200, qualifying_days=160,
+                 days_to_first_payout=15)]
+    ins = funded_insights(paid)
+    assert ins[0]["tone"] == "good" and "payouts" in ins[0]["text"]
+    breached = [_run("5m", "funded", payouts=2, withdrawable=800, breached=True,
+                     breach_reason="balance hit floor", trading_days=40)]
+    assert funded_insights(breached)[0]["tone"] == "bad"
+    # verdict reflects a paying funded lens when a classic edge also exists
+    j = build_journey(CLASSIC + paid)
+    assert j["verdict"]["tone"] == "good" and "pays" in j["verdict"]["text"]
 
 
 def test_verdict_reflects_edge_then_eval():

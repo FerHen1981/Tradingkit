@@ -269,19 +269,17 @@ tr:hover td{background:rgba(14,42,94,.5)}
 _MARK = ('<svg viewBox="0 0 100 100" width="22" height="22" aria-hidden="true">'
          '<defs><linearGradient id="navgold" x1="0" y1="0" x2="1" y2="1">'
          '<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
-         '<path d="M7,71.3 L93,71.3 L93,74.8 L7,74.8 Z" fill="#F2EBDA" opacity=".42"/>'
-         '<path d="M19.1,16 L30.35,16 L30.35,66 L19.1,66 Z M69.65,16 L80.9,16 L80.9,66 L69.65,66 Z '
-         'M19.1,16 L30.86,16 L47.63,71.3 L35.88,71.3 Z M67.88,16 L80.9,16 L48.67,71.3 L35.65,71.3 Z" '
-         'fill="url(#navgold)"/></svg>')
+         '<path d="M-10.55,69.29 L100.15,69.29 L100.15,72.93 L-10.55,72.93 Z" fill="#F2EBDA" opacity=".42"/>'
+         '<path d="M16.85,78 L21.65,41.87 L40.46,69.29 L51.20,69.29 L78,42.03 L83.10,78 L94.92,78 '
+         'L86.27,16.94 L46.29,57.59 L46.63,57.59 L14.07,10.13 L5.05,78 Z" fill="url(#navgold)"/></svg>')
 _BRAND = f'<a class=brand href="/">{_MARK}<span class=wm>MEX<em>TRADERS</em></span></a>'
 _FAVICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
             '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">'
             '<stop offset="0" stop-color="#E8B54F"/><stop offset="1" stop-color="#B98526"/></linearGradient></defs>'
-            '<rect width="100" height="100" rx="20" fill="#030F28"/>'
-            '<path d="M4,68.78 L96,68.78 L96,74.86 L4,74.86 Z" fill="#F2EBDA" opacity=".5"/>'
-            '<path d="M10.45,-2 L24.85,-2 L24.85,62 L10.45,62 Z M75.15,-2 L89.55,-2 L89.55,62 L75.15,62 Z '
-            'M10.45,-2 L25.5,-2 L46.97,68.78 L31.92,68.78 Z M72.89,-2 L89.55,-2 L48.3,68.78 L31.64,68.78 Z" '
-            'fill="url(#g)"/></svg>')
+            '<rect width="100" height="100" fill="#030F28"/>'
+            '<path d="M2,69.95 L98,69.95 L98,75.08 L2,75.08 Z" fill="#F2EBDA" opacity=".52"/>'
+            '<path d="M15.57,79 L20.56,41.48 L40.10,69.95 L51.24,69.95 L79.08,41.65 L84.37,79 L96.64,79 '
+            'L87.66,15.59 L46.15,57.80 L46.50,57.80 L12.69,8.52 L3.32,79 Z" fill="url(#g)"/></svg>')
 _HEAD = ('<meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">'
          '<link rel="icon" type="image/svg+xml" href="/favicon.svg">'
          '<link rel=preconnect href="https://fonts.googleapis.com">'

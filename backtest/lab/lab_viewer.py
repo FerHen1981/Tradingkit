@@ -14,8 +14,12 @@ import hashlib
 import hmac
 import json
 import os
+import subprocess
+import sys
+import threading
 import time
 import urllib.parse
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -79,6 +83,115 @@ def _run_detail(run_id: str) -> dict | None:
         return json.loads(rj.read_text())
     except Exception:
         return None
+
+
+def _specs_dir() -> Path:
+    return Path(__file__).resolve().parents[1] / "specs"
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _datasets() -> list[dict]:
+    """Datasets in the data room that are ready to run (have a canonical/data CSV)."""
+    out = []
+    d = datasets_dir()
+    if not d.exists():
+        return out
+    for sub in sorted(p for p in d.iterdir() if p.is_dir()):
+        canon, raw = sub / "canonical.csv", sub / "data.csv"
+        f = canon if canon.exists() else (raw if raw.exists() else None)
+        if not f:
+            continue
+        sym, rows = "", None
+        man = sub / "manifest.json"
+        if man.exists():
+            try:
+                m = json.loads(man.read_text())
+                sym, rows = m.get("symbol", ""), m.get("rows")
+            except Exception:
+                pass
+        out.append({"name": sub.name, "file": str(f), "symbol": sym, "rows": rows})
+    return out
+
+
+def _specs() -> list[dict]:
+    out = [{"kind": "spec", "id": f"spec:{p.name}", "name": p.name}
+           for p in sorted(_specs_dir().glob("*.yaml"))]
+    try:
+        from ..config import PRESETS
+        out += [{"kind": "preset", "id": f"preset:{n}", "name": f"{n} (preset)"} for n in PRESETS]
+    except Exception:
+        pass
+    return out
+
+
+# --- backtest jobs (subprocess into the bt-venv engine) -------------------- #
+_JOBS: dict[str, dict] = {}
+_JOBS_LOCK = threading.Lock()
+
+
+def _run_job(job_id: str, cmd: list[str]) -> None:
+    def upd(**k):
+        with _JOBS_LOCK:
+            _JOBS[job_id].update(**k)
+    upd(status="running")
+    try:
+        p = subprocess.Popen(cmd, cwd=str(_repo_root()), env=dict(os.environ),
+                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, bufsize=1)
+        log, run_ids = [], []
+        for line in p.stdout:
+            line = line.rstrip()
+            log.append(line)
+            if "recorded run " in line:
+                try:
+                    run_ids.append(line.split("recorded run ", 1)[1].split(" ")[0])
+                except Exception:
+                    pass
+            with _JOBS_LOCK:
+                _JOBS[job_id]["log"] = log[-80:]
+                _JOBS[job_id]["run_ids"] = run_ids
+        p.wait()
+        upd(status="done" if p.returncode == 0 else "error", rc=p.returncode)
+    except Exception as e:
+        upd(status="error", error=str(e))
+
+
+def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
+    from ..config import PRESETS, TIMEFRAMES
+    ds = {d["name"]: d for d in _datasets()}
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    tfs = [t.strip().lower() for t in tf.split(",") if t.strip()]
+    bad = [t for t in tfs if t not in TIMEFRAMES]
+    if not tfs or bad:
+        return {"error": f"bad timeframe(s): {bad or tf!r}"}, 400
+    if lens not in ("research", "funnel"):
+        return {"error": "lens must be research or funnel"}, 400
+
+    cmd = [sys.executable, "-m", "backtest.run", "--data", ds[dataset]["file"],
+           "--tf", ",".join(tfs), "--lab"]
+    if spec.startswith("preset:"):
+        name = spec.split(":", 1)[1]
+        if name not in PRESETS:
+            return {"error": f"unknown preset {name!r}"}, 400
+        cmd += ["--preset", name]
+    else:
+        name = spec.split(":", 1)[1] if spec.startswith("spec:") else spec
+        f = (_specs_dir() / name).resolve()
+        if f.suffix != ".yaml" or f.parent != _specs_dir().resolve() or not f.exists():
+            return {"error": f"unknown spec {name!r}"}, 400
+        cmd += ["--spec", f"backtest/specs/{f.name}"]
+    cmd += ["--research"] if lens == "research" else ["--funnel"]
+
+    job_id = uuid.uuid4().hex[:12]
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {"status": "queued", "log": [], "run_ids": [],
+                         "cmd": " ".join(cmd[2:])}
+    threading.Thread(target=_run_job, args=(job_id, cmd), daemon=True).start()
+    return {"job": job_id}, 200
 
 
 def _fleet_stats(runs: list[dict]) -> dict:
@@ -145,6 +258,15 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/journey":
             strat = (q.get("strategy") or [""])[0]
             return self._json(build_journey(_runs(), strat or None))
+        if u.path == "/api/datasets":
+            return self._json({"datasets": _datasets()})
+        if u.path == "/api/specs":
+            return self._json({"specs": _specs()})
+        if u.path == "/api/run/status":
+            j = (q.get("job") or [""])[0]
+            with _JOBS_LOCK:
+                st = dict(_JOBS.get(j) or {})
+            return self._json(st or {"error": "unknown job"}, 200 if st else 404)
         return self._send(404, "not found", "text/plain")
 
     # -- POST --
@@ -163,6 +285,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "unauthorized"}, 401)
         if u.path == "/api/upload":
             return self._upload(q)
+        if u.path == "/api/run":
+            body, code = _start_job((q.get("dataset") or [""])[0], (q.get("spec") or [""])[0],
+                                    (q.get("tf") or ["5m"])[0], (q.get("lens") or ["research"])[0])
+            return self._json(body, code)
         return self._send(404, "not found", "text/plain")
 
     def _upload(self, q):
@@ -365,6 +491,41 @@ $('#upbtn').addEventListener('click',async()=>{
     else{$('#msg').innerHTML='<span class=neg>'+(j.error||'failed')+'</span>';}
   }catch(e){$('#msg').innerHTML='<span class=neg>'+e+'</span>';}
 });
+// wizard
+async function loadWizard(){
+  try{
+    const sp=(await (await fetch('/api/specs')).json()).specs||[];
+    $('#wSpec').innerHTML=sp.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    const ds=(await (await fetch('/api/datasets')).json()).datasets||[];
+    $('#wDs').innerHTML=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')
+      ||'<option value="">no datasets — upload one</option>';
+  }catch(e){}
+}
+let POLL=null;
+async function pollJob(id){
+  const j=await (await fetch('/api/run/status?job='+id)).json();
+  const log=$('#wLog');log.style.display='block';
+  log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
+  if(j.status==='done'||j.status==='error'){
+    clearInterval(POLL);POLL=null;$('#wRun').disabled=false;
+    log.textContent+='\n\n['+j.status+(j.rc!==undefined?' rc='+j.rc:'')+
+      (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s) recorded':'')+']';
+    load();
+  }
+}
+$('#wRun').addEventListener('click',async()=>{
+  const spec=$('#wSpec').value,ds=$('#wDs').value,tf=$('#wTf').value,lens=$('#wLens').value;
+  if(!ds){$('#wLog').style.display='block';$('#wLog').textContent='Upload a dataset first.';return}
+  $('#wRun').disabled=true;$('#wLog').style.display='block';$('#wLog').textContent='Starting…';
+  const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent(spec)+
+    '&tf='+encodeURIComponent(tf)+'&lens='+encodeURIComponent(lens);
+  try{
+    const r=await (await fetch('/api/run?'+qs,{method:'POST'})).json();
+    if(r.error){$('#wLog').textContent=r.error;$('#wRun').disabled=false;return}
+    POLL=setInterval(()=>pollJob(r.job),1500);pollJob(r.job);
+  }catch(e){$('#wLog').textContent=''+e;$('#wRun').disabled=false;}
+});
+loadWizard();
 load();
 """
 
@@ -384,6 +545,21 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <div style="display:flex;align-items:center">{_BRAND}<span class=tag-lab>Backtest Lab</span></div>
   <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Run a backtest</b><span class=muted style="font-size:12px">spec × dataset × timeframes → the 3 lenses</span></div>
+  <div class=up style="margin-top:10px">
+    <select id=wSpec style="min-width:190px"></select>
+    <select id=wDs style="min-width:150px"></select>
+    <input id=wTf placeholder="timeframes (5m,15m,1h)" value="5m,15m" style="width:190px">
+    <select id=wLens>
+      <option value=research>Classic (edge)</option>
+      <option value=funnel>Eval (funnel)</option>
+    </select>
+    <button class=go id=wRun>Run</button>
+  </div>
+  <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+</div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
   <b>Upload dataset</b><span class=muted style="font-size:12px">raw export → normalized → cataloged</span></div>

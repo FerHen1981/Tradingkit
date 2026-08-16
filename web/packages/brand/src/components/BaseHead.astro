@@ -15,8 +15,12 @@ interface Props {
   path: string;
   /** Site-relative or absolute social image. */
   image?: string;
-  /** Emoji favicon — cheap, sharp at every size, no asset pipeline. */
+  /** Emoji favicon — goedkoop en scherp, voor een site zonder eigen beeldmerk. */
   favicon?: string;
+  /** Pad naar een echt favicon-bestand. Gaat voor op `favicon`. */
+  faviconHref?: string;
+  /** Pad naar het app-icoon (180×180 of groter) voor iOS-snelkoppelingen. */
+  appleIcon?: string;
   locale?: string;
   /** Blog posts set this so search engines see an article, not a page. */
   type?: "website" | "article";
@@ -34,6 +38,8 @@ const {
   path,
   image = "/og-default.png",
   favicon = "🌴",
+  faviconHref,
+  appleIcon,
   locale = "nl_NL",
   type = "website",
   publishedAt,
@@ -44,9 +50,11 @@ const {
 const canonical = new URL(path, origin).href;
 const ogImage = new URL(image, origin).href;
 const fullTitle = title === siteName ? title : `${title} · ${siteName}`;
-const faviconHref = `data:image/svg+xml,${encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">${favicon}</text></svg>`
-)}`;
+const iconHref =
+  faviconHref ??
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="0.9em" font-size="90">${favicon}</text></svg>`
+  )}`;
 ---
 
 <meta charset="utf-8" />
@@ -54,7 +62,8 @@ const faviconHref = `data:image/svg+xml,${encodeURIComponent(
 <title>{fullTitle}</title>
 <meta name="description" content={description} />
 <link rel="canonical" href={canonical} />
-<link rel="icon" href={faviconHref} />
+<link rel="icon" href={iconHref} type={faviconHref?.endsWith(".svg") || !faviconHref ? "image/svg+xml" : undefined} />
+{appleIcon && <link rel="apple-touch-icon" href={appleIcon} />}
 {noindex && <meta name="robots" content="noindex, nofollow" />}
 
 <meta property="og:type" content={type} />

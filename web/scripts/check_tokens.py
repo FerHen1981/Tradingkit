@@ -21,6 +21,30 @@ SOURCE = ROOT / "packages/brand/src/styles/tokens.css"
 COPY = ROOT / "portal/app/static/portal.css"
 
 TOKEN_RE = re.compile(r"^\s*(--[a-z0-9-]+)\s*:\s*([^;]+);", re.MULTILINE)
+VAR_RE = re.compile(r"var\(\s*(--[a-z0-9-]+)\s*\)")
+
+
+def resolve(tokens: dict[str, str]) -> dict[str, str]:
+    """Vervang var(--x) door de waarde van --x binnen hetzelfde blok.
+
+    Zonder dit vergelijkt de check notatie in plaats van kleur: de sites
+    schrijven `--accent: var(--brand-gold)` waar het portal de hex herhaalt,
+    en dat zijn dezelfde kleur. Herhaalt tot er niets meer op te lossen valt,
+    met een harde grens tegen een kringverwijzing.
+    """
+    out = dict(tokens)
+    for _ in range(10):
+        changed = False
+        for name, value in out.items():
+            match = VAR_RE.fullmatch(value)
+            if match and match.group(1) in out:
+                target = out[match.group(1)]
+                if target != value:
+                    out[name] = target
+                    changed = True
+        if not changed:
+            break
+    return out
 
 
 def first_definitions(path: Path) -> dict[str, str]:
@@ -32,10 +56,11 @@ def first_definitions(path: Path) -> dict[str, str]:
     text = path.read_text(encoding="utf-8")
     start = text.index(":root")
     end = text.index("}", start)
-    return {
+    raw = {
         name: " ".join(value.split())
         for name, value in TOKEN_RE.findall(text[start:end])
     }
+    return resolve(raw)
 
 
 def main() -> int:
@@ -47,7 +72,14 @@ def main() -> int:
     copy = first_definitions(COPY)
 
     shared = sorted(set(source) & set(copy))
-    drift = [(name, source[name], copy[name]) for name in shared if source[name] != copy[name]]
+    def norm(value: str) -> str:
+        return value.strip().lower()
+
+    drift = [
+        (name, source[name], copy[name])
+        for name in shared
+        if norm(source[name]) != norm(copy[name])
+    ]
 
     if drift:
         print("Brand token drift between the sites and the portal:\n")

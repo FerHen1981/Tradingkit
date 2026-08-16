@@ -122,6 +122,31 @@ def main():
     expanded = [(tag(bn, tf), bn, cfg, tf) for bn, cfg in jobs for tf in tfs]
     single = len(expanded) == 1
 
+    # Data date range (same span across timeframes; recorded on every run).
+    try:
+        _window = {"first": str(df["et"].iloc[0])[:19], "last": str(df["et"].iloc[-1])[:19],
+                   "bars_1m": int(len(df))}
+    except Exception:
+        _window = {}
+
+    def _settings(cfg):
+        """Curated snapshot of the indicators + mechanics a run actually used
+        (works for specs AND presets, so every run is transparent)."""
+        return {
+            "unit_mode": cfg.unit_mode,
+            "filters": {"gap_filter": cfg.use_gap_filter, "gap_min_ticks": cfg.gap_min_ticks,
+                        "gap_max_ticks": cfg.gap_max_ticks, "cvd_filter": cfg.use_cvd_filter,
+                        "cvd_streak": cfg.use_cvd_streak, "cvd_trend_count": cfg.cvd_trend_count,
+                        "vwap_veto": cfg.use_vwap_veto},
+            "structure": {"stop_swing": cfg.stop_swing, "pivot_k": cfg.pivot_k,
+                          "swing_buf_ticks": cfg.swing_buf_ticks, "max_stop_ticks": cfg.max_stop_ticks},
+            "entry": {"limit_mode": cfg.entry_limit_mode, "expiry_bars": cfg.expiry_bars},
+            "tp": {"mode": cfg.tp_mode, "r_multiple": cfg.r_multiple, "tp_fixed_ticks": cfg.tp_fixed_ticks,
+                   "breakeven": cfg.use_breakeven, "trail": cfg.use_trail},
+            "sizing": {"mode": cfg.sizing_mode, "contract_size": cfg.contract_size},
+            "account": {"initial_capital": cfg.initial_capital, "phase": cfg.phase},
+        }
+
     def _record(base_name, cfg, tf, lens, kpi_obj, trades_csv):
         """Register one run in the Lab data room with a recognizable run_id."""
         if not args.lab:
@@ -131,13 +156,17 @@ def main():
         asset = cfg.contract.symbol
         if args.spec:
             fp_src, source = {"groups": rspec.groups, "base_preset": rspec.base_preset}, f"spec:{args.spec}"
+            kind = "spec"
         else:
             fp_src, source = {"preset": base_name}, f"preset:{base_name}"
+            kind = "preset"
         fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens,
                           "unit_mode": cfg.unit_mode, "data": os.path.basename(args.data)})
         rid = make_run_id(asset, base_name, tf, lens, fp)
         meta = {"run_id": rid, "asset": asset, "strategy": base_name, "timeframe": tf,
-                "lens": lens, "source": source, "data_file": os.path.basename(args.data),
+                "lens": lens, "source": source, "kind": kind,
+                "data_file": os.path.basename(args.data), "window": _window,
+                "settings": _settings(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
         if args.spec:
             meta["groups"] = rspec.groups

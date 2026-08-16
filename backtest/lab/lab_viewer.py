@@ -429,8 +429,8 @@ function render(){
   $('#rows').innerHTML=rows.map(r=>{
     const pf=k(r,'profit_factor',null),net=k(r,'net_profit',0),exp=k(r,'expectancy',0),
       win=k(r,'win_rate_pct',null),tr=k(r,'trades',0),dd=k(r,'max_drawdown',0);
-    return `<tr>
-      <td title="${r.run_id}">${(r.run_id||'').slice(0,42)}</td><td>${r.asset||''}</td>
+    return `<tr data-id="${r.run_id}" style="cursor:pointer">
+      <td title="click for detail">${(r.run_id||'').slice(0,42)}</td><td>${r.asset||''}</td>
       <td>${r.strategy||''}</td><td><span class=tag>${r.timeframe||''}</span></td>
       <td><span class=tag>${r.lens||''}</span></td><td>${tr}</td>
       <td>${win==null?'':win.toFixed(0)}</td>
@@ -439,6 +439,28 @@ function render(){
       <td class=${net>=0?'pos':'neg'}>${net?money(net):''}</td>
       <td>${dd?'$'+Math.round(dd).toLocaleString():''}</td>
       <td class=muted>${(r.created_at||'').slice(0,16).replace('T',' ')}</td></tr>`}).join('');
+  $('#rows').querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>showDetail(tr.dataset.id)));
+}
+function kvs(obj,pre){return Object.entries(obj||{}).map(([k,v])=>{
+  if(v&&typeof v==='object')return kvs(v,(pre?pre+'.':'')+k);
+  return `<span class=tag style="margin:2px">${(pre?pre+'.':'')+k}: <b style="color:var(--sand)">${v}</b></span>`}).join('');}
+async function showDetail(id){
+  const d=$('#detail');d.style.display='block';d.innerHTML='<div class=muted>Loading…</div>';
+  const r=await (await fetch('/api/run?id='+encodeURIComponent(id))).json();
+  if(r.error){d.innerHTML='<div class=neg>'+r.error+'</div>';return;}
+  const w=r.window||{},kind=r.kind||(r.source||'').split(':')[0];
+  const badge=kind==='preset'?'<span class=tag style="color:var(--rose)">legacy preset — not registry-governed</span>'
+    :'<span class=tag style="color:var(--azure)">registry spec</span>';
+  const grp=r.groups?`<div style="margin-top:10px"><b>Indicators (registry blocks)</b><div style="margin-top:6px">${
+    Object.entries(r.groups).map(([g,ps])=>`<div class=lensrow style="margin-top:4px"><b style="color:var(--gold)">${g}</b> — ${kvs(ps)}</div>`).join('')}</div></div>`:'';
+  d.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center">
+      <b>${r.strategy||''} · ${r.timeframe||''} · ${r.lens||''}</b>${badge}</div>
+    <div class=lensrow style="margin-top:8px">run_id: ${r.run_id||''}</div>
+    <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars · source ${r.source||''}</div>
+    ${grp}
+    <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
+    <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
+  d.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 function fillKpis(){
   const b=STATS.best,bl=b?((b.kpis||{}).profit_factor||0).toFixed(2):'—';
@@ -594,6 +616,8 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <th data-k=win>Win%</th><th data-k=pf>PF</th><th data-k=exp>Exp</th>
   <th data-k=net>Net</th><th data-k=dd>MaxDD</th><th data-k=created>When</th>
 </tr></thead><tbody id=rows></tbody></table>
+
+<div class=panel id=detail style="display:none"></div>
 
 <div class=foot id=foot></div></div>
 <script>{_JS}</script></body></html>"""

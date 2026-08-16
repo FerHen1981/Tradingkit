@@ -1,7 +1,7 @@
 /* ==========================================================================
    MEX portal — styles
 
-   The token block below is a copy of web/packages/brand/src/styles/tokens.css.
+   Het tokenblok hieronder is een kopie van web/packages/brand/src/styles/tokens.css.
    The portal deploys separately from the sites (different host, different
    runtime) and must not depend on the npm workspace being present, so the
    values are restated here. If you change a brand colour, change it in both —
@@ -9,36 +9,103 @@
    ========================================================================== */
 
 :root {
-  --brand-gold: #f0b64d;
-  --brand-aqua: #3fd0bd;
-  --brand-petrol: #06171a;
+  --brand-abyss: #030f28;
+  --brand-deep: #081d46;
+  --brand-navy: #0e2a5e;
+  --brand-sand: #f2ebda;
+  --brand-gold: #e8b54f;
+  --brand-gold-deep: #b98526;
+  --brand-azure: #5aa2ff;
+  --brand-rose: #e0796e;
+  --brand-gold-gradient: linear-gradient(135deg, #e8b54f, #b98526);
 
-  --bg: #06171a;
-  --surface: #0b2428;
-  --surface-2: #0f2e33;
-  --line: #1c3f43;
-  --line-strong: #26545a;
+  --bg: #030f28;
+  --surface: #081d46;
+  --surface-2: #0e2a5e;
+  --line: rgba(242, 235, 218, 0.15);
+  --line-strong: rgba(242, 235, 218, 0.28);
 
-  --ink: #eaf4f1;
-  --muted: #84a8a3;
-  --dim: #5c807c;
+  --ink: #f2ebda;
+  --muted: rgba(242, 235, 218, 0.58);
+  --dim: rgba(242, 235, 218, 0.42);
 
-  --accent: var(--brand-gold);
-  --accent-2: var(--brand-aqua);
+  --accent: #e8b54f;
+  --accent-2: #5aa2ff;
 
-  --pos: #35c88a;
-  --neg: #ef6b53;
-  --warn: #f0a53a;
+  --pos: #5aa2ff;
+  --neg: #e0796e;
+  --warn: #e8b54f;
 
-  --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: 4px;
+  --radius-sm: 2px;
   --width: 1180px;
 
   color-scheme: dark;
 }
+
+/* ---- lettertypen ----
+   Zelf gehost, net als op de sites: de CSP van het portal is default-src
+   'self' en trading-data hoort geen verzoek naar een derde partij te
+   veroorzaken. Bestanden staan in static/fonts/. */
+
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('./fonts/bricolage-grotesque-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('./fonts/bricolage-grotesque-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./fonts/instrument-sans-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./fonts/instrument-sans-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./fonts/jetbrains-mono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -51,13 +118,13 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   background-image:
-    radial-gradient(1200px 500px at 85% -10%, rgba(63, 208, 189, 0.07), transparent 60%),
-    radial-gradient(900px 400px at 5% 0%, rgba(240, 182, 77, 0.05), transparent 55%);
+    radial-gradient(1100px 620px at 82% -8%, rgba(232, 181, 79, 0.18), transparent 60%),
+    radial-gradient(900px 700px at 2% 42%, rgba(90, 162, 255, 0.14), transparent 62%);
   background-attachment: fixed;
 }
 
-h1 { font-size: 1.75rem; letter-spacing: -0.02em; margin: 0; }
-h2 { font-size: 1.0625rem; margin: 0; }
+h1 { font-family: var(--display); font-weight: 800; font-size: 1.75rem; letter-spacing: -0.025em; margin: 0; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 1.0625rem; margin: 0; }
 
 a { color: var(--accent-2); }
 
@@ -86,7 +153,7 @@ a { color: var(--accent-2); }
 
 .masthead {
   border-bottom: 1px solid var(--line);
-  background: rgba(6, 23, 26, 0.92);
+  background: rgba(3, 15, 40, 0.9);
   backdrop-filter: blur(10px);
   position: sticky;
   top: 0;
@@ -109,21 +176,22 @@ a { color: var(--accent-2); }
   margin-right: auto;
 }
 
-.brand__mark {
-  font-family: var(--mono);
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--brand-petrol);
-  background: var(--accent);
-  padding: 3px 9px;
-  border-radius: var(--radius-sm);
+.brand__word {
+  font-family: var(--display);
+  font-size: 17px;
+  color: var(--ink);
 }
 
-.brand__word {
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+.brand__word strong {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.brand__word em {
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  margin-left: 0.4em;
   color: var(--muted);
 }
 
@@ -161,9 +229,9 @@ a { color: var(--accent-2); }
   border-radius: 999px;
 }
 
-.role-owner { background: rgba(240, 182, 77, 0.16); color: var(--accent); }
-.role-partner { background: rgba(63, 208, 189, 0.16); color: var(--accent-2); }
-.role-viewer { background: rgba(132, 168, 163, 0.16); color: var(--muted); }
+.role-owner { background: rgba(232, 181, 79, 0.16); color: var(--accent); }
+.role-partner { background: rgba(90, 162, 255, 0.16); color: var(--accent-2); }
+.role-viewer { background: rgba(242, 235, 218, 0.12); color: var(--muted); }
 
 /* ---- buttons ---- */
 
@@ -178,7 +246,11 @@ a { color: var(--accent-2); }
   white-space: nowrap;
 }
 
-.btn--primary { background: var(--accent); color: var(--brand-petrol); }
+.btn--primary {
+  background: var(--brand-gold-gradient);
+  border-color: var(--brand-gold-deep);
+  color: var(--brand-abyss);
+}
 .btn--primary:hover { filter: brightness(1.08); }
 
 .btn--secondary {
@@ -231,7 +303,7 @@ a { color: var(--accent-2); }
   margin-bottom: 1.5rem;
   font-size: 14px;
   color: var(--muted);
-  background: rgba(11, 36, 40, 0.6);
+  background: rgba(14, 42, 94, 0.4);
 }
 
 .notice p { margin: 0 0 8px; }
@@ -360,7 +432,7 @@ thead th {
 tbody th,
 tbody td {
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(28, 63, 67, 0.55);
+  border-bottom: 1px solid rgba(242, 235, 218, 0.09);
   text-align: left;
   font-weight: 400;
   white-space: nowrap;

@@ -73,12 +73,15 @@ const attrs = href
     padding: 0.85rem 1.5rem;
   }
 
+  /* De primaire knop draagt het goudverloop van het merkteken. Dat is een
+     accent, geen vlak: het blijft klein en staat nooit achter lopende tekst. */
   .btn--primary {
-    background: var(--accent);
-    color: var(--brand-petrol);
+    background: var(--brand-gold-gradient);
+    border-color: var(--brand-gold-deep);
+    color: var(--brand-abyss);
   }
 
-  .btn--primary:hover { filter: brightness(1.08); }
+  .btn--primary:hover { filter: brightness(1.06); }
 
   .btn--secondary {
     background: transparent;
@@ -87,8 +90,8 @@ const attrs = href
   }
 
   .btn--secondary:hover {
-    border-color: var(--accent);
-    color: var(--accent);
+    border-color: var(--accent-2);
+    color: var(--accent-2);
   }
 
   .btn--ghost {

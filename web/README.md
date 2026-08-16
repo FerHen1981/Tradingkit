@@ -224,6 +224,33 @@ make check-glossary # faalt op een kapot bron-id of een dode verwijzing
 make check          # alles
 ```
 
+### Huisstijl en lettertypen
+
+Het palet, de typografie en het beeldmerk komen uit het merkpakket
+*MEX Traders — merkidentiteit v2*. Twee regels daaruit staan in code vast:
+
+- **Goud is voor het merkteken en accenten**, niet voor vlakken en niet voor
+  lopende tekst. Er is daarom geen token dat goud als paneelachtergrond
+  aanbiedt.
+- **Op en neer zijn azure en rose**, niet groen en rood. Dat is geen smaak: het
+  paar meet ΔE 20,7 bij protanopie, waar groen/rood juist het klassieke
+  probleemgeval is.
+
+Het beeldmerk zit in `packages/brand/src/components/Logo.astro`; de losse
+bestanden staan in `sites/mex/public/brand/`. Pips & Palm Trees gebruikt dat
+merkteken bewust **niet** — dat hoort bij het bedrijf, niet bij het weblog.
+
+De drie lettertypen worden zelf gehost. Niet uit voorkeur: de CSP van beide
+sites is `default-src 'self'`, en een verzoek aan de Google-CDN is een verzoek
+aan een derde partij bij elke paginaweergave — precies wat de privacyverklaring
+zegt dat de site niet doet, en de reden dat er geen cookiebanner nodig is.
+
+De bestanden staan in `packages/brand/src/fonts` en worden door
+`make sync-fonts` naar elke plek gekopieerd die ze serveert. Dat is nodig omdat
+Vite relatieve `url()`'s in CSS uit een workspace-pakket ongemoeid laat en de
+bestanden niet meebouwt — ze geven dan stilzwijgend 404 op de gebouwde site.
+`make check` faalt wanneer een doelmap afwijkt.
+
 ### Waarom het palet twee keer bestaat
 
 De sites importeren `packages/brand/src/styles/tokens.css`. Het portal deployt

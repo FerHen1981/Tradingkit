@@ -1,7 +1,12 @@
 ---
 /**
- * Shared masthead. The brand mark follows the approved mockup: a gold badge
- * holding the short mark, then the wordmark in tracked mono uppercase.
+ * Gedeelde kopbalk.
+ *
+ * Het merk komt via de `brand`-slot binnen, zodat MEX zijn beeldmerk kan
+ * doorgeven en Pips & Palm Trees zijn eigen woordmerk houdt — één component,
+ * twee merken, zonder dat het ene merkteken op het andere merk belandt.
+ * Zonder slot valt het terug op een woordmerk volgens de merkregel: de naam
+ * claimt in 800, de toevoeging beschrijft in 400 met +0,10em.
  */
 interface NavItem {
   label: string;
@@ -32,8 +37,11 @@ const isCurrent = (href: string) =>
 <header class="masthead">
   <div class="wrap bar">
     <a class="brand" href={home} aria-label={`${mark} ${word} — home`}>
-      <span class="brand__mark">{mark}</span>
-      <span class="brand__word">{word}</span>
+      <slot name="brand">
+        <span class="brand__word">
+          <strong>{mark}</strong><em>{word}</em>
+        </span>
+      </slot>
       {tag && <span class="brand__tag">{tag}</span>}
     </a>
 
@@ -104,27 +112,32 @@ const isCurrent = (href: string) =>
     color: inherit;
   }
 
-  .brand__mark {
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: 1.1875rem;
-    letter-spacing: 0.03em;
-    color: var(--brand-petrol);
-    background: var(--accent);
-    padding: 3px 9px;
-    border-radius: var(--radius-sm);
+  .brand__word {
+    font-family: var(--display);
+    font-size: 1.0625rem;
+    color: var(--ink);
   }
 
-  .brand__word,
+  .brand__word strong {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .brand__word em {
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    margin-left: 0.4em;
+    color: var(--muted);
+  }
+
   .brand__tag {
     font-family: var(--mono);
-    font-size: var(--t-small);
-    letter-spacing: 0.2em;
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
+    color: var(--accent-2);
   }
-
-  .brand__word { color: var(--muted); }
-  .brand__tag { color: var(--accent-2); }
 
   .nav {
     display: none;
@@ -174,20 +187,23 @@ const isCurrent = (href: string) =>
     border-color: var(--line-strong);
   }
 
+  /* De navigatie-CTA is een omlijnde knop, geen goudvlak: goud is voor het
+     merkteken en accenten. De mockup gebruikt dezelfde behandeling. */
   .cta {
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    color: var(--brand-petrol);
-    background: var(--accent);
-    padding: 0.48rem 0.95rem;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    padding: 0.55rem 1rem;
     border-radius: var(--radius-sm);
     text-decoration: none;
     white-space: nowrap;
-    transition: filter 0.15s ease;
+    transition: border-color 0.2s ease, color 0.2s ease;
   }
 
-  .cta:hover { filter: brightness(1.08); }
+  .cta:hover { border-color: var(--accent); color: var(--accent); }
 
   /* The nav collapses to a scrollable rail on small screens rather than
      hiding behind a hamburger — fewer taps, no JS, nothing hidden. */

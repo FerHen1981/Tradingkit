@@ -52,10 +52,11 @@ const year = new Date().getFullYear();
   <div class="wrap">
     <div class="foot__top" style={`--foot-cols:${columns.length}`}>
       <div class="foot__brand">
-        <span class="brand">
-          <span class="brand__mark">{mark}</span>
-          <span class="brand__word">{word}</span>
-        </span>
+        <slot name="brand">
+          <span class="brand__word">
+            <strong>{mark}</strong><em>{word}</em>
+          </span>
+        </slot>
         <p class="foot__tagline">{tagline}</p>
       </div>
 
@@ -115,27 +116,22 @@ const year = new Date().getFullYear();
     }
   }
 
-  .brand {
-    display: flex;
-    align-items: baseline;
-    gap: var(--sp-2);
-  }
-
-  .brand__mark {
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: 1.0625rem;
-    color: var(--brand-petrol);
-    background: var(--accent);
-    padding: 2px 8px;
-    border-radius: var(--radius-sm);
-  }
-
   .brand__word {
-    font-family: var(--mono);
-    font-size: var(--t-small);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
+    font-family: var(--display);
+    font-size: 1rem;
+    color: var(--ink);
+  }
+
+  .brand__word strong {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .brand__word em {
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    margin-left: 0.4em;
     color: var(--muted);
   }
 

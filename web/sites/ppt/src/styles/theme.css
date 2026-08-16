@@ -1,45 +1,49 @@
 /* --------------------------------------------------------------------------
-   pipsandpalmtrees.com — site theme
+   pipsandpalmtrees.com — site-thema
 
-   Same bones as the corporate site, different temperature. This is the whole
-   point of the shared package: a second brand is a token override plus its own
-   content, not a second codebase.
+   Zelfde botten als MEX Traders, andere stem. Dat is het hele punt van het
+   gedeelde pakket: een tweede merk is een tokenoverride plus eigen content,
+   geen tweede codebase.
 
-   What changes: the accent warms from trading-desk gold to a sunlit amber, the
-   secondary accent moves from aqua to palm green, headings take a serif so long
-   reads feel editorial rather than institutional, and the measure widens.
-   What does not change: surfaces, ink, spacing, radii, components.
+   Wat verandert: het accent warmt op van merkgoud naar zonlicht-amber, en de
+   koppen krijgen een schreefletter zodat lang lezen redactioneel aanvoelt in
+   plaats van institutioneel. Het beeldmerk van MEX Traders wordt hier
+   uitdrukkelijk NIET gebruikt — dat merkteken hoort bij het bedrijf, niet bij
+   het weblog.
+
+   Wat níet verandert: vlakken, inkt, ritme, radii, componenten, en de
+   semantische kleuren voor resultaat. Azure en rose blijven op en neer, over
+   beide merken heen.
    -------------------------------------------------------------------------- */
 
 :root {
   --accent: #f2a541;
   --accent-dim: #b07726;
-  --accent-2: #5fc9a0;
 
-  /* Editorial pages breathe wider than corporate ones. */
+  /* Redactionele pagina's ademen breder dan corporate. */
   --measure: 72ch;
   --width-narrow: 760px;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
+    --accent: #a86a15;
     --accent-dim: #8f5f1c;
-    --accent-2: #14805f;
   }
 }
 
 :root[data-theme="light"] {
+  --accent: #a86a15;
   --accent-dim: #8f5f1c;
-  --accent-2: #14805f;
 }
 
 :root[data-theme="dark"] {
+  --accent: #f2a541;
   --accent-dim: #b07726;
-  --accent-2: #5fc9a0;
 }
 
-/* Headings in serif — the single strongest signal that this is somebody
-   writing, not a company publishing. */
+/* Koppen in schreef — het sterkste signaal dat hier iemand schrijft in plaats
+   van dat een bedrijf publiceert. */
 h1,
 h2,
 h3,

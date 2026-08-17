@@ -41,6 +41,19 @@ def test_recommend_keeps_micro_instrument():
     assert recommend_setup({}, "trailing", "NQ")["off_edge"]
 
 
+def test_eval_default_is_el_toro():
+    # no current asset, no data → default eval passer is NQ · El Toro (not the old El Minero)
+    r = recommend_setup({"stage": "Eval"}, "eval", None)
+    assert r["base"] == "NQ" and r["strategy"] == "El Toro" and r["instrument"] == "MNQ"
+
+
+def test_eval_measured_leader_overrides_default():
+    # GC measured with the best net → data drives the pick over the El Toro default
+    edge = {"GC": {"net": 9000, "expectancy": 60, "n": 200}, "NQ": {"net": 1000, "expectancy": 5, "n": 200}}
+    r = recommend_setup({"stage": "Eval"}, "eval", None, edge)
+    assert r["base"] == "GC" and r["strategy"] == "El Minero" and "measured" in r["why"]
+
+
 def test_survival_below_safety_net():
     # +$800 profit, safety net $2,600 → survival, 1 ct, route says how much to the safety net
     a = _acct(current=50_800, buffer=1_800)

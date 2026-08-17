@@ -554,16 +554,20 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
 
     # payout playbook: per-account doctrine preset (track/phase → asset·strategy + contracts +
     # day-trail) plus live payout progress. Follows the Operating Schema, not an optimizer.
-    from .playbook import PlaybookParams, build_playbook
+    from .playbook import PlaybookParams, base_asset, build_playbook
     dom_asset: dict = defaultdict(lambda: defaultdict(int))
     for t in trades:
         dom_asset[t["acct"]][t["sym"]] += 1
+    # measured per-asset edge (base symbol) → drives the data-driven eval recommendation
+    edge_stats: dict = {}
+    for x in assets:
+        edge_stats[base_asset(x["sym"])] = {"net": x["net"], "expectancy": x["expectancy"], "n": x["n"]}
     _pp = PlaybookParams()
     for a in accounts:
         da = dom_asset.get(a["full"]) or {}
         instrument = max(da, key=da.get) if da else None      # the real instrument (MGC/MES…)
         try:
-            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), instrument, _pp)
+            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), instrument, edge_stats, _pp)
         except Exception as exc:                       # never let the playbook break the dashboard
             log.warning("playbook failed for %s: %r", a.get("full"), exc)
             a["playbook"] = None

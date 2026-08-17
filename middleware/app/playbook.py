@@ -158,9 +158,10 @@ def account_phase(track: str, account: dict) -> str:
 _DEFAULT_INSTRUMENT = {"trailing": "MGC", "static": "GC", "eval": "MGC"}
 
 
-def recommend_setup(account: dict, track: str, current_instrument: str | None) -> dict:
+def recommend_setup(account: dict, track: str, current_instrument: str | None,
+                    edge_stats: dict | None = None) -> dict:
     """Strategy from the allocation matrix + the ACTUAL instrument the account trades
-    (micro MGC/MES kept as-is). Keep the current validated edge; else default by track."""
+    (micro MGC/MES kept as-is). Keep the current validated edge; else pick data-driven."""
     inst = (current_instrument or "").upper() or None
     b = base_asset(inst)
     table = EVAL_STRAT if track == "eval" else FUNDED_STRAT
@@ -168,8 +169,21 @@ def recommend_setup(account: dict, track: str, current_instrument: str | None) -
         return {"instrument": inst, "base": b, "strategy": table[b], "keep": True,
                 "why": f"keep {inst} · {table[b]}"}
     if track == "eval":
-        return {"instrument": _DEFAULT_INSTRUMENT["eval"], "base": "GC", "strategy": "El Minero",
-                "keep": False, "why": "El Minero (GC) — ~25% more passes than NQ for the same work"}
+        # data-driven: rank eval assets by MEASURED fleet net; default order El Toro-first (NQ has
+        # been the top eval passer in practice — the old El Minero default was a stale schema claim).
+        es = edge_stats or {}
+        order = ["NQ", "GC", "ES"]
+        cand = [a for a in order if a in table]
+
+        def rank(sym: str) -> tuple:
+            s = es.get(sym) or {}
+            return (1 if (s.get("n") or 0) >= 20 else 0, s.get("net") or -1e18, -order.index(sym))
+        best = max(cand, key=rank)
+        measured = (es.get(best, {}).get("n") or 0) >= 20
+        why = (f"{best} · {table[best]} — top measured eval passer" if measured
+               else f"{best} · {table[best]} — default eval passer (verify vs actual pass counts)")
+        return {"instrument": _MICRO.get(best, best), "base": best, "strategy": table[best],
+                "keep": False, "why": why}
     off = b in ("NQ", "YM")
     return {"instrument": _DEFAULT_INSTRUMENT[track], "base": "GC", "strategy": "El Tesoro",
             "keep": False, "off_edge": off,
@@ -203,7 +217,7 @@ def edge_size(account: dict, cur_size: float | None, trading_days: int, dll: flo
 
 
 def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
-                   params: PlaybookParams | None = None) -> dict:
+                   edge_stats: dict | None = None, params: PlaybookParams | None = None) -> dict:
     """Per-account ROUTE to payout: read the account's own history against its firm rules and
     decide the best next move. Not a preset lookup — a grounded, decisive plan."""
     p = params or PlaybookParams()
@@ -217,7 +231,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     payouts_taken = int(account.get("payouts_taken") or 0)
     cur_instrument = (instrument or "").upper() or None
     track = account_track(account)
-    rec = recommend_setup(account, track, cur_instrument)
+    rec = recommend_setup(account, track, cur_instrument, edge_stats)
     inst = rec["instrument"]
 
     # --- state: consume the Payout engine (SAME rules as the L5 Payout panel), plus history ---

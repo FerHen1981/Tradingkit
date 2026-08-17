@@ -117,11 +117,30 @@ def _datasets() -> list[dict]:
 
 
 def _specs() -> list[dict]:
-    out = [{"kind": "spec", "id": f"spec:{p.name}", "name": p.name}
-           for p in sorted(_specs_dir().glob("*.yaml"))]
+    from ..spec import validate_file, spec_to_config, describe_config
+    out = []
+    for p in sorted(_specs_dir().glob("*.yaml")):
+        row = {"kind": "spec", "id": f"spec:{p.name}", "name": p.name}
+        try:
+            rs = validate_file(p)
+            cfg, unmapped = spec_to_config(rs)
+            row["title"] = rs.name
+            row["preset"] = rs.base_preset
+            row["groups"] = list(rs.groups.keys())
+            row["desc"] = describe_config(cfg)
+            row["unmapped"] = unmapped
+        except Exception as e:               # never let one bad spec break the list
+            row["error"] = str(e)
+        out.append(row)
     try:
         from ..config import PRESETS
-        out += [{"kind": "preset", "id": f"preset:{n}", "name": f"{n} (preset)"} for n in PRESETS]
+        for n, c in PRESETS.items():
+            row = {"kind": "preset", "id": f"preset:{n}", "name": f"{n} (preset)", "title": n}
+            try:
+                row["desc"] = describe_config(c)
+            except Exception:
+                pass
+            out.append(row)
     except Exception:
         pass
     return out
@@ -495,6 +514,18 @@ tr:hover td{background:rgba(14,42,94,.5)}
 .v-bad{background:rgba(224,121,110,.10);border-color:rgba(224,121,110,.40);color:var(--rose)}
 .v-info{background:rgba(14,42,94,.50);border-color:var(--line);color:var(--sub)}
 .lensrow{font-family:var(--mono);font-size:10px;color:var(--sub);margin-top:6px;letter-spacing:.06em}
+.lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(288px,1fr));gap:10px;margin-top:12px}
+.card{background:rgba(8,29,70,.34);border:1px solid var(--line);border-radius:4px;padding:12px 13px;cursor:pointer;transition:border-color .15s,transform .15s}
+.card:hover{border-color:var(--gold);transform:translateY(-1px)}
+.card .ct{font-family:var(--display);font-weight:600;font-size:14px;color:var(--sand);letter-spacing:-.01em}
+.card .row{font-family:var(--mono);font-size:10px;color:var(--sub);margin-top:6px;letter-spacing:.02em}
+.card .row b{color:var(--gold);font-weight:500}
+.fam{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.12em;padding:2px 7px;border-radius:2px;border:1px solid;white-space:nowrap}
+.fam-confluence{color:var(--gold);border-color:rgba(232,181,79,.5);background:rgba(232,181,79,.08)}
+.fam-reversal{color:var(--rose);border-color:rgba(224,121,110,.5);background:rgba(224,121,110,.08)}
+.fam-trend{color:var(--azure);border-color:rgba(90,162,255,.5);background:rgba(90,162,255,.08)}
+.fam-momentum{color:#9FD3A8;border-color:rgba(159,211,168,.5);background:rgba(159,211,168,.08)}
+.fam-mixed{color:var(--sub);border-color:var(--line);background:rgba(242,235,218,.05)}
 """
 
 # Brand mark (the gold "M") for the header, and the favicon (served at /favicon.svg).
@@ -620,14 +651,47 @@ $('#upbtn').addEventListener('click',async()=>{
   }catch(e){$('#msg').innerHTML='<span class=neg>'+e+'</span>';}
 });
 // wizard
+let SPECS=[];
 async function loadWizard(){
   try{
-    const sp=(await (await fetch('/api/specs')).json()).specs||[];
-    $('#wSpec').innerHTML=sp.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    SPECS=(await (await fetch('/api/specs')).json()).specs||[];
+    $('#wSpec').innerHTML=SPECS.map(s=>{const f=(s.desc||{}).family;
+      return `<option value="${s.id}">${s.title||s.name}${f?' · '+f:''}</option>`}).join('');
     const ds=(await (await fetch('/api/datasets')).json()).datasets||[];
     $('#wDs').innerHTML=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')
       ||'<option value="">no datasets — upload one</option>';
+    loadLibrary();
   }catch(e){}
+}
+function famPill(f){return `<span class="fam fam-${f||'trend'}">${f||'trend'}</span>`}
+function libCard(s){
+  const d=s.desc||{};
+  if(s.error)return `<div class=card><div class=ct>${s.name}</div><div class=row style="color:var(--rose)">${s.error}</div></div>`;
+  const c=d.confluence;
+  const conf=c?`<div class=row>confluence · primary <b>${c.primary}</b> · gates <b>${(c.require||[]).join(', ')||'—'}</b></div>`
+    +`<div class=row>killzones <b>${(c.killzones||[]).join(' · ')}</b> · lookback ${c.lookback}</div>`:'';
+  const filt=(d.filters||[]).length?`<div class=row>filters ${d.filters.join(' · ')}</div>`:'';
+  const ex=d.exit||{};
+  return `<div class=card data-id="${s.id}">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <span class=ct>${s.title||s.name}</span>${famPill(d.family)}</div>
+    <div class=row>entry <b>${(d.entries||[]).join(', ')||'—'}</b></div>
+    ${conf}${filt}
+    <div class=row>exit · stop <b>${ex.stop||'?'}</b> · target <b>${ex.target||'?'}</b> · ${(ex.manage||[]).join('+')}</div>
+    <div class=row style="margin-top:7px;color:var(--dim)">${s.preset?('base '+s.preset+' · '):''}${(s.groups||[]).join(', ')}</div>
+  </div>`;
+}
+function loadLibrary(){
+  const specs=SPECS.filter(s=>s.kind==='spec');
+  const order={confluence:0,trend:1,momentum:2,reversal:3,mixed:4};
+  specs.sort((a,b)=>((order[(a.desc||{}).family]??9)-(order[(b.desc||{}).family]??9))||String(a.name).localeCompare(b.name));
+  $('#libRows').innerHTML=specs.map(libCard).join('')||'<div class=muted>no specs</div>';
+  $('#libCount').textContent=specs.length+' strategies';
+  $('#libRows').querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>{
+    const sel=$('#wSpec');if(sel)sel.value=el.dataset.id;
+    document.querySelector('.panel').scrollIntoView({behavior:'smooth',block:'start'});
+    sel&&sel.focus();
+  }));
 }
 function watchJob(id,logSel,btnSel,onDone){
   const log=$(logSel);log.style.display='block';
@@ -713,6 +777,12 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <button class=go id=wRun>Run</button>
   </div>
   <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+</div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Strategy library</b><span class=muted id=libCount>—</span></div>
+  <div class=muted style="font-size:12px;margin-top:3px">Every governed strategy — its entries, confluence gates, filters and exit. Click a card to load it into the runner above.</div>
+  <div class=lib id=libRows></div>
 </div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">

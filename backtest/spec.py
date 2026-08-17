@@ -307,6 +307,71 @@ def effective_signature(cfg) -> tuple:
             int(cfg.confl_lookback))
 
 
+# Human labels for the entry generators (config flag -> display name + family tag).
+_ENTRY_LABELS: dict[str, tuple[str, str]] = {
+    "use_fvg_entry":   ("FVG imbalance", "trend"),
+    "use_ema_cross":   ("EMA cross", "trend"),
+    "use_bos_entry":   ("Break of structure", "trend"),
+    "use_choch_entry": ("Change of character", "reversal"),
+    "use_liq_sweep":   ("Liquidity sweep", "reversal"),
+    "use_cvd_div":     ("CVD divergence", "reversal"),
+    "use_order_block": ("Order block", "trend"),
+    "use_momentum":    ("Momentum impulse", "momentum"),
+    "use_macd_cross":  ("MACD cross", "momentum"),
+    "use_rsi_rev":     ("RSI reversion", "reversal"),
+    "use_donchian":    ("Donchian break", "trend"),
+    "use_ma_pullback": ("MA pullback", "trend"),
+    "use_bb_revert":   ("Bollinger reversion", "reversal"),
+}
+_KILLZONES = {3: "London 03-04", 10: "NY-AM 10-11", 14: "NY-PM 14-15"}
+_REQUIRE_LABELS = {"liq_sweep": "prior liquidity sweep", "cvd_div": "prior CVD divergence",
+                   "bos": "prior break of structure", "bias_vwap": "VWAP bias side"}
+
+
+def describe_config(cfg) -> dict:
+    """Decode an engine Config into a human, honest picture of what the strategy
+    actually does — the entries, the confluence gates, the filters and the exit
+    machinery. Used by the cockpit so every run shows its real mechanism, not
+    just a spec filename."""
+    entries = [(lbl, fam) for flag, (lbl, fam) in _ENTRY_LABELS.items() if getattr(cfg, flag, False)]
+    out: dict[str, Any] = {"entries": [e[0] for e in entries]}
+
+    if getattr(cfg, "use_confluence", False):
+        hrs = sorted(cfg.enabled_hours)
+        out["family"] = "confluence"
+        out["confluence"] = {
+            "primary": cfg.confl_primary,
+            "require": [_REQUIRE_LABELS.get(r, r) for r in cfg.confl_require],
+            "lookback": cfg.confl_lookback,
+            "killzones": [_KILLZONES.get(h, f"{h:02d}:00") for h in hrs] if len(hrs) < 6 else ["all hours"],
+        }
+    else:
+        fams = {f for _, f in entries}
+        out["family"] = ("reversal" if fams == {"reversal"} else "momentum" if fams == {"momentum"}
+                         else "trend" if fams <= {"trend", "momentum"} else "mixed" if fams else "trend")
+
+    filt = []
+    if cfg.use_cvd_filter and cfg.use_cvd_streak:
+        filt.append(f"CVD streak ≥{cfg.cvd_trend_count}")
+    elif cfg.use_cvd_filter:
+        filt.append("CVD sign")
+    if cfg.use_vwap_veto:
+        filt.append("VWAP veto")
+    if cfg.use_gap_filter:
+        filt.append(f"gap {cfg.gap_min_ticks:g}-{cfg.gap_max_ticks:g}t")
+    out["filters"] = filt
+
+    tp = ({"R-multiple": f"{cfg.r_multiple:g}R", "Swing structure": "swing",
+           "Fixed (units)": f"{cfg.tp_fixed_ticks:g}t"}).get(cfg.tp_mode, cfg.tp_mode)
+    out["exit"] = {
+        "stop": "swing pivot" if cfg.stop_swing else f"fixed {cfg.fixed_stop_ticks:g}t",
+        "target": tp,
+        "manage": [m for m, on in (("breakeven", cfg.use_breakeven), ("trail", cfg.use_trail)) if on] or ["let run"],
+    }
+    out["contract"] = getattr(cfg.contract, "symbol", "")
+    return out
+
+
 def spec_to_config(rspec: ResolvedSpec):
     """Turn a validated spec into an engine Config.
 

@@ -123,6 +123,33 @@ Bursts are rate-limited per strategy+severity (`ALERT_MAX_PER_WINDOW` per
 `ALERT_WINDOW_SECONDS`); suppressed alerts are counted and reported as `+N suppressed` on
 the next one that goes out, so nothing is dropped silently.
 
+### Non-order events (`POST /notice`) — the other cards
+Entries and exits arrive as a `Signal` on `/webhook`. Everything *else* a strategy
+reports — **limit expired, auto flat, signal blocked, config**, day halt, payout, derisk,
+risk-off, trail, fill — is emitted by Pine's `f_sendDiscord(...)`, which posts **straight
+to a Discord webhook** as a flat blue embed. Those never touched this renderer, which is
+why they still looked like the old format.
+
+**Fix (no Pine edit, no re-paste):** in the TradingView alert that currently points at
+your Discord webhook, change the webhook URL to
+```
+https://<your-app>/notice?secret=<MIDDLEWARE_SECRET>&strategy=ES
+```
+The middleware parses the Pine body back into a typed notice and renders a card per event
+kind: emoji, colour and real fields (blocked-by reasons as a list, the limit price, the
+whole `cfgStr` broken out into a **Config** card). `strategy=` is optional — it is derived
+from the ticker (`ES1!`/`ESZ2025` → `ES`) when omitted, but set it explicitly if an account
+trades a micro (`MES1!`) under the ES strategy. Notices go to every channel that
+strategy's accounts route to, so the funded/eval split holds here too.
+
+A structured body works as well, if you'd rather not rely on text parsing:
+```json
+{"kind": "signal_blocked", "symbol": "ES1!", "data": {"direction": "Short", "reasons": ["MAE guard"]}}
+```
+`/notice` never dispatches an order — it only notifies and journals (`kind='notice'`).
+`NOTICE_SUPPRESS` (default `entry_intent`) drops kinds that would duplicate the trade card;
+set it to empty to see everything, or add kinds to quieten them down.
+
 **Telegram** works on the same env vars — point `NOTIFY_WEBHOOK`/`ALERT_WEBHOOK` at
 `https://api.telegram.org/bot<TOKEN>/sendMessage` and set `TELEGRAM_CHAT_ID` (or append
 `?chat_id=...`). The message is sent as Telegram Markdown; the embed is Discord-only.
@@ -147,4 +174,6 @@ lives here, not in the alert. (Kept out of scope for Phase 0.)
       feed is wired to `RiskState.record_fill` (Phase 5b).
 - [x] Notify channel — rich Discord embeds, funded/eval channel split, severity + rate-limited
       failure alerts, Telegram parity, day-P&L on exits (chart image when the alert sends a URL)
+- [x] Notice cards (`/notice`) — limit expired, auto flat, signal blocked, config + the rest of
+      the Pine `f_sendDiscord` events, rendered instead of the flat blue embed
 - [ ] Go-live — VPS deploy, tokens, TradingView alerts, flip one account to DRY_RUN=false

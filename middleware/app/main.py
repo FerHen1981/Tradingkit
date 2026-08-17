@@ -3,6 +3,7 @@
 Endpoints
   GET  /health        liveness probe
   POST /webhook       receive a Signal from TradingView, fan out to accounts
+  POST /notice        receive a NON-order strategy event (config, auto flat, ...) -> card
   GET  /journal       last N journalled events (debug; secret-gated)
   POST /killswitch    enable/disable dispatching fleet-wide (secret-gated)
 
@@ -10,6 +11,7 @@ Phase 0 = receive + journal. Phase 1 = PMT (Tradovate) dispatch in DRY_RUN.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -22,7 +24,8 @@ from .models import Signal
 import asyncio
 
 from .metaapi import MetaApiClient
-from .notify import AlertLimiter, alert_failures, notify_trade_routes
+from .notices import build_notice_embed, format_notice, notice_from_payload
+from .notify import AlertLimiter, alert_failures, notify_card_routes, notify_trade_routes
 from .notion_sync import NotionJournal, NotionRecon, NotionSync
 from .reconciler import Reconciler
 from .risk import RiskState, trading_day_start_ts
@@ -128,6 +131,36 @@ async def webhook(request: Request) -> dict:
         journal.write("alert", alerted, strategy=sig.strategy)
     return {"accepted": True, "dispatched": True, "dry_run": settings.dry_run,
             "failures": len(failures), "results": results}
+
+
+@app.post("/notice")
+async def notice(request: Request, secret: str, strategy: str = "") -> dict:
+    """Render a NON-order strategy event as a card: limit expired, auto flat, signal
+    blocked, config, day halt, payout...
+
+    Point the Pine "→ Discord" alert at this endpoint instead of the raw Discord webhook
+    (`.../notice?secret=...&strategy=ES`) and its `f_sendDiscord` body is parsed back into
+    a typed notice. A structured {"kind": ..., "data": {...}} body works too. Never
+    dispatches an order — notify + journal only.
+    """
+    _check_secret(secret)
+    raw = await request.body()
+    try:
+        payload = json.loads(raw or b"{}")
+    except ValueError:
+        payload = {"text": raw.decode("utf-8", "replace")[:2000]}   # plain-text alert body
+
+    note = notice_from_payload(payload, strategy)
+    journal.write("notice", {"kind": note.kind, "symbol": note.symbol, "text": note.text[:500]},
+                  strategy=note.strategy)
+    log.info("notice %s %s %s", note.strategy, note.symbol, note.kind)
+    if note.kind in settings.notice_suppress():
+        return {"accepted": True, "kind": note.kind, "posted": 0, "reason": "kind suppressed"}
+
+    webhooks = accounts.notify_webhooks_for_strategy(note.strategy, _notify_defaults())
+    posted = await notify_card_routes(webhooks, format_notice(note), build_notice_embed(note),
+                                      chat_id=settings.telegram_chat_id)
+    return {"accepted": True, "kind": note.kind, "strategy": note.strategy, "posted": posted}
 
 
 @app.get("/journal")

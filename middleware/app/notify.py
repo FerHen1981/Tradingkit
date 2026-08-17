@@ -218,6 +218,24 @@ async def notify_trade_routes(routes: list[tuple[str, str, list[dict]]], sig, *,
             await client.aclose()
 
 
+async def notify_card_routes(webhooks: list[str], text: str, embed: dict | None = None, *,
+                             chat_id: str = "", client: httpx.AsyncClient | None = None) -> int:
+    """Post one already-built card to each webhook (used by the notice renderer, which
+    has no per-account split). Returns how many went out."""
+    targets = [w for w in dict.fromkeys(webhooks) if w]
+    if not targets:
+        return 0
+    own = client is None
+    client = client or httpx.AsyncClient(timeout=8.0)
+    try:
+        for webhook in targets:
+            await _post(webhook, text, embed, chat_id=chat_id, client=client)
+    finally:
+        if own:
+            await client.aclose()
+    return len(targets)
+
+
 # ------------------------------------------------------------------ failure alerts
 def classify_failure(r: dict) -> str:
     """How loud should this one failure be?

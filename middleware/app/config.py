@@ -47,6 +47,9 @@ class Settings:
     alert_max_per_window: int = int(os.environ.get("ALERT_MAX_PER_WINDOW", "5"))
     alert_window_seconds: float = float(os.environ.get("ALERT_WINDOW_SECONDS", "60"))
     notify_pnl_on_exit: bool = os.environ.get("NOTIFY_PNL_ON_EXIT", "true").lower() != "false"
+    # Notice events (/notice): kinds to drop. Entry intents duplicate the trade card the
+    # order route already posts, so they are suppressed unless you ask for them.
+    notice_suppress_raw: str = os.environ.get("NOTICE_SUPPRESS", "entry_intent")
     # Phase 5 — risk overlay
     max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)
     # Live fleet tracking — Tradovate read API
@@ -77,6 +80,9 @@ class Settings:
 
     def tradovate_enabled(self) -> bool:
         return self.tradovate_mock or bool(os.environ.get("TRADOVATE_NAME"))
+
+    def notice_suppress(self) -> set[str]:
+        return {k.strip() for k in self.notice_suppress_raw.split(",") if k.strip()}
 
 
 @dataclass
@@ -123,6 +129,20 @@ class AccountMap:
                 continue
             grouped.setdefault(hook, (label, []))[1].append(r)
         return [(hook, label, subset) for hook, (label, subset) in grouped.items()]
+
+    def notify_webhooks_for_strategy(self, strategy: str, defaults: dict) -> list[str]:
+        """Channels a strategy-level message (a notice: config, auto-flat, blocked signal)
+        belongs in. A notice has no per-account results, so it goes to every distinct
+        channel that strategy's accounts route to — a funded/eval split still gets both.
+        With no accounts mapped it falls back to the strategy override or the default.
+        """
+        hooks = [self.notify_channel(aid, strategy, defaults)[0]
+                 for aid in (self.strategies.get(strategy) or {}).get("accounts", [])]
+        hooks = [h for h in dict.fromkeys(hooks) if h]
+        if hooks:
+            return hooks
+        fallback = self.notify_for(strategy) or self.notify_channels.get("default") or defaults.get("default", "")
+        return [fallback] if fallback else []
 
     def accounts_for(self, strategy: str) -> list[dict]:
         ids = (self.strategies.get(strategy) or {}).get("accounts", [])

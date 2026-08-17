@@ -94,11 +94,20 @@ def health() -> dict:
 
 
 @app.post("/webhook")
-async def webhook(request: Request) -> dict:
+async def webhook(request: Request, secret: str = "", strategy: str = "") -> dict:
+    """The single door TradingView posts to. A body that validates as a `Signal` is an
+    order and gets fanned out; anything else on the same alert is a NON-order event
+    (Pine's f_sendDiscord bodies: limit expired, auto flat, signal blocked, config...)
+    and is rendered as a notice card instead of being rejected. Notices carry no secret
+    in their body, so they authenticate on `?secret=` in the alert URL."""
     raw = await request.body()
     try:
         sig = Signal.model_validate_json(raw)
     except ValidationError as exc:
+        payload = _as_notice_payload(raw)
+        if payload is not None:
+            _check_secret(secret)
+            return await _render_notice(payload, strategy)
         journal.write("error", {"reason": "validation", "errors": exc.errors(), "raw": raw.decode("utf-8", "replace")[:1000]})
         raise HTTPException(422, "invalid signal")
 
@@ -133,23 +142,32 @@ async def webhook(request: Request) -> dict:
             "failures": len(failures), "results": results}
 
 
-@app.post("/notice")
-async def notice(request: Request, secret: str, strategy: str = "") -> dict:
-    """Render a NON-order strategy event as a card: limit expired, auto flat, signal
-    blocked, config, day halt, payout...
+def _as_notice_payload(raw: bytes) -> dict | None:
+    """Is this non-Signal body something we can render as a notice? Returns the decoded
+    payload, or None when there is nothing recognisable to show (then it is a real error).
 
-    Point the Pine "→ Discord" alert at this endpoint instead of the raw Discord webhook
-    (`.../notice?secret=...&strategy=ES`) and its `f_sendDiscord` body is parsed back into
-    a typed notice. A structured {"kind": ..., "data": {...}} body works too. Never
-    dispatches an order — notify + journal only.
+    Accepts the Pine f_sendDiscord body ({"embeds":[{"title","description"}]}), a
+    structured {"kind": ...} body, and a plain-text alert line.
     """
-    _check_secret(secret)
-    raw = await request.body()
+    text = raw.decode("utf-8", "replace").strip()
+    if not text:
+        return None
     try:
-        payload = json.loads(raw or b"{}")
+        payload = json.loads(text)
     except ValueError:
-        payload = {"text": raw.decode("utf-8", "replace")[:2000]}   # plain-text alert body
+        return {"text": text[:2000]}          # plain-text alert body
+    if not isinstance(payload, dict):
+        return None
+    if {"secret", "action", "dollar_sl", "qty"} & set(payload):
+        return None   # a BROKEN order, not a notice — must surface as an error, not a card
+    if payload.get("embeds") or payload.get("kind") or payload.get("title") or payload.get("text") \
+            or payload.get("content"):
+        return payload
+    return None
 
+
+async def _render_notice(payload: dict, strategy: str = "") -> dict:
+    """Journal a notice and post its card. Never dispatches an order."""
     note = notice_from_payload(payload, strategy)
     journal.write("notice", {"kind": note.kind, "symbol": note.symbol, "text": note.text[:500]},
                   strategy=note.strategy)
@@ -161,6 +179,17 @@ async def notice(request: Request, secret: str, strategy: str = "") -> dict:
     posted = await notify_card_routes(webhooks, format_notice(note), build_notice_embed(note),
                                       chat_id=settings.telegram_chat_id)
     return {"accepted": True, "kind": note.kind, "strategy": note.strategy, "posted": posted}
+
+
+@app.post("/notice")
+async def notice(request: Request, secret: str, strategy: str = "") -> dict:
+    """Explicit door for non-order events, for when they come in on their own alert
+    rather than sharing the order alert. Same rendering as the `/webhook` fallback."""
+    _check_secret(secret)
+    payload = _as_notice_payload(await request.body())
+    if payload is None:
+        raise HTTPException(422, "nothing to render")
+    return await _render_notice(payload, strategy)
 
 
 @app.get("/journal")

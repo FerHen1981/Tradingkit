@@ -34,7 +34,8 @@ REGISTRY_PATH = Path(__file__).with_name("registry.yaml")
 # Keys under a group that are metadata, not tunable params.
 _GROUP_META = {"desc", "price_action", "provenance", "engine", "optimize", "note",
                "canonical_menu", "classic_pairs", "classic_menu", "windows_ET",
-               "requires_data", "params"}
+               "requires_data", "params",
+               "layer", "role", "info_category", "secondary"}   # framework classification
 
 
 class SpecError(ValueError):

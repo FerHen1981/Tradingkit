@@ -16,6 +16,18 @@
 #   options   enum choices (for categorical params)
 #
 # Per-group fields:
+#   layer          L1..L10 — the group's PRIMARY decision layer (see lab/FRAMEWORK.md).
+#                  The role-composing sampler fills one slot per layer; this is where
+#                  the group competes. L1 regime · L2 bias · L3 structure · L4 location ·
+#                  L5 participation · L6 momentum · L7 volatility · L8 setup ·
+#                  L9 trigger · L10 risk.
+#   role           human name of that layer (regime|bias|structure|location|
+#                  participation|momentum|volatility|setup|trigger|risk).
+#   info_category  redundancy-guard bucket. The sampler/builder allow at most ONE
+#                  confirmation per category, so correlated signals (rsi+stochastic+
+#                  macd) can't be triple-counted. (trend|momentum|volatility|
+#                  participation|location|structure|setup|risk)
+#   secondary      optional list of layers the group ALSO contributes to.
 #   price_action   true  = counts toward the "price-action-only" policy
 #   provenance     sourced | folklore | mixed  (honest label — folklore = convention, no published edge)
 #   engine         implemented | partial | todo  (what backtest/ already computes)
@@ -25,7 +37,7 @@
 # ============================================================================
 
 meta:
-  version: 1
+  version: 2   # v2: per-group layer/role/info_category tags (framework); footprint dropped (deep L5)
   units: "distances in TICKS unless *_atr* (ATR multiples) or *_pct (fraction 0..1)"
   note: "DEFAULTS are sourced/widely-cited; MIN/MAX/STEP are engineering guardrails, not published ranges."
 
@@ -42,6 +54,10 @@ price_action:
 
   fvg:
     desc: "Fair Value Gap (3-candle imbalance). Bull = c1.high < c3.low."
+    layer: L9   # FVG entry; the imbalance is structure
+    role: trigger
+    info_category: structure
+    secondary: [L3]
     price_action: true
     provenance: sourced        # gap-size numbers are convention; structure is standard
     engine: partial            # gap_min/max_ticks exist; the rest is TODO
@@ -57,6 +73,10 @@ price_action:
 
   cvd_delta:
     desc: "Cumulative Volume Delta as bias/confirmation. Two axes: streak + divergence."
+    layer: L5   # shallow flow only (volume-delta); deep L5 dropped
+    role: participation
+    info_category: participation
+    secondary: [L2]
     price_action: true
     provenance: sourced
     engine: partial            # cvd_trend_count streak exists; divergence/slope TODO
@@ -70,6 +90,10 @@ price_action:
 
   divergence:
     desc: "Regular/hidden divergence on an oscillator (RSI/MACD/CVD) vs price. osc_source=cvd enables the divergence entry."
+    layer: L6   # oscillator/CVD divergence
+    role: momentum
+    info_category: momentum
+    secondary: [L5, L9]
     price_action: true
     provenance: sourced
     engine: partial            # CVD-divergence entry wired; RSI/MACD divergence still TODO
@@ -84,6 +108,10 @@ price_action:
 
   market_structure:
     desc: "BOS (continuation) / CHoCH (reversal) from swing pivots. Presence enables the BOS entry generator."
+    layer: L3   # BOS/CHoCH break is also a trigger
+    role: structure
+    info_category: structure
+    secondary: [L9]
     price_action: true
     provenance: mixed
     engine: partial            # BOS entry wired (close-break); CHoCH + wick-ref still TODO
@@ -95,6 +123,10 @@ price_action:
 
   momentum:
     desc: "Displacement / impulse bar (opening drive). Enter WITH a bar whose body >= x*ATR."
+    layer: L6   # impulse bar doubles as trigger
+    role: momentum
+    info_category: momentum
+    secondary: [L9]
     price_action: true
     provenance: sourced
     engine: implemented        # wired as an entry generator (Level B)
@@ -104,6 +136,10 @@ price_action:
 
   liquidity_eqhl:
     desc: "Equal highs/lows = resting-stop liquidity pools / sweep targets. Presence enables the sweep+reclaim entry."
+    layer: L4   # sweep target
+    role: location
+    info_category: location
+    secondary: [L9]
     price_action: true
     provenance: sourced
     engine: partial            # sweep+reclaim entry wired off the confirmed swing; EQH/EQL tolerance TODO
@@ -114,6 +150,9 @@ price_action:
 
   premium_discount_ote:
     desc: "Dealing-range location: <0.5 discount (buy), >0.5 premium (sell); OTE 0.62-0.79."
+    layer: L4   # dealing-range zone
+    role: location
+    info_category: location
     price_action: true
     provenance: folklore       # OTE 0.705 'ideal' is folklore; the zone gate is the real tunable
     engine: todo
@@ -127,6 +166,10 @@ price_action:
 
   order_block:
     desc: "Last opposite candle before an impulse (OB); failed OB retested = Breaker. Presence enables the OB-mitigation entry."
+    layer: L4   # OB mitigation zone
+    role: location
+    info_category: location
+    secondary: [L3, L9]
     price_action: true
     provenance: folklore
     engine: implemented        # OB-mitigation entry wired (Level B); breaker variant TODO
@@ -139,6 +182,10 @@ price_action:
 
   vwap:
     desc: "Session-anchored VWAP as directional bias veto."
+    layer: L4   # VWAP-side bias
+    role: location
+    info_category: location
+    secondary: [L2]
     price_action: true
     provenance: sourced
     engine: partial            # session VWAP exists; anchor/deadband TODO
@@ -150,6 +197,9 @@ price_action:
 
   swing_stops:
     desc: "Stop beyond the protective swing pivot (below swing low for longs)."
+    layer: L10   # stop placement
+    role: risk
+    info_category: risk
     price_action: true
     provenance: sourced
     engine: partial            # pivot_k + buffer exist; keep aligned with market_structure
@@ -160,6 +210,10 @@ price_action:
 
   silver_bullet:
     desc: "Time-gated FVG confluence: within a fixed ET window, bias -> sweep -> displacement FVG -> return-to-gap. Presence switches the engine to confluence mode (Level C)."
+    layer: L8   # composite confluence setup
+    role: setup
+    info_category: setup
+    secondary: [L4, L9]
     price_action: true
     provenance: folklore       # the windows are ICT convention, no published edge
     engine: partial            # confluence gate wired (killzone + prior sweep + VWAP bias); HTF-draw bias + strict sequence-state TODO
@@ -178,6 +232,9 @@ price_action:
 
   kill_zones:
     desc: "Session windows as coarse regime gates (ET)."
+    layer: L4   # session gate
+    role: location
+    info_category: location
     price_action: true
     provenance: folklore
     engine: todo
@@ -187,18 +244,6 @@ price_action:
       london_open:  {start: "02:00", end: "05:00", type: fixed}
       ny_open:      {start: "08:30", end: "11:00", type: fixed}
       london_close: {start: "10:00", end: "12:00", type: fixed}
-
-  footprint:
-    desc: "Order-flow micro (imbalance/absorption). DATA-GATED: needs bid/ask footprint feed."
-    price_action: true
-    provenance: sourced        # 3:1 and stacked>=3 are hard platform defaults (ATAS/Quantower)
-    engine: todo
-    optimize: microstructure
-    requires_data: [bid_ask_footprint]
-    params:
-      imbalance_ratio:        {default: 3.0, min: 1.5, max: 5.0, step: 0.5, type: opt}   # 300% diagonal
-      stacked_min_count:      {default: 3,   min: 2,   max: 6,   step: 1,   type: opt}
-      absorption_lookback:    {default: 1,   min: 1,   max: 5,   step: 1,   type: opt}
 
 # ============================================================================
 # FAMILY B — CLASSIC (long-term analyst) INDICATORS
@@ -212,6 +257,10 @@ classic:
 
   ema_cross:
     desc: "EMA fast/slow crossover ENTRY (enters on the cross; not just a filter)."
+    layer: L2   # the cross is the trigger
+    role: bias
+    info_category: trend
+    secondary: [L9]
     price_action: false
     provenance: sourced
     engine: implemented        # wired as an entry generator (Level B)
@@ -222,6 +271,10 @@ classic:
 
   moving_average:
     desc: "SMA/EMA trend + pullback entry. Long-term: 50/200 golden cross (watch on weekly). Presence enables the MA pullback entry."
+    layer: L1   # MA-stack / slope = regime
+    role: regime
+    info_category: trend
+    secondary: [L2]
     price_action: false
     provenance: sourced
     engine: partial            # trend-pullback entry wired (Level B); golden-cross-as-filter TODO
@@ -235,6 +288,9 @@ classic:
 
   rsi:
     desc: "Wilder momentum oscillator (0-100). OB/OS reversion entry + divergence. Presence enables the RSI-reversion entry."
+    layer: L6
+    role: momentum
+    info_category: momentum
     price_action: false
     provenance: sourced
     engine: implemented        # RSI OB/OS reversion entry wired (Level B)
@@ -246,6 +302,10 @@ classic:
 
   macd:
     desc: "(fastEMA - slowEMA), signal EMA, histogram. 12/26/9 near-universal. Presence enables the MACD-cross entry."
+    layer: L6   # trend component = bias
+    role: momentum
+    info_category: momentum
+    secondary: [L2]
     price_action: false
     provenance: sourced
     engine: implemented        # MACD line/signal cross entry wired (Level B)
@@ -257,6 +317,10 @@ classic:
 
   bollinger_bands:
     desc: "20-SMA +/- k*stddev volatility envelope. Presence enables the band-reversion entry."
+    layer: L7   # width + band-reversion
+    role: volatility
+    info_category: volatility
+    secondary: [L4]
     price_action: false
     provenance: sourced
     engine: partial            # band-reversion entry wired (SMA basis); ma_type EMA basis TODO
@@ -268,6 +332,9 @@ classic:
 
   adx_dmi:
     desc: "ADX = trend STRENGTH (0-100); +DI/-DI = direction."
+    layer: L1   # trend strength gate
+    role: regime
+    info_category: trend
     price_action: false
     provenance: sourced
     engine: todo
@@ -278,6 +345,10 @@ classic:
 
   atr:
     desc: "Wilder volatility unit for stops/sizing."
+    layer: L7   # feeds stop sizing
+    role: volatility
+    info_category: volatility
+    secondary: [L10]
     price_action: false
     provenance: sourced
     engine: implemented        # ATR already computed in indicators.py
@@ -288,6 +359,9 @@ classic:
 
   stochastic:
     desc: "%K position in n-period range; %D = SMA of %K. Full 14/3/3."
+    layer: L6
+    role: momentum
+    info_category: momentum
     price_action: false
     provenance: sourced
     engine: todo
@@ -301,6 +375,10 @@ classic:
 
   ichimoku:
     desc: "Cloud (Tenkan/Kijun/Senkou/Chikou). Hosoda 9/26/52 — DO NOT OPTIMIZE."
+    layer: L1   # cloud
+    role: regime
+    info_category: trend
+    secondary: [L2]
     price_action: false
     provenance: sourced
     engine: todo
@@ -313,6 +391,10 @@ classic:
 
   supertrend:
     desc: "ATR-band trailing trend that flips long/short."
+    layer: L1   # ATR trend flip
+    role: regime
+    info_category: trend
+    secondary: [L2]
     price_action: false
     provenance: sourced
     engine: todo
@@ -323,6 +405,10 @@ classic:
 
   donchian:
     desc: "Highest-high/lowest-low breakout channel. Turtle 20/55. Presence enables the channel-break entry."
+    layer: L3   # breakout is the trigger
+    role: structure
+    info_category: structure
+    secondary: [L9]
     price_action: false
     provenance: sourced
     engine: implemented        # prior-N channel break entry wired (Level B)
@@ -333,6 +419,10 @@ classic:
 
   keltner:
     desc: "EMA +/- ATR*mult envelope (smoother than Bollinger)."
+    layer: L7   # ATR envelope
+    role: volatility
+    info_category: volatility
+    secondary: [L4]
     price_action: false
     provenance: sourced
     engine: todo

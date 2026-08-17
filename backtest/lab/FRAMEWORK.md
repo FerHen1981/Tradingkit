@@ -71,17 +71,22 @@ vandaag kunnen valideren:
 - 🟢 **Backtestbaar nu** (single-instrument OHLCV + volume):
   L1 Regime, L2 Bias, L3 Structure, L4 Location (VWAP/levels/sessies),
   L6 Momentum, L7 Volatility, L8 Setup, L9 Trigger, L10 Risk.
-- 🟡 **Deels** — L5 Participation: alleen wat uit bar-volume + afgeleide CVD
-  komt (`cvd_delta`, relative volume). Delta/footprint zijn `requires_data`.
-- 🔴 **Nog niet** — vereist data-architectuur die we niet hebben:
-  - **L0 Cross-Market** (DXY, yields, VIX, breadth, sectorrotatie) — tweede feed.
-  - **L5 diep** (TICK, advance/decline, Open Interest, funding, liquidations,
-    footprint/delta-tape) — geen bron.
+- 🟡 **Ondiep L5 Participation — IN SCOPE** — alleen wat uit bar-volume +
+  afgeleide CVD komt (`cvd_delta`, relative volume). Dit integreren we in v1.
+- 🔴 **L0 Cross-Market — TOEKOMST (bouwbaar)** — DXY, yields, VIX, breadth,
+  sectorrotatie. Vereist een tweede, op timestamp uitgelijnde datafeed, maar dat
+  zijn óók gewoon OHLCV-series: de bestaande `normalize.py` + dataset-catalogus
+  kan meerdere series inladen. Begrensde bouw, geen externe API's — kandidaat
+  voor de eerste uitbreiding ná v1.
+- ⛔ **Diep L5 — LOSGELATEN (besluit)** — TICK, advance/decline, Open Interest,
+  funding, liquidations, footprint/delta-tape. Vereist databronnen die we niet
+  hebben (en die achteraf op OHLCV-bars niet te reconstrueren zijn). **Bewust uit
+  scope, geen stub.** De `footprint`-groep is uit de registry verwijderd.
 
-**Consequentie voor v1:** we bouwen de engine rond de 🟢-lagen, tuigen L0 en het
-diepe L5 op als *expliciete stubs* (rol bestaat in de architectuur, levert nu
-`neutral`/`n.v.t.`), zodat we later alleen de datalaag hoeven aan te sluiten
-zonder de rolstructuur te herzien. Niets wordt stilzwijgend weggelaten.
+**Consequentie voor v1:** we bouwen de engine rond de 🟢-lagen + ondiep L5.
+L0 krijgt een *expliciete stub* (rol bestaat in de architectuur, levert nu
+`neutral`, datalaag later aan te sluiten zonder de rolstructuur te herzien).
+Diep L5 laten we volledig los — niet als stub, gewoon weg.
 
 ---
 
@@ -104,8 +109,7 @@ te wiren of te schrappen). Dit is de tag die als `layer:` per groep in
 | `premium_discount_ote` | L4 Location | — | decorative |
 | `vwap` | L4 Location | L2 Bias (VWAP-side) | wired |
 | `kill_zones` | L4 Location | session-gate | decorative |
-| `cvd_delta` | L5 Participation | L2 Bias | wired |
-| `footprint` | L5 Participation | — | 🔴 requires_data |
+| `cvd_delta` | L5 Participation (ondiep) | L2 Bias | wired |
 | `momentum` | L6 Momentum | L9 Trigger (impulse) | wired |
 | `divergence` | L6 Momentum | L5, L9 (CVD-div reversal) | wired |
 | `fvg` | L9 Trigger | L3 Structure | wired |
@@ -191,7 +195,7 @@ per categorie en laat er één aanvinken.
 | Trend/regime | `moving_average`, `supertrend`, `ichimoku`, `adx_dmi` |
 | Momentum | `rsi`, `stochastic`, `macd`(-hist), `momentum`, `divergence` |
 | Volatility | `atr`, `bollinger_bands`(width), `keltner` |
-| Participation | `cvd_delta`, `footprint`, relative-volume |
+| Participation | `cvd_delta`, relative-volume  *(diep L5 losgelaten)* |
 | Location | `vwap`, `order_block`, `liquidity_eqhl`, `premium_discount_ote`, levels |
 | Structure | `market_structure`, `donchian`, `fvg` |
 
@@ -280,16 +284,17 @@ zwaar wegen en welke datalagen beschikbaar zijn.
   → Volume → Location → Setup → Trigger`. Zwaar: RVOL, AVWAP, opening-gap,
   premarket, breadth. (🔴 sector/breadth = toekomst.)
 - **Futures** (ES/NQ/GC/CL) — zwaar: centralized volume, VWAP/profile,
-  overnight H/L, opening-range, RTH vs ETH, delta/CVD, TICK, breadth. Breadth is
-  een aparte institutionele confirmatielaag. **Dit is de best gedekte variant nu**
-  (de bestaande specs draaien hier).
+  overnight H/L, opening-range, RTH vs ETH, ondiepe delta/CVD. **Dit is de best
+  gedekte variant nu** (de bestaande specs draaien hier). *(TICK/breadth =
+  diep L5, losgelaten.)*
 - **Forex** — géén centralized volume: leun op relative currency strength, DXY,
   yield-differentials, sessie-structuur (Asia/London/NY-overlap), sessie-H/L,
   ATR, HTF-trend, sweeps. Tick-volume ≠ centralized volume.
-- **Crypto** — spot + perp: OI, funding, basis, liquidations, CVD,
-  spot-vs-derivatives flow, 24/7 vol-structuur. Onderscheid gezonde
-  spot-gedreven move (`prijs↑ + spot-vol↑ + OI↓`) van leveraged/crowded
-  (`prijs↑ + OI↑↑ + funding+ + zwak spot-vol`). (🔴 OI/funding = toekomst.)
+- **Crypto** — spot + perp, 24/7 vol-structuur, VWAP/AVWAP, weekly levels,
+  ondiepe CVD/volume. Het klassieke onderscheid gezonde spot-move
+  (`prijs↑ + spot-vol↑ + OI↓`) vs. leveraged/crowded
+  (`prijs↑ + OI↑↑ + funding+ + zwak spot-vol`) vergt OI/funding — *diep L5,
+  losgelaten*. Zonder die feeds blijft crypto op de 🟢-lagen + ondiep L5.
 
 ---
 
@@ -313,12 +318,13 @@ Action:      Long allowed
 
 ## 11. Bouwplan (gefaseerd, backtestbaar-eerst)
 
-1. **Registry hertaggen** — `layer:` + `role:` per groep in `registry.yaml`
-   (§3). Plus een `information_category:` voor de redundancy-guard (§5). Puur
-   data, geen gedrag. ✔ eerste, veilige stap.
+1. ~~**Registry hertaggen**~~ — ✅ **DONE** (registry v2): `layer:` + `role:` +
+   `info_category:` (+ `secondary:`) per groep in `registry.yaml` (§3);
+   `footprint` verwijderd (diep L5 losgelaten). Puur data, geen gedrag; 83 tests
+   groen.
 2. **`describe_config` uitbreiden** — laag-per-laag rolinvulling teruggeven,
    zodat runs én de builder hun stack tonen (dekt tegelijk open taak 2 uit de
-   handoff: per-run confluence in de run-detail).
+   handoff: per-run confluence in de run-detail). ← **volgende stap**
 3. **L1 regime-classifier wiren** — `adx_dmi` + `atr`-percentiel + MA-stack →
    objectieve regime-tag. Poortwachter van het framework; nu nog decorative.
 4. **Role-composing sampler** — `sample_spec` → `compose_strategy` (§4), met
@@ -327,8 +333,9 @@ Action:      Long allowed
    tonen; funnel blijft de rechter (§8).
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
    → opslaan als spec → runnen. De role-getagde registry ís het skelet.
-7. **Later (🔴 data):** L0 cross-market feed + diep L5 (OI/funding/breadth/
-   footprint). Rolstructuur ligt er dan al; alleen de datalaag koppelen.
+7. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als
+   uitgelijnde OHLCV-series). Rolstructuur ligt er dan al; alleen de datalaag
+   koppelen. *Diep L5 is losgelaten — geen onderdeel meer van het plan.*
 
 ---
 

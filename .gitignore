@@ -15,3 +15,7 @@ venv/
 # Outputs
 *.out
 trades*.csv
+
+# Runtime state — never commit a journal (it holds live trade data)
+*.db
+.pytest_cache/

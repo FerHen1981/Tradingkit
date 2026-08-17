@@ -116,3 +116,19 @@ def test_notice_is_journalled_and_never_dispatches(client):
     kinds = [e["kind"] for e in events]
     assert "notice" in kinds and "dispatch" not in kinds
     assert notice_from_payload(pine("🔒 ES1! DAY HALT", "x")).kind == "day_halt"
+
+
+def test_journal_filters_answer_did_it_arrive(client):
+    client.post("/webhook?secret=t", json=pine("⛔ ES1! SIGNAL BLOCKED", "Long ... blocked by: DD guard"))
+    client.post("/webhook", json=ORDER)
+    client.post("/webhook?secret=t", json={"secret": "t", "strategy": "ES"})   # broken order -> error
+
+    notices = client.get("/journal?secret=t&kind=notice").json()["events"]
+    assert [e["detail"]["kind"] for e in notices] == ["signal_blocked"]
+    assert notices[0]["detail"]["title"] == "⛔ ES1! SIGNAL BLOCKED"
+
+    hits = client.get("/journal?secret=t&kind=notice,error&contains=BLOCKED").json()["events"]
+    assert len(hits) == 1 and hits[0]["kind"] == "notice"
+
+    assert [e["kind"] for e in client.get("/journal?secret=t&kind=error").json()["events"]] == ["error"]
+    assert len(client.get("/journal?secret=t&strategy=ES").json()["events"]) >= 2

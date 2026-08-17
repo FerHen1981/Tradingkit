@@ -55,11 +55,27 @@ class Journal:
         )
         self._db.commit()
 
-    def recent(self, limit: int = 50) -> list[dict]:
-        cur = self._db.execute(
-            "SELECT ts, kind, strategy, account, detail FROM events ORDER BY id DESC LIMIT ?",
-            (limit,),
-        )
+    def recent(self, limit: int = 50, kind: str = "", strategy: str = "",
+               contains: str = "") -> list[dict]:
+        """Newest events first. `kind`/`strategy` filter exactly (comma-separated for
+        several kinds); `contains` is a substring match on the JSON detail — the quickest
+        way to answer "did that alert reach me, and what did I make of it?".
+        """
+        where, args = [], []
+        kinds = [k.strip() for k in kind.split(",") if k.strip()]
+        if kinds:
+            where.append(f"kind IN ({','.join('?' * len(kinds))})")
+            args += kinds
+        if strategy:
+            where.append("strategy = ?")
+            args.append(strategy)
+        if contains:
+            where.append("detail LIKE ?")
+            args.append(f"%{contains}%")
+        sql = "SELECT ts, kind, strategy, account, detail FROM events"
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        cur = self._db.execute(sql + " ORDER BY id DESC LIMIT ?", (*args, limit))
         return [
             {"ts": r[0], "kind": r[1], "strategy": r[2], "account": r[3], "detail": json.loads(r[4])}
             for r in cur.fetchall()

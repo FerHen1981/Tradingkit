@@ -169,7 +169,10 @@ def _as_notice_payload(raw: bytes) -> dict | None:
 async def _render_notice(payload: dict, strategy: str = "") -> dict:
     """Journal a notice and post its card. Never dispatches an order."""
     note = notice_from_payload(payload, strategy)
-    journal.write("notice", {"kind": note.kind, "symbol": note.symbol, "text": note.text[:500]},
+    # Keep the original title: when a kind comes out as the generic "notice" it is the
+    # only thing that tells you why the classifier did not recognise the event.
+    journal.write("notice", {"kind": note.kind, "symbol": note.symbol,
+                             "title": note.title[:200], "text": note.text[:500]},
                   strategy=note.strategy)
     log.info("notice %s %s %s", note.strategy, note.symbol, note.kind)
     if note.kind in settings.notice_suppress():
@@ -193,9 +196,14 @@ async def notice(request: Request, secret: str, strategy: str = "") -> dict:
 
 
 @app.get("/journal")
-def get_journal(secret: str, limit: int = 50) -> dict:
+def get_journal(secret: str, limit: int = 50, kind: str = "", strategy: str = "",
+                contains: str = "") -> dict:
+    """Recent events, newest first. Filter with `kind` (signal|dispatch|notice|alert|
+    dedupe|error, comma-separated), `strategy`, and `contains` (substring of the detail).
+    E.g. `?kind=notice,error&contains=BLOCKED` answers whether an alert arrived at all
+    and what the renderer made of it."""
     _check_secret(secret)
-    return {"events": journal.recent(limit)}
+    return {"events": journal.recent(limit, kind=kind, strategy=strategy, contains=contains)}
 
 
 @app.post("/killswitch")

@@ -74,6 +74,8 @@ def main():
                     help="hold out the last N days as out-of-sample")
     ap.add_argument("--segment", choices=["all", "is", "oos"], default="all",
                     help="with --holdout-days: run in-sample (is), out-of-sample (oos), or all")
+    ap.add_argument("--micro", action="store_true",
+                    help="also run each job on the micro twin (MNQ/MES/MGC/...) — same data, 1/10 multiplier")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
     ap.add_argument("--funnel-horizon", type=int, default=20, help="sessions per eval before TIMEOUT")
     ap.add_argument("--trades-out", help="write the trade list CSV to this path")
@@ -113,6 +115,16 @@ def main():
         if names == [None]:
             ap.error("provide one of --preset NAME, --all, or --spec PATH")
         jobs = [(n, PRESETS[n]) for n in names]
+
+    # --micro: add a micro-twin variant of each job (same data, 1/10 multiplier).
+    if args.micro:
+        from .config import micro_twin
+        twins = []
+        for bn, cfg in jobs:
+            tw = micro_twin(cfg.contract.symbol)
+            if tw:
+                twins.append((bn, cfg.with_(contract=contract(tw))))
+        jobs = jobs + twins
 
     # Timeframe(s) to run: --tf wins; else a spec's timeframe; else 1m. A
     # comma-list sweeps (e.g. --tf 5m,15m,1h) — one job per (strategy x timeframe).

@@ -34,6 +34,13 @@ CONTRACTS = {
     "ES": Contract("ES", 0.25, 50.0, 1.55),
     "YM": Contract("YM", 1.0, 5.0, 1.55),
     "RTY": Contract("RTY", 0.10, 50.0, 1.55),
+    # CME micros — SAME price series as the mini (distilled from mini data), 1/10 the
+    # multiplier. Identical at the tick/PF level; different vs the fixed Apex $ rules.
+    "MNQ": Contract("MNQ", 0.25, 2.0, 0.37),   # micro Nasdaq
+    "MES": Contract("MES", 0.25, 5.0, 0.37),   # micro S&P
+    "MYM": Contract("MYM", 1.0, 0.5, 0.37),    # micro Dow
+    "M2K": Contract("M2K", 0.10, 5.0, 0.37),   # micro Russell
+    "MGC": Contract("MGC", 0.10, 10.0, 0.52),  # micro gold, $1/tick
     # metals / energy
     "GC": Contract("GC", 0.10, 100.0, 1.75),   # gold, $10/tick
     "SI": Contract("SI", 0.005, 5000.0, 1.75), # silver, 5000oz, $25/tick
@@ -64,6 +71,15 @@ def contract(symbol: str) -> Contract:
     if key not in CONTRACTS:
         raise KeyError(f"unknown symbol {symbol!r}; known: {sorted(CONTRACTS)}")
     return CONTRACTS[key]
+
+
+# mini -> its micro twin (same price series, 1/10 multiplier). Used by --micro to
+# test a strategy on the micro contract in parallel (matters at the eval/funded lens).
+MICRO_TWIN = {"NQ": "MNQ", "ES": "MES", "YM": "MYM", "RTY": "M2K", "GC": "MGC"}
+
+
+def micro_twin(symbol: str) -> str | None:
+    return MICRO_TWIN.get(symbol.upper())
 
 
 # Canonical timeframe vocabulary: label -> minutes. The engines aggregate the

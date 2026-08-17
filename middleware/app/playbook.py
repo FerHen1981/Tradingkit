@@ -314,18 +314,20 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # target (~cons_margin × the 30% ceiling) — margin under the wall, spread over more days.
     soft_cap = round(cons_cap * p.cons_margin)
 
-    # consistency HEALING: a day already > 30% of total is locked in. The only way back under 30%
-    # is to grow total to best_day / 30% — with small days, never another big one.
+    # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days, and that
+    # ceiling RISES as you earn. Heal an outlier by growing total wins to best_day/30% — and the
+    # FASTER route is BIGGER days (up to, never over, the outlier), not micro-caps.
+    total_win = round(best_day / (consistency_pct / 100)) if (consistency_pct and best_day > 0) else max(profit, 0)
     broken = bool(consistency_pct is not None and limit and consistency_pct > 100 * limit)
-    heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0
-    heal_deficit = round(max(0, heal_total - profit)) if broken else 0
+    heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0        # total wins to clear 30%
+    heal_deficit = round(max(0, heal_total - total_win)) if broken else 0
 
     days_plan = days_to_heal = None
     if track == "eval" or maxed:
         set_day_cap = None
     elif broken:
-        set_day_cap = round(min(day_trail or 150, soft_cap))          # small — dilute, never repeat a big day
-        days_to_heal = math.ceil(heal_deficit / set_day_cap) if (set_day_cap and heal_deficit > 0) else 0
+        set_day_cap = round(best_day)                    # optimize UP — run days up to the outlier, never over
+        days_to_heal = math.ceil(heal_deficit / best_day) if best_day > 0 else None
     elif profit < safety:
         set_day_cap = round(min(day_trail or 150, soft_cap))
     elif to_full > 0:
@@ -337,13 +339,14 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     if broken:
         if quality == "ok":
             quality = "consistency"
-        prac = "" if (cap and heal_deficit <= 2 * cap) else " — likely won't pay this cycle"
-        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% > 30% — cap days at ${set_day_cap:,.0f}; "
-                     f"grow total to ${heal_total:,.0f} (+${heal_deficit:,.0f}, ~{days_to_heal}d) to clear 30%{prac}")
+        risk = (f" — but buffer ${int(buffer)} is thin for days that big; resetting may be safer"
+                if (buffer is not None and buffer < 2 * best_day) else "")
+        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — heal FAST: run days up to ${best_day:,.0f} "
+                     f"(never over) so total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d){risk}")
     elif consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
         if quality == "ok":
             quality = "consistency"
-        flags.append(f"consistency {consistency_pct:.0f}% on one day — spread more (max {limit*100:.0f}%)")
+        flags.append(f"consistency {consistency_pct:.0f}% of wins on one day — keep spreading (the 30% ceiling rises as you earn)")
 
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],

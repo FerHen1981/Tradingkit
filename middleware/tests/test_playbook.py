@@ -115,16 +115,17 @@ def test_survival_settables_stay_small():
     assert pb["day_cap"] == 150 and pb["dll"] == 360          # doctrine trail ; 20% of 1800
 
 
-def test_consistency_broken_gives_concrete_heal_plan():
-    # a $1,383 top day on $1,898 profit → 73% > 30%: cap small + grow total to best/30%
+def test_consistency_broken_heals_as_total_wins_grow():
+    # a $1,383 top day at 73% of wins → the 30% ceiling RISES as total wins grow to best/30%.
     a = _acct(current=51_898, buffer=2_000, payouts_taken=0,
               payout={"eligible": False, "trading_days": 3, "consistency_pct": 73.0, "profit": 1898})
     hist = {dt.date(2026, 1, 1): 1383, dt.date(2026, 1, 2): 300, dt.date(2026, 1, 3): 215}
     pb = build_playbook(a, hist, "MES")
-    assert pb["broken"] and pb["day_cap"] == 150                     # small — dilute, never repeat
-    assert pb["heal_total"] == round(1383 / 0.30)                    # 4610
-    assert pb["heal_deficit"] == round(1383 / 0.30 - 1898)           # 2712
-    assert pb["days_to_heal"] and "clear 30%" in pb["note"]
+    assert pb["broken"] and pb["heal_total"] == round(1383 / 0.30)   # total wins needed = 4610
+    total_win = round(1383 / 0.73)                                   # denominator = SUM of wins, not net
+    assert pb["heal_deficit"] == round(4610 - total_win)             # grow wins by this much
+    assert pb["day_cap"] == 1383                                     # optimize UP to the outlier, not $150
+    assert pb["days_to_heal"] and "run days up to" in pb["note"]     # bigger days heal faster
 
 
 def test_non_apex_firm_flagged():

@@ -614,6 +614,12 @@ tr:hover td{background:rgba(14,42,94,.5)}
 .chips label{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--sub);background:var(--deep);border:1px solid var(--line);border-radius:2px;padding:5px 9px;cursor:pointer;white-space:nowrap}
 .chips label:hover{border-color:var(--gold);color:var(--sand)}
 .linkbtn{background:none;border:none;color:var(--azure);padding:6px 4px;font-family:var(--mono);font-size:10px;text-transform:none;letter-spacing:0;cursor:pointer}
+.field{display:flex;flex-direction:column;gap:5px}
+.field>.fld{margin:0}
+.up{align-items:flex-end}
+.steps{font-family:var(--mono);font-size:11px;color:var(--sub);margin:2px 0 0;letter-spacing:.02em}
+.steps b{color:var(--gold);font-weight:500}
+.hint{color:var(--sub);font-family:var(--body);font-size:12px;margin-top:3px}
 """
 
 # Brand mark (the gold "M") for the header, and the favicon (served at /favicon.svg).
@@ -846,7 +852,8 @@ function loadLibrary(){
   $('#libCount').textContent=specs.length+' strategies';
   $('#libRows').querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>{
     const sel=$('#wSpec');if(sel)sel.value=el.dataset.id;
-    document.querySelector('.panel').scrollIntoView({behavior:'smooth',block:'start'});
+    showTab('test');                       // create → test: card loads into the runner
+    window.scrollTo({top:0,behavior:'smooth'});
     sel&&sel.focus();
   }));
 }
@@ -933,8 +940,9 @@ async function saveBuilder(){
     const r=await (await fetch('/api/builder/save',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(builderBody())})).json();
     if(!r.ok){m.innerHTML='<span class=neg>'+r.error+'</span>';return;}
-    m.innerHTML='saved <b style="color:var(--gold)">'+r.name+'</b> — loaded into the runner above';
+    m.innerHTML='saved <b style="color:var(--gold)">'+r.name+'</b> — opened in Test';
     await loadWizard(); const sel=$('#wSpec'); if(sel)sel.value=r.id;
+    showTab('test'); window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){m.innerHTML='<span class=neg>'+e+'</span>';}
 }
 async function loadBuilder(){
@@ -960,7 +968,7 @@ function showTab(name){
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 const gAdvT=$('#gAdvToggle');
 if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.style.display!=='none';a.style.display=open?'none':'flex';gAdvT.textContent=open?'+ advanced':'− advanced';});
-showTab('run');
+showTab('create');
 
 loadWizard();loadGenDatasets();loadBuilder();
 load();
@@ -984,48 +992,47 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
 
+<div class=steps>Pipeline: <b>1 Data</b> → <b>2 Create</b> a strategy → <b>3 Test</b> it (classic · eval · funded) → <b>4 Runs</b> to review &amp; promote</div>
 <div class=tabs id=tabs>
-  <button data-tab=run class=on>Build &amp; Run</button>
-  <button data-tab=factory>Factory</button>
-  <button data-tab=runs>Runs</button>
-  <button data-tab=data>Data</button>
+  <button data-tab=data>1 · Data</button>
+  <button data-tab=create class=on>2 · Create</button>
+  <button data-tab=test>3 · Test</button>
+  <button data-tab=runs>4 · Runs</button>
 </div>
 
-<!-- ===================== TAB: BUILD & RUN ===================== -->
-<div class=tab id=tab-run>
-
+<!-- ===================== 1 · DATA ===================== -->
+<div class=tab id=tab-data>
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Run a backtest</b><span class=muted>a strategy × dataset × timeframes → the 3 lenses</span></div>
+      <b class=sub>Upload dataset</b><span class=muted>raw export → normalized → cataloged</span></div>
+    <div class=hint>Start here: drop a 1-minute CSV export (Quantower/ATAS). It is normalized and cataloged, then available as a Dataset everywhere below.</div>
     <div class=up style="margin-top:12px">
-      <select id=wSpec style="min-width:200px"></select>
-      <select id=wDs style="min-width:150px"></select>
-      <input id=wTf placeholder="timeframes (5m,15m)" value="5m,15m" style="width:170px">
-      <select id=wLens>
-        <option value=research>Classic (edge)</option>
-        <option value=funnel>Eval (funnel)</option>
-        <option value=funded>Funded (payouts)</option>
-      </select>
-      <button class=go id=wRun>Run</button>
-    </div>
-    <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+      <label class=field><span class=fld>Dataset name</span><input id=dsname placeholder="e.g. NQ_1m" style="width:170px"></label>
+      <label class=field><span class=fld>Symbol</span><input id=dssym placeholder="NQ" style="width:100px"></label>
+      <label class=field><span class=fld>CSV file</span><label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label></label>
+      <button class=go id=upbtn>Upload</button>
+    </div><div id=msg class=muted style="margin-top:8px"></div>
   </div>
+</div>
+
+<!-- ===================== 2 · CREATE ===================== -->
+<div class=tab id=tab-create>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Build a strategy</b><span class=muted>4th variant — compose by role</span></div>
-    <div class=muted style="margin-top:4px;text-transform:none;letter-spacing:0;font-size:12px">One thesis per strategy: a setup-class + its primary entry, at most one filter per category, optionally gated to the regimes where the edge lives. The redundancy guard and the score update live.</div>
+      <b class=sub>Build a strategy</b><span class=muted>custom — compose by role</span></div>
+    <div class=hint>One thesis per strategy: pick a setup-class and its entry, add at most one filter per category, optionally gate it to the regimes where the edge lives. The redundancy guard and the score update live; Save loads it into Test.</div>
     <div class=up style="margin-top:12px">
-      <select id=bSetup title="setup-class"></select>
-      <select id=bEntry title="primary entry" style="min-width:150px"></select>
-      <select id=bPreset title="engine mechanics (TP/sizing/phase)"></select>
+      <label class=field><span class=fld>Setup-class</span><select id=bSetup title="the strategy's thesis"></select></label>
+      <label class=field><span class=fld>Primary entry</span><select id=bEntry style="min-width:150px" title="the signal that triggers a trade"></select></label>
+      <label class=field><span class=fld>Mechanics (preset)</span><select id=bPreset title="stop/target/sizing/account phase inherited from this preset"></select></label>
     </div>
     <div style="margin-top:14px"><div class=fld>Filters — coherent, one per category</div><div class=chips id=bFilters></div></div>
     <div style="margin-top:14px"><div class=fld>Regime gate — trade only in these · empty = all regimes</div><div class=chips id=bRegimes></div></div>
     <div id=bPreview style="margin-top:14px"></div>
     <div class=up style="margin-top:14px">
-      <input id=bName placeholder="name (custom_…)" style="width:180px">
-      <button class=go id=bSave>Save &amp; load into runner</button>
+      <label class=field><span class=fld>Name</span><input id=bName placeholder="custom_…" style="width:170px"></label>
+      <button class=go id=bSave>Save &amp; test</button>
       <span id=bMsg class=muted></span>
     </div>
   </div>
@@ -1033,39 +1040,59 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
-    <div class=muted style="margin-top:3px;text-transform:none;letter-spacing:0;font-size:12px">Every governed strategy — grade, entries, gates, exit and its framework stack. Click a card to load it into the runner.</div>
+    <div class=hint>Saved &amp; governed strategies — grade, entries, gates, exit and framework stack. Click a card to load it into Test.</div>
     <div class=lib id=libRows></div>
   </div>
 
-</div>
-
-<!-- ===================== TAB: FACTORY ===================== -->
-<div class=tab id=tab-factory>
-
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Generate strategies</b><span class=muted>sample → in-sample screen → OOS verify</span></div>
+      <b class=sub>Generate strategies</b><span class=muted>factory — unbiased discovery</span></div>
+    <div class=hint>Sample many role-composed candidates, screen them in-sample, then Verify OOS. Survivors appear in Test → Candidates.</div>
     <div class=up style="margin-top:12px">
-      <select id=gDs style="min-width:150px"></select>
-      <input id=gN value=100 style="width:64px" title="candidates to sample">
+      <label class=field><span class=fld>Dataset</span><select id=gDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Candidates</span><input id=gN value=100 style="width:70px"></label>
       <button class=go id=gRun>Generate</button>
       <button id=gVerify>Verify OOS</button>
       <button class=linkbtn id=gAdvToggle>+ advanced</button>
     </div>
     <div class=up id=gAdv style="margin-top:10px;display:none">
-      <input id=gTf value=5m style="width:60px" title="timeframe">
-      <input id=gSince placeholder="coarse since (2022-01-01)" style="width:170px">
-      <input id=gHold value=365 style="width:64px" title="OOS holdout days">
-      <input id=gSeed value=0 style="width:52px" title="seed">
-      <select id=gPreset title="engine mechanics"><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select>
-      <label class=muted style="text-transform:none"><input type=checkbox id=gPao> PA-only</label>
+      <label class=field><span class=fld>Timeframe</span><input id=gTf value=5m style="width:64px"></label>
+      <label class=field><span class=fld>Coarse since</span><input id=gSince placeholder="2022-01-01" style="width:150px"></label>
+      <label class=field><span class=fld>OOS holdout (d)</span><input id=gHold value=365 style="width:80px"></label>
+      <label class=field><span class=fld>Seed</span><input id=gSeed value=0 style="width:60px"></label>
+      <label class=field><span class=fld>Mechanics</span><select id=gPreset><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select></label>
+      <label class=field><span class=fld>Price-action</span><span style="padding:8px 0"><input type=checkbox id=gPao> PA-only</span></label>
     </div>
     <pre id=gLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+</div>
+
+<!-- ===================== 3 · TEST ===================== -->
+<div class=tab id=tab-test>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Run a backtest</b><span class=muted>test a strategy toward a goal</span></div>
+    <div class=hint>Pick a strategy and dataset, choose the goal (lens), and run. Classic = raw edge · Eval = prop-firm pass-rate · Funded = payout simulation.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Strategy</span><select id=wSpec style="min-width:200px"></select></label>
+      <label class=field><span class=fld>Dataset</span><select id=wDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Timeframes</span><input id=wTf value="5m,15m" style="width:150px"></label>
+      <label class=field><span class=fld>Goal (lens)</span><select id=wLens>
+        <option value=research>Classic — edge</option>
+        <option value=funnel>Eval — funnel</option>
+        <option value=funded>Funded — payouts</option>
+      </select></label>
+      <button class=go id=wRun>Run</button>
+    </div>
+    <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Candidates</b><span class=muted id=lbSrc>no candidates yet</span></div>
+    <div class=hint>OOS-verified survivors from the factory — the overfit gate. IS PF vs OOS PF, retain and verdict.</div>
     <div style="overflow-x:auto"><table style="margin-top:8px"><thead><tr>
       <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
       <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
@@ -1074,7 +1101,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
 </div>
 
-<!-- ===================== TAB: RUNS ===================== -->
+<!-- ===================== 4 · RUNS ===================== -->
 <div class=tab id=tab-runs>
 
   <div class=bar>
@@ -1102,20 +1129,6 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <div id=lenses></div>
   </div>
 
-</div>
-
-<!-- ===================== TAB: DATA ===================== -->
-<div class=tab id=tab-data>
-  <div class=panel>
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Upload dataset</b><span class=muted>raw export → normalized → cataloged</span></div>
-    <div class=up style="margin-top:12px">
-      <input id=dsname placeholder="dataset name (e.g. NQ_1m)" style="width:180px">
-      <input id=dssym placeholder="symbol (NQ)" style="width:110px">
-      <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
-      <button class=go id=upbtn>Upload</button>
-    </div><div id=msg class=muted style="margin-top:8px"></div>
-  </div>
 </div>
 
 <div class=foot id=foot></div></div>

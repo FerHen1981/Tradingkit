@@ -26,7 +26,7 @@ from pathlib import Path
 from .datasets import write_catalog
 from .insights import build_journey
 from .normalize import to_canonical
-from .paths import datasets_dir, ensure_dirs, results_dir
+from .paths import datasets_dir, ensure_dirs, lab_root, results_dir
 from .runs import load_index
 
 _PASSWORD = os.environ.get("LAB_PASSWORD", "")
@@ -194,6 +194,104 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
     return {"job": job_id}, 200
 
 
+def _spawn(cmd: list[str], label: str) -> dict:
+    job_id = uuid.uuid4().hex[:12]
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {"status": "queued", "log": [], "run_ids": [], "cmd": label}
+    threading.Thread(target=_run_job, args=(job_id, cmd), daemon=True).start()
+    return {"job": job_id}
+
+
+def _start_generate(q) -> tuple[dict, int]:
+    from ..config import TIMEFRAMES
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    tf = (q.get("tf") or ["5m"])[0].strip().lower()
+    if tf not in TIMEFRAMES:
+        return {"error": f"unknown timeframe {tf!r}"}, 400
+
+    def _int(name, dflt):
+        try:
+            return str(int((q.get(name) or [dflt])[0]))
+        except Exception:
+            return str(dflt)
+
+    def _flt(name, dflt):
+        try:
+            return str(float((q.get(name) or [dflt])[0]))
+        except Exception:
+            return str(dflt)
+
+    symbol = ds[dataset].get("symbol") or "NQ"
+    cmd = [sys.executable, "-m", "backtest.generate", "--data", ds[dataset]["file"],
+           "--n", _int("n", 100), "--tf", tf, "--holdout-days", _int("holdout", 365),
+           "--min-trades", _int("min_trades", 100), "--min-pf", _flt("min_pf", 1.1),
+           "--max-groups", _int("max_groups", 5), "--base-preset", (q.get("preset") or ["EL_TORO"])[0],
+           "--base-asset", symbol, "--seed", _int("seed", 0), "--top", _int("top", 50), "--lab"]
+    since = (q.get("since") or [""])[0].strip()
+    if since:
+        cmd += ["--coarse-since", since]
+    if (q.get("pao") or ["0"])[0] in ("1", "true", "on"):
+        cmd += ["--price-action-only"]
+    return _spawn(cmd, "generate " + " ".join(cmd[cmd.index("--n"):])), 200
+
+
+def _start_verify(q) -> tuple[dict, int]:
+    from ..config import TIMEFRAMES
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    tf = (q.get("tf") or ["5m"])[0].strip().lower()
+    if tf not in TIMEFRAMES:
+        return {"error": f"unknown timeframe {tf!r}"}, 400
+    seed = "0"
+    try:
+        seed = str(int((q.get("seed") or ["0"])[0]))
+    except Exception:
+        pass
+    cfile = lab_root() / f"candidates_seed{seed}.json"
+    if not cfile.exists():
+        return {"error": f"no {cfile.name} yet — run Generate first"}, 400
+    hold = "365"
+    try:
+        hold = str(int((q.get("holdout") or ["365"])[0]))
+    except Exception:
+        pass
+    cmd = [sys.executable, "-m", "backtest.verify", "--data", ds[dataset]["file"],
+           "--candidates", str(cfile), "--tf", tf, "--holdout-days", hold,
+           "--base-asset", ds[dataset].get("symbol") or "NQ", "--lab"]
+    return _spawn(cmd, f"verify seed{seed}"), 200
+
+
+def _candidates() -> dict:
+    root = lab_root()
+    files = sorted(root.glob("verified_seed*.json")) or sorted(root.glob("candidates_seed*.json"))
+    if not files:
+        return {"rows": [], "source": None}
+    f = files[-1]
+    try:
+        data = json.loads(f.read_text())
+    except Exception:
+        return {"rows": [], "source": f.name}
+    rows = []
+    for c in data:
+        spec = c.get("spec") or {}
+        v = c.get("verdict") or {}
+        kis = c.get("kpis_is") or c.get("kpis") or {}
+        rows.append({"name": spec.get("name") or c.get("name", ""),
+                     "groups": list((spec.get("groups") or c.get("groups") or {}).keys()),
+                     "is_pf": v.get("is_pf") if v else kis.get("profit_factor"),
+                     "is_trades": kis.get("trades"),
+                     "oos_pf": v.get("oos_pf"), "retain": v.get("retain"),
+                     "oos_trades": v.get("oos_trades"), "pass": v.get("pass")})
+    rows.sort(key=lambda r: (r.get("oos_pf") if r.get("oos_pf") is not None else -1,
+                             r.get("is_pf") or -1), reverse=True)
+    return {"rows": rows, "source": f.name, "verified": f.name.startswith("verified")}
+
+
 def _fleet_stats(runs: list[dict]) -> dict:
     assets = sorted({r.get("asset", "") for r in runs if r.get("asset")})
     strats = sorted({r.get("strategy", "") for r in runs if r.get("strategy")})
@@ -267,6 +365,8 @@ class Handler(BaseHTTPRequestHandler):
             with _JOBS_LOCK:
                 st = dict(_JOBS.get(j) or {})
             return self._json(st or {"error": "unknown job"}, 200 if st else 404)
+        if u.path == "/api/candidates":
+            return self._json(_candidates())
         return self._send(404, "not found", "text/plain")
 
     # -- POST --
@@ -288,6 +388,12 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             body, code = _start_job((q.get("dataset") or [""])[0], (q.get("spec") or [""])[0],
                                     (q.get("tf") or ["5m"])[0], (q.get("lens") or ["research"])[0])
+            return self._json(body, code)
+        if u.path == "/api/generate":
+            body, code = _start_generate(q)
+            return self._json(body, code)
+        if u.path == "/api/verify":
+            body, code = _start_verify(q)
             return self._json(body, code)
         return self._send(404, "not found", "text/plain")
 
@@ -523,32 +629,57 @@ async function loadWizard(){
       ||'<option value="">no datasets — upload one</option>';
   }catch(e){}
 }
-let POLL=null;
-async function pollJob(id){
-  const j=await (await fetch('/api/run/status?job='+id)).json();
-  const log=$('#wLog');log.style.display='block';
-  log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
-  if(j.status==='done'||j.status==='error'){
-    clearInterval(POLL);POLL=null;$('#wRun').disabled=false;
-    log.textContent+='\n\n['+j.status+(j.rc!==undefined?' rc='+j.rc:'')+
-      (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s) recorded':'')+']';
-    load();
-  }
+function watchJob(id,logSel,btnSel,onDone){
+  const log=$(logSel);log.style.display='block';
+  const iv=setInterval(async()=>{
+    const j=await (await fetch('/api/run/status?job='+id)).json();
+    log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
+    if(j.status==='done'||j.status==='error'){clearInterval(iv);if(btnSel)$(btnSel).disabled=false;
+      log.textContent+='\n\n['+j.status+(j.rc!==undefined?' rc='+j.rc:'')+
+        (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s)':'')+']';
+      if(onDone)onDone(j);}
+  },1500);
 }
-$('#wRun').addEventListener('click',async()=>{
-  const spec=$('#wSpec').value,ds=$('#wDs').value,tf=$('#wTf').value,lens=$('#wLens').value;
-  if(!ds){$('#wLog').style.display='block';$('#wLog').textContent='Upload a dataset first.';return}
-  $('#wRun').disabled=true;$('#wLog').style.display='block';$('#wLog').textContent='Starting…';
-  const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent(spec)+
-    '&tf='+encodeURIComponent(tf)+'&lens='+encodeURIComponent(lens);
-  try{
-    const r=await (await fetch('/api/run?'+qs,{method:'POST'})).json();
-    if(r.error){$('#wLog').textContent=r.error;$('#wRun').disabled=false;return}
-    POLL=setInterval(()=>pollJob(r.job),1500);pollJob(r.job);
-  }catch(e){$('#wLog').textContent=''+e;$('#wRun').disabled=false;}
+async function postJob(url,qs,logSel,btnSel,onDone){
+  const b=btnSel&&$(btnSel);if(b)b.disabled=true;const log=$(logSel);log.style.display='block';log.textContent='Starting…';
+  try{const r=await (await fetch(url+'?'+qs,{method:'POST'})).json();
+    if(r.error){log.textContent=r.error;if(b)b.disabled=false;return}
+    watchJob(r.job,logSel,btnSel,onDone);
+  }catch(e){log.textContent=''+e;if(b)b.disabled=false;}
+}
+$('#wRun').addEventListener('click',()=>{
+  const ds=$('#wDs').value;if(!ds){$('#wLog').style.display='block';$('#wLog').textContent='Upload a dataset first.';return}
+  const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#wSpec').value)+
+    '&tf='+encodeURIComponent($('#wTf').value)+'&lens='+encodeURIComponent($('#wLens').value);
+  postJob('/api/run',qs,'#wLog','#wRun',()=>load());
 });
-loadWizard();
+// generator
+function gqs(){return 'dataset='+encodeURIComponent($('#gDs').value)+'&n='+encodeURIComponent($('#gN').value)+
+  '&tf='+encodeURIComponent($('#gTf').value)+'&since='+encodeURIComponent($('#gSince').value)+
+  '&holdout='+encodeURIComponent($('#gHold').value)+'&preset='+encodeURIComponent($('#gPreset').value)+
+  '&pao='+($('#gPao').checked?'1':'0')+'&seed='+encodeURIComponent($('#gSeed').value||'0');}
+$('#gRun').addEventListener('click',()=>{if(!$('#gDs').value){$('#gLog').style.display='block';$('#gLog').textContent='Upload a dataset first.';return}
+  postJob('/api/generate',gqs(),'#gLog','#gRun',()=>{load();loadCandidates();});});
+$('#gVerify').addEventListener('click',()=>postJob('/api/verify',gqs(),'#gLog','#gVerify',()=>{load();loadCandidates();}));
+async function loadCandidates(){
+  const j=await (await fetch('/api/candidates')).json();
+  $('#lbSrc').textContent=j.source?(j.source+(j.verified?' · OOS-verified':' · in-sample only (run Verify OOS)')):'no candidates yet';
+  const rows=(j.rows||[]).slice(0,100);
+  $('#lbrows').innerHTML=rows.map(r=>{const oos=r.oos_pf,isp=r.is_pf;
+    return `<tr><td>${r.name||''}</td>
+      <td class=muted style="text-align:left;white-space:normal;max-width:300px">${(r.groups||[]).join(', ')}</td>
+      <td class=${isp>=1?'pos':'neg'}>${isp==null?'':isp.toFixed(2)}</td>
+      <td class=${oos>=1?'pos':'neg'}>${oos==null?'—':oos.toFixed(2)}</td>
+      <td>${r.retain==null?'—':r.retain.toFixed(2)}</td>
+      <td>${r.oos_trades==null?'—':r.oos_trades}</td>
+      <td>${r.pass===true?'<b class=pos>PASS</b>':r.pass===false?'<span class=neg>fail</span>':'—'}</td></tr>`}).join('')
+    ||'<tr><td colspan=7 class=muted style="text-align:left">Run Generate → Verify OOS to populate.</td></tr>';
+}
+async function loadGenDatasets(){try{const ds=(await (await fetch('/api/datasets')).json()).datasets||[];
+  $('#gDs').innerHTML=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')||'<option value="">upload a dataset</option>';}catch(e){}}
+loadWizard();loadGenDatasets();
 load();
+loadCandidates();
 """
 
 LOGIN_HTML = f"""<!doctype html><html><head>{_HEAD}
@@ -582,6 +713,31 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <button class=go id=wRun>Run</button>
   </div>
   <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+</div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Generate strategies</b><span class=muted style="font-size:12px">sample → in-sample screen → OOS verify</span></div>
+  <div class=up style="margin-top:10px">
+    <select id=gDs style="min-width:150px"></select>
+    <input id=gN value=100 style="width:64px" title="candidates to sample">
+    <input id=gTf value=5m style="width:60px" title="timeframe">
+    <input id=gSince placeholder="coarse since (2022-01-01)" style="width:170px">
+    <input id=gHold value=365 style="width:60px" title="OOS holdout days">
+    <input id=gSeed value=0 style="width:52px" title="seed">
+    <select id=gPreset title="engine mechanics"><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select>
+    <label class=muted style="font-size:12px"><input type=checkbox id=gPao> PA-only</label>
+    <button class=go id=gRun>Generate</button>
+    <button id=gVerify>Verify OOS</button>
+  </div>
+  <pre id=gLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
+</div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Candidates</b><span class=muted id=lbSrc>no candidates yet</span></div>
+  <table style="margin-top:8px"><thead><tr>
+    <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
+    <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
+  </tr></thead><tbody id=lbrows></tbody></table>
 </div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">

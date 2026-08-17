@@ -1,14 +1,21 @@
-"""Strategy generator — the coarse mill's candidate sampler.
+"""Strategy generator — the coarse mill's candidate samplers.
 
-Draws random, valid strategy specs from the registry: a random subset of
-indicator groups, each opt param sampled on its step grid (fixed params keep
-their default, per `optimizer_skips_fixed`), then repaired to satisfy the hard
-constraints and validated. Feeds the screen → refine → OOS funnel.
+Two samplers feed the screen → refine → OOS funnel:
+
+- `sample_spec`/`sample_batch` — the legacy RANDOM-SUBSET sampler: a random
+  subset of indicator groups, each opt param on its step grid. Kept for A/B and
+  backwards compatibility.
+- `compose_strategy`/`compose_batch` — the ROLE-COMPOSING sampler (framework §4,
+  see lab/FRAMEWORK.md): compose ONE slot per decision layer instead of a random
+  subset. A setup-class (optionally biased by a regime hint via the §6 matrix)
+  picks one primary entry; optional coherent filters are added under a redundancy
+  guard (at most one group per information-category). This removes the randomness
+  and makes double-counting structurally impossible — it is the default in the
+  mill.
 
 Pure Python (only spec.py + config, no pandas) so it is fully unit-testable.
-Each sampled spec is ONE complete strategy; it is carried whole through the
-three lenses — the mill decides *which* candidates advance, never mixes their
-indicators.
+Each sampled spec is ONE complete strategy carried whole through the three
+lenses — the mill decides *which* candidates advance, never mixes their entries.
 """
 from __future__ import annotations
 
@@ -97,7 +104,7 @@ def sample_spec(registry: dict, rng: random.Random, *, base_asset: str = "NQ",
 
 
 def sample_batch(n: int, registry: dict | None = None, seed: int = 0, **kw) -> list[dict]:
-    """Return up to `n` distinct, valid candidate specs."""
+    """Return up to `n` distinct, valid candidate specs (random-subset sampler)."""
     registry = registry or load_registry()
     rng = random.Random(seed)
     out, seen, tries = [], set(), 0
@@ -114,5 +121,161 @@ def sample_batch(n: int, registry: dict | None = None, seed: int = 0, **kw) -> l
         seen.add(key)
         spec = dict(spec)
         spec["name"] = f"gen_{seed}_{len(out):04d}"
+        out.append(spec)
+    return out
+
+
+# =========================================================================== #
+# Role-composing sampler (framework §4) — compose ONE slot per layer instead of
+# a random subset. Removes the randomness and makes double-counting impossible.
+# =========================================================================== #
+
+# A setup-class picks exactly ONE primary entry generator; the class is the
+# strategy's thesis (framework §7). Each option carries any params needed to
+# select the right engine mechanism (e.g. market_structure mode bos vs choch).
+SETUP_ENTRIES: dict[str, list[tuple[str, dict]]] = {
+    "trend_pullback": [("moving_average", {}), ("order_block", {}), ("fvg", {})],
+    "breakout":       [("donchian", {}), ("market_structure", {"mode": "bos"}),
+                       ("momentum", {}), ("ema_cross", {})],
+    "mean_reversion": [("rsi", {}), ("bollinger_bands", {})],
+    "reversal":       [("liquidity_eqhl", {}), ("divergence", {"osc_source": "cvd"}),
+                       ("market_structure", {"mode": "choch"})],
+}
+
+# Regime -> setup-class weights (framework §6 matrix). The composer, given a
+# regime hint, biases which setup-class it builds for. Keys match the L1
+# classifier's REGIME_LABELS (indicators.classify_regime).
+REGIME_SETUP_WEIGHTS: dict[str, dict[str, int]] = {
+    "Strong Bull Trend":     {"trend_pullback": 5, "breakout": 5, "mean_reversion": 1, "reversal": 1},
+    "Strong Bear Trend":     {"trend_pullback": 5, "breakout": 5, "mean_reversion": 1, "reversal": 1},
+    "Controlled Bull Trend": {"trend_pullback": 5, "breakout": 3, "mean_reversion": 2, "reversal": 1},
+    "Controlled Bear Trend": {"trend_pullback": 5, "breakout": 3, "mean_reversion": 2, "reversal": 1},
+    "Compression":           {"trend_pullback": 1, "breakout": 4, "mean_reversion": 3, "reversal": 1},
+    "Low-Volatility Range":  {"trend_pullback": 1, "breakout": 1, "mean_reversion": 5, "reversal": 3},
+    "High-Volatility Range": {"trend_pullback": 2, "breakout": 1, "mean_reversion": 4, "reversal": 3},
+}
+
+# Optional coherent FILTERS the composer may add — each a distinct engine
+# mechanism in its own information-category (never a second entry).
+_FILTER_GROUPS = ("vwap", "cvd_delta")     # location veto, participation
+
+
+def _weighted_choice(rng: random.Random, items: list, weights: list[int]):
+    total = sum(weights)
+    if total <= 0:
+        return rng.choice(items)
+    r = rng.uniform(0, total)
+    upto = 0.0
+    for it, w in zip(items, weights):
+        upto += w
+        if r <= upto:
+            return it
+    return items[-1]
+
+
+def compose_strategy(registry: dict, rng: random.Random, *, base_asset: str = "NQ",
+                     timeframe: str | None = None, base_preset: str | None = None,
+                     regime: str | None = None, setup_class: str | None = None,
+                     price_action_only: bool = False, p_confluence: float = 0.12,
+                     p_filter_location: float = 0.5, p_filter_participation: float = 0.5) -> dict:
+    """Compose ONE coherent strategy by role (framework §4).
+
+    Picks a setup-class (optionally biased by a `regime` hint via the §6 matrix),
+    then exactly one primary entry generator for that class, then optional
+    coherent filters — enforcing the redundancy guard: at most one group per
+    information-category. Always adds a protective swing stop (L10). Returns a
+    spec dict (validated by the caller) tagged with its setup_class/target_regime."""
+    groups_reg = _all_groups(registry)
+    info_used: set[str] = set()
+    groups: dict[str, dict] = {}
+
+    def _add(gname: str, seed_params: dict | None = None):
+        gd = groups_reg[gname][1]
+        pdefs = _params(gd)
+        vals = {p: _sample_param(rng, pd) for p, pd in pdefs.items()
+                if pd.get("type") != "fixed"}
+        if seed_params:
+            vals.update(seed_params)
+        groups[gname] = vals
+        cat = gd.get("info_category")
+        if cat:
+            info_used.add(cat)
+
+    def _can_add(gname: str) -> bool:
+        gd = groups_reg[gname][1]
+        if price_action_only and not gd.get("price_action"):
+            return False
+        return gd.get("info_category") not in info_used
+
+    # Entry options, price-action filtered so PA-only never proposes a classic
+    # entry (which validation would reject). Classes with no PA-valid entry drop.
+    def _pa_ok(gname: str) -> bool:
+        return not price_action_only or groups_reg[gname][1].get("price_action")
+    entry_opts = {sc: [(g, s) for (g, s) in opts if _pa_ok(g)]
+                  for sc, opts in SETUP_ENTRIES.items()}
+    entry_opts = {sc: opts for sc, opts in entry_opts.items() if opts}
+
+    # 1) setup-class: explicit > confluence roll > regime-weighted > uniform
+    if setup_class is None and rng.random() < p_confluence:
+        setup_class = "confluence"
+    if setup_class is None:
+        classes = list(entry_opts)
+        weights = REGIME_SETUP_WEIGHTS.get(regime) if regime else None
+        setup_class = (_weighted_choice(rng, classes, [weights[c] for c in classes])
+                       if weights else rng.choice(classes))
+
+    # 2) primary entry (the thesis)
+    if setup_class == "confluence":
+        _add("silver_bullet")
+        _add("fvg")                       # confluence primary; keep gap sizing tunable
+    else:
+        entry_group, seed = rng.choice(entry_opts[setup_class])
+        _add(entry_group, seed)
+
+    # 3) optional coherent filters (distinct info-category, price-action aware)
+    if _can_add("vwap") and rng.random() < p_filter_location:
+        _add("vwap")
+    if _can_add("cvd_delta") and rng.random() < p_filter_participation:
+        _add("cvd_delta")
+
+    # 4) risk: always a protective swing stop
+    _add("swing_stops")
+
+    maxg = (registry.get("policy") or {}).get("max_active_groups", 8)
+    spec = {"name": "gen", "base_asset": base_asset, "groups": groups,
+            "policy": {"price_action_only": price_action_only, "max_active_groups": maxg},
+            "setup_class": setup_class}
+    if regime:
+        spec["target_regime"] = regime
+    if timeframe:
+        spec["timeframe"] = timeframe
+    if base_preset:
+        spec["base_preset"] = base_preset
+    return _repair(spec)
+
+
+def compose_batch(n: int, registry: dict | None = None, seed: int = 0, *,
+                  regimes: list[str] | None = None, **kw) -> list[dict]:
+    """Return up to `n` distinct, valid role-composed specs. If `regimes` is
+    given, candidates are spread across those regime hints (round-robin) so the
+    batch covers the setup-classes each regime favours."""
+    registry = registry or load_registry()
+    rng = random.Random(seed)
+    out, seen, tries = [], set(), 0
+    while len(out) < n and tries < n * 40:
+        tries += 1
+        regime = regimes[len(out) % len(regimes)] if regimes else kw.get("regime")
+        call_kw = {k: v for k, v in kw.items() if k != "regime"}
+        spec = compose_strategy(registry, rng, regime=regime, **call_kw)
+        try:
+            validate_spec(spec, registry)
+        except SpecError:
+            continue
+        key = json.dumps({"g": spec["groups"], "s": spec.get("setup_class")}, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        spec = dict(spec)
+        spec["name"] = f"cmp_{seed}_{len(out):04d}"
         out.append(spec)
     return out

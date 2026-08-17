@@ -66,6 +66,11 @@ def main():
     ap.add_argument("--top", type=int, default=50, help="how many survivors to record")
     ap.add_argument("--include-unwired", action="store_true",
                     help="also sample engine:todo indicators (inert today — for experiments only)")
+    ap.add_argument("--sampler", choices=["role", "random"], default="role",
+                    help="role = framework role-composer (default); random = legacy random-subset")
+    ap.add_argument("--regimes", default="",
+                    help="comma-separated regime hints to spread role-composed candidates across "
+                         "(e.g. 'Strong Bull Trend,Low-Volatility Range'); empty = unbiased")
     ap.add_argument("--lab", action="store_true", help="record survivors + a candidates summary in $LAB_DIR")
     args = ap.parse_args()
 
@@ -79,16 +84,28 @@ def main():
     print(f"  IS coarse window: {df_tf['et'].iloc[0]} -> {df_tf['et'].iloc[-1]}  "
           f"({len(df_tf):,} {args.tf} bars; last {args.holdout_days}d held out for OOS)")
 
-    batch = sample_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
-                         timeframe=args.tf, price_action_only=args.price_action_only,
-                         max_groups=args.max_groups, base_preset=args.base_preset,
-                         wired_only=not args.include_unwired)
-    if args.include_unwired:
-        print("  WARNING: --include-unwired samples engine:todo indicators that are inert today; "
-              "candidates collapse to their wired core (dedup below still applies).")
+    if args.sampler == "role":
+        from .generator import compose_batch
+        regimes = [r.strip() for r in args.regimes.split(",") if r.strip()] or None
+        batch = compose_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
+                              timeframe=args.tf, price_action_only=args.price_action_only,
+                              base_preset=args.base_preset, regimes=regimes)
+        classes = {}
+        for s in batch:
+            classes[s.get("setup_class", "?")] = classes.get(s.get("setup_class", "?"), 0) + 1
+        print(f"  role-composer (framework §4): one slot per layer, redundancy-guarded. "
+              f"setup-classes {classes}" + (f"; regimes {regimes}" if regimes else ""))
     else:
-        print(f"  honest search: only wired indicators {list(WIRED_GROUPS)} "
-              f"(engine:todo blocks not searched — grow via the wiring roadmap)")
+        batch = sample_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
+                             timeframe=args.tf, price_action_only=args.price_action_only,
+                             max_groups=args.max_groups, base_preset=args.base_preset,
+                             wired_only=not args.include_unwired)
+        if args.include_unwired:
+            print("  WARNING: --include-unwired samples engine:todo indicators that are inert today; "
+                  "candidates collapse to their wired core (dedup below still applies).")
+        else:
+            print(f"  honest search: only wired indicators {list(WIRED_GROUPS)} "
+                  f"(engine:todo blocks not searched — grow via the wiring roadmap)")
     print(f"  sampled {len(batch)} candidates; screening (min trades {args.min_trades}, "
           f"PF {args.min_pf}) ...")
 

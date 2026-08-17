@@ -333,11 +333,15 @@ Action:      Long allowed
    objectieve trend×volatility-tag per bar (7 regimes + Indecision warm-up,
    framework §6). Elke run slaat nu z'n regime-distributie op (`meta.regime`),
    zichtbaar in de run-detail + als annotatie op de L1-stackregel. 89 tests groen.
-4. **Role-composing sampler** — `sample_spec` → `compose_strategy` (§4), met
-   redundancy-guard en setup×regime-gate (§6). Vervangt de random-subset.
-   Consumeert `classify_regime` als de regime-gate. ← **volgende stap**
+4. ~~**Role-composing sampler**~~ — ✅ **DONE**: `generator.compose_strategy` /
+   `compose_batch` — kiest een setup-class (regime-hint → §6-matrix-gewogen),
+   dan één primaire entry, dan optionele coherente filters onder de
+   redundancy-guard (max één groep per `info_category`), plus altijd een
+   swing-stop. Vervangt de random-subset; standaard in de mill
+   (`generate.py --sampler role`, met `--regimes`). Legacy random-subset blijft
+   via `--sampler random`. 95 tests groen; end-to-end door de engine bewezen.
 5. **Scoring als prior** — 0–100 grade berekenen en **naast** de funnel-KPI's
-   tonen; funnel blijft de rechter (§8).
+   tonen; funnel blijft de rechter (§8). ← **volgende stap**
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
    → opslaan als spec → runnen. De role-getagde registry ís het skelet.
 7. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als

@@ -26,13 +26,33 @@ Payload komt als JSON op stdin; output via $MEX_SIGNAL_OUT.
 | PA THRESHOLD | "THRESHOLD" | goud |
 | REGIME → FAV/UNFAV | "REGIME" | azuur/rose pijl |
 
+## Tier B — ook als kaart (per dag/sessie eenmalig, dus geen rate-limit-risico)
+| Event | Detectie | Accent |
+|---|---|---|
+| CONFIG | "CONFIG" | dim — instellingen bij sessie-start, `k=v`-rijen |
+| AUTO FLAT | "AUTO FLAT" | dim — sessievenster dicht, prijs waarop is platgemaakt |
+
 ## Tier C — tekst-embed (geen kaart; ops/ruis — blijft fallback-pad)
-CONFIG · ACCOUNT STARTED · LIMIT EXPIRED · SIGNAL BLOCKED · AUTO FLAT
+ACCOUNT STARTED · LIMIT EXPIRED
 Ratio: hoogfrequent of puur administratief; een kaart voegt niets toe en
 Discord-rate-limit (30/min/webhook) wil je bewaren voor Tier A/B.
+
+## SIGNAL BLOCKED — gepoort, niet getierd
+Staat een account op halt, dan wordt élk geldig setup-signaal geblokkeerd: hetzelfde
+bericht komt bar na bar terug. Daarom beslist `BlockedGate` in de receiver, niet de
+tier-tabel:
+
+- Blokkade die de **handelsdag of het account beëindigt** (`Day halt: …`, `Account: …`,
+  breach, eval passed) ⇒ **één kaart**, per symbool per categorie (`day` / `account`)
+  per handelsdag (kalenderdatum New York, dezelfde grens als de dagteller in de scripts).
+- Elke **routineblokkade** (time gate, flat window, stop invalid, qty < 1, MAE/DD guard)
+  en elke herhaling ⇒ **niets naar Discord**; het journaal houdt ze wél
+  (`blocked-notice suppressed`).
+- `MEX_CARD_TIER_OVERRIDES="SIGNAL BLOCKED=B"` zet de poort uit en laat álles door.
 
 ## Regels
 1. Onbekende titel ⇒ generieke sand-kaart (nooit stil verloren).
 2. Kleur volgt uitsluitend de brand-tokens (abyss/deep/surface/sand/goud/azuur/rose).
 3. Eén webhook per kanaal-doel: trades (A/B) gescheiden van ops (C) aanbevolen.
 4. Tier is data, geen code: `CARD_TIER_OVERRIDES` in .env kan events promoveren/degraderen.
+5. Gedempt is niet verloren: wat Discord niet haalt, staat in `routed_*.jsonl`.

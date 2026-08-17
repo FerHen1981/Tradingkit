@@ -98,6 +98,19 @@ function fromDiscord(p) {
     case 'ACCOUNT_HALT':
       s.reason = parts[0]; s.reasonShort = 'account';
       break;
+    case 'SIGNAL_BLOCKED': {
+      // "... blocked by: Day halt: PA Daily Loss Limit, Stop invalid" — de eerste reden
+      // is de terminale (daar poortte de receiver op), de rest is context.
+      const after = desc.split(/blocked by:\s*/i)[1] ?? desc;
+      const list = after.split(',').map(x => x.trim()).filter(Boolean);
+      s.reason = list[0] ?? null;
+      s.alsoBlocked = list.slice(1).join(' · ') || null;
+      break;
+    }
+    case 'AUTO_FLAT':
+      s.flatPx = pick(/@\s*~?\s*([\d.]+)/);
+      s.closedLine = s.flatPx ? `position closed @ ~${s.flatPx}` : null;
+      break;
     case 'DERISK':
       s.level     = title.match(/\bL(\d)\b/)?.[1] ?? (T.includes('PA') ? 'PA' : '');
       s.qtyChange = pick(/capped to\s+(\d+)\s*contract/) ? `${pick(/capped to\s+(\d+)\s*contract/)} ct` : null;
@@ -225,8 +238,13 @@ const T = {
   CONFIG: () => ({ icon: '⚙', tone: 'dim', title: `${d.asset} · config pinned`, badge: 'ops',
     rows: Object.entries(Object.fromEntries((d.raw || '').split(';').map(kv => kv.split('=')).filter(p => p.length === 2)))
           .slice(0, 10).map(([k, v]) => row(k, v)) }),
-  SIGNAL_BLOCKED: () => ({ icon: '⛔', tone: 'dim', title: `${d.asset} · signal blocked`, badge: 'ops',
-    rows: [row('Reason', d.raw), row('Plan', 'intact — next signal re-arms', 'blue')] }),
+  // Alleen de blokkade die de dag (of het account) beëindigt komt hier nog langs — de
+  // receiver dempt de herhalingen, dus deze kaart betekent: dit account is klaar.
+  SIGNAL_BLOCKED: () => ({ icon: '⛔', tone: 'rose', title: `${d.asset} · setup blocked — account stopped`, badge: 'ops',
+    rows: [row('Reason', d.reason ?? d.raw, 'rose'), row('Also blocked by', d.alsoBlocked),
+           row('Setup', d.dir ? `${d.dir.toLowerCase()} — met every strategy rule` : null),
+           row('Repeats', 'one notice per stop reason per day'),
+           row('Exits', 'never blocked', 'blue')] }),
   HEARTBEAT_LOST: () => ({ icon: '⚠', tone: 'rose', title: `${d.strategy} · no events for ${d.gap} in session`, badge: 'ops', badgeTone: 'rose',
     rows: [row('Last event', d.lastEvent), row('Expected', d.expected),
            row('Check', 'alert active? chart open? PMT mapping?'), row('Middleware', d.mwState || '/health OK — chart side suspect')] }),

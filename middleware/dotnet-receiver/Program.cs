@@ -133,6 +133,22 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         var title = obj["embeds"]?[0]?["title"]?.ToString() ?? "";
         var tier = CardTier.For(title);
 
+        // SIGNAL BLOCKED is hoogfrequent: tijdens een day halt wordt élk signaal
+        // geblokkeerd, dus zonder poort loopt het kanaal vol met hetzelfde bericht.
+        // Nieuws is alleen: dit account handelt vandaag (of helemaal) niet meer —
+        // en dat hoeft één keer. Routineblokkades (time gate, stop invalid, ...)
+        // worden gedempt; ze blijven wel in het journaal staan.
+        if (!CardTier.HasOverride(title) && BlockedGate.Applies(title))
+        {
+            var desc = obj["embeds"]?[0]?["description"]?.ToString() ?? "";
+            if (!BlockedGate.Admit(title, desc))
+            {
+                await AppendAsync(storePath, "discord", body, "blocked-notice suppressed");
+                return Results.Ok(new { accepted = true, kind = "discord", suppressed = true });
+            }
+            tier = 'B';   // eerste terminale blokkade van deze handelsdag: wél een kaart
+        }
+
         // Tier A/B krijgt een kaart. Renderen duurt seconden, dus dat gebeurt in
         // de achtergrond: TradingView krijgt direct antwoord en probeert niet
         // opnieuw. Mislukt de render, dan gaat het originele bericht alsnog door.
@@ -282,11 +298,11 @@ public static class CardTier
 {
     static readonly (string Needle, char Tier)[] Table =
     {
-        ("CONFIG",         'C'),
+        ("CONFIG",         'B'),   // 1x per sessie-start — administratief maar leesbaar als kaart
         ("ACCOUNT STARTED",'C'),
         ("LIMIT EXPIRED",  'C'),
-        ("SIGNAL BLOCKED", 'C'),
-        ("AUTO FLAT",      'C'),
+        ("SIGNAL BLOCKED", 'C'),   // poort in BlockedGate promoveert de terminale melding naar B
+        ("AUTO FLAT",      'B'),   // 1x per dag — het einde van de sessie is een moment
         ("ACCOUNT HALT",   'A'),
         ("EXIT",           'A'),
         ("PASSED",         'A'),
@@ -326,6 +342,81 @@ public static class CardTier
         foreach (var (needle, tier) in Table)
             if (t.Contains(needle)) return tier;
         return 'B';
+    }
+
+    // Een expliciete override wint van alles — ook van de blocked-poort hieronder,
+    // zodat "SIGNAL BLOCKED=B" in .env alsnog élke blokkade als kaart doorlaat.
+    public static bool HasOverride(string title)
+    {
+        var t = title.ToUpperInvariant();
+        foreach (var (needle, _) in Overrides)
+            if (t.Contains(needle)) return true;
+        return false;
+    }
+}
+
+// Poort voor SIGNAL BLOCKED. Zonder poort is dit het luidruchtigste event dat er is:
+// zodra een account op halt staat wordt élk geldig setup-signaal geblokkeerd, dus komt
+// hetzelfde bericht bar na bar terug. De enige blokkade die nieuws is, is er één die de
+// handelsdag (day halt) of het account (breach / eval passed) beëindigt — en die is één
+// kaart waard, niet twintig. De rest wordt gedempt; het journaal houdt alles.
+public static class BlockedGate
+{
+    // Markers uit f_persistentBlockers() in de Pine-scripts. De categorie is de
+    // dedupe-sleutel, zodat "Day halt: PA Daily Loss Limit" en "Day halt: Day-cap"
+    // samen één melding per dag opleveren.
+    static readonly (string Needle, string Category)[] Terminal =
+    {
+        ("DAY HALT",    "day"),       // day-cap, daily loss, equity lock: klaar voor vandaag
+        ("ACCOUNT:",    "account"),   // trailing breach / eval passed: klaar, punt
+        ("BREACH",      "account"),
+        ("EVAL PASSED", "account"),
+    };
+
+    static readonly ConcurrentDictionary<string, byte> Sent = new();
+
+    public static bool Applies(string title) =>
+        title.ToUpperInvariant().Contains("SIGNAL BLOCKED");
+
+    /// True als dit de EERSTE terminale blokkade van deze handelsdag is (voor dit
+    /// symbool). Routineblokkades en herhalingen geven false — die gaan niet door.
+    public static bool Admit(string title, string description)
+    {
+        var text = description.ToUpperInvariant();
+        var category = "";
+        foreach (var (needle, cat) in Terminal)
+            if (text.Contains(needle)) { category = cat; break; }
+        if (category.Length == 0) return false;      // routineblokkade: ruis
+
+        var key = TradingDay() + "|" + Symbol(title) + "|" + category;
+        return Sent.TryAdd(key, 0);
+    }
+
+    // Handelsdag = kalenderdatum in New York, dezelfde grens als de dagteller in de
+    // scripts (risk.trading_day). Valt de tijdzonedatabase weg, dan UTC — dan is de
+    // demping hooguit een paar uur scheef, nooit stuk.
+    static string TradingDay()
+    {
+        try
+        {
+            var et = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, et).ToString("yyyy-MM-dd");
+        }
+        catch (TimeZoneNotFoundException) { return DateTime.UtcNow.ToString("yyyy-MM-dd"); }
+        catch (InvalidTimeZoneException) { return DateTime.UtcNow.ToString("yyyy-MM-dd"); }
+    }
+
+    // "⛔ MGC1! SIGNAL BLOCKED" -> "MGC1!". Het blocked-bericht draagt géén account-id,
+    // dus het symbool is het fijnste wat we hebben om op te sleutelen.
+    static string Symbol(string title)
+    {
+        foreach (var token in title.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.EndsWith("!", StringComparison.Ordinal)) return token.ToUpperInvariant();
+            foreach (var ch in token)
+                if (char.IsDigit(ch)) return token.ToUpperInvariant();
+        }
+        return "?";
     }
 }
 

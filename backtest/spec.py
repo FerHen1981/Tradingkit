@@ -22,6 +22,7 @@ may only optimize WITHIN these registry bounds — this module is what makes
 """
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -328,6 +329,67 @@ _KILLZONES = {3: "London 03-04", 10: "NY-AM 10-11", 14: "NY-PM 14-15"}
 _REQUIRE_LABELS = {"liq_sweep": "prior liquidity sweep", "cvd_div": "prior CVD divergence",
                    "bos": "prior break of structure", "bias_vwap": "VWAP bias side"}
 
+# --- Framework layer stack (lab/FRAMEWORK.md §1) ----------------------------- #
+# Canonical role per decision layer. L0 (cross-market) is a neutral stub on
+# single-instrument data — it always appears but is never filled here.
+_ROLE_BY_LAYER = {
+    "L0": "cross-market", "L1": "regime", "L2": "bias", "L3": "structure",
+    "L4": "location", "L5": "participation", "L6": "momentum",
+    "L7": "volatility", "L8": "setup", "L9": "trigger", "L10": "risk",
+}
+# Which registry group each engine mechanism belongs to (cfg flag -> group).
+# A group sits in the stack under its PRIMARY layer (from the registry tags),
+# so the same building block is never counted in two slots.
+_CFG_GROUP = {
+    "use_fvg_entry": "fvg", "use_gap_filter": "fvg",
+    "use_ema_cross": "ema_cross",
+    "use_bos_entry": "market_structure", "use_choch_entry": "market_structure",
+    "use_liq_sweep": "liquidity_eqhl",
+    "use_cvd_div": "divergence", "use_cvd_filter": "cvd_delta",
+    "use_order_block": "order_block", "use_momentum": "momentum",
+    "use_macd_cross": "macd", "use_rsi_rev": "rsi", "use_donchian": "donchian",
+    "use_ma_pullback": "moving_average", "use_bb_revert": "bollinger_bands",
+    "use_vwap_veto": "vwap", "use_confluence": "silver_bullet",
+    "stop_swing": "swing_stops",
+}
+
+
+@functools.lru_cache(maxsize=1)
+def _layer_map() -> dict:
+    """group -> {layer, role, info_category, secondary} from the registry tags."""
+    reg = load_registry()
+    out: dict[str, dict] = {}
+    for fam in ("price_action", "classic"):
+        for g, gd in (reg.get(fam) or {}).items():
+            if gd and gd.get("layer"):
+                out[g] = {"layer": gd["layer"], "role": gd.get("role"),
+                          "info_category": gd.get("info_category"),
+                          "secondary": gd.get("secondary") or []}
+    return out
+
+
+def layer_stack(cfg) -> list[dict]:
+    """The strategy as a role-per-layer stack (framework §1). Every active
+    mechanism is placed under its group's PRIMARY layer; all of L0..L10 appear so
+    gaps are visible at a glance. Empty layers carry an empty group list, and L0
+    is flagged as a not-yet-wired cross-market stub."""
+    lm = _layer_map()
+    active = {grp for flag, grp in _CFG_GROUP.items() if getattr(cfg, flag, False)}
+    by_layer: dict[str, list] = {}
+    for g in active:
+        tag = lm.get(g)
+        if tag:
+            by_layer.setdefault(tag["layer"], []).append(g)
+    stack = []
+    for i in range(0, 11):
+        L = f"L{i}"
+        groups = sorted(by_layer.get(L, []))
+        row = {"layer": L, "role": _ROLE_BY_LAYER[L], "groups": groups, "active": bool(groups)}
+        if L == "L0":
+            row["status"] = "future"     # cross-market feed not wired (single-instrument scope)
+        stack.append(row)
+    return stack
+
 
 def describe_config(cfg) -> dict:
     """Decode an engine Config into a human, honest picture of what the strategy
@@ -370,6 +432,13 @@ def describe_config(cfg) -> dict:
         "manage": [m for m, on in (("breakeven", cfg.use_breakeven), ("trail", cfg.use_trail)) if on] or ["let run"],
     }
     out["contract"] = getattr(cfg.contract, "symbol", "")
+
+    # Framework layer stack: the same strategy read as a role-per-layer decision
+    # stack (lab/FRAMEWORK.md). Drives the run-detail and the 4e-variant builder.
+    out["stack"] = layer_stack(cfg)
+    out["stack_summary"] = " · ".join(
+        f"{r['layer']} {r['role']}: {', '.join(r['groups'])}"
+        for r in out["stack"] if r["active"])
     return out
 
 

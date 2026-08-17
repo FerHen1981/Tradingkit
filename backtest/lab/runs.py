@@ -23,7 +23,7 @@ from pathlib import Path
 from .paths import ensure_dirs, index_path, results_dir
 
 # Fields kept out of the (light) index; the full run.json holds everything.
-_HEAVY = {"groups", "unmapped", "settings"}
+_HEAVY = {"groups", "unmapped", "settings", "desc"}
 
 
 def slug(s) -> str:

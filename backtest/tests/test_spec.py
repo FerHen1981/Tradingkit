@@ -204,3 +204,32 @@ def test_spec_timeframe_valid():
 def test_spec_timeframe_invalid():
     with pytest.raises(SpecError, match="unknown timeframe"):
         validate_spec(_spec(timeframe="7m"), REG)
+
+
+# --- framework layer stack (lab/FRAMEWORK.md) ------------------------------ #
+def test_layer_stack_all_layers_present_and_ordered():
+    from backtest.spec import describe_config
+    cfg, _ = spec_to_config(validate_spec(_spec(), REG))
+    stack = describe_config(cfg)["stack"]
+    # every framework layer L0..L10 appears exactly once, in order
+    assert [r["layer"] for r in stack] == [f"L{i}" for i in range(0, 11)]
+    # L0 cross-market is the not-yet-wired stub, never filled on single-instrument
+    l0 = stack[0]
+    assert l0["role"] == "cross-market" and l0["status"] == "future" and not l0["active"]
+
+
+def test_layer_stack_places_groups_by_primary_layer():
+    from backtest.spec import describe_config
+    # the minimal spec: fvg (L9 trigger) + market_structure (L3) + swing_stops (L10)
+    cfg, _ = spec_to_config(validate_spec(_spec(), REG))
+    by = {r["layer"]: r["groups"] for r in describe_config(cfg)["stack"]}
+    assert "fvg" in by["L9"]              # trigger
+    assert "market_structure" in by["L3"]  # structure
+    assert "swing_stops" in by["L10"]     # risk
+    # a momentum-only reversion lands under L6, not scattered
+    rsi_cfg, _ = spec_to_config(validate_spec(
+        {"name": "R", "groups": {"rsi": {}, "swing_stops": {"pivot_k": 3}}}, REG))
+    d = describe_config(rsi_cfg)
+    by_rsi = {r["layer"]: r["groups"] for r in d["stack"]}
+    assert "rsi" in by_rsi["L6"]
+    assert "L6 momentum: rsi" in d["stack_summary"]

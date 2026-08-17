@@ -184,6 +184,7 @@ def main():
             return
         from datetime import datetime, timezone
         from .lab.runs import fingerprint, make_run_id, record_run
+        from .spec import describe_config
         asset = cfg.contract.symbol
         if args.spec:
             fp_src, source = {"groups": rspec.groups, "base_preset": rspec.base_preset}, f"spec:{args.spec}"
@@ -198,7 +199,7 @@ def main():
                 "lens": lens, "segment": _segment, "holdout_days": args.holdout_days or 0,
                 "source": source, "kind": kind,
                 "data_file": os.path.basename(args.data), "window": _window,
-                "settings": _settings(cfg),
+                "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
         if args.spec:
             meta["groups"] = rspec.groups

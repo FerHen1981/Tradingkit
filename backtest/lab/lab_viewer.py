@@ -581,6 +581,23 @@ function render(){
 function kvs(obj,pre){return Object.entries(obj||{}).map(([k,v])=>{
   if(v&&typeof v==='object')return kvs(v,(pre?pre+'.':'')+k);
   return `<span class=tag style="margin:2px">${(pre?pre+'.':'')+k}: <b style="color:var(--sand)">${v}</b></span>`}).join('');}
+function stackHtml(desc){
+  if(!desc||!(desc.stack||[]).length)return '';
+  const rows=desc.stack.map(r=>{
+    const on=r.active;
+    const gr=on?`<b style="color:var(--gold)">${r.groups.join(', ')}</b>`
+      :(r.status==='future'?'<span class=muted>— cross-market feed (not wired)</span>':'<span class=muted>—</span>');
+    return `<div class=lensrow style="margin-top:3px;${on?'':'opacity:.45'}">`
+      +`<span class=tag style="min-width:118px;display:inline-block">${r.layer} · ${r.role}</span> ${gr}</div>`;
+  }).join('');
+  const meta=[];
+  if(desc.family)meta.push('family: <b style="color:var(--sand)">'+desc.family+'</b>');
+  if((desc.entries||[]).length)meta.push('entries: '+desc.entries.join(', '));
+  if((desc.filters||[]).length)meta.push('filters: '+desc.filters.join(', '));
+  if(desc.exit)meta.push('exit: '+[desc.exit.stop,desc.exit.target,(desc.exit.manage||[]).join('/')].filter(Boolean).join(' · '));
+  return `<div style="margin-top:10px"><b>Decision stack (framework)</b>`
+    +`<div class=muted style="margin:4px 0">${meta.join(' · ')}</div>${rows}</div>`;
+}
 async function showDetail(id){
   const d=$('#detail');d.style.display='block';d.innerHTML='<div class=muted>Loading…</div>';
   const r=await (await fetch('/api/run?id='+encodeURIComponent(id))).json();
@@ -595,6 +612,7 @@ async function showDetail(id){
     <div class=lensrow style="margin-top:8px">run_id: ${r.run_id||''}</div>
     <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars${r.segment&&r.segment!=='all'?' · <b style="color:var(--gold)">'+r.segment.toUpperCase()+'</b> (holdout '+(r.holdout_days||0)+'d)':''} · source ${r.source||''}</div>
     ${grp}
+    ${stackHtml(r.desc)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
   d.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -678,6 +696,7 @@ function libCard(s){
     <div class=row>entry <b>${(d.entries||[]).join(', ')||'—'}</b></div>
     ${conf}${filt}
     <div class=row>exit · stop <b>${ex.stop||'?'}</b> · target <b>${ex.target||'?'}</b> · ${(ex.manage||[]).join('+')}</div>
+    ${d.stack_summary?`<div class=row style="margin-top:5px;color:var(--azure)">stack · ${d.stack_summary}</div>`:''}
     <div class=row style="margin-top:7px;color:var(--dim)">${s.preset?('base '+s.preset+' · '):''}${(s.groups||[]).join(', ')}</div>
   </div>`;
 }

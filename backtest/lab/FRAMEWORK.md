@@ -322,11 +322,13 @@ Action:      Long allowed
    `info_category:` (+ `secondary:`) per groep in `registry.yaml` (§3);
    `footprint` verwijderd (diep L5 losgelaten). Puur data, geen gedrag; 83 tests
    groen.
-2. **`describe_config` uitbreiden** — laag-per-laag rolinvulling teruggeven,
-   zodat runs én de builder hun stack tonen (dekt tegelijk open taak 2 uit de
-   handoff: per-run confluence in de run-detail). ← **volgende stap**
+2. ~~**`describe_config` uitbreiden**~~ — ✅ **DONE**: `describe_config` geeft nu
+   een `stack` (L0..L10, rol + actieve groepen per laag) + `stack_summary`.
+   Zichtbaar in de Strategy Library én — via `run.json` — in de run-detail
+   (dekt open taak 2 uit de handoff). 85 tests groen.
 3. **L1 regime-classifier wiren** — `adx_dmi` + `atr`-percentiel + MA-stack →
    objectieve regime-tag. Poortwachter van het framework; nu nog decorative.
+   ← **volgende stap**
 4. **Role-composing sampler** — `sample_spec` → `compose_strategy` (§4), met
    redundancy-guard en setup×regime-gate (§6). Vervangt de random-subset.
 5. **Scoring als prior** — 0–100 grade berekenen en **naast** de funnel-KPI's

@@ -1125,7 +1125,9 @@ if sendCfgOnStart and barstate.isrealtime and not cfgSent
     if useJournal and not execInstance
         string _cfgRow = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "," + accountID + "," + jrnlAcct + "," + syminfo.ticker + ",CONFIG,-,-,-,-,-,-,-,-," + cfgStr
         alert(jrnlJsonWrap ? "{\"type\":\"config\",\"csv\":\"" + _cfgRow + "\"}" : _cfgRow, alert.freq_once_per_bar)
-    else if useDiscord
+    // v6.9.2: geen `else` meer — met journalling aan ging CONFIG alleen naar de CSV-route
+    // en bereikte de Discord-kaart nooit. Journaal en kaart sluiten elkaar niet uit.
+    if useDiscord
         f_sendDiscord("⚙️ " + syminfo.ticker + " CONFIG", cfgStr)
     else if plainAlertsOK
         alert(f_msgHead() + " | CONFIG | " + cfgStr, alert.freq_once_per_bar)

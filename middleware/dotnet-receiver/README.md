@@ -21,9 +21,14 @@ netwerk/5xx (niet op 4xx).
 
 Discord-berichten van Tier A/B (zie `../CARDS.md`) worden door
 `renderer/render-signal.js` tot een PNG gerenderd en als bijlage gepost;
-Tier C (CONFIG, ACCOUNT STARTED, LIMIT EXPIRED, SIGNAL BLOCKED, AUTO FLAT)
-blijft tekst. De renderer leest de Pine-payload zelf: titel → event,
-description → velden.
+Tier C (ACCOUNT STARTED, LIMIT EXPIRED) blijft tekst. De renderer leest de
+Pine-payload zelf: titel → event, description → velden.
+
+`SIGNAL BLOCKED` valt onder geen van beide: dat beslist `BlockedGate`. Alleen een
+blokkade die de handelsdag of het account beëindigt (`Day halt: …`, `Account: …`,
+breach, eval passed) wordt een kaart, en dan één keer per symbool per categorie per
+handelsdag. Routineblokkades en herhalingen gaan niet naar Discord maar staan wel in
+`routed_<datum>.jsonl` als `blocked-notice suppressed`.
 
 Renderen duurt seconden, dus het gebeurt ná het antwoord aan TradingView
 (achtergrondtaak, max 2 Chromium-processen tegelijk). Mislukt het renderen —
@@ -53,11 +58,40 @@ Staat het script niet op `MEX_RENDER_SCRIPT`, dan blijft alles tekst.
 
 ## Uitrollen
 
+Twee losse onderdelen. De renderer is een los bestand dat per bericht wordt aangeroepen,
+dus die heeft géén herstart nodig — het volgende event pakt de nieuwe versie.
+
+    RAW=https://raw.githubusercontent.com/FerHen1981/Tradingkit/claude/legacy-accounts-scripts-analysis-ui0j6m/middleware
+
+    # 1 — renderer (geen herstart nodig)
+    cp /root/mex-renderer/render-signal.js /root/mex-renderer/render-signal.js.bak
+    curl -fsSL -o /root/mex-renderer/render-signal.js $RAW/renderer/render-signal.js
+
+    # 2 — receiver
     cd /root/mex-middleware-b
     cp src/Mex.Journal.Receiver/Program.cs src/Mex.Journal.Receiver/Program.cs.bak
-    # nieuwe Program.cs plaatsen
+    curl -fsSL -o src/Mex.Journal.Receiver/Program.cs $RAW/dotnet-receiver/Program.cs
     dotnet build -c Release
     systemctl restart mex-receiver
-    curl -s localhost:PORT/health
+    curl -s localhost:PORT/health        # renderEnabled + renderScript moeten kloppen
 
-Terug bij problemen: `cp Program.cs.bak Program.cs && dotnet build -c Release && systemctl restart mex-receiver`.
+Rooktest zonder op een echte trade te wachten — post een nagebootst Pine-bericht:
+
+    H='content-type: application/json'
+    U="https://<host>/signal/$MEX_WEBHOOK_SECRET"
+    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⚙️ MGC1! CONFIG","description":"ver=v6.9.2;acct=TEST;qty=4","footer":{"text":"MGC1!"}}]}'
+    # -> {"accepted":true,"kind":"discord","tier":"B","card":"queued"}
+
+    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup ... blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
+    # -> tier B, card queued   (de eerste terminale blokkade van vandaag)
+    sleep 6   # body-hash-dedupe is 5s; anders meet je die i.p.v. de poort
+    # ...zelfde commando nogmaals -> {"accepted":true,"kind":"discord","suppressed":true}
+
+    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup ... blocked by: Stop invalid","footer":{"text":"MGC1!"}}]}'
+    # -> suppressed (routineblokkade, komt nooit door)
+
+Let op: met `MEX_DRY_RUN=true` wordt er niets gepost — de kaart rendert wel en het
+resultaat staat in het journaal, maar Discord ziet niets.
+
+Terug bij problemen: `cp Program.cs.bak Program.cs && dotnet build -c Release && systemctl restart mex-receiver`
+(en `cp render-signal.js.bak render-signal.js` voor de renderer).

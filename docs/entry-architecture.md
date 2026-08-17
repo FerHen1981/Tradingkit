@@ -50,6 +50,36 @@ Each is a numpy pass in `indicators.compute()` producing a per-bar dir + refs.
 new generator). `premium_discount_ote` = a **context filter** (only longs in
 discount, shorts in premium).
 
+## Strategy-family coverage (what the roster is FOR)
+
+The generator roster is how the engine spans the classic strategy families. This
+is a **single-instrument 1m-bar + CVD** engine, so directional families map onto
+entry generators; a few families need machinery this engine does not have, and
+we say so rather than fake them.
+
+| Family | Engine mechanism | Status |
+|---|---|---|
+| Trend Following | `ema_cross`, MA-pullback | ✅ B1 / wireable |
+| Momentum | displacement/impulse entry | wireable |
+| Mean Reversion | VWAP-revert, BB-extreme (enters *against* the VWAP bias) | wireable (new generator) |
+| Breakout | `structure_bos`, range-break, ORB, Donchian | ✅ **B2 (BOS landed)** |
+| Breakdown | `structure_bos` short-side | ✅ same generator |
+| Range Trading | range-fade | wireable |
+| Reversal | `sweep_reversal`, `structure_choch` | wireable |
+| Pullback / Retracement | VWAP/EMA pullback | wireable |
+| Continuation | flag/consolidation break = `structure_bos` | ✅ covered by BOS |
+| Liquidity / Stop Run | `liquidity_sweep` | wireable |
+| Order-Flow | `cvd_divergence` ✅ wireable; absorption/imbalance = footprint-data-gated | partial |
+| Volatility | squeeze / ATR-expansion gate | wireable (coarse) |
+| Market Making / Scalping | needs L2 order-book + tick — different execution model | ❌ out of scope |
+| Relative Value / Spread | needs **two instruments at once** — single-symbol engine | ❌ needs a multi-series engine |
+| Statistical Arbitrage | pairs/z-score, multi-instrument | ❌ needs a multi-series engine |
+| Event / News Driven | present only as a **filter** (avoid roll/OpEx/FOMC); as a *trigger* needs an economic-calendar feed | filter-only |
+
+The ❌ rows are an honest boundary, not a TODO: 12–15 would each require a
+genuinely different engine (order-book, or two synchronized price series). They
+stay out until/unless we build that, so the mill never pretends to test them.
+
 ## Regime context (which entry when)
 
 A lightweight **regime tag** per bar drives which generators are allowed:
@@ -77,11 +107,15 @@ the bar's regime matches the generator's declared `suits`.
 
 - **B0 — refactor, zero behavior change.** Extract `_entry()` with only FVG.
   Guard: El Toro classic on NQ 5m must match the pre-refactor KPIs to the dollar.
-- **B1 — first cross entry (`ema_cross`) end-to-end.** New indicator arrays,
-  registry entry, spec/sampler wiring, market-entry path. Validate it makes
-  sensible, different trades.
-- **B2 — order-flow/PA entries:** `cvd_divergence`, `liquidity_sweep`,
-  `order_block`, `structure_bos`/`choch`, `sweep_reversal`.
+- **B1 — first cross entry (`ema_cross`) end-to-end.** ✅ DONE. El Toro identical
+  (404 / PF 1.22 / $11,437.7); EMA_Cross_20_50 = a genuinely different strategy
+  (9,680 trades, PF 1.19). Proves the pluggable-generator + market-entry path.
+- **B2 — order-flow/PA entries, one-per-smoke** (each carries lookahead risk, so
+  each gets its own VPS smoke with El Toro as the regression guard):
+  - `structure_bos` — ✅ LANDED (this change). Group `market_structure`; presence
+    enables the BOS entry (close-break of the last confirmed swing, swing stop on
+    the opposite pivot). Spec: `specs/bos.yaml`. CHoCH + wick-ref still TODO.
+  - next: `liquidity_sweep`, `cvd_divergence`, `order_block`, `sweep_reversal`.
 - **B3 — classic entries:** `macd_cross`, `rsi_reversion`.
 - **B4 — regime context** gate (trend/range/turning) + premium/discount filter.
 - **B5 — grow the generator's search space** to all wired entries; re-run the

@@ -16,9 +16,9 @@ groups:
     displacement_body_atr: 1.0
     mitigation_mode: CE
     expiry_bars: 12
-  market_structure:
-    pivot_k: 3               # must equal swing_stops.pivot_k (registry constraint)
-    structure_break_ref: close
+  # NB: market_structure is NOT declared here — its presence now enables the BOS
+  # entry generator (see specs/bos.yaml). This spec is FVG-only; the swing pivot
+  # lookback it needs is already set by swing_stops.pivot_k below.
   swing_stops:
     pivot_k: 3
     stop_buffer_ticks: 4

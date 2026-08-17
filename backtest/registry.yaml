@@ -83,14 +83,14 @@ price_action:
       max_bars_between_pivots: {default: 60, min: 20, max: 120, step: 5, type: opt}
 
   market_structure:
-    desc: "BOS (continuation) / CHoCH (reversal) from swing pivots."
+    desc: "BOS (continuation) / CHoCH (reversal) from swing pivots. Presence enables the BOS entry generator."
     price_action: true
     provenance: mixed
-    engine: partial            # pivot_k exists for swing stops; reuse for structure
+    engine: partial            # BOS entry wired (close-break); CHoCH + wick-ref still TODO
     optimize: structure
     params:
       pivot_k:                {default: 3,     min: 2, max: 10, step: 1,        type: opt}   # SHARED with swing_stops
-      structure_break_ref:    {default: close, options: [wick, close],         type: opt}
+      structure_break_ref:    {default: close, options: [wick, close],         type: opt}   # only 'close' wired; 'wick' TODO
 
   liquidity_eqhl:
     desc: "Equal highs/lows = resting-stop liquidity pools / sweep targets."

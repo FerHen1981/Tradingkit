@@ -206,4 +206,23 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     else:
         out["ema_cross_dir"] = np.zeros(n, dtype=np.int64)
 
+    # --- Break-of-structure entry (Level B generator) -------------------------
+    # Momentum/continuation: a bullish break fires the bar the close crosses
+    # ABOVE the last confirmed swing high; bearish the bar it closes BELOW the
+    # last confirmed swing low. Reuses the same lookahead-safe pivots as the
+    # swing stops (pivot_k) — piv_high/piv_low are the price of the most recently
+    # CONFIRMED pivot as of bar i, so comparing close[i] to them uses no future
+    # data. Fires once on the transition (ta.crossover against a stepped level).
+    if cfg.use_bos_entry:
+        ph = out["piv_high"].to_numpy()
+        pl = out["piv_low"].to_numpy()
+        above = close > ph              # NaN reference (pre-first-pivot) -> False
+        below = close < pl
+        bos = np.zeros(n, dtype=np.int64)
+        bos[1:] = np.where(above[1:] & ~above[:-1], 1,
+                           np.where(below[1:] & ~below[:-1], -1, 0))
+        out["bos_dir"] = bos
+    else:
+        out["bos_dir"] = np.zeros(n, dtype=np.int64)
+
     return out

@@ -86,6 +86,8 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "veto_short": ind["veto_short"].to_numpy(bool),
         "ema_cross_dir": ind["ema_cross_dir"].to_numpy() if "ema_cross_dir" in ind
         else np.zeros(len(df), dtype=np.int64),
+        "bos_dir": ind["bos_dir"].to_numpy() if "bos_dir" in ind
+        else np.zeros(len(df), dtype=np.int64),
     }
 
 
@@ -107,6 +109,7 @@ class Engine:
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
         self.ema_cross_dir = a.get("ema_cross_dir")
+        self.bos_dir = a.get("bos_dir")
 
         self.n = len(self.close)
         self._reset_state()
@@ -176,6 +179,8 @@ class Engine:
             gens.append(self._entry_fvg)
         if self.cfg.use_ema_cross:
             gens.append(self._entry_ema)
+        if self.cfg.use_bos_entry:
+            gens.append(self._entry_bos)
         self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
 
     # --------------------------------------------------------------- helpers
@@ -610,6 +615,16 @@ class Engine:
         if d == 0:
             return 0, np.nan, np.nan, np.nan
         return d, self.close[i], np.nan, np.nan       # entry_ref = close; stops via swing/fixed
+
+    def _entry_bos(self, i: int):
+        """Entry generator — break of market structure (BOS). Momentum/continuation
+        entry when the close breaks the last confirmed swing (long above the swing
+        high, short below the swing low). No gap edge; returning NaN edges lets the
+        engine's swing-stop logic anchor the stop on the opposite pivot."""
+        d = int(self.bos_dir[i]) if self.bos_dir is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan
 
     def _signal(self, i: int, can_trade: bool):
         """Ask the enabled entry generators (priority order); the first with a

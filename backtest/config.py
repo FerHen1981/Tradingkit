@@ -134,6 +134,7 @@ class Config:
     use_ema_cross: bool = False          # EMA fast/slow crossover entry
     ema_fast: int = 20
     ema_slow: int = 50
+    use_bos_entry: bool = False          # break-of-structure (swing break) momentum entry
 
     # --- entry & stop ---
     entry_limit_mode: bool = True        # "Limit @ 50% FVG" vs market

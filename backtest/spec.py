@@ -250,7 +250,8 @@ _TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
 # Groups whose presence/params actually change engine behaviour TODAY (via
 # _PARAM_MAP + the toggles). Everything else is engine:todo and inert until
 # wired, so the generator restricts its honest search to these.
-WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross")
+WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops",
+                                 "ema_cross", "market_structure")
 
 
 def effective_signature(cfg) -> tuple:
@@ -260,7 +261,8 @@ def effective_signature(cfg) -> tuple:
             round(float(cfg.gap_max_ticks), 3), bool(cfg.use_cvd_filter),
             bool(cfg.use_cvd_streak), int(cfg.cvd_trend_count), bool(cfg.use_vwap_veto),
             bool(cfg.stop_swing), int(cfg.pivot_k), round(float(cfg.swing_buf_ticks), 3),
-            bool(cfg.use_ema_cross), int(cfg.ema_fast), int(cfg.ema_slow))
+            bool(cfg.use_ema_cross), int(cfg.ema_fast), int(cfg.ema_slow),
+            bool(cfg.use_bos_entry))
 
 
 def spec_to_config(rspec: ResolvedSpec):
@@ -300,13 +302,19 @@ def spec_to_config(rspec: ResolvedSpec):
     over["stop_swing"] = "swing_stops" in g
     over["use_vwap_veto"] = "vwap" in g and bool(g["vwap"].get("vwap_veto", True))
 
-    # Entry generators (Level B). An ema_cross spec turns the EMA entry on; if it
-    # declares no fvg group it is an EMA-only strategy (FVG entry off). Specs/
-    # presets without any entry group keep the default FVG entry.
+    # Entry generators (Level B). Presence of an explicit entry group turns its
+    # generator on: ema_cross -> EMA crossover, market_structure -> break-of-
+    # structure (BOS). A spec that declares any explicit entry but NO fvg group is
+    # a non-FVG strategy, so the default FVG entry is switched off (otherwise FVG
+    # stays on and the generators stack, in priority order). Specs/presets with no
+    # entry group at all keep the default FVG entry.
+    _ENTRY_GROUPS = {"ema_cross", "market_structure"}
     if "ema_cross" in g:
         over["use_ema_cross"] = True
-        if "fvg" not in g:
-            over["use_fvg_entry"] = False
+    if "market_structure" in g:
+        over["use_bos_entry"] = True
+    if (_ENTRY_GROUPS & set(g)) and "fvg" not in g:
+        over["use_fvg_entry"] = False
 
     # Direct param maps (resolved values include registry defaults).
     for (grp, param), field_name in _PARAM_MAP.items():

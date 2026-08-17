@@ -14,8 +14,9 @@ groups:
   fvg:
     gap_min_ticks: 9
     gap_max_ticks: 12
-  market_structure:
-    pivot_k: 3
+  # market_structure omitted on purpose: its presence now switches on the BOS
+  # entry generator, and this spec is an FVG-only El Toro reference. The pivot
+  # lookback is carried by swing_stops.pivot_k.
   swing_stops:
     pivot_k: 3
     stop_buffer_ticks: 2

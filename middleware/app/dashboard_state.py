@@ -166,6 +166,15 @@ def _load_accounts(token: str) -> list[dict]:
                     "net": _num(p.get("Net PnL")),   # ledger truth (rollup), matches Current
                     "health": health, "seed": seed is not None,
                     "hrank": _HEALTH_RANK.get(health, 0) * 1000 + (_num(p.get("DD Buffer %")) or -999),
+                    # --- payout-playbook inputs (all owner-maintained in the Accounts DB) ---
+                    "payouts_taken": _num(p.get("Payouts (0-6)")),   # ladder rung already taken (0-6)
+                    "fase_config": _sel(p.get("Fase Config")),       # e.g. "Milking (2c/day-trail $150)"
+                    "pos_band": _sel(p.get("Position Size")),        # e.g. "2-4 contracts"
+                    "dd_rule": _sel(p.get("Drawdown Rule")),         # Trailing / EOD ($2500) / ...
+                    "daily_buffer": _num(p.get("Daily Buffer $")),
+                    "dd_amount": _num(p.get("DD Amount $")),
+                    "status": _sel(p.get("Status")),                 # Active Eval / Funded / Milking / ...
+                    "payout_total": _num(p.get("Payout Total ($)")),
                 })
             if not data.get("has_more"):
                 break
@@ -542,6 +551,27 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
                          a["stage"], dict(daily.get(a["full"], {})))
         a["payout"] = dataclasses.asdict(p) if p else None
     _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
+
+    # payout playbook: per-account preset (asset·strategy + contracts + day-cap + SL-cap) to
+    # bank the ladder rung within the 8-day window inside the breach budget.
+    from .playbook import PlaybookParams, build_playbook
+    edge_stats = {x["sym"]: {"expectancy": x["expectancy"], "pf": x["pf"], "n": x["n"]} for x in assets}
+    dom_asset: dict = defaultdict(lambda: defaultdict(int))
+    dom_strat: dict = defaultdict(lambda: defaultdict(int))
+    for t in trades:
+        dom_asset[t["acct"]][t["sym"]] += 1
+        if t.get("strat"):
+            dom_strat[t["acct"]][t["strat"]] += 1
+    _pp = PlaybookParams()
+    for a in accounts:
+        da, ds = dom_asset.get(a["full"]) or {}, dom_strat.get(a["full"]) or {}
+        asset = max(da, key=da.get) if da else None
+        strat = max(ds, key=ds.get) if ds else None
+        try:
+            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), asset, strat, edge_stats, _pp)
+        except Exception as exc:                       # never let sizing math break the dashboard
+            log.warning("playbook failed for %s: %r", a.get("full"), exc)
+            a["playbook"] = None
     total_withdrawable = round(sum(p["withdrawable"] for p in _funded_p), 2)
     payout_eligible = sum(1 for p in _funded_p if p["eligible"])
     fleet_buffer = round(sum(a["buffer"] for a in accounts if a["buffer"] and a["buffer"] > 0), 2)

@@ -489,6 +489,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=portfolio><span class=lv>L7</span>Portfolio</button>
     <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
     <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
+    <button class=tab role=tab aria-selected=false data-panel=playbook><span class=lv>L10</span>Playbook</button>
     <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
   </nav>
   <section role=tabpanel id=fleet>
@@ -575,6 +576,14 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <p class=sec-note>What's withdrawable now and what's left to satisfy — PA (funded) accounts only. Apex rules: ≥8 trading days (≥$50/day) · 30% consistency (best day ≤30% of profit) · safety-net balance. <span class=calc>Configurable — verify against Apex's current terms.</span></p>
     <div class="grid g2" id=payoutKpis style="margin-bottom:18px"></div>
     <div class="grid g3" id=payoutCards></div>
+  </section>
+  <section role=tabpanel id=playbook hidden>
+    <h2 class=sec>Payout Playbook</h2>
+    <p class=sec-note>Per account: the best asset·strategy to run, and the preset to bank the ladder rung inside the 8-day window — sized as large as the estimated chance of breaching the trailing DD staying under 15% allows. Copy straight into your alerts. <span class=calc>Estimates from the account's own daily edge + Apex rules — verify. Set the rung in the Accounts DB (Payouts 0-6) and keep Fase Config + DD Buffer $ current.</span></p>
+    <div class=tablewrap><table id=pbTable style="min-width:980px"><thead><tr>
+      <th>Account</th><th>Recommended run</th><th class=num>Rung → target</th><th class=num>Contracts</th>
+      <th class=num>Day lock / stop</th><th class=num>SL cap</th><th class=num>Reach / breach</th><th>Status</th>
+    </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=live hidden>
     <h2 class=sec>Live · intraday</h2>
@@ -755,6 +764,25 @@ function renderPayout(){
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
+const PB_BADGE={ok:["var(--ok)","ready"],target_unlikely:["var(--warn)","stretch"],
+  thin_data:["var(--dim)","need data"],no_buffer:["var(--dim)","set buffer"],fragile:["var(--crit)","fragile"]};
+function renderPlaybook(){
+  const rows=CMD.accounts.filter(a=>a.playbook);
+  $("#pbTable tbody").innerHTML=rows.map(a=>{const p=a.playbook;
+    const sw=p.switch?` <span style="color:var(--warn)" title="currently running ${p.asset||'—'}">↹ now ${p.asset||'—'}</span>`:'';
+    const rec=`<b>${p.rec_asset}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}`;
+    const tgt=`<span class=calc>${p.target_label}</span> ${money0(p.target)}`;
+    const con=p.rec_contracts==null?'<span class=calc>—</span>':(p.rec_contracts+'ct'+(p.micro?` <span class=calc>(${p.micro})</span>`:''));
+    const cap=p.day_lock==null?'<span class=calc>—</span>':(money0(p.day_lock)+' <span class=calc>/</span> '+(p.day_stop!=null?money0(p.day_stop):'—'));
+    const sl=p.sl_cap==null?'<span class=calc>—</span>':money0(p.sl_cap);
+    const rb=p.p_reach==null?'<span class=calc>—</span>':`<b class="${p.p_reach>=0.7?'pos':''}">${Math.round(p.p_reach*100)}%</b> <span class=calc>/</span> <b class="${p.p_breach>0.15?'neg':''}">${Math.round(p.p_breach*100)}%</b>`;
+    const b=PB_BADGE[p.quality]||["var(--dim)",p.quality];
+    return `<tr><td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span></td>
+      <td style="text-align:left">${rec}</td><td class=num>${tgt}</td><td class=num>${con}</td>
+      <td class=num>${cap}</td><td class=num>${sl}</td><td class=num>${rb}</td>
+      <td style="text-align:left;white-space:normal;max-width:280px"><span class=pill style="background:${b[0]};color:#04121a">${b[1]}</span> <span style="color:var(--muted)">${p.note||''}</span></td></tr>`;
+  }).join('')||'<tr><td colspan=8 class=calc>no accounts</td></tr>';
+}
 function bar(label,pct,right,color){
   return `<div style="margin:9px 0;font-family:var(--mono);font-size:12px">
     <div style="display:flex;justify-content:space-between;margin-bottom:3px;gap:10px"><span style="color:var(--muted)">${label}</span><b style="white-space:nowrap">${right}</b></div>
@@ -902,7 +930,7 @@ async function loadCommand(){
   if(!s||s.error){renderKpis({});return}
   CMD=s;renderKpis(s.fleet);renderFleet();
   $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();renderAttention();
-  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderHeatmap();renderPortfolio();renderCalendar();renderEquity();
+  sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderPlaybook();renderHeatmap();renderPortfolio();renderCalendar();renderEquity();
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

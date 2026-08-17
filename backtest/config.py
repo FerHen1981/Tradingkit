@@ -368,6 +368,17 @@ EL_DORADO_TUNED = EL_DORADO.with_(
 EL_MATADOR = EL_TORO.with_(name="EL_MATADOR", dd_model="EOD")     # Eval, EOD
 EL_PATRON = EL_DORADO.with_(name="EL_PATRON", dd_model="EOD")     # Funded/PA, EOD
 
+# --- ES / GC fleet — ported from pine/MEX_EL_{REY,LEON,TESORO,MINERO}.pine v7.3.
+# One engine, differ by asset · phase · DD model. The ES/GC scripts run a FIXED
+# stop (legacy mode, 100u), a fixed 122u target and EOD drawdown; Eval vs Funded
+# is inherited from the NQ base (EL_TORO = Apex Eval, EL_DORADO = Apex PA).
+_FLEET_ESGC = dict(stop_swing=False, fixed_stop_ticks=100.0, max_stop_ticks=100.0,
+                   tp_mode="Fixed (units)", tp_fixed_ticks=122.0, dd_model="EOD")
+EL_LEON   = EL_TORO.with_(name="EL_LEON",     contract=contract("ES"), **_FLEET_ESGC)   # ES · Eval
+EL_REY    = EL_DORADO.with_(name="EL_REY",    contract=contract("ES"), **_FLEET_ESGC)   # ES · Funded
+EL_MINERO = EL_TORO.with_(name="EL_MINERO",   contract=contract("GC"), **_FLEET_ESGC)   # GC · Eval
+EL_TESORO = EL_DORADO.with_(name="EL_TESORO", contract=contract("GC"), **_FLEET_ESGC)   # GC · Funded
+
 # Walk-forward-validated El Toro tweak (see docs/optimization.md): restrict
 # entries to the US regular session (09:00-15:59 ET). Pass-rate 29.8->32.7% IS
 # and 27.7->38.3% OOS. Optionally loosen delta streak to 2 (OOS 46.8%, more
@@ -410,4 +421,8 @@ PRESETS = {
     "EL_DORADO": EL_DORADO,
     "EL_DORADO_TUNED": EL_DORADO_TUNED,
     "EL_PATRON": EL_PATRON,
+    "EL_LEON": EL_LEON,
+    "EL_REY": EL_REY,
+    "EL_MINERO": EL_MINERO,
+    "EL_TESORO": EL_TESORO,
 }

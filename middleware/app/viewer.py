@@ -579,7 +579,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=playbook hidden>
     <h2 class=sec>Payout Playbook</h2>
-    <p class=sec-note>Per account: the best asset·strategy to run, and the preset to bank the ladder rung inside the 8-day window — sized as large as the estimated chance of breaching the trailing DD staying under 15% allows. Copy straight into your alerts. <span class=calc>Estimates from the account's own daily edge + Apex rules — verify. Set the rung in the Accounts DB (Payouts 0-6) and keep Fase Config + DD Buffer $ current.</span></p>
+    <p class=sec-note>Per account: the best asset · strategy to run, and the preset to bank the ladder rung inside the 8-day window — sized as large as keeping the estimated chance of breaching the trailing DD under 15% allows ("not at any cost"). Contracts are tradeable (whole minis + micros). Rows marked <span class=calc>·def</span> fall back to the phase-start default (funded 2c / eval 5c) until the account has ≥5 traded days. Copy straight into your alerts. <span class=calc>Estimates from the account's own daily edge + Apex rules — verify. Set the rung in the Accounts DB (Payouts 0-6), keep Fase Config + DD Buffer $ current.</span></p>
     <div class=tablewrap><table id=pbTable style="min-width:980px"><thead><tr>
       <th>Account</th><th>Recommended run</th><th class=num>Rung → target</th><th class=num>Contracts</th>
       <th class=num>Day lock / stop</th><th class=num>SL cap</th><th class=num>Reach / breach</th><th>Status</th>
@@ -765,14 +765,15 @@ function renderPayout(){
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
 const PB_BADGE={ok:["var(--ok)","ready"],target_unlikely:["var(--warn)","stretch"],
-  thin_data:["var(--dim)","need data"],no_buffer:["var(--dim)","set buffer"],fragile:["var(--crit)","fragile"]};
+  "default":["var(--aqua)","default"],fragile:["var(--crit)","fragile"]};
 function renderPlaybook(){
   const rows=CMD.accounts.filter(a=>a.playbook);
   $("#pbTable tbody").innerHTML=rows.map(a=>{const p=a.playbook;
-    const sw=p.switch?` <span style="color:var(--warn)" title="currently running ${p.asset||'—'}">↹ now ${p.asset||'—'}</span>`:'';
+    const sw=p.switch?` <span style="color:var(--warn)" title="currently running ${p.cur_asset||'—'}">↹ now ${p.cur_asset||'—'}</span>`:'';
     const rec=`<b>${p.rec_asset}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}`;
     const tgt=`<span class=calc>${p.target_label}</span> ${money0(p.target)}`;
-    const con=p.rec_contracts==null?'<span class=calc>—</span>':(p.rec_contracts+'ct'+(p.micro?` <span class=calc>(${p.micro})</span>`:''));
+    const dc=p.source==='default'?' <span class=calc>·def</span>':'';
+    const con=p.contracts_label?`${p.contracts_label}${dc}`:'<span class=calc>—</span>';
     const cap=p.day_lock==null?'<span class=calc>—</span>':(money0(p.day_lock)+' <span class=calc>/</span> '+(p.day_stop!=null?money0(p.day_stop):'—'));
     const sl=p.sl_cap==null?'<span class=calc>—</span>':money0(p.sl_cap);
     const rb=p.p_reach==null?'<span class=calc>—</span>':`<b class="${p.p_reach>=0.7?'pos':''}">${Math.round(p.p_reach*100)}%</b> <span class=calc>/</span> <b class="${p.p_breach>0.15?'neg':''}">${Math.round(p.p_breach*100)}%</b>`;

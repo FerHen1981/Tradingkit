@@ -582,7 +582,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <p class=sec-note>Each account's route to the MAXIMUM payout this step, read from its OWN history against the firm rules. Withdrawable = min(profit − safety-net, rung cap); to pull the full cap you need profit = safety + cap, spread over 8 days (reset each cycle) so consistency (best day ≤ 30% of total) allows it. Funded runs only the edge on the real instrument (MGC · El Tesoro / MES · El Rey; NQ eval-only): <b style="color:var(--warn)">survival</b> 1 ct below the safety-net → <b style="color:var(--ok)">milking</b> 2 ct building to the full cap → <b style="color:var(--gold)">payout</b> pull the full cap, carry the excess, reset to the next rung; legacy <b style="color:var(--aqua)">compound</b>. The Route says what still has to happen and warns when banking early leaves money on the table. <span class=calc>Apex 50k: safety $2,600 · ladder $1.5k→$3k · total $13k — verify. Rung = "Payouts (0-6)".</span></p>
     <div class=tablewrap><table id=pbTable style="min-width:1040px"><thead><tr>
       <th>Account</th><th>Run</th><th>Phase</th><th style="text-align:left">Where it stands</th>
-      <th class=num>Rung → target</th><th style="text-align:left">Route to payout</th>
+      <th style="text-align:left">Set: size · DLL · day-cap</th><th style="text-align:left">Route to payout</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=live hidden>
@@ -771,8 +771,11 @@ function renderPlaybook(){
   const rows=CMD.accounts.filter(a=>a.playbook);
   $("#pbTable tbody").innerHTML=rows.map(a=>{const p=a.playbook;
     const sw=p.switch?` <span style="color:${p.off_edge?'var(--crit)':'var(--warn)'}" title="currently ${p.cur_instrument||'—'}">↹ ${p.cur_instrument||'—'}</span>`:'';
-    const sett=`${p.contracts_label}`+(p.day_cap!=null?` · cap ${money0(p.day_cap)}`:'')+(p.dll!=null?` · DLL ${money0(p.dll)}`:'');
-    const run=`<b>${p.rec_instrument||p.rec_base||'—'}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}<div style="color:var(--ink);font-size:11px;margin-top:2px;font-family:var(--mono)">${sett}</div>`;
+    const run=`<b>${p.rec_instrument||p.rec_base||'—'}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}`;
+    const setCol=`<b style="color:var(--gold)">${p.contracts_label||'—'}</b>`
+      +(p.day_cap!=null?`<br>day-cap <b>${money0(p.day_cap)}</b>`:'')
+      +(p.dll!=null?`<br>DLL <b>${money0(p.dll)}</b>`:'')
+      +(p.exp_pc!=null?`<br><span class=calc>edge ${money0(p.exp_pc)}/ct × ${p.tpd}/d</span>`:'<br><span class=calc>doctrine size (thin data)</span>');
     const ph=PB_PHASE[p.phase]||["var(--muted)",p.phase];
     const phase=`<span class=pill style="background:${ph[0]};color:#04121a">${ph[1]}</span>`;
     const consWarn=p.consistency_pct!=null&&p.consistency_pct>=20;
@@ -782,8 +785,6 @@ function renderPlaybook(){
       +(p.consistency_pct!=null?` <span style="color:${consWarn?'var(--warn)':'var(--muted)'}">· ${p.consistency_pct}% top day</span>`:'')
       +(p.withdrawable_now!=null?`<br><span class=calc>pull ${money0(p.withdrawable_now)}/${money0(p.cap)}${p.total_cap?' · paid '+money0(p.total_paid)+'/'+money0(p.total_cap):''}</span>`:'')
       +((p.best_day||p.cons_cap)?`<br><span style="color:${topWarn?'var(--crit)':'var(--muted)'}">top day ${money0(p.best_day)} · 30% max ${p.cons_cap?money0(p.cons_cap):'—'}</span>`:'');
-    const tgt=p.cap!=null?`<span class=calc>${p.target_label}</span><br><span class=calc>need P/L ${money0(p.target)}</span>`
-      :`<span class=calc>${p.target_label}</span> ${money0(p.target)}`;
     const flag=p.note?`<div style="color:var(--warn);font-size:11px;margin-bottom:3px">⚑ ${p.note}</div>`:'';
     const rcol=(p.quality==='payout'||p.phase==='maxed')?'var(--gold)':'var(--ink)';
     return `<tr>
@@ -791,7 +792,7 @@ function renderPlaybook(){
       <td style="text-align:left">${run}</td>
       <td>${phase}</td>
       <td style="text-align:left;font-size:12px;font-family:var(--mono)">${st}</td>
-      <td class=num style="text-align:left">${tgt}</td>
+      <td style="text-align:left;font-family:var(--mono);font-size:12px">${setCol}</td>
       <td style="text-align:left;white-space:normal;max-width:430px">${flag}<span style="color:${rcol}">${p.route}</span></td>
     </tr>`;
   }).join('')||'<tr><td colspan=6 class=calc>no accounts</td></tr>';

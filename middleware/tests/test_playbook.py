@@ -47,7 +47,7 @@ def test_survival_below_safety_net():
     pb = build_playbook(a, _hist(150, 4), "MGC")
     assert pb["phase"] == "survival" and pb["contracts"] == 1 and pb["profit"] == 800
     assert pb["safety"] == 2_600 and pb["withdrawable_now"] == 0
-    assert "safety net" in pb["route"] and "1 MGC" in pb["route"]
+    assert "safety net" in pb["route"] and "Survival" in pb["route"]
 
 
 def test_building_warns_it_leaves_money_on_the_table():
@@ -134,7 +134,23 @@ def test_broken_heal_uses_full_outlier_when_buffer_is_roomy():
               payout={"eligible": False, "trading_days": 3, "consistency_pct": 73.0, "profit": 1898})
     hist = {dt.date(2026, 1, 1): 1383, dt.date(2026, 1, 2): 300, dt.date(2026, 1, 3): 215}
     pb = build_playbook(a, hist, "MES")
-    assert pb["day_cap"] == 1383 and not pb["risk_capped"] and "run days up to" in pb["note"]
+    assert pb["day_cap"] == 1383 and not pb["risk_capped"] and "day-cap" in pb["note"]
+
+
+def test_edge_size_from_per_trade_stats():
+    from app.playbook import PlaybookParams, edge_size
+    acct = {"expectancy": 60, "avg_loss": 200, "win_pct": 55, "trades": 40}   # at 2-contract size
+    es = edge_size(acct, 2.0, 8, dll=400, params=PlaybookParams())
+    assert es["exp_pc"] == 30 and es["loss_pc"] == 100 and es["tpd"] == 5      # per contract, trades/day
+    assert es["size"] == 1 and es["day_net"] == 150                            # round(400/300)=1; 1×30×5
+
+
+def test_build_uses_edge_size_when_stats_present():
+    a = _acct(current=53_000, buffer=2_000, expectancy=60, avg_loss=200, win_pct=55, trades=40,
+              fase_config="Milking (2c/day-trail $150)",
+              payout={"eligible": False, "trading_days": 8, "consistency_pct": 20})
+    pb = build_playbook(a, _hist(300, 8), "MGC")
+    assert pb["exp_pc"] == 30 and pb["contracts"] == 1 and pb["day_cap"] == 150     # data-driven whole size
 
 
 def test_non_apex_firm_flagged():

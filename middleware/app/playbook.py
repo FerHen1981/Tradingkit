@@ -185,6 +185,31 @@ def recommend_setup(account: dict, track: str, current_instrument: str | None) -
                     else "MGC · El Tesoro — robust funded workhorse (default)")}
 
 
+def edge_size(account: dict, cur_size: float | None, trading_days: int, dll: float | None,
+              params: PlaybookParams) -> dict | None:
+    """Size the account from what it ACTUALLY does per trade — heat (avg loss) and potential
+    (expectancy) per contract — instead of a static number. Returns the risk-optimal size, the
+    expected daily net at that size, and the per-contract edge, or None when data is too thin."""
+    exp = account.get("expectancy")
+    avg_loss = account.get("avg_loss")
+    trades = account.get("trades") or 0
+    if not (exp and avg_loss and cur_size and trades and trading_days) or cur_size <= 0:
+        return None
+    tpd = max(0.5, trades / trading_days)                 # trades per day
+    exp_pc = exp / cur_size                                # potential: expected $/trade per contract
+    loss_pc = abs(avg_loss) / cur_size                    # heat: $ given back per losing trade / contract
+    if exp_pc <= 0 or loss_pc <= 0:
+        return None
+    # risk-optimal size: ~3 average losing trades should equal the daily loss limit. Whole
+    # contracts of the traded instrument (a micro like MGC is already the smallest unit → min 1).
+    raw = min(dll / (loss_pc * 3) if dll else params.max_position, params.max_position)
+    size = max(1, round(raw))
+    day_net = round(size * exp_pc * tpd)                   # expected net/day at this size
+    heat_day = round(size * loss_pc * max(1.0, tpd * (1 - (account.get("win_pct") or 50) / 100)))
+    return {"size": size, "day_net": day_net, "tpd": round(tpd, 1),
+            "exp_pc": round(exp_pc, 1), "loss_pc": round(loss_pc, 1), "heat_day": heat_day}
+
+
 def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
                    params: PlaybookParams | None = None) -> dict:
     """Per-account ROUTE to payout: read the account's own history against its firm rules and
@@ -255,12 +280,12 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # --- decide the phase + the decisive route from where the account actually stands ---
     if track == "eval":
         phase = "eval-sprint"
-        route = (f"Eval sprint — 5 {inst} · {rec['strategy']}. ${to_full:.0f} of ${target:.0f} to pass; "
+        route = (f"Eval sprint · {rec['strategy']}. ${to_full:.0f} of ${target:.0f} to pass; "
                  "variance lot, ~1 pass/day, reset on breach.")
     elif maxed:
         phase, contracts, quality = "maxed", 1, "maxed"
-        route = (f"Maxed — ${total_paid:,.0f} of ${total_cap:,.0f} ladder paid. Minimize risk: bank & hold "
-                 f"1 {inst}, shift size to newer accounts.")
+        route = (f"Maxed — ${total_paid:,.0f} of ${total_cap:,.0f} ladder paid. Minimize risk: bank & hold, "
+                 "shift size to newer accounts.")
     elif eligible and above_safety >= cap:
         phase, quality = "payout-ready", "payout"
         extra = round(above_safety - cap)
@@ -275,16 +300,15 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         phase = mname
         rate = daily_rate or (day_trail or cons_cap * 0.3)
         days_needed = max(need_days, math.ceil(to_full / rate) if rate > 0 else 0, 1)
-        trail_txt = f"milk ~${day_trail:,.0f}/day" if day_trail else "small days"
         route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap: "
-                 f"{trail_txt} over ~{days_needed} days (never a day > ${cons_cap:,.0f} = 30% consistency). "
+                 f"milk small days over ~{days_needed} days (never a day > ${cons_cap:,.0f} = 30% consistency). "
                  f"Banking now leaves ${leaving:,.0f} on the table.")
         if leaving > 0:
             flags.append(f"cap ${cap:,.0f} — don't bank early and leave ${leaving:,.0f}")
     else:                                                    # below the safety net → can't withdraw yet
         phase = "compound" if track == "static" else "survival"
         to_safety = round(safety - profit)
-        route = (f"{'Build' if track == 'static' else 'Survival'} — {contracts} {inst}. +${to_safety:,.0f} to the "
+        route = (f"{'Build' if track == 'static' else 'Survival'} — +${to_safety:,.0f} to the "
                  f"safety net (${safety:,.0f}); withdrawals unlock there, then build to the full ${cap:,.0f} cap. "
                  f"Keep days small (well under the ${cons_cap:,.0f} consistency ceiling).")
         if track != "static" and buffer is not None and buffer < 700:
@@ -311,16 +335,18 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         dll = round(p.dll_pct * buffer)
         if account.get("daily_buffer"):
             dll = min(dll, round(account["daily_buffer"]))
-    # day-cap (daily profit target/trail to set): pace so every day stays at a CONSERVATIVE soft
-    # target (~cons_margin × the 30% ceiling) — margin under the wall, spread over more days.
+    # SIZE + day-cap from what the account ACTUALLY does per trade (heat = avg loss, potential =
+    # expectancy). es is None when trade data is too thin → fall back to the doctrine size.
+    cur_size = parse_size(account.get("fase_config"), account.get("pos_band"))
+    es = edge_size(account, cur_size, trading_days, dll, p)
+    set_size = es["size"] if es else float(contracts)
     soft_cap = round(cons_cap * p.cons_margin)
 
-    # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days, and that
-    # ceiling RISES as you earn. Heal an outlier by growing total wins to best_day/30% — and the
-    # FASTER route is BIGGER days (up to, never over, the outlier), not micro-caps.
+    # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days; the ceiling
+    # RISES as you earn. Heal an outlier by growing total wins to best_day / 30%.
     total_win = round(best_day / (consistency_pct / 100)) if (consistency_pct and best_day > 0) else max(profit, 0)
     broken = bool(consistency_pct is not None and limit and consistency_pct > 100 * limit)
-    heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0        # total wins to clear 30%
+    heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0
     heal_deficit = round(max(0, heal_total - total_win)) if broken else 0
 
     days_plan = days_to_heal = None
@@ -328,31 +354,27 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     if track == "eval" or maxed:
         set_day_cap = None
     elif broken:
-        # optimize UP toward the outlier, but bound by risk/reward: don't chase a day bigger than
-        # reward_risk × the DLL the buffer safely allows — else the size to hit it risks a breach.
-        ideal = round(best_day)
-        safe = round(p.reward_risk * dll) if dll else ideal
-        set_day_cap = min(ideal, safe) if safe else ideal
-        risk_capped = set_day_cap < ideal
+        # heal at the expected net/day the risk-optimal size delivers — never above the outlier.
+        pace = es["day_net"] if es else (round(p.reward_risk * dll) if dll else round(best_day))
+        set_day_cap = min(round(best_day), max(1, pace))
+        risk_capped = set_day_cap < round(best_day)
         days_to_heal = math.ceil(heal_deficit / set_day_cap) if set_day_cap > 0 else None
     elif profit < safety:
-        set_day_cap = round(min(day_trail or 150, soft_cap))
+        set_day_cap = min(es["day_net"], soft_cap) if es else round(min(day_trail or 150, soft_cap))
     elif to_full > 0:
         days_plan = max(need_days, math.ceil(to_full / soft_cap) if soft_cap > 0 else 1, 1)
-        set_day_cap = min(round(to_full / days_plan), soft_cap)
+        pace = es["day_net"] if es else round(to_full / days_plan)
+        set_day_cap = min(max(1, pace), soft_cap)
     else:
         set_day_cap = round(min(day_trail or soft_cap, soft_cap))
 
     if broken:
         if quality == "ok":
             quality = "consistency"
-        if risk_capped:
-            flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — buffer thin, so heal at the SAFE "
-                         f"day-cap ${set_day_cap:,.0f} (DLL ${dll:,.0f}, {p.reward_risk:.0f}:1): total wins reach "
-                         f"${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d)")
-        else:
-            flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — heal FAST: run days up to ${set_day_cap:,.0f} "
-                         f"(never over) so total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d)")
+        edge_txt = f" ({set_size:g} {inst}, exp ${es['exp_pc']:.0f}/ct × {es['tpd']:g} trades/day)" if es else ""
+        tag = "SAFE day-cap" if risk_capped else "day-cap"
+        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% — {tag} ${set_day_cap:,.0f}{edge_txt}; "
+                     f"total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d to clear 30%)")
     elif consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
         if quality == "ok":
             quality = "consistency"
@@ -364,9 +386,11 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "cur_instrument": cur_instrument, "rec_instrument": inst, "rec_base": rec.get("base"),
         "rec_strategy": rec["strategy"], "rec_why": rec["why"],
         "switch": not rec["keep"] and cur_instrument is not None, "off_edge": bool(rec.get("off_edge")),
-        "contracts": contracts, "contracts_label": contract_label(contracts, inst),
-        # exact settables for the alert: status-based day-cap (profit) + DLL (loss) + the 30% ceiling
+        "contracts": set_size, "contracts_label": contract_label(set_size, inst),
+        # exact settables for the alert: edge-derived size + day-cap (profit) + DLL (loss)
         "day_cap": set_day_cap, "dll": dll, "days_plan": days_plan,
+        "exp_pc": es["exp_pc"] if es else None, "loss_pc": es["loss_pc"] if es else None,
+        "tpd": es["tpd"] if es else None, "day_net": es["day_net"] if es else None,
         "day_trail": day_trail, "cons_cap": cons_cap, "consistency_limit": limit,
         "broken": broken, "heal_total": heal_total or None, "heal_deficit": heal_deficit or None,
         "days_to_heal": days_to_heal, "risk_capped": risk_capped,

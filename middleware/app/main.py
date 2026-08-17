@@ -106,7 +106,9 @@ async def webhook(request: Request, secret: str = "", strategy: str = "") -> dic
     except ValidationError as exc:
         payload = _as_notice_payload(raw)
         if payload is not None:
-            _check_secret(secret)
+            # A structured notice carries the secret in its body (same as an order); the raw
+            # Pine Discord body has no room for one, so that falls back to ?secret= on the URL.
+            _check_secret(payload.get("secret") or secret)
             return await _render_notice(payload, strategy)
         journal.write("error", {"reason": "validation", "errors": exc.errors(), "raw": raw.decode("utf-8", "replace")[:1000]})
         raise HTTPException(422, "invalid signal")
@@ -158,10 +160,11 @@ def _as_notice_payload(raw: bytes) -> dict | None:
         return {"text": text[:2000]}          # plain-text alert body
     if not isinstance(payload, dict):
         return None
+    if payload.get("kind"):
+        return payload   # structured notice from Pine — carries its own secret, like an order
     if {"secret", "action", "dollar_sl", "qty"} & set(payload):
         return None   # a BROKEN order, not a notice — must surface as an error, not a card
-    if payload.get("embeds") or payload.get("kind") or payload.get("title") or payload.get("text") \
-            or payload.get("content"):
+    if payload.get("embeds") or payload.get("title") or payload.get("text") or payload.get("content"):
         return payload
     return None
 
@@ -185,13 +188,13 @@ async def _render_notice(payload: dict, strategy: str = "") -> dict:
 
 
 @app.post("/notice")
-async def notice(request: Request, secret: str, strategy: str = "") -> dict:
+async def notice(request: Request, secret: str = "", strategy: str = "") -> dict:
     """Explicit door for non-order events, for when they come in on their own alert
     rather than sharing the order alert. Same rendering as the `/webhook` fallback."""
-    _check_secret(secret)
     payload = _as_notice_payload(await request.body())
     if payload is None:
         raise HTTPException(422, "nothing to render")
+    _check_secret(payload.get("secret") or secret)
     return await _render_notice(payload, strategy)
 
 

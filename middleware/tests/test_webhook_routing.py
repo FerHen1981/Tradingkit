@@ -132,3 +132,53 @@ def test_journal_filters_answer_did_it_arrive(client):
 
     assert [e["kind"] for e in client.get("/journal?secret=t&kind=error").json()["events"]] == ["error"]
     assert len(client.get("/journal?secret=t&strategy=ES").json()["events"]) >= 2
+
+
+# ---------------------------------------------------------------- Pine v6.9.2 notices
+# The literal bodies f_mwNotice builds — string-concatenated in Pine exactly like these.
+def mw(kind, text, data="{}", secret="t", strategy="ES", symbol="ES1!"):
+    return ('{"secret":"' + secret + '","strategy":' + json.dumps(strategy) +
+            ',"kind":"' + kind + '","symbol":"' + symbol + '","text":"' + text +
+            '","data":' + data + '}').encode()
+
+
+def test_pine_signal_blocked_notice(client):
+    reasons = "Day halt: Daily Loss, MAE guard (risk > cap)"
+    body = mw("signal_blocked",
+              "Long setup meets all strategy rules but was blocked by: " + reasons,
+              '{"direction":"Long","reasons":"' + reasons + '"}')
+    out = client.post("/webhook", content=body).json()
+    assert out == {"accepted": True, "kind": "signal_blocked", "strategy": "ES", "posted": 2}
+    f = {x["name"]: x["value"] for x in client.posted[0]["embed"]["fields"]}
+    assert f["Direction"] == "Long"
+    assert f["Blocked by (2)"] == "• Day halt: Daily Loss\n• MAE guard (risk > cap)"
+
+
+def test_pine_auto_flat_notice(client):
+    body = mw("auto_flat", "Forced flat @ ~5312.25", '{"price":"5312.25"}')
+    out = client.post("/webhook", content=body).json()
+    assert out["kind"] == "auto_flat"
+    f = {x["name"]: x["value"] for x in client.posted[0]["embed"]["fields"]}
+    assert f["Flat at"] == "~5312.25"
+
+
+def test_pine_config_notice(client):
+    cfg = "ver=6.9.2;acct=Apex-50k-1;qty=2;entry=limit50;stop=Swing;R=2.0;DLL=1000;phase=funded"
+    out = client.post("/webhook", content=mw("config", cfg)).json()
+    assert out["kind"] == "config"
+    f = {x["name"]: x["value"] for x in client.posted[0]["embed"]["fields"]}
+    assert f["Version"] == "6.9.2" and f["Phase"] == "funded" and f["Daily loss limit"] == "1000"
+
+
+def test_structured_notice_authenticates_on_its_body_secret(client):
+    """Pine puts the secret in the body, like an order — no ?secret= on the URL needed."""
+    assert client.post("/webhook", content=mw("auto_flat", "x")).status_code == 200
+    assert client.post("/webhook", content=mw("auto_flat", "x", secret="wrong")).status_code == 401
+    assert len(client.posted) == 2   # only the authenticated one, on both channels
+
+
+def test_a_broken_order_is_still_not_a_notice(client):
+    """The kind-first check must not let a failed Signal through as a card."""
+    assert client.post("/webhook?secret=t", json={"secret": "t", "strategy": "ES",
+                                                  "action": "buy"}).status_code == 422
+    assert client.posted == []

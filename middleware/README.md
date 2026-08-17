@@ -136,10 +136,15 @@ reached the renderer.
 fields: blocked-by reasons as a list, the limit price, and the whole `cfgStr` broken out
 into a **Config** card. Nothing changes in Pine and no alert has to be re-created.
 
-**One setup detail:** a notice body carries no `secret` (only the order body does), so the
-alert URL has to supply it — add `?secret=<MIDDLEWARE_SECRET>` to the webhook URL you
-already use. Orders keep authenticating on the secret inside their body, so the same URL
-serves both:
+**Pine v6.9.2 and up** sends signal-blocked, auto-flat and config as a *structured* notice
+via `f_mwNotice` — secret in the body, exactly like an order — so nothing extra is needed
+on the alert URL. Those three used to leave the script only through `f_sendDiscord`, which
+is gated on `useDiscord` (and config sat behind `useJournal` in an `else if` chain), so
+routing Discord through the middleware silenced them.
+
+**Older scripts / the raw Pine Discord body** carry no `secret`, so there the alert URL has
+to supply it — add `?secret=<MIDDLEWARE_SECRET>` to the webhook URL you already use.
+Orders keep authenticating on the secret inside their body, so one URL serves everything:
 ```
 https://<your-app>/webhook?secret=<MIDDLEWARE_SECRET>          # optionally &strategy=ES
 ```

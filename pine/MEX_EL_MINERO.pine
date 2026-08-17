@@ -40,7 +40,7 @@
 // v6.8.11: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-var string currentVersion = "v6.9.1"
+var string currentVersion = "v6.9.2"
 strategy("MΞX ΞL MINΞRO · GC Eval EOD · " + currentVersion, shorttitle="ΞL MINΞRO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1095,6 +1095,15 @@ f_sendDiscord(_title, _desc) =>
         alert("{" + _user + _ava + _tag + "\"embeds\":[{\"title\":\"" + _title + "\"," + _url + "\"color\":3447003,\"description\":\"" + _desc + "\",\"footer\":{\"text\":\"" + syminfo.ticker + "\"}}]}", alert.freq_once_per_bar)
 
 
+// v6.9.2: non-order events on the middleware route. f_sendDiscord is gated on
+// `useDiscord` (and config sits behind an else-if chain), so routing Discord through the
+// middleware used to silence these. This emits the structured notice the middleware
+// renders as a card — same secret/strategy contract as f_sendExec.
+f_mwNotice(_kind, _text, _data) =>
+    if useMiddleware
+        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"kind\":\"" + _kind + "\",\"symbol\":\"" + syminfo.ticker + "\",\"text\":\"" + _text + "\",\"data\":" + _data + "}", alert.freq_once_per_bar)
+
+
 f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
     _started ?
          "\\n📍 " + _acct +
@@ -1110,6 +1119,7 @@ if barstate.isfirst
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
     cfgSent := true
+    f_mwNotice("config", cfgStr, "{}")
     if useJournal and not execInstance
         string _cfgRow = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "," + accountID + "," + jrnlAcct + "," + syminfo.ticker + ",CONFIG,-,-,-,-,-,-,-,-," + cfgStr
         alert(jrnlJsonWrap ? "{\"type\":\"config\",\"csv\":\"" + _cfgRow + "\"}" : _cfgRow, alert.freq_once_per_bar)
@@ -1220,6 +1230,7 @@ if sigBlockedEvt
     lastBlockedInfo := (rawLong ? "LONG " : "SHORT ") + str.format_time(time, "dd-MM HH:mm", "America/New_York") + " · " + str.substring(persistBlk + sigBlk, 0, math.max(0, str.length(persistBlk + sigBlk) - 2))
 if sigBlockedEvt and notifyBlocked
     string _reasons = str.substring(persistBlk + sigBlk, 0, math.max(0, str.length(persistBlk + sigBlk) - 2))
+    f_mwNotice("signal_blocked", (rawLong ? "Long" : "Short") + " setup meets all strategy rules but was blocked by: " + _reasons, "{\"direction\":\"" + (rawLong ? "Long" : "Short") + "\",\"reasons\":\"" + _reasons + "\"}")
     if plainAlertsOK
         alert(f_msgHead() + " | ⛔ SIGNAL BLOCKED | " + (rawLong ? "LONG" : "SHORT") + " " + syminfo.ticker + " | strategy rules met, blocked by: " + _reasons, alert.freq_once_per_bar)
     if useDiscord
@@ -1443,6 +1454,7 @@ if barstate.isconfirmed and inFlatWindow and not flattenedToday
         strategy.close_all(comment="Auto Flat")
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
         exitReasonNext := "AUTO-FLAT"
+    f_mwNotice("auto_flat", "Forced flat @ ~" + str.tostring(close, format.mintick), "{\"price\":\"" + str.tostring(close, format.mintick) + "\"}")
     f_sendDiscord("🕔 " + syminfo.ticker + " AUTO FLAT", "Forced flat @ ~" + str.tostring(close, format.mintick))
 
 var bool haltCloseSent = false

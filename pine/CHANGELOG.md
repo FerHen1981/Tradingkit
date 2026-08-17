@@ -1,5 +1,19 @@
 # MEX Pine scripts — optimisation changelog
 
+## v6.9.2 — non-order events on the middleware route
+
+All 8 scripts gain `f_mwNotice(kind, text, data)`: **signal blocked**, **auto flat** and
+the startup **config** now also leave the script as a structured middleware notice
+(`{secret, strategy, kind, symbol, text, data}`), which the middleware renders as a card
+next to the trade cards.
+
+Why: these three only ever left through `f_sendDiscord`, which is gated on `useDiscord` —
+and config additionally sat in an `else if` chain behind `useJournal`, so it never reached
+the Discord branch when journalling was on. Routing Discord through the middleware
+therefore silenced them. `f_mwNotice` is independent of both toggles and uses the same
+secret/strategy contract as `f_sendExec`; the existing `f_sendDiscord` calls are untouched,
+so a direct-to-Discord setup keeps working unchanged.
+
 ## v6.9.1 — "→ Middleware" route (fan-out seam)
 
 All 8 scripts gain a `→ Middleware (fan-out)` alert route in group *9 · EXECUTION*.

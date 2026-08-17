@@ -602,6 +602,18 @@ tr:hover td{background:rgba(14,42,94,.5)}
 .fam-trend{color:var(--azure);border-color:rgba(90,162,255,.5);background:rgba(90,162,255,.08)}
 .fam-momentum{color:#9FD3A8;border-color:rgba(159,211,168,.5);background:rgba(159,211,168,.08)}
 .fam-mixed{color:var(--sub);border-color:var(--line);background:rgba(242,235,218,.05)}
+/* tabs */
+.tabs{display:flex;gap:2px;margin:20px 0 4px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tabs button{background:none;border:none;border-bottom:2px solid transparent;border-radius:0;color:var(--sub);padding:11px 18px;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
+.tabs button:hover{color:var(--sand)}
+.tabs button.on{color:var(--gold);border-bottom-color:var(--gold)}
+.tab{display:none}.tab.on{display:block}
+.sub{font-family:var(--display);font-weight:600;font-size:16px;color:var(--sand);letter-spacing:-.01em}
+.fld{font-family:var(--mono);font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips label{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--sub);background:var(--deep);border:1px solid var(--line);border-radius:2px;padding:5px 9px;cursor:pointer;white-space:nowrap}
+.chips label:hover{border-color:var(--gold);color:var(--sand)}
+.linkbtn{background:none;border:none;color:var(--azure);padding:6px 4px;font-family:var(--mono);font-size:10px;text-transform:none;letter-spacing:0;cursor:pointer}
 """
 
 # Brand mark (the gold "M") for the header, and the favicon (served at /favicon.svg).
@@ -930,8 +942,8 @@ async function loadBuilder(){
     BOPTS=await (await fetch('/api/builder/options')).json();
     $('#bSetup').innerHTML=Object.keys(BOPTS.setups).map(s=>`<option>${s}</option>`).join('')+`<option value=confluence>confluence</option>`;
     $('#bPreset').innerHTML=(BOPTS.base_presets||[]).map(p=>`<option>${p}</option>`).join('');
-    $('#bFilters').innerHTML=(BOPTS.filters||[]).map(f=>`<label class=muted style="font-size:12px;margin-right:12px"><input type=checkbox class=bFilt value="${f}"> ${f}</label>`).join('');
-    $('#bRegimes').innerHTML=(BOPTS.regimes||[]).map(r=>`<label class=muted style="font-size:12px;margin-right:12px;display:inline-block;white-space:nowrap"><input type=checkbox class=bReg value="${r}"> ${r}</label>`).join('');
+    $('#bFilters').innerHTML=(BOPTS.filters||[]).map(f=>`<label><input type=checkbox class=bFilt value="${f}"> ${f}</label>`).join('');
+    $('#bRegimes').innerHTML=(BOPTS.regimes||[]).map(r=>`<label><input type=checkbox class=bReg value="${r}"> ${r}</label>`).join('');
     $('#bSetup').addEventListener('change',fillBuilderEntry);
     $('#bEntry').addEventListener('change',previewBuilder);
     $('#bPreset').addEventListener('change',previewBuilder);
@@ -940,6 +952,16 @@ async function loadBuilder(){
     fillBuilderEntry();
   }catch(e){}
 }
+// ---- tabs ----
+function showTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+name));
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+const gAdvT=$('#gAdvToggle');
+if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.style.display!=='none';a.style.display=open?'none':'flex';gAdvT.textContent=open?'+ advanced':'− advanced';});
+showTab('run');
+
 loadWizard();loadGenDatasets();loadBuilder();
 load();
 loadCandidates();
@@ -962,105 +984,139 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
 
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Upload dataset</b><span class=muted style="font-size:12px">raw export → normalized → cataloged · needed before any run</span></div>
-  <div class=up style="margin-top:10px">
-    <input id=dsname placeholder="dataset name (e.g. NQ_1m)" style="width:180px">
-    <input id=dssym placeholder="symbol (NQ)" style="width:110px">
-    <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
-    <button class=go id=upbtn>Upload</button>
-  </div><div id=msg class=muted style="margin-top:8px"></div>
+<div class=tabs id=tabs>
+  <button data-tab=run class=on>Build &amp; Run</button>
+  <button data-tab=factory>Factory</button>
+  <button data-tab=runs>Runs</button>
+  <button data-tab=data>Data</button>
 </div>
 
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Run a backtest</b><span class=muted style="font-size:12px">spec × dataset × timeframes → the 3 lenses</span></div>
-  <div class=up style="margin-top:10px">
-    <select id=wSpec style="min-width:190px"></select>
-    <select id=wDs style="min-width:150px"></select>
-    <input id=wTf placeholder="timeframes (5m,15m,1h)" value="5m,15m" style="width:190px">
-    <select id=wLens>
-      <option value=research>Classic (edge)</option>
-      <option value=funnel>Eval (funnel)</option>
-      <option value=funded>Funded (payouts)</option>
-    </select>
-    <button class=go id=wRun>Run</button>
+<!-- ===================== TAB: BUILD & RUN ===================== -->
+<div class=tab id=tab-run>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Run a backtest</b><span class=muted>a strategy × dataset × timeframes → the 3 lenses</span></div>
+    <div class=up style="margin-top:12px">
+      <select id=wSpec style="min-width:200px"></select>
+      <select id=wDs style="min-width:150px"></select>
+      <input id=wTf placeholder="timeframes (5m,15m)" value="5m,15m" style="width:170px">
+      <select id=wLens>
+        <option value=research>Classic (edge)</option>
+        <option value=funnel>Eval (funnel)</option>
+        <option value=funded>Funded (payouts)</option>
+      </select>
+      <button class=go id=wRun>Run</button>
+    </div>
+    <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
-  <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
-</div>
 
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Strategy library</b><span class=muted id=libCount>—</span></div>
-  <div class=muted style="font-size:12px;margin-top:3px">Every governed strategy — its entries, confluence gates, filters and exit. Click a card to load it into the runner above.</div>
-  <div class=lib id=libRows></div>
-</div>
-
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Build a strategy · 4th variant</b><span class=muted style="font-size:12px">compose by role → gate to regimes → live score → save &amp; run</span></div>
-  <div class=muted style="font-size:12px;margin-top:3px">One thesis per strategy: pick a setup-class + its primary entry, add at most one coherent filter per category, and (optionally) gate it to the regimes where the edge lives. The redundancy guard and the framework stack are enforced live.</div>
-  <div class=up style="margin-top:10px">
-    <select id=bSetup title="setup-class"></select>
-    <select id=bEntry title="primary entry" style="min-width:150px"></select>
-    <select id=bPreset title="engine mechanics (TP/sizing/phase)"></select>
-    <input id=bName placeholder="name (custom_...)" style="width:150px">
-    <button class=go id=bSave>Save &amp; load</button>
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Build a strategy</b><span class=muted>4th variant — compose by role</span></div>
+    <div class=muted style="margin-top:4px;text-transform:none;letter-spacing:0;font-size:12px">One thesis per strategy: a setup-class + its primary entry, at most one filter per category, optionally gated to the regimes where the edge lives. The redundancy guard and the score update live.</div>
+    <div class=up style="margin-top:12px">
+      <select id=bSetup title="setup-class"></select>
+      <select id=bEntry title="primary entry" style="min-width:150px"></select>
+      <select id=bPreset title="engine mechanics (TP/sizing/phase)"></select>
+    </div>
+    <div style="margin-top:14px"><div class=fld>Filters — coherent, one per category</div><div class=chips id=bFilters></div></div>
+    <div style="margin-top:14px"><div class=fld>Regime gate — trade only in these · empty = all regimes</div><div class=chips id=bRegimes></div></div>
+    <div id=bPreview style="margin-top:14px"></div>
+    <div class=up style="margin-top:14px">
+      <input id=bName placeholder="name (custom_…)" style="width:180px">
+      <button class=go id=bSave>Save &amp; load into runner</button>
+      <span id=bMsg class=muted></span>
+    </div>
   </div>
-  <div style="margin-top:10px;display:flex;gap:22px;flex-wrap:wrap">
-    <div><div class=muted style="font-size:12px">Filters (coherent — one per category)</div><div id=bFilters style="margin-top:5px"></div></div>
-    <div><div class=muted style="font-size:12px">Regime gate — trade only in these (empty = all regimes)</div><div id=bRegimes style="margin-top:5px"></div></div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
+    <div class=muted style="margin-top:3px;text-transform:none;letter-spacing:0;font-size:12px">Every governed strategy — grade, entries, gates, exit and its framework stack. Click a card to load it into the runner.</div>
+    <div class=lib id=libRows></div>
   </div>
-  <div id=bPreview style="margin-top:12px"></div>
-  <div id=bMsg class=muted style="margin-top:6px"></div>
+
 </div>
 
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Generate strategies</b><span class=muted style="font-size:12px">sample → in-sample screen → OOS verify</span></div>
-  <div class=up style="margin-top:10px">
-    <select id=gDs style="min-width:150px"></select>
-    <input id=gN value=100 style="width:64px" title="candidates to sample">
-    <input id=gTf value=5m style="width:60px" title="timeframe">
-    <input id=gSince placeholder="coarse since (2022-01-01)" style="width:170px">
-    <input id=gHold value=365 style="width:60px" title="OOS holdout days">
-    <input id=gSeed value=0 style="width:52px" title="seed">
-    <select id=gPreset title="engine mechanics"><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select>
-    <label class=muted style="font-size:12px"><input type=checkbox id=gPao> PA-only</label>
-    <button class=go id=gRun>Generate</button>
-    <button id=gVerify>Verify OOS</button>
+<!-- ===================== TAB: FACTORY ===================== -->
+<div class=tab id=tab-factory>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Generate strategies</b><span class=muted>sample → in-sample screen → OOS verify</span></div>
+    <div class=up style="margin-top:12px">
+      <select id=gDs style="min-width:150px"></select>
+      <input id=gN value=100 style="width:64px" title="candidates to sample">
+      <button class=go id=gRun>Generate</button>
+      <button id=gVerify>Verify OOS</button>
+      <button class=linkbtn id=gAdvToggle>+ advanced</button>
+    </div>
+    <div class=up id=gAdv style="margin-top:10px;display:none">
+      <input id=gTf value=5m style="width:60px" title="timeframe">
+      <input id=gSince placeholder="coarse since (2022-01-01)" style="width:170px">
+      <input id=gHold value=365 style="width:64px" title="OOS holdout days">
+      <input id=gSeed value=0 style="width:52px" title="seed">
+      <select id=gPreset title="engine mechanics"><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select>
+      <label class=muted style="text-transform:none"><input type=checkbox id=gPao> PA-only</label>
+    </div>
+    <pre id=gLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
-  <pre id=gLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
-</div>
 
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Candidates</b><span class=muted id=lbSrc>no candidates yet</span></div>
-  <table style="margin-top:8px"><thead><tr>
-    <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
-    <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
-  </tr></thead><tbody id=lbrows></tbody></table>
-</div>
-
-<div class=panel id=journey>
-  <div style="display:flex;justify-content:space-between;align-items:center">
-    <b>Journey</b>
-    <select id=jStrat style="min-width:200px"></select>
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Candidates</b><span class=muted id=lbSrc>no candidates yet</span></div>
+    <div style="overflow-x:auto"><table style="margin-top:8px"><thead><tr>
+      <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
+      <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
+    </tr></thead><tbody id=lbrows></tbody></table></div>
   </div>
-  <div id=verdict style="margin:10px 0"></div>
-  <div id=lenses></div>
+
 </div>
 
-<div class=bar>
-  <select id=fAsset><option value="">All assets</option></select>
-  <select id=fStrat><option value="">All strategies</option></select>
-  <select id=fTf><option value="">All timeframes</option></select>
-  <select id=fLens><option value="">All lenses</option></select>
-  <span class=muted id=count></span>
-</div>
-<table id=tbl><thead><tr>
-  <th data-k=run_id>Run</th><th data-k=asset>Asset</th><th data-k=strategy>Strategy</th>
-  <th data-k=timeframe>TF</th><th data-k=lens>Lens</th><th data-k=trades>Trades</th>
-  <th data-k=win>Win%</th><th data-k=pf>PF</th><th data-k=exp>Exp</th>
-  <th data-k=net>Net</th><th data-k=dd>MaxDD</th><th data-k=created>When</th>
-</tr></thead><tbody id=rows></tbody></table>
+<!-- ===================== TAB: RUNS ===================== -->
+<div class=tab id=tab-runs>
 
-<div class=panel id=detail style="display:none"></div>
+  <div class=bar>
+    <select id=fAsset><option value="">All assets</option></select>
+    <select id=fStrat><option value="">All strategies</option></select>
+    <select id=fTf><option value="">All timeframes</option></select>
+    <select id=fLens><option value="">All lenses</option></select>
+    <span class=muted id=count></span>
+  </div>
+  <div style="overflow-x:auto"><table id=tbl><thead><tr>
+    <th data-k=run_id>Run</th><th data-k=asset>Asset</th><th data-k=strategy>Strategy</th>
+    <th data-k=timeframe>TF</th><th data-k=lens>Lens</th><th data-k=trades>Trades</th>
+    <th data-k=win>Win%</th><th data-k=pf>PF</th><th data-k=exp>Exp</th>
+    <th data-k=net>Net</th><th data-k=dd>MaxDD</th><th data-k=created>When</th>
+  </tr></thead><tbody id=rows></tbody></table></div>
+
+  <div class=panel id=detail style="display:none"></div>
+
+  <div class=panel id=journey style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Journey</b>
+      <select id=jStrat style="min-width:200px"></select>
+    </div>
+    <div id=verdict style="margin:10px 0"></div>
+    <div id=lenses></div>
+  </div>
+
+</div>
+
+<!-- ===================== TAB: DATA ===================== -->
+<div class=tab id=tab-data>
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Upload dataset</b><span class=muted>raw export → normalized → cataloged</span></div>
+    <div class=up style="margin-top:12px">
+      <input id=dsname placeholder="dataset name (e.g. NQ_1m)" style="width:180px">
+      <input id=dssym placeholder="symbol (NQ)" style="width:110px">
+      <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
+      <button class=go id=upbtn>Upload</button>
+    </div><div id=msg class=muted style="margin-top:8px"></div>
+  </div>
+</div>
 
 <div class=foot id=foot></div></div>
 <script>{_JS}</script></body></html>"""

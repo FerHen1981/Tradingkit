@@ -111,6 +111,10 @@ function fromDiscord(p) {
       s.flatPx = pick(/@\s*~?\s*([\d.]+)/);
       s.closedLine = s.flatPx ? `position closed @ ~${s.flatPx}` : null;
       break;
+    case 'LIMIT_EXPIRED':
+      // "Pending long cancelled @ 4442.1"
+      s.limitPx = pick(/@\s*([\d.]+)/);
+      break;
     case 'DERISK':
       s.level     = title.match(/\bL(\d)\b/)?.[1] ?? (T.includes('PA') ? 'PA' : '');
       s.qtyChange = pick(/capped to\s+(\d+)\s*contract/) ? `${pick(/capped to\s+(\d+)\s*contract/)} ct` : null;
@@ -177,7 +181,9 @@ const T = {
            row("Today's plan", d.outlook, d.outlookTone || 'blue'),
            row('To target / to fail', f`$${d.toTarget} · $${d.toFail}`, 'gold')] }),
   LIMIT_EXPIRED: () => ({ icon: '✕', tone: 'dim', title: `${d.asset} · limit expired — no fill`,
-    rows: [row('Waited', d.expiry ? `${d.expiry} bars` : null), row('Price', 'moved away from retrace level'),
+    rows: [row('Direction', d.dir ? d.dir.toLowerCase() : null),
+           row('Limit price', d.limitPx), row('Waited', d.expiry ? `${d.expiry} bars` : null),
+           row('Outcome', 'price never came back — order cancelled'),
            row('Plan', 'intact — next signal re-arms', 'blue')] }),
   ACCOUNT_STARTED: () => ({ icon: '▶', tone: 'gold', title: `Account armed · ${d.strategy}`, badge: d.phase,
     rows: [row('Account', d.account), row('Phase', d.phaseLong), row('Target', d.targetLine),

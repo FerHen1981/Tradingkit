@@ -300,7 +300,7 @@ public static class CardTier
     {
         ("CONFIG",         'B'),   // 1x per sessie-start — administratief maar leesbaar als kaart
         ("ACCOUNT STARTED",'C'),
-        ("LIMIT EXPIRED",  'C'),
+        ("LIMIT EXPIRED",  'B'),   // per niet-gevulde limit — de reden dat een setup niets werd
         ("SIGNAL BLOCKED", 'C'),   // poort in BlockedGate promoveert de terminale melding naar B
         ("AUTO FLAT",      'B'),   // 1x per dag — het einde van de sessie is een moment
         ("ACCOUNT HALT",   'A'),

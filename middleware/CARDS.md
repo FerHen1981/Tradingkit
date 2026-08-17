@@ -31,11 +31,13 @@ Payload komt als JSON op stdin; output via $MEX_SIGNAL_OUT.
 |---|---|---|
 | CONFIG | "CONFIG" | dim — instellingen bij sessie-start, `k=v`-rijen |
 | AUTO FLAT | "AUTO FLAT" | dim — sessievenster dicht, prijs waarop is platgemaakt |
+| LIMIT EXPIRED | "LIMIT EXPIRED" | dim — richting + limietprijs die nooit geraakt werd |
 
 ## Tier C — tekst-embed (geen kaart; ops/ruis — blijft fallback-pad)
-ACCOUNT STARTED · LIMIT EXPIRED
-Ratio: hoogfrequent of puur administratief; een kaart voegt niets toe en
-Discord-rate-limit (30/min/webhook) wil je bewaren voor Tier A/B.
+ACCOUNT STARTED
+Ratio: puur administratief; de CONFIG-kaart die er direct achteraan komt zegt
+hetzelfde met meer inhoud. Discord-rate-limit (30/min/webhook) blijft de reden om
+niet álles te promoveren.
 
 ## SIGNAL BLOCKED — gepoort, niet getierd
 Staat een account op halt, dan wordt élk geldig setup-signaal geblokkeerd: hetzelfde

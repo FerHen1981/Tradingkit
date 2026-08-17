@@ -21,7 +21,7 @@ netwerk/5xx (niet op 4xx).
 
 Discord-berichten van Tier A/B (zie `../CARDS.md`) worden door
 `renderer/render-signal.js` tot een PNG gerenderd en als bijlage gepost;
-Tier C (ACCOUNT STARTED, LIMIT EXPIRED) blijft tekst. De renderer leest de
+Tier C (alleen nog ACCOUNT STARTED) blijft tekst. De renderer leest de
 Pine-payload zelf: titel → event, description → velden.
 
 `SIGNAL BLOCKED` valt onder geen van beide: dat beslist `BlockedGate`. Alleen een

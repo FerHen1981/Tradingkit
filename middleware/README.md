@@ -9,7 +9,7 @@ of hand-maintaining one alert per account per strategy.
 ```
                         ┌─ EXEC ── PMT ──────▶ Tradovate account 1..N   (per acct: firm/asset/vol)
 TradingView alert ─▶ middleware ┼─ EXEC ── PineConnector ▶ MT5/FTMO
-   (strategy "GC")   (control    ├─ NOTIFY ─ Discord (live, every trade)
+   (strategy "GC")   (control    ├─ NOTIFY ─ Discord/Telegram (live embed per trade; funded|eval split)
                       plane)     ├─ JOURNAL ─ sqlite (internal) + LifeOS Trade Journal
                                  └─ TRACK ── Tradovate P&L ▶ LifeOS Fleet Performance
 ```
@@ -89,6 +89,47 @@ sudo apt install -y caddy && sudo cp deploy/Caddyfile /etc/caddy/Caddyfile && su
 ```
 TradingView webhook URL becomes `https://middleware.yourdomain.com/webhook`.
 
+## Notify channel (Discord / Telegram)
+Every fan-out posts a **rich embed** per trade and pings a separate alert channel when a
+dispatch fails. Both are best-effort — a dead webhook can never break the order path.
+
+**Per-trade message** — colour by direction (green long / red short), grey on exits, and
+**red when nothing got through** (a missed trade, not a degraded one). Fields: price, qty,
+SL/TP, the accounts it routed to, plus per-account reasons for anything blocked or failed.
+A `DRY RUN` footer while `DRY_RUN=true`. On exits it adds the fleet **day P&L** tally
+(realized since midnight ET + open), which needs the Tradovate poller running — without it
+the field is simply omitted. If the alert sends a `chart_url`, it becomes the embed image.
+
+**Separate streams.** Give each account a `kind: funded|eval` (and optionally `firm:`) and
+set the channels in `accounts.yaml`:
+```yaml
+notify:
+  default: "${NOTIFY_WEBHOOK}"
+  funded: "${NOTIFY_FUNDED_WEBHOOK}"
+  eval: "${NOTIFY_EVAL_WEBHOOK}"
+```
+One signal hitting funded *and* eval accounts then posts **one message per channel**, each
+listing only its own accounts. Resolution order, most specific first:
+`account.notify` → `strategies.<name>.notify` → `kind` → `firm` → `default`. Existing
+configs keep routing exactly as they did (the per-strategy override still wins over groups).
+
+**Failure alerts carry a severity**, so a burst is readable at a glance:
+| Severity | When | Meaning |
+|---|---|---|
+| 🚨 critical | 4xx, missing URL, unknown broker, or *every* account failed | won't fix itself — go look |
+| ⚠️ warning | 5xx or network error after retries were exhausted | transient, partially routed |
+
+Bursts are rate-limited per strategy+severity (`ALERT_MAX_PER_WINDOW` per
+`ALERT_WINDOW_SECONDS`); suppressed alerts are counted and reported as `+N suppressed` on
+the next one that goes out, so nothing is dropped silently.
+
+**Telegram** works on the same env vars — point `NOTIFY_WEBHOOK`/`ALERT_WEBHOOK` at
+`https://api.telegram.org/bot<TOKEN>/sendMessage` and set `TELEGRAM_CHAT_ID` (or append
+`?chat_id=...`). The message is sent as Telegram Markdown; the embed is Discord-only.
+
+Test without posting anything real: keep `DRY_RUN=true` and point the webhooks at a
+throwaway Discord channel, or run `python -m pytest tests` from `middleware/`.
+
 ## Wiring the Pine side (Phase 2)
 The scripts already emit a rich PMT JSON. To use the middleware instead, add a
 "→ Middleware" alert that posts the lean `Signal` shape above (strategy/action/
@@ -104,4 +145,6 @@ lives here, not in the alert. (Kept out of scope for Phase 0.)
 - [x] Phase 5 — risk overlay: per-account daily entry cap + halt flag (`/halt`, `/risk`);
       exits never blocked. Full DLL/consistency ($) enforcement is dormant until a PnL
       feed is wired to `RiskState.record_fill` (Phase 5b).
+- [x] Notify channel — rich Discord embeds, funded/eval channel split, severity + rate-limited
+      failure alerts, Telegram parity, day-P&L on exits (chart image when the alert sends a URL)
 - [ ] Go-live — VPS deploy, tokens, TradingView alerts, flip one account to DRY_RUN=false

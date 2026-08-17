@@ -22,10 +22,10 @@ from .models import Signal
 import asyncio
 
 from .metaapi import MetaApiClient
-from .notify import alert_failure, notify_trade
+from .notify import AlertLimiter, alert_failures, notify_trade_routes
 from .notion_sync import NotionJournal, NotionRecon, NotionSync
 from .reconciler import Reconciler
-from .risk import RiskState
+from .risk import RiskState, trading_day_start_ts
 from .router import dispatch
 from .tradovate import TradovateClient, poll_loop
 
@@ -40,10 +40,18 @@ journal = Journal(settings.journal_db)
 deduper = Deduper(settings.idem_ttl)
 risk = RiskState(settings.max_entries_default)
 trade_journal = NotionJournal(settings.notion_token, settings.notion_journal_db)
+alert_limiter = AlertLimiter(settings.alert_max_per_window, settings.alert_window_seconds)
 RECON: dict = {"engine": None}   # populated at startup
 
 # Runtime kill-switch (in addition to DRY_RUN). True = orders may dispatch.
 STATE = {"armed": True}
+
+
+def _notify_defaults() -> dict:
+    """Env-level fallbacks for the notify channel groups (accounts.yaml `notify:` wins)."""
+    return {"default": settings.notify_webhook,
+            "funded": settings.notify_funded_webhook,
+            "eval": settings.notify_eval_webhook}
 
 
 @app.on_event("startup")
@@ -109,12 +117,15 @@ async def webhook(request: Request) -> dict:
         journal.write("dispatch", r, strategy=sig.strategy, account=r.get("account", ""))
 
     # Notify + journal channels (best-effort; never block the trade path)
-    await notify_trade(accounts.notify_for(sig.strategy) or settings.notify_webhook, sig, results)
+    is_exit = sig.event == "EXIT" or sig.action == "close"
+    pnl = journal.day_pnl(trading_day_start_ts()) if (is_exit and settings.notify_pnl_on_exit) else None
+    routes = accounts.notify_routes(sig.strategy, results, _notify_defaults())
+    await notify_trade_routes(routes, sig, pnl=pnl, chat_id=settings.telegram_chat_id)
     await trade_journal.append_trade(sig, results)
     if failures:
-        summary = ", ".join(f"{r.get('account', '?')}: {r.get('reason') or r.get('http_status')}" for r in failures)
-        await alert_failure(settings.alert_webhook,
-                            f"⚠️ MEX middleware: {len(failures)} dispatch failure(s) on {sig.strategy} {sig.action} — {summary}")
+        alerted = await alert_failures(settings.alert_webhook, sig, results,
+                                       limiter=alert_limiter, chat_id=settings.telegram_chat_id)
+        journal.write("alert", alerted, strategy=sig.strategy)
     return {"accepted": True, "dispatched": True, "dry_run": settings.dry_run,
             "failures": len(failures), "results": results}
 

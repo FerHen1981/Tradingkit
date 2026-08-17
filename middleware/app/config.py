@@ -40,6 +40,13 @@ class Settings:
     retry_backoff: float = float(os.environ.get("RETRY_BACKOFF_SECONDS", "0.5"))
     alert_webhook: str = os.environ.get("ALERT_WEBHOOK", "")              # Discord/Telegram webhook for FAILURES
     notify_webhook: str = os.environ.get("NOTIFY_WEBHOOK", "")            # Discord webhook for EVERY trade (live notify)
+    # Notify channel — routing, rate-limiting, Telegram
+    notify_funded_webhook: str = os.environ.get("NOTIFY_FUNDED_WEBHOOK", "")  # funded accounts stream
+    notify_eval_webhook: str = os.environ.get("NOTIFY_EVAL_WEBHOOK", "")      # eval accounts stream
+    telegram_chat_id: str = os.environ.get("TELEGRAM_CHAT_ID", "")        # only for api.telegram.org webhooks
+    alert_max_per_window: int = int(os.environ.get("ALERT_MAX_PER_WINDOW", "5"))
+    alert_window_seconds: float = float(os.environ.get("ALERT_WINDOW_SECONDS", "60"))
+    notify_pnl_on_exit: bool = os.environ.get("NOTIFY_PNL_ON_EXIT", "true").lower() != "false"
     # Phase 5 — risk overlay
     max_entries_default: int = int(os.environ.get("MAX_ENTRIES_PER_DAY", "0"))  # 0 = unlimited (per-account yaml overrides)
     # Live fleet tracking — Tradovate read API
@@ -76,10 +83,46 @@ class Settings:
 class AccountMap:
     strategies: dict = field(default_factory=dict)  # {strategy: {"accounts": [ids]}}
     accounts: dict = field(default_factory=dict)     # {id: {broker, token, account_id, ...}}
+    notify_channels: dict = field(default_factory=dict)  # {"funded"|"eval"|firm|"default": webhook}
 
     def notify_for(self, strategy: str) -> str:
         """Optional per-strategy Discord webhook override (falls back to the global one)."""
         return (self.strategies.get(strategy) or {}).get("notify", "")
+
+    def notify_channel(self, account_id: str, strategy: str, defaults: dict) -> tuple[str, str]:
+        """Which notify channel does this account's leg of the trade belong in?
+
+        Most specific wins: the account's own webhook, then the per-strategy override
+        (pre-existing behaviour, so old configs keep routing exactly as before), then the
+        group channel for its `kind` (funded/eval) or `firm`, then the global default.
+        Returns (webhook, label) — the label is what the embed footer shows.
+        """
+        acct = self.accounts.get(account_id) or {}
+        if acct.get("notify"):
+            return acct["notify"], account_id
+        if self.notify_for(strategy):
+            return self.notify_for(strategy), strategy
+        for key in (acct.get("kind"), acct.get("firm")):
+            if not key:
+                continue
+            hook = self.notify_channels.get(key) or defaults.get(key, "")
+            if hook:
+                return hook, str(key)
+        return self.notify_channels.get("default") or defaults.get("default", ""), "default"
+
+    def notify_routes(self, strategy: str, results: list[dict],
+                      defaults: dict) -> list[tuple[str, str, list[dict]]]:
+        """Split one fan-out's results into (webhook, label, subset) routes, so a signal
+        that hit Funded and Eval accounts posts one message per stream instead of one
+        mixed message. Legs whose channel is unconfigured are dropped (nothing to post to).
+        """
+        grouped: dict[str, tuple[str, list[dict]]] = {}
+        for r in results:
+            hook, label = self.notify_channel(r.get("account", ""), strategy, defaults)
+            if not hook:
+                continue
+            grouped.setdefault(hook, (label, []))[1].append(r)
+        return [(hook, label, subset) for hook, (label, subset) in grouped.items()]
 
     def accounts_for(self, strategy: str) -> list[dict]:
         ids = (self.strategies.get(strategy) or {}).get("accounts", [])
@@ -93,7 +136,8 @@ class AccountMap:
 
 def _parse_accounts(text: str) -> AccountMap:
     raw = _expand(yaml.safe_load(text) or {})
-    return AccountMap(strategies=raw.get("strategies", {}), accounts=raw.get("accounts", {}))
+    return AccountMap(strategies=raw.get("strategies", {}), accounts=raw.get("accounts", {}),
+                      notify_channels=raw.get("notify", {}) or {})
 
 
 def load_accounts(path: str) -> AccountMap:

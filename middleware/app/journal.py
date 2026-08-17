@@ -12,7 +12,7 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
     ts        REAL NOT NULL,
-    kind      TEXT NOT NULL,          -- 'signal' | 'dispatch' | 'error'
+    kind      TEXT NOT NULL,          -- 'signal' | 'dispatch' | 'dedupe' | 'alert' | 'error'
     strategy  TEXT,
     account   TEXT,
     detail    TEXT                    -- JSON blob
@@ -98,6 +98,31 @@ class Journal:
         self._db.executemany(
             f"INSERT INTO recon ({','.join(cols)}) VALUES ({','.join(':' + c for c in cols)})", payload)
         self._db.commit()
+
+    def day_pnl(self, since_ts: float) -> dict:
+        """Fleet P&L moved since `since_ts`, from the Tradovate perf snapshots.
+
+        `perf.realized` is cumulative per account, so the day's realized = latest minus
+        the first snapshot at/after the day boundary. That means the tally only covers
+        what the poller actually saw: with no poller running (TRADOVATE_* unset) this
+        returns realized=None and the notify message simply omits the P&L field.
+        """
+        cur = self._db.execute(
+            "SELECT account, ts, realized, open_pnl FROM perf WHERE ts>=? ORDER BY ts", (since_ts,))
+        first: dict[str, float] = {}
+        last: dict[str, tuple[float, float]] = {}
+        for account, _ts, realized, open_pnl in cur.fetchall():
+            if account not in first:
+                first[account] = realized or 0.0
+            last[account] = (realized or 0.0, open_pnl or 0.0)
+        if not last:
+            return {"realized": None, "open_pnl": None, "accounts": 0, "since_ts": since_ts}
+        return {
+            "realized": round(sum(r - first[a] for a, (r, _o) in last.items()), 2),
+            "open_pnl": round(sum(o for _r, o in last.values()), 2),
+            "accounts": len(last),
+            "since_ts": since_ts,
+        }
 
     def latest_perf(self) -> list[dict]:
         """Most recent snapshot per account."""

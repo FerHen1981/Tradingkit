@@ -28,6 +28,12 @@ def trading_day() -> str:
     return dt.datetime.now(_ET).strftime("%Y-%m-%d")
 
 
+def trading_day_start_ts() -> float:
+    """Epoch seconds of midnight ET today — the boundary the daily counters roll on."""
+    now = dt.datetime.now(_ET)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+
 class RiskState:
     def __init__(self, default_cap: int = 0):
         self.default_cap = default_cap

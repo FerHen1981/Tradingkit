@@ -4,12 +4,22 @@
 # Model: a strategy alert (e.g. "GC") fans out to every account listed under it.
 # This is what lets you keep ONE TradingView alert per strategy.
 
+# Notify channels — where the live trade messages land. An account is routed by its
+# `kind` (funded/eval) or its `firm`, so one alert that hits both a funded and an eval
+# account posts TWO messages, one per stream, instead of one mixed message.
+# Resolution order per account: account.notify > strategies.<s>.notify > kind > firm > default.
+notify:
+  default: "${NOTIFY_WEBHOOK}"      # anything without a more specific channel
+  funded: "${NOTIFY_FUNDED_WEBHOOK}"  # accounts with kind: funded
+  eval: "${NOTIFY_EVAL_WEBHOOK}"      # accounts with kind: eval
+  # apex: "https://discord.com/api/webhooks/..."   # or split per firm instead of per kind
+
 strategies:
   GC:                       # El Tesoro (funded) / El Minero (eval) send strategy:"GC"
     accounts: [apex_f1, apex_f2, apex_f3, apex_f4]
   ES:                       # El Rey (funded) / El Leon (eval) send strategy:"ES"
     accounts: [apex_f5, apex_f6, apex_f7, ftmo_mt5_1]   # cross-firm: Apex + FTMO from one alert
-    notify: ""              # optional per-strategy Discord webhook (else global NOTIFY_WEBHOOK)
+    notify: ""              # optional per-strategy webhook; overrides the funded/eval split
 
 accounts:
   apex_f1:
@@ -19,12 +29,17 @@ accounts:
     quantity_multiplier: 1          # scales base qty for this account (size control)
     symbol_override: null           # e.g. "MGC1!" if this account trades micros
     max_entries_per_day: 0          # risk overlay: 0 = unlimited; set e.g. 4 to cap new entries/day
+    kind: funded                    # funded | eval — picks the notify channel
+    firm: apex                      # apex | mffu | ftmo — notify fallback + your own bookkeeping
   apex_f2:
     broker: pmt_tradovate
     token: "${PMT_TOKEN}"
     account_id: "APEX-1234568"
     quantity_multiplier: 1
     symbol_override: null
+    kind: eval
+    firm: apex
+    # notify: "https://discord.com/api/webhooks/..."   # optional: this account only
   # ...apex_f3 ... apex_f7 (same shape)
 
   ftmo_mt5_1:                       # FTMO / MetaTrader via PineConnector
@@ -32,3 +47,5 @@ accounts:
     license: "${PC_LICENSE}"        # your PineConnector license id (the EA listens on it)
     risk: 1.0                       # lot size / risk units per your EA config
     symbol_override: "US500"        # broker symbol for ES on MT5 (differs per broker)
+    kind: funded
+    firm: ftmo

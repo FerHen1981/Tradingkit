@@ -591,6 +591,24 @@ function scoreHtml(desc){
     +`<span class=muted>${sc.note||''}</span>`
     +`<div style="margin-top:5px">${comps}</div></div>`;
 }
+function edgeHtml(edge){
+  if(!edge||!Object.keys(edge).length)return '';
+  const fmtpf=v=>(v===null||v===undefined)?'—':(v>1e6?'∞':Number(v).toFixed(2));
+  const rows=Object.entries(edge).map(([reg,m])=>{
+    const pos=(m.net||0)>=0;
+    return `<div class=lensrow style="margin-top:2px;display:flex;gap:10px;align-items:center">`
+      +`<span class=tag style="min-width:160px;display:inline-block">${reg}</span>`
+      +`<span>PF <b style="color:${(m.profit_factor>=1)?'var(--gold)':'var(--rose)'}">${fmtpf(m.profit_factor)}</b></span>`
+      +`<span class=muted>exp <b style="color:${pos?'var(--gold)':'var(--rose)'}">${m.expectancy}</b></span>`
+      +`<span class=muted>win ${m.win_rate_pct}%</span>`
+      +`<span class=muted>n ${m.trades}</span>`
+      +`<span class=muted>net ${m.net}</span></div>`;
+  }).join('');
+  return `<div style="margin-top:10px"><b>Realized edge by regime</b> `
+    +`<span class=muted>where the edge actually lived — regime tagged at each trade's entry (no look-ahead). `
+    +`This is the measured truth; the setup score's regime-fit is only a prior.</span>`
+    +`<div style="margin-top:5px">${rows}</div></div>`;
+}
 function regimeHtml(reg){
   if(!reg||reg.error||!reg.distribution)return '';
   const d=reg.distribution,keys=Object.keys(d);
@@ -642,6 +660,7 @@ async function showDetail(id){
     ${stackHtml(r.desc,r.regime)}
     ${scoreHtml(r.desc)}
     ${regimeHtml(r.regime)}
+    ${edgeHtml(r.edge_by_regime)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
   d.scrollIntoView({behavior:'smooth',block:'nearest'});

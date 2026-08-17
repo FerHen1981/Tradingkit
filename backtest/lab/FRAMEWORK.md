@@ -270,6 +270,29 @@ Grades: **90–100 A+ · 80–89 A · 70–79 B (reduced) · 60–69 observation
 trade**. Grade drijft *sizing-suggestie en sortering*, niet de accept/reject in
 de backtest.
 
+### 8a. Bias-discipline — regime als *gemeten uitkomst*, niet als aanname
+
+Kernregel: **je gaat zonder bias de test in.** De backtest observeert de
+omstandigheden causaal (bar-voor-bar, geen look-ahead/repaint — bewezen: 0/1000
+labels veranderen als je toekomstige bars toevoegt) en het vonnis komt uitsluitend
+van de gerealiseerde OOS-edge. Concreet ingebouwd:
+
+- **Generatie is default ongebiast** — `compose_batch` zonder `regimes=` sampelt
+  uniform over de setup-classes. De §6-matrix-weging is **opt-in** (`--regimes`),
+  puur voor *targeted search* als je al een hypothese hébt.
+- **De rechter is realized PF** — de mill selecteert/sorteert op OOS-PF, nooit op
+  de prior-score. De score kleurt en rangschikt alleen.
+- **Regime wordt een uitkomst, geen input** — `metrics.edge_by_regime` tagt élke
+  trade met het objectieve regime op z'n **entry-bar** (causaal) en breekt de
+  realized PF/expectancy/n per regime uit. Zo vertelt de data *waar* de edge zit,
+  in plaats van dat wij het opleggen.
+
+Daarmee is de §6-matrix een **hypothese die je toetst**, niet een bias: de
+run-detail zet "assumed" (regime-fit in de score) naast "realized"
+(edge-by-regime), zodat je de matrix kunt bevestigen óf weerleggen. Vindt de data
+dat mean-reversion óók in een Strong Bull Trend werkt, dan zie je dat — de matrix
+onderdrukt het niet.
+
 **Hard veto's** (blokkeren ongeacht score — dit zijn wél poorten):
 major macro-release imminent · onacceptabel grote/technisch onmogelijke stop ·
 extreme volatility-event · onvoldoende participation/liquidity · slechte
@@ -346,6 +369,12 @@ Action:      Long allowed
    run-detail (score-blok) en de candidates-leaderboard; de **OOS-funnel blijft de
    rechter**. Ongevulde optionele lagen krijgen een neutrale baseline (niet nul) —
    trouw aan de "meer ≠ beter"-ethos. 100 tests groen.
+5b. ~~**Per-regime edge-attributie**~~ — ✅ **DONE** (bias-discipline, §8a):
+   `metrics.edge_by_regime` tagt élke trade met het causale regime op z'n
+   entry-bar (geen look-ahead, bewezen) en breekt realized PF/expectancy/n per
+   regime uit — opgeslagen per run (`meta.edge_by_regime`), getoond in de
+   run-detail als "Realized edge by regime". Zo is regime een **gemeten uitkomst**
+   die de §6-matrix toetst, geen aanname die hem oplegt. 103 tests groen.
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
    → opslaan als spec → runnen. De role-getagde registry ís het skelet.
    ← **volgende stap**

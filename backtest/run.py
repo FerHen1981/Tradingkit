@@ -178,7 +178,7 @@ def main():
             "account": {"initial_capital": cfg.initial_capital, "phase": cfg.phase},
         }
 
-    def _record(base_name, cfg, tf, lens, kpi_obj, trades_csv):
+    def _record(base_name, cfg, tf, lens, kpi_obj, trades_csv, res=None):
         """Register one run in the Lab data room with a recognizable run_id."""
         if not args.lab:
             return
@@ -204,6 +204,9 @@ def main():
         try:                                   # objective L1 regime tag for this run
             reg = ind_mod.classify_regime(df_for(tf), cfg)
             meta["regime"] = ind_mod.regime_summary(reg["regime"])
+            if res is not None:                # unbiased discovery: realized edge per regime
+                from .metrics import edge_by_regime
+                meta["edge_by_regime"] = edge_by_regime(res, reg["regime"])
         except Exception as e:
             meta["regime"] = {"error": str(e)}
         try:                                   # sharpen the setup score with the run's regime
@@ -270,7 +273,7 @@ def main():
         out[name] = kpis(res)
         lens = "classic" if args.research else "native"
         _record(base_name, cfg, tf, lens, out[name],
-                trades_frame(res).to_csv(index=False) if args.lab else None)
+                trades_frame(res).to_csv(index=False) if args.lab else None, res=res)
         if args.trades_out and single:
             trades_frame(res).to_csv(args.trades_out, index=False)
             print(f"  trades written to {args.trades_out}")

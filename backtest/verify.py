@@ -18,10 +18,6 @@ import json
 import time
 from datetime import datetime, timezone
 
-from . import data as data_mod
-from .generate import run_classic
-from .spec import load_registry
-
 
 def _verdict(kis: dict, koos: dict, min_trades: int, min_pf: float, retain: float) -> dict:
     is_pf = kis.get("profit_factor") or 0
@@ -49,6 +45,10 @@ def main():
     ap.add_argument("--base-asset", default="NQ")
     ap.add_argument("--lab", action="store_true")
     args = ap.parse_args()
+
+    from . import data as data_mod
+    from .generate import run_classic
+    from .spec import load_registry
 
     registry = load_registry()
     cands = json.loads(open(args.candidates).read())

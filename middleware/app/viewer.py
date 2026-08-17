@@ -533,7 +533,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <div class=tablewrap><table id=assetTable><thead><tr>
       <th data-k=sym data-t=s>Asset</th><th data-k=engine data-t=s>Engine</th>
       <th data-k=n data-t=n>Trades</th><th data-k=win data-t=n>Win %</th>
-      <th>PF</th><th>Exp.</th><th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
+      <th data-k=pf data-t=n>PF</th><th data-k=expectancy data-t=n>Exp.</th><th data-k=ticks data-t=n>Net ticks</th><th data-k=net data-t=n>Net P&amp;L</th>
       <th>Fees</th><th>MFE / MAE</th><th data-k=edge data-t=s>Edge</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
@@ -581,8 +581,9 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <h2 class=sec>Payout Playbook</h2>
     <p class=sec-note>Each account's route to the MAXIMUM payout this step, read from its OWN history against the firm rules. Withdrawable = min(profit − safety-net, rung cap); to pull the full cap you need profit = safety + cap, spread over 8 days (reset each cycle) so consistency (best day ≤ 30% of total) allows it. Funded runs only the edge on the real instrument (MGC · El Tesoro / MES · El Rey; NQ eval-only): <b style="color:var(--warn)">survival</b> 1 ct below the safety-net → <b style="color:var(--ok)">milking</b> 2 ct building to the full cap → <b style="color:var(--gold)">payout</b> pull the full cap, carry the excess, reset to the next rung; legacy <b style="color:var(--aqua)">compound</b>. The Route says what still has to happen and warns when banking early leaves money on the table. <span class=calc>Apex 50k: safety $2,600 · ladder $1.5k→$3k · total $13k — verify. Rung = "Payouts (0-6)".</span></p>
     <div class=tablewrap><table id=pbTable style="min-width:1040px"><thead><tr>
-      <th>Account</th><th>Run</th><th>Phase</th><th style="text-align:left">Where it stands</th>
-      <th style="text-align:left">Set: size · DLL · day-cap</th><th style="text-align:left">Route to payout</th>
+      <th data-k=id data-t=s>Account</th><th>Run</th><th data-k=playbook.phase data-t=s>Phase</th>
+      <th style="text-align:left" data-k=playbook.profit data-t=n>Where it stands</th>
+      <th style="text-align:left" data-k=playbook.day_cap data-t=n>Set: size · DLL · day-cap</th><th style="text-align:left">Route to payout</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=live hidden>
@@ -722,6 +723,19 @@ function sortAccts(k,t){
 function markSort(tbl,k,dir){document.querySelectorAll(tbl+" thead th").forEach(th=>{
   const base=th.textContent.replace(/[▲▼]\s*$/,"").trim();
   th.innerHTML=th.dataset.k===k?base+' <span class=ar>'+(dir>0?"▲":"▼")+'</span>':base})}
+// generic: click a header (with data-k / data-t=s|n) to sort any table by that column.
+function wireSort(tblId,getRows,render){
+  const S=(wireSort._s=wireSort._s||{}), st=S[tblId]||(S[tblId]={k:null,dir:1});
+  const get=(o,k)=>k.split('.').reduce((v,p)=>v==null?v:v[p],o);
+  document.querySelectorAll('#'+tblId+' thead th[data-k]').forEach(th=>{th.style.cursor='pointer';
+    th.onclick=()=>{const k=th.dataset.k,t=th.dataset.t||'n';
+      st.dir=st.k===k?-st.dir:(t==='s'?1:-1); st.k=k;
+      const rows=[...getRows()].sort((a,b)=>{let x=get(a,k),y=get(b,k);
+        if(x==null)x=(t==='s'?'￿':-Infinity); if(y==null)y=(t==='s'?'￿':-Infinity);
+        return t==='s'?st.dir*String(x).localeCompare(String(y)):st.dir*((+x)-(+y));});
+      render(rows); markSort('#'+tblId,k,st.dir);};
+  });
+}
 function renderFirms(){$("#firmCards").innerHTML=CMD.firms.map(f=>`<div class=card>
   <div class=ey>${f.name}</div><div class="big ${f.net>0?'pos':(f.net<0?'neg':'')}">${f.net?signed(f.net):"—"}</div>
   <div class=row><span>Accounts</span><b>${f.accts}</b></div>
@@ -737,7 +751,7 @@ function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class
   <div class=row><span>Net ticks</span><b>${signed(a.ticks)}</b></div>
   <div class=row><span>Fees</span><b style="color:var(--warn)">${a.comm?"−"+money0(a.comm):"—"}${a.fees_pct!=null?' ('+a.fees_pct+'%)':''}</b></div>
   <div class=row><span>MFE / MAE (heat)</span><b>${a.mfe!=null?a.mfe+"t / "+(a.mae!=null?a.mae+"t":"—"):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
-function renderAssets(){$("#assetTable tbody").innerHTML=CMD.assets.map(a=>`<tr>
+function renderAssets(rows){$("#assetTable tbody").innerHTML=(rows||CMD.assets).map(a=>`<tr>
   <td class=acct><span class="tag ${a.cls}">${a.sym}</span> <span class="tag ${a.micro?'micro':'full'}">${a.micro?'micro':'full'}</span></td><td style="color:var(--muted)">${a.engine}</td>
   <td class=num>${a.n}</td><td class=num>${a.win.toFixed(1)}%</td>
   <td class="num ${pfCls(a.pf)}">${a.pf==null?'—':a.pf}</td><td class="num ${cls(a.expectancy)}">${money0(a.expectancy)}</td>
@@ -768,9 +782,9 @@ function renderPayout(){
 const PB_PHASE={survival:["var(--warn)","survival"],milking:["var(--ok)","milking"],
   "payout-ready":["var(--gold)","payout ✓"],compound:["var(--aqua)","compound"],
   "eval-sprint":["var(--muted)","eval sprint"],maxed:["var(--gold)","maxed"]};
-function renderPlaybook(){
-  const rows=CMD.accounts.filter(a=>a.playbook);
-  $("#pbTable tbody").innerHTML=rows.map(a=>{const p=a.playbook;
+function renderPlaybook(rows){
+  const list=rows||CMD.accounts.filter(a=>a.playbook);
+  $("#pbTable tbody").innerHTML=list.map(a=>{const p=a.playbook;
     const sw=p.switch?` <span style="color:${p.off_edge?'var(--crit)':'var(--warn)'}" title="currently ${p.cur_instrument||'—'}">↹ ${p.cur_instrument||'—'}</span>`:'';
     const run=`<b>${p.rec_instrument||p.rec_base||'—'}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}`;
     const setCol=`<b style="color:var(--gold)">${p.contracts_label||'—'}</b>`
@@ -946,6 +960,9 @@ async function loadCommand(){
   CMD=s;renderKpis(s.fleet);renderFleet();
   $("#topStats").innerHTML=fleetTiles(s.fleet);renderStatus();renderAttention();
   sortAccts("hrank","n");renderFirms();renderStrats();renderAssets();renderPayout();renderPlaybook();renderHeatmap();renderPortfolio();renderCalendar();renderEquity();
+  wireSort('acctTable',()=>CMD.accounts,renderAccts);
+  wireSort('assetTable',()=>CMD.assets,renderAssets);
+  wireSort('pbTable',()=>CMD.accounts.filter(a=>a.playbook),renderPlaybook);
   if(s.window_label)$("#tflabel").textContent=s.window_label;
   $("#asof").textContent=s.as_of?"· updated "+new Date(s.as_of).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}):"";
   const f=s.fleet;$("#footnet").innerHTML=f.trades?`${f.trades} trades · fleet realized <b>${signed(f.realized_net)}</b>`:"";

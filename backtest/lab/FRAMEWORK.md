@@ -136,10 +136,12 @@ registry-technisch bij `classic` maar vervult de regime-rol. Zie hieronder.
 | `keltner` | L7 Volatility | L4 Location | decorative |
 | `atr` | L7 Volatility | L10 Risk (stop-sizing) | decorative |
 
-**Observatie:** de wired-groepen dekken L1–L10 al af behalve een expliciete
-regime-classifier (`adx_dmi`/`supertrend`/`atr`-percentiel zijn nog decorative).
-Dat is de eerste wiring-schuld om aan te pakken (§10 stap 3), want L1 is de
-poortwachter van het hele framework.
+**Observatie:** de wired-groepen dekken L1–L10 af. De expliciete L1
+regime-classifier is inmiddels gewired (§11 stap 3): een objectieve
+trend×volatility-tag uit MA-stack + ADX + ATR-percentiel
+(`indicators.classify_regime`). `adx_dmi`/`atr` doen nu echt werk als
+regime-inputs; `supertrend`/`ichimoku` blijven decorative tot ze als
+alternatieve regime-bron gewired worden.
 
 ---
 
@@ -326,11 +328,14 @@ Action:      Long allowed
    een `stack` (L0..L10, rol + actieve groepen per laag) + `stack_summary`.
    Zichtbaar in de Strategy Library én — via `run.json` — in de run-detail
    (dekt open taak 2 uit de handoff). 85 tests groen.
-3. **L1 regime-classifier wiren** — `adx_dmi` + `atr`-percentiel + MA-stack →
-   objectieve regime-tag. Poortwachter van het framework; nu nog decorative.
-   ← **volgende stap**
+3. ~~**L1 regime-classifier wiren**~~ — ✅ **DONE**: `indicators.classify_regime`
+   = MA-stack (20/50/200 EMA) + slow-slope + ADX + ATR-percentiel → een
+   objectieve trend×volatility-tag per bar (7 regimes + Indecision warm-up,
+   framework §6). Elke run slaat nu z'n regime-distributie op (`meta.regime`),
+   zichtbaar in de run-detail + als annotatie op de L1-stackregel. 89 tests groen.
 4. **Role-composing sampler** — `sample_spec` → `compose_strategy` (§4), met
    redundancy-guard en setup×regime-gate (§6). Vervangt de random-subset.
+   Consumeert `classify_regime` als de regime-gate. ← **volgende stap**
 5. **Scoring als prior** — 0–100 grade berekenen en **naast** de funnel-KPI's
    tonen; funnel blijft de rechter (§8).
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview

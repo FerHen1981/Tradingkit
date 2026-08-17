@@ -203,6 +203,121 @@ def _atr(high, low, close, length):
     return atr
 
 
+def _adx(high, low, close, length):
+    """Wilder's ADX (trend strength, 0-100). +DM/-DM and TR are Wilder-smoothed
+    (RMA, alpha=1/length), +DI/-DI derived, DX = 100*|+DI--DI|/(+DI+-DI), and ADX
+    is the RMA of DX. Matches Pine ta.adx conventions."""
+    n = len(close)
+    length = max(int(length), 1)
+    tr = np.empty(n); pdm = np.zeros(n); mdm = np.zeros(n)
+    tr[0] = high[0] - low[0]
+    for i in range(1, n):
+        up = high[i] - high[i - 1]
+        dn = low[i - 1] - low[i]
+        pdm[i] = up if (up > dn and up > 0) else 0.0
+        mdm[i] = dn if (dn > up and dn > 0) else 0.0
+        pc = close[i - 1]
+        tr[i] = max(high[i] - low[i], abs(high[i] - pc), abs(low[i] - pc))
+    alpha = 1.0 / length
+    atr = np.empty(n); rpdm = np.empty(n); rmdm = np.empty(n)
+    atr[0], rpdm[0], rmdm[0] = tr[0], pdm[0], mdm[0]
+    for i in range(1, n):
+        atr[i] = atr[i - 1] + alpha * (tr[i] - atr[i - 1])
+        rpdm[i] = rpdm[i - 1] + alpha * (pdm[i] - rpdm[i - 1])
+        rmdm[i] = rmdm[i - 1] + alpha * (mdm[i] - rmdm[i - 1])
+    eps = 1e-12
+    pdi = 100.0 * rpdm / (atr + eps)
+    mdi = 100.0 * rmdm / (atr + eps)
+    dx = 100.0 * np.abs(pdi - mdi) / (pdi + mdi + eps)
+    adx = np.empty(n); adx[0] = dx[0]
+    for i in range(1, n):
+        adx[i] = adx[i - 1] + alpha * (dx[i] - adx[i - 1])
+    return adx
+
+
+# Objective regime labels (framework §6). A defensible v1 subset of the full
+# taxonomy — Transition/Exhaustion/Expansion are left for a later refinement.
+REGIME_LABELS = ("Strong Bull Trend", "Controlled Bull Trend", "Strong Bear Trend",
+                 "Controlled Bear Trend", "Compression", "Low-Volatility Range",
+                 "High-Volatility Range", "Indecision")
+
+
+def classify_regime(df: pd.DataFrame, cfg) -> dict:
+    """L1 regime classifier — the framework's gatekeeper (lab/FRAMEWORK.md §1/§6).
+
+    Combines a 3-EMA trend stack (fast/mid/slow) + slow-MA slope, ADX for trend
+    strength, and an ATR volatility percentile into one per-bar regime label.
+    Pure/objective: same bars + knobs -> same tags. Returns numeric axes
+    (`trend` -2..2, `vol_bucket` 0..2, `vol_dir` -1..1, `adx`) plus the string
+    `regime` array, so both humans and the sampler (step 4) can consume it."""
+    high = df["High"].to_numpy(dtype=float)
+    low = df["Low"].to_numpy(dtype=float)
+    close = df["Close"].to_numpy(dtype=float)
+    n = len(df)
+    fast = _ema(close, cfg.regime_ma_fast)
+    mid = _ema(close, cfg.regime_ma_mid)
+    slow = _ema(close, cfg.regime_ma_slow)
+    adx = _adx(high, low, close, cfg.adx_len)
+    atr = _atr(high, low, close, cfg.atr_len)
+
+    # ATR volatility percentile via rolling quantiles (vectorized, C-backed).
+    w = max(int(cfg.regime_atr_lookback), 5)
+    atr_s = pd.Series(atr)
+    q33 = atr_s.rolling(w, min_periods=w).quantile(0.33).to_numpy()
+    q66 = atr_s.rolling(w, min_periods=w).quantile(0.66).to_numpy()
+    vol_bucket = np.where(np.isnan(q33), 1,
+                          np.where(atr < q33, 0, np.where(atr > q66, 2, 1))).astype(int)
+
+    sl = max(int(cfg.regime_slope_lookback), 1)
+    vol_dir = np.zeros(n, dtype=int)
+    slow_slope = np.zeros(n)
+    if n > sl:
+        vol_dir[sl:] = np.sign(atr[sl:] - atr[:-sl]).astype(int)
+        slow_slope[sl:] = slow[sl:] - slow[:-sl]
+
+    strong = adx >= cfg.adx_trend
+    up_stack = (close > fast) & (fast > mid) & (mid > slow) & (slow_slope > 0)
+    dn_stack = (close < fast) & (fast < mid) & (mid < slow) & (slow_slope < 0)
+    up_soft = (close > slow) & (mid > slow)
+    dn_soft = (close < slow) & (mid < slow)
+
+    trend = np.zeros(n, dtype=int)
+    trend = np.where(up_soft & strong, 1, trend)
+    trend = np.where(dn_soft & strong, -1, trend)
+    trend = np.where(up_stack & ~strong, 1, trend)     # stack but weak ADX = controlled
+    trend = np.where(dn_stack & ~strong, -1, trend)
+    trend = np.where(up_stack & strong, 2, trend)      # full stack + strong ADX
+    trend = np.where(dn_stack & strong, -2, trend)
+
+    warm = np.arange(n) < max(int(cfg.regime_ma_slow), w)
+    regime = np.select(
+        [warm, trend == 2, trend == -2, trend == 1, trend == -1,
+         (trend == 0) & (vol_bucket == 0), (trend == 0) & (vol_bucket == 2)],
+        ["Indecision", "Strong Bull Trend", "Strong Bear Trend",
+         "Controlled Bull Trend", "Controlled Bear Trend",
+         "Compression", "High-Volatility Range"],
+        default="Low-Volatility Range").astype(object)
+    return {"adx": adx, "trend": trend, "vol_bucket": vol_bucket,
+            "vol_dir": vol_dir, "regime": regime}
+
+
+def regime_summary(labels) -> dict:
+    """Collapse a per-bar regime label array into a run summary: the dominant
+    tradeable regime + a distribution (warm-up 'Indecision' excluded from the
+    shares but reported as its own fraction)."""
+    import collections
+    labels = list(np.asarray(labels, dtype=object))
+    total = len(labels) or 1
+    counts = collections.Counter(labels)
+    indef = counts.pop("Indecision", 0)
+    denom = sum(counts.values()) or 1
+    dist = {k: round(v / denom, 4)
+            for k, v in sorted(counts.items(), key=lambda kv: -kv[1])}
+    dominant = max(counts, key=counts.get) if counts else "Indecision"
+    return {"dominant": dominant, "distribution": dist,
+            "indecision_frac": round(indef / total, 4), "bars": len(labels)}
+
+
 def _session_vwap(hlc3: np.ndarray, vol: np.ndarray, new_session: np.ndarray) -> np.ndarray:
     n = len(hlc3)
     out = np.full(n, np.nan)

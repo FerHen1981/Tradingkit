@@ -201,6 +201,11 @@ def main():
                 "data_file": os.path.basename(args.data), "window": _window,
                 "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
+        try:                                   # objective L1 regime tag for this run
+            reg = ind_mod.classify_regime(df_for(tf), cfg)
+            meta["regime"] = ind_mod.regime_summary(reg["regime"])
+        except Exception as e:
+            meta["regime"] = {"error": str(e)}
         if args.spec:
             meta["groups"] = rspec.groups
         artifacts = {"kpis.json": json.dumps(kpi_obj, indent=2, default=str)}

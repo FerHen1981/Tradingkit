@@ -213,6 +213,18 @@ class Config:
     use_cvd_streak: bool = True
     cvd_trend_count: int = 4             # consecutive same-side delta bars
 
+    # --- regime (L1 classifier: MA-stack + ADX + ATR percentile) ---
+    # Objective trend x volatility regime tag. See lab/FRAMEWORK.md §1/§6. The
+    # tag is the framework's gatekeeper (which setup-class a regime allows); it
+    # is computed and surfaced per run, and consumed by the sampler (step 4).
+    regime_ma_fast: int = 20             # fast EMA of the trend stack
+    regime_ma_mid: int = 50              # mid EMA
+    regime_ma_slow: int = 200            # slow EMA (the trend spine)
+    adx_len: int = 14                    # Wilder ADX length
+    adx_trend: float = 25.0              # ADX >= this = a real trend (else controlled/flat)
+    regime_atr_lookback: int = 100       # window for the ATR volatility percentile
+    regime_slope_lookback: int = 20      # bars for slow-MA slope + ATR direction
+
     # --- time gate ---
     trade_days: tuple = (0, 1, 2, 3, 4)  # Mon..Fri (ET weekday, 0=Mon)
     enabled_hours: frozenset = frozenset(set(range(24)) - {17})  # ET hours; 17 = daily break

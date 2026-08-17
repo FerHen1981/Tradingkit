@@ -581,13 +581,30 @@ function render(){
 function kvs(obj,pre){return Object.entries(obj||{}).map(([k,v])=>{
   if(v&&typeof v==='object')return kvs(v,(pre?pre+'.':'')+k);
   return `<span class=tag style="margin:2px">${(pre?pre+'.':'')+k}: <b style="color:var(--sand)">${v}</b></span>`}).join('');}
-function stackHtml(desc){
+function regimeHtml(reg){
+  if(!reg||reg.error||!reg.distribution)return '';
+  const d=reg.distribution,keys=Object.keys(d);
+  if(!keys.length)return '';
+  const bars=keys.map(k=>`<div class=lensrow style="margin-top:2px">`
+    +`<span class=tag style="min-width:160px;display:inline-block">${k}</span> `
+    +`<b style="color:var(--gold)">${Math.round(d[k]*100)}%</b></div>`).join('');
+  const idf=reg.indecision_frac?`<span class=muted> · warm-up/indecision ${Math.round(reg.indecision_frac*100)}%</span>`:'';
+  return `<div style="margin-top:10px"><b>Regime (L1, objective)</b> `
+    +`<span class=muted>dominant</span> <b style="color:var(--azure)">${reg.dominant}</b>${idf}`
+    +`<div style="margin-top:5px">${bars}</div></div>`;
+}
+function stackHtml(desc,regime){
   if(!desc||!(desc.stack||[]).length)return '';
+  const rdom=regime&&regime.dominant?regime.dominant:null;
   const rows=desc.stack.map(r=>{
     const on=r.active;
-    const gr=on?`<b style="color:var(--gold)">${r.groups.join(', ')}</b>`
+    let gr=on?`<b style="color:var(--gold)">${r.groups.join(', ')}</b>`
       :(r.status==='future'?'<span class=muted>— cross-market feed (not wired)</span>':'<span class=muted>—</span>');
-    return `<div class=lensrow style="margin-top:3px;${on?'':'opacity:.45'}">`
+    // annotate L1 with the run's objective regime tag when present
+    if(r.layer==='L1'&&rdom){const rf=regime.indecision_frac?` · ${Math.round((1-regime.indecision_frac)*100)}% tradeable`:'';
+      gr=`<b style="color:var(--azure)">${rdom}</b><span class=muted>${rf}</span>`;}
+    const dim=(!on&&!(r.layer==='L1'&&rdom));
+    return `<div class=lensrow style="margin-top:3px;${dim?'opacity:.45':''}">`
       +`<span class=tag style="min-width:118px;display:inline-block">${r.layer} · ${r.role}</span> ${gr}</div>`;
   }).join('');
   const meta=[];
@@ -612,7 +629,8 @@ async function showDetail(id){
     <div class=lensrow style="margin-top:8px">run_id: ${r.run_id||''}</div>
     <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars${r.segment&&r.segment!=='all'?' · <b style="color:var(--gold)">'+r.segment.toUpperCase()+'</b> (holdout '+(r.holdout_days||0)+'d)':''} · source ${r.source||''}</div>
     ${grp}
-    ${stackHtml(r.desc)}
+    ${stackHtml(r.desc,r.regime)}
+    ${regimeHtml(r.regime)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
   d.scrollIntoView({behavior:'smooth',block:'nearest'});

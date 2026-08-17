@@ -525,6 +525,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   <section role=tabpanel id=strategies hidden>
     <h2 class=sec>By strategy engine</h2>
     <p class=sec-note>One engine, tuned per asset with the "El ___" variants. Validated funded edges: GC + ES; NQ = variance lottery (eval-only).</p>
+    <div id=evalPasses style="margin-bottom:16px"></div>
     <div class="grid g3" id=stratCards></div>
   </section>
   <section role=tabpanel id=assets hidden>
@@ -741,7 +742,15 @@ function renderFirms(){$("#firmCards").innerHTML=CMD.firms.map(f=>`<div class=ca
   <div class=row><span>Accounts</span><b>${f.accts}</b></div>
   <div class=row><span>Survival buffer</span><b>${f.buffer?money0(f.buffer):"—"}</b></div></div>`).join("")||'<div class=calc>—</div>'}
 // (strategy card labels below)
-function renderStrats(){$("#stratCards").innerHTML=CMD.assets.map(a=>`<div class=card>
+function renderStrats(){
+  const ep=CMD.eval_passes||[], tot=ep.reduce((s,x)=>s+x.passes,0);
+  $("#evalPasses").innerHTML = ep.length
+    ? `<div class=card><div class=ey>Eval passes per strategy <span class=calc>· ${tot} total · registered in Notion</span></div>`
+      + `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">`
+      + ep.map(x=>`<span class=tag style="font-size:13px;padding:6px 11px"><b class=pos>${x.passes}</b> · <b>${x.asset}</b> ${x.strategy}</span>`).join('')
+      + `</div></div>`
+    : `<div class=calc>Set the <b>Strategy</b> field on your accounts (Accounts DB) — passed evals then show here and drive the eval recommendation.</div>`;
+  $("#stratCards").innerHTML=CMD.assets.map(a=>`<div class=card>
   <div class=ey><span class="tag ${a.cls}">${a.sym}</span> <span class="tag ${a.micro?'micro':'full'}">${a.micro?'micro':'full'}</span> ${a.robust?'<span style="color:var(--ok)">funded edge</span>':'<span style="color:var(--warn)">eval</span>'}</div>
   <div class="big ${cls(a.net)}">${signed(a.net)}</div><div class=row><span>${a.engine}</span></div>
   <div class=row><span>Trades</span><b>${a.n}</b></div><div class=row><span>Win rate</span><b>${a.win.toFixed(1)}%</b></div>

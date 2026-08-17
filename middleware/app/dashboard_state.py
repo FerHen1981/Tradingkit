@@ -566,11 +566,17 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
     # registered eval passes per strategy → asset (Notion Accounts DB): an account that reached a
     # funded status passed its eval on its Strategy. Counts across the WHOLE fleet, not the filter.
     _PASSED = {"Funded Account", "Milking", "Milked"}
+    strat_passes: dict = defaultdict(int)
     for a in accounts_src:
-        base = STRAT_ASSET.get(a.get("strategy") or "")
-        if base and (a.get("status") in _PASSED):
-            edge_stats.setdefault(base, {}).setdefault("passes", 0)
-            edge_stats[base]["passes"] += 1
+        strat = a.get("strategy")
+        if strat and (a.get("status") in _PASSED):
+            strat_passes[strat] += 1
+            base = STRAT_ASSET.get(strat)
+            if base:
+                edge_stats.setdefault(base, {}).setdefault("passes", 0)
+                edge_stats[base]["passes"] += 1
+    eval_passes = sorted(({"strategy": k, "asset": STRAT_ASSET.get(k, ""), "passes": v}
+                          for k, v in strat_passes.items()), key=lambda z: -z["passes"])
     _pp = PlaybookParams()
     for a in accounts:
         da = dom_asset.get(a["full"]) or {}
@@ -658,6 +664,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "accounts": accounts,
         "assets": assets,
         "firms": firm_rows,
+        "eval_passes": eval_passes,
         "heatmap": ag["heatmap"],
         "portfolio": portfolio,
         "calendar": ag["calendar"],

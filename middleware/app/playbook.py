@@ -1,9 +1,10 @@
 """Payout Playbook — the fleet Operating Schema turned into a per-account preset table.
 
 This is NOT an optimizer. It follows the owner's doctrine (LifeOS "MEX Fleet — Operating
-Schema"): funded runs ONLY the edge (El Tesoro/GC + El Rey/ES), survival-first 1 ct until
-the trailing DD locks, then milking 2 ct / day-trail $150; legacy static/EOD accounts
-compound at 2–3 ct GC+ES; eval accounts sprint El Minero (GC) / El Toro (NQ) at 5 ct.
+Schema"): funded runs ONLY the edge on MICROS (El Tesoro/MGC + El Rey/MES), survival-first
+1 ct until the trailing DD locks, then milking 2 ct / day-trail $150; legacy static/EOD
+accounts compound at 2–3 ct GC+ES; eval accounts are pass-hunters — the full MINIS at 5 ct,
+led by El Toro (NQ), the top eval passer (El Minero/GC + El León/ES behind it).
 
 Per account it decides the TRACK (trailing / static / eval) and the PHASE (survival /
 milking / payout-ready / compound / eval-sprint), then shows the doctrine preset for it —
@@ -23,8 +24,9 @@ from .payout_rules import (APEX_LADDER_50K, APEX_TARGET, CONSISTENCY_LIMIT, MIN_
 BASES = ("GC", "ES", "NQ", "YM", "CL")
 _MICRO = {"GC": "MGC", "ES": "MES", "NQ": "MNQ", "YM": "MYM", "CL": "MCL"}
 
-# Validated edges. Funded = edge only (El Tesoro/GC, El Rey/ES). Eval = El Minero (GC) /
-# El Toro (NQ). NQ/YM are eval-only variance lots — never on a funded account.
+# Validated edges. Funded = edge only (El Tesoro/GC, El Rey/ES). Eval = pass-hunter led by
+# El Toro (NQ), then El Minero (GC) / El León (ES). NQ/YM are eval-only variance lots — never
+# on a funded account.
 FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}
 EVAL_STRAT = {"GC": "El Minero", "ES": "El León", "NQ": "El Toro", "YM": "El Toro"}
 
@@ -32,18 +34,19 @@ EVAL_STRAT = {"GC": "El Minero", "ES": "El León", "NQ": "El Toro", "YM": "El To
 STRAT_ASSET = {"El Tesoro": "GC", "El Minero": "GC", "El Rey": "ES", "El León": "ES", "El Leon": "ES",
                "El Toro": "NQ", "El Matador": "NQ", "El Dorado": "NQ", "El Patrón": "NQ", "El Patron": "NQ"}
 
-# Doctrine presets per phase (contracts + $ day-trail). The Operating Schema numbers.
+# Doctrine presets per phase (contracts + $ day-trail + instrument class). The Operating Schema
+# numbers. instrument = "micro" (funded, conservative) / "mini" (eval + legacy compound).
 DOCTRINE = {
-    "survival":     {"contracts": 1, "day_trail": None,
-                     "note": "1 ct survival-first until the trailing DD locks — payout is won by surviving, not size."},
-    "milking":      {"contracts": 2, "day_trail": 150,
-                     "note": "2 ct · day-trail $150 — many small green days, keep any day <50% of total profit."},
-    "payout-ready": {"contracts": 2, "day_trail": 150,
+    "survival":     {"contracts": 1, "day_trail": None, "instrument": "micro",
+                     "note": "1 ct survival-first on the MICRO until the trailing DD locks — payout is won by surviving, not size."},
+    "milking":      {"contracts": 2, "day_trail": 150, "instrument": "micro",
+                     "note": "2 ct MICRO · day-trail $150 — many small green days, keep any day <30% of total profit."},
+    "payout-ready": {"contracts": 2, "day_trail": 150, "instrument": "micro",
                      "note": "Threshold + min days met → request the payout, then step up the ladder."},
-    "compound":     {"contracts": 2, "day_trail": None,
-                     "note": "Static/EOD legacy — GC+ES parallel, 2–3 ct compound motor (roomy buffer)."},
-    "eval-sprint":  {"contracts": 5, "day_trail": None,
-                     "note": "Eval lot — Pass-hunter 5c / TP144, ~1 pass/day. New evals on El Minero (GC)."},
+    "compound":     {"contracts": 2, "day_trail": None, "instrument": "mini",
+                     "note": "Static/EOD legacy — GC+ES full-size parallel, 2–3 ct compound motor (roomy buffer)."},
+    "eval-sprint":  {"contracts": 5, "day_trail": None, "instrument": "mini",
+                     "note": "Eval lot — pass-hunter, full MINI 5c / TP144, ~1 pass/day. New evals on El Toro (NQ)."},
 }
 
 # lock_at = profit at which the Apex trailing DD stops trailing (floor locks at start+$100).

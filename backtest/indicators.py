@@ -59,6 +59,17 @@ def _run_length_negative(delta: np.ndarray) -> np.ndarray:
     return out
 
 
+def _ema(x: np.ndarray, length: int) -> np.ndarray:
+    """Exponential moving average (alpha = 2/(n+1)), seeded with the first value."""
+    n = max(int(length), 1)
+    alpha = 2.0 / (n + 1.0)
+    out = np.empty(len(x))
+    out[0] = x[0]
+    for i in range(1, len(x)):
+        out[i] = out[i - 1] + alpha * (x[i] - out[i - 1])
+    return out
+
+
 def _atr(high, low, close, length):
     """Wilder's ATR (RMA of true range), matching Pine ta.atr."""
     n = len(close)
@@ -182,5 +193,17 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     else:
         out["veto_long"] = True
         out["veto_short"] = True
+
+    # --- EMA crossover entry (Level B generator) ------------------------------
+    if cfg.use_ema_cross:
+        ef = _ema(close, cfg.ema_fast)
+        es = _ema(close, cfg.ema_slow)
+        above = ef > es
+        cross = np.zeros(n, dtype=np.int64)
+        cross[1:] = np.where(above[1:] & ~above[:-1], 1,
+                             np.where(~above[1:] & above[:-1], -1, 0))
+        out["ema_cross_dir"] = cross
+    else:
+        out["ema_cross_dir"] = np.zeros(n, dtype=np.int64)
 
     return out

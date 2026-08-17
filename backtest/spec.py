@@ -241,6 +241,8 @@ _PARAM_MAP: dict[tuple[str, str], str] = {
     ("swing_stops", "pivot_k"):      "pivot_k",       # same field; constraint keeps them equal
     ("swing_stops", "stop_buffer_ticks"): "swing_buf_ticks",
     ("atr", "length"):               "atr_len",
+    ("ema_cross", "fast"):           "ema_fast",
+    ("ema_cross", "slow"):           "ema_slow",
 }
 # Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
 _TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
@@ -248,16 +250,17 @@ _TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
 # Groups whose presence/params actually change engine behaviour TODAY (via
 # _PARAM_MAP + the toggles). Everything else is engine:todo and inert until
 # wired, so the generator restricts its honest search to these.
-WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops")
+WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross")
 
 
 def effective_signature(cfg) -> tuple:
     """The engine fields that genuinely change behaviour — used to collapse
     candidates that differ only in inert (unwired) knobs, so the search is honest."""
-    return (bool(cfg.use_gap_filter), round(float(cfg.gap_min_ticks), 3),
+    return (bool(cfg.use_fvg_entry), bool(cfg.use_gap_filter), round(float(cfg.gap_min_ticks), 3),
             round(float(cfg.gap_max_ticks), 3), bool(cfg.use_cvd_filter),
             bool(cfg.use_cvd_streak), int(cfg.cvd_trend_count), bool(cfg.use_vwap_veto),
-            bool(cfg.stop_swing), int(cfg.pivot_k), round(float(cfg.swing_buf_ticks), 3))
+            bool(cfg.stop_swing), int(cfg.pivot_k), round(float(cfg.swing_buf_ticks), 3),
+            bool(cfg.use_ema_cross), int(cfg.ema_fast), int(cfg.ema_slow))
 
 
 def spec_to_config(rspec: ResolvedSpec):
@@ -296,6 +299,14 @@ def spec_to_config(rspec: ResolvedSpec):
         over["use_cvd_streak"] = True
     over["stop_swing"] = "swing_stops" in g
     over["use_vwap_veto"] = "vwap" in g and bool(g["vwap"].get("vwap_veto", True))
+
+    # Entry generators (Level B). An ema_cross spec turns the EMA entry on; if it
+    # declares no fvg group it is an EMA-only strategy (FVG entry off). Specs/
+    # presets without any entry group keep the default FVG entry.
+    if "ema_cross" in g:
+        over["use_ema_cross"] = True
+        if "fvg" not in g:
+            over["use_fvg_entry"] = False
 
     # Direct param maps (resolved values include registry defaults).
     for (grp, param), field_name in _PARAM_MAP.items():

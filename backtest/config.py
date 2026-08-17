@@ -129,6 +129,12 @@ class Config:
     max_qty: float = 100.0
     min_qty: float = 1.0
 
+    # --- entry generators (Level B; FVG is the default entry) ---
+    use_fvg_entry: bool = True           # FVG imbalance entry (El Toro's core)
+    use_ema_cross: bool = False          # EMA fast/slow crossover entry
+    ema_fast: int = 20
+    ema_slow: int = 50
+
     # --- entry & stop ---
     entry_limit_mode: bool = True        # "Limit @ 50% FVG" vs market
     expiry_bars: int = 12                # resting limit lifetime

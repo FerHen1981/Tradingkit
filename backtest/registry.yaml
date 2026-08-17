@@ -197,6 +197,16 @@ price_action:
 # ============================================================================
 classic:
 
+  ema_cross:
+    desc: "EMA fast/slow crossover ENTRY (enters on the cross; not just a filter)."
+    price_action: false
+    provenance: sourced
+    engine: implemented        # wired as an entry generator (Level B)
+    optimize: coarse_menu
+    params:
+      fast: {default: 20, min: 5,  max: 100, step: 5,  type: opt}
+      slow: {default: 50, min: 20, max: 250, step: 10, type: opt}   # constraint: slow > fast
+
   moving_average:
     desc: "SMA/EMA trend + crossovers. Long-term: 50/200 golden cross (watch on weekly)."
     price_action: false
@@ -324,6 +334,7 @@ classic:
 # ============================================================================
 constraints:
   - "macd.slow > macd.fast"
+  - "ema_cross.slow > ema_cross.fast"
   - "moving_average.length_slow > moving_average.length_fast"
   - "rsi.overbought > rsi.oversold"
   - "stochastic.overbought > stochastic.oversold"

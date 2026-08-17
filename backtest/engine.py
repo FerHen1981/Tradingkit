@@ -84,6 +84,8 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
         "veto_short": ind["veto_short"].to_numpy(bool),
+        "ema_cross_dir": ind["ema_cross_dir"].to_numpy() if "ema_cross_dir" in ind
+        else np.zeros(len(df), dtype=np.int64),
     }
 
 
@@ -104,6 +106,7 @@ class Engine:
         self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]; self.atr = a["atr"]
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
+        self.ema_cross_dir = a.get("ema_cross_dir")
 
         self.n = len(self.close)
         self._reset_state()
@@ -164,11 +167,16 @@ class Engine:
         self._cur_i = self.start_bar
         self.trades: list[Trade] = []
 
-        # Pluggable entry generators, in priority order. FVG is #1; more are
-        # wired in later (Level B). Each returns (dir, entry_ref, stop_up,
-        # stop_down); filters (CVD/VWAP) and stop/TP/sizing are applied by the
-        # engine on top, so adding a generator never touches the risk machinery.
-        self._gens = (self._entry_fvg,)
+        # Pluggable entry generators, in priority order, chosen by the spec.
+        # Each returns (dir, entry_ref, stop_up, stop_down); filters (CVD/VWAP)
+        # and stop/TP/sizing are applied by the engine on top, so adding a
+        # generator never touches the risk machinery.
+        gens = []
+        if cfg.use_fvg_entry:
+            gens.append(self._entry_fvg)
+        if cfg.use_ema_cross:
+            gens.append(self._entry_ema)
+        self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
 
     # --------------------------------------------------------------- helpers
     def _dist(self, units: float) -> float:
@@ -595,6 +603,14 @@ class Engine:
             return 0, np.nan, np.nan, np.nan
         return d, self.fvg_mid[i], self.fvg_top[i], self.fvg_bot[i]
 
+    def _entry_ema(self, i: int):
+        """Entry generator — EMA fast/slow crossover. Market-style entry at the
+        cross bar close; no gap edge, so stops fall back to swing/fixed."""
+        d = int(self.ema_cross_dir[i]) if self.ema_cross_dir is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan       # entry_ref = close; stops via swing/fixed
+
     def _signal(self, i: int, can_trade: bool):
         """Ask the enabled entry generators (priority order); the first with a
         direction wins. Filters (CVD streak + VWAP veto) gate the direction, and
@@ -645,16 +661,18 @@ class Engine:
         entry_px = mid if cfg.entry_limit_mode else self.close[i]
         if is_long:
             if cfg.stop_swing:
-                piv = self.piv_low[i]
-                base = min(piv, bot) if not np.isnan(piv) else bot
-                stop_px = base - self._dist(cfg.swing_buf_ticks)
+                cands = [v for v in (self.piv_low[i], bot) if not np.isnan(v)]
+                base = min(cands) if cands else np.nan   # NaN when a generator gives no edge (e.g. EMA)
+                stop_px = (base - self._dist(cfg.swing_buf_ticks) if not np.isnan(base)
+                           else entry_px - self._dist(cfg.fixed_stop_ticks))
             else:
                 stop_px = entry_px - self._dist(cfg.fixed_stop_ticks)
         else:
             if cfg.stop_swing:
-                piv = self.piv_high[i]
-                base = max(piv, top) if not np.isnan(piv) else top
-                stop_px = base + self._dist(cfg.swing_buf_ticks)
+                cands = [v for v in (self.piv_high[i], top) if not np.isnan(v)]
+                base = max(cands) if cands else np.nan
+                stop_px = (base + self._dist(cfg.swing_buf_ticks) if not np.isnan(base)
+                           else entry_px + self._dist(cfg.fixed_stop_ticks))
             else:
                 stop_px = entry_px + self._dist(cfg.fixed_stop_ticks)
 

@@ -41,10 +41,10 @@ def _repair(spec: dict) -> dict:
     g = spec["groups"]
     if "market_structure" in g and "swing_stops" in g and "pivot_k" in g["swing_stops"]:
         g["market_structure"]["pivot_k"] = g["swing_stops"]["pivot_k"]
-    if "macd" in g:
-        m = g["macd"]
-        if "fast" in m and "slow" in m and m["slow"] <= m["fast"]:
-            m["slow"] = m["fast"] + 1
+    for grp in ("macd", "ema_cross"):
+        m = g.get(grp)
+        if m and "fast" in m and "slow" in m and m["slow"] <= m["fast"]:
+            m["slow"] = m["fast"] + (1 if grp == "macd" else 5)
     if "moving_average" in g:
         m = g["moving_average"]
         if "length_fast" in m and "length_slow" in m and m["length_slow"] <= m["length_fast"]:

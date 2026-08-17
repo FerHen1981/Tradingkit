@@ -53,6 +53,8 @@ class ResolvedSpec:
     base_preset: str | None = None                          # optional engine Config to start from
     timeframe: str | None = None                            # optional aggregation timeframe (1m..1d)
     explicit: dict[str, set] = field(default_factory=dict)  # group -> {params the spec set by hand}
+    regime_filter: frozenset = field(default_factory=frozenset)  # L1 gate: trade only these regimes
+    setup_class: str | None = None                          # framework thesis tag (builder/composer)
 
 
 # --------------------------------------------------------------------------- #
@@ -155,7 +157,9 @@ def validate_spec(spec: dict, registry: dict | None = None) -> ResolvedSpec:
     return ResolvedSpec(name=name, base_asset=spec.get("base_asset"),
                         policy=policy, groups=resolved, families=families,
                         base_preset=spec.get("base_preset"), timeframe=timeframe,
-                        explicit=explicit)
+                        explicit=explicit,
+                        regime_filter=frozenset(spec.get("regime_filter") or []),
+                        setup_class=spec.get("setup_class"))
 
 
 def _validate_value(gname: str, pname: str, pdef: dict, val: Any) -> None:
@@ -555,6 +559,10 @@ def spec_to_config(rspec: ResolvedSpec):
     for (grp, param), field_name in _PARAM_MAP.items():
         if grp in g and param in g[grp]:
             over[field_name] = g[grp][param]
+
+    # L1 regime gate (framework §8a) — a spec-level, persistable field.
+    if rspec.regime_filter:
+        over["regime_filter"] = frozenset(rspec.regime_filter)
 
     cfg = replace(base, **over)
 

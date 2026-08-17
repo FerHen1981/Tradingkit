@@ -21,3 +21,6 @@ data/lab/
 lab_data/
 *.parquet
 results/*/
+
+# User-built strategies from the Lab 4th-variant builder (kept local to the VPS)
+backtest/specs/custom_*.yaml

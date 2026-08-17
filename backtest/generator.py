@@ -254,6 +254,64 @@ def compose_strategy(registry: dict, rng: random.Random, *, base_asset: str = "N
     return _repair(spec)
 
 
+def spec_from_selection(registry: dict, *, setup_class: str, entry: str | None = None,
+                        filters=(), regime_filter=(), base_asset: str = "NQ",
+                        base_preset: str | None = None, name: str = "custom",
+                        timeframe: str | None = None) -> dict:
+    """Build a spec from EXPLICIT builder choices (registry defaults, not random)
+    so the preview is stable. Same role structure as compose_strategy: one primary
+    entry for the setup-class, optional coherent filters, always a swing stop.
+    Raises SpecError on an unknown setup-class or a filter that collides with the
+    entry's information-category (redundancy guard)."""
+    groups_reg = _all_groups(registry)
+    info_used: set[str] = set()
+    groups: dict[str, dict] = {}
+
+    def _add(gname: str, seed_params: dict | None = None):
+        groups[gname] = dict(seed_params or {})           # defaults fill in validate
+        cat = groups_reg[gname][1].get("info_category")
+        if cat:
+            info_used.add(cat)
+
+    if setup_class == "confluence":
+        _add("silver_bullet")
+        _add("fvg")
+    else:
+        opts = SETUP_ENTRIES.get(setup_class)
+        if not opts:
+            raise SpecError(f"unknown setup_class {setup_class!r}; "
+                            f"known: {sorted(SETUP_ENTRIES)} + 'confluence'")
+        table = {g: s for g, s in opts}
+        entry = entry or opts[0][0]
+        if entry not in table:
+            raise SpecError(f"entry {entry!r} not valid for {setup_class!r}; "
+                            f"choose from {list(table)}")
+        _add(entry, table[entry])
+
+    for f in filters:
+        if f not in ("vwap", "cvd_delta"):
+            raise SpecError(f"unknown filter {f!r} (allowed: vwap, cvd_delta)")
+        cat = groups_reg[f][1].get("info_category")
+        if cat in info_used:
+            raise SpecError(f"filter {f!r} collides with the entry's "
+                            f"information-category {cat!r} (redundancy guard)")
+        _add(f)
+
+    _add("swing_stops")
+
+    maxg = (registry.get("policy") or {}).get("max_active_groups", 8)
+    spec = {"name": name, "base_asset": base_asset, "groups": groups,
+            "policy": {"price_action_only": False, "max_active_groups": maxg},
+            "setup_class": setup_class}
+    if regime_filter:
+        spec["regime_filter"] = sorted(regime_filter)
+    if timeframe:
+        spec["timeframe"] = timeframe
+    if base_preset:
+        spec["base_preset"] = base_preset
+    return _repair(spec)
+
+
 def compose_batch(n: int, registry: dict | None = None, seed: int = 0, *,
                   regimes: list[str] | None = None, **kw) -> list[dict]:
     """Return up to `n` distinct, valid role-composed specs. If `regimes` is

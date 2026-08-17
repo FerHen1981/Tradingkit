@@ -154,3 +154,40 @@ def test_composer_price_action_only():
     for s in compose_batch(40, REG, seed=8, price_action_only=True):
         for g in s["groups"]:
             assert groups_reg[g][1].get("price_action") is True
+
+
+# --- builder: deterministic spec_from_selection (framework §4, step 6) ------ #
+def test_spec_from_selection_valid_and_deterministic():
+    from backtest.generator import spec_from_selection
+    from backtest.spec import spec_to_config
+    a = spec_from_selection(REG, setup_class="breakout", entry="donchian",
+                            filters=["vwap", "cvd_delta"], name="c1")
+    b = spec_from_selection(REG, setup_class="breakout", entry="donchian",
+                            filters=["vwap", "cvd_delta"], name="c1")
+    assert a["groups"] == b["groups"]              # defaults, not random
+    assert set(a["groups"]) == {"donchian", "vwap", "cvd_delta", "swing_stops"}
+    spec_to_config(validate_spec(a, REG))          # validates + configures
+
+
+def test_spec_from_selection_redundancy_guard():
+    from backtest.generator import spec_from_selection
+    from backtest.spec import SpecError
+    import pytest
+    # liquidity_eqhl entry is L4 location; a vwap filter is also location -> reject
+    with pytest.raises(SpecError, match="redundancy"):
+        spec_from_selection(REG, setup_class="reversal", entry="liquidity_eqhl",
+                            filters=["vwap"])
+
+
+def test_spec_regime_filter_persists_to_config():
+    from backtest.generator import spec_from_selection
+    from backtest.spec import spec_to_config
+    import yaml
+    gate = ["Strong Bull Trend", "Controlled Bull Trend"]
+    s = spec_from_selection(REG, setup_class="breakout", entry="momentum",
+                            regime_filter=gate, name="g1")
+    cfg, _ = spec_to_config(validate_spec(s, REG))
+    assert cfg.regime_filter == frozenset(gate)
+    # survives a YAML round-trip (as a saved spec would)
+    cfg2, _ = spec_to_config(validate_spec(yaml.safe_load(yaml.safe_dump(s)), REG))
+    assert cfg2.regime_filter == frozenset(gate)

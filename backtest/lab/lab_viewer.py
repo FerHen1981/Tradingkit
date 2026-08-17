@@ -146,6 +146,70 @@ def _specs() -> list[dict]:
     return out
 
 
+# --- 4th-variant builder (framework §4) ------------------------------------ #
+def _builder_options() -> dict:
+    """Building blocks the front-end offers: setup-classes -> valid entries,
+    the coherent filters, the regime vocabulary for the gate, and base presets."""
+    from ..generator import SETUP_ENTRIES
+    from ..indicators import REGIME_LABELS
+    from ..config import PRESETS
+    return {
+        "setups": {sc: [g for g, _ in opts] for sc, opts in SETUP_ENTRIES.items()},
+        "confluence_entry": ["silver_bullet"],
+        "filters": ["vwap", "cvd_delta"],
+        "regimes": [r for r in REGIME_LABELS if r != "Indecision"],
+        "base_presets": sorted(PRESETS),
+    }
+
+
+def _builder_build(body: dict) -> dict:
+    from ..generator import spec_from_selection
+    from ..spec import load_registry
+    return spec_from_selection(
+        load_registry(),
+        setup_class=body.get("setup_class") or "trend_pullback",
+        entry=body.get("entry") or None,
+        filters=[f for f in (body.get("filters") or []) if f],
+        regime_filter=[r for r in (body.get("regime_filter") or []) if r],
+        base_asset=body.get("base_asset") or "NQ",
+        base_preset=body.get("base_preset") or None,
+        name=body.get("name") or "custom",
+        timeframe=body.get("timeframe") or None,
+    )
+
+
+def _builder_preview(body: dict) -> tuple[dict, int]:
+    from ..spec import load_registry, validate_spec, spec_to_config, describe_config
+    from ..scoring import score_strategy
+    try:
+        spec = _builder_build(body)
+        cfg, unmapped = spec_to_config(validate_spec(spec, load_registry()))
+        desc = describe_config(cfg)
+        rf = [r for r in (body.get("regime_filter") or []) if r]
+        regime = rf[0] if len(rf) == 1 else None      # sharpen L1 only if a single regime
+        desc["score"] = score_strategy(desc, regime=regime, setup_class=spec.get("setup_class"))
+        return {"ok": True, "spec": spec, "desc": desc, "unmapped": unmapped}, 200
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 200
+
+
+def _builder_save(body: dict) -> tuple[dict, int]:
+    import yaml
+    from ..spec import load_registry, validate_spec
+    try:
+        raw = body.get("name") or "custom"
+        safe = "".join(c for c in raw if c.isalnum() or c in "-_") or "custom"
+        if not safe.startswith("custom"):
+            safe = "custom_" + safe                    # namespace user-built specs
+        spec = _builder_build({**body, "name": safe})
+        validate_spec(spec, load_registry())           # never write an invalid spec
+        path = _specs_dir() / f"{safe}.yaml"
+        path.write_text(yaml.safe_dump(spec, sort_keys=False, allow_unicode=True))
+        return {"ok": True, "id": f"spec:{safe}.yaml", "name": f"{safe}.yaml"}, 200
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 200
+
+
 # --- backtest jobs (subprocess into the bt-venv engine) -------------------- #
 _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
@@ -386,6 +450,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(st or {"error": "unknown job"}, 200 if st else 404)
         if u.path == "/api/candidates":
             return self._json(_candidates())
+        if u.path == "/api/builder/options":
+            return self._json(_builder_options())
         return self._send(404, "not found", "text/plain")
 
     # -- POST --
@@ -414,6 +480,16 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/verify":
             body, code = _start_verify(q)
             return self._json(body, code)
+        if u.path in ("/api/builder/preview", "/api/builder/save"):
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length).decode("utf-8", "replace") if length > 0 else "{}"
+            try:
+                jb = json.loads(raw)
+            except Exception:
+                jb = {}
+            fn = _builder_preview if u.path.endswith("preview") else _builder_save
+            b, code = fn(jb)
+            return self._json(b, code)
         return self._send(404, "not found", "text/plain")
 
     def _upload(self, q):
@@ -810,7 +886,61 @@ async function loadCandidates(){
 }
 async function loadGenDatasets(){try{const ds=(await (await fetch('/api/datasets')).json()).datasets||[];
   $('#gDs').innerHTML=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')||'<option value="">upload a dataset</option>';}catch(e){}}
-loadWizard();loadGenDatasets();
+
+// ---- 4th-variant builder ----
+let BOPTS={setups:{}};
+function builderBody(){
+  const setup=$('#bSetup').value;
+  return {setup_class:setup, entry:setup==='confluence'?null:$('#bEntry').value,
+    filters:[...document.querySelectorAll('.bFilt:checked')].map(x=>x.value),
+    regime_filter:[...document.querySelectorAll('.bReg:checked')].map(x=>x.value),
+    base_preset:$('#bPreset').value, name:$('#bName').value||'custom'};
+}
+async function previewBuilder(){
+  const el=$('#bPreview');
+  try{
+    const r=await (await fetch('/api/builder/preview',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(builderBody())})).json();
+    if(!r.ok){el.innerHTML='<span class=neg>'+r.error+'</span>';return;}
+    const d=r.desc,rf=(r.spec.regime_filter||[]);
+    el.innerHTML=`<div class=lensrow>family <b style="color:var(--gold)">${d.family}</b> · entry <b>${(d.entries||[]).join(', ')||'—'}</b>`
+      +((d.filters||[]).length?` · filters ${d.filters.join(' · ')}`:'')
+      +(rf.length?` · <span style="color:var(--azure)">gate: ${rf.join(', ')}</span>`:' · <span class=muted>gate: all regimes</span>')
+      +`</div>`+scoreHtml(d)+stackHtml(d,null);
+  }catch(e){el.innerHTML='<span class=neg>'+e+'</span>';}
+}
+function fillBuilderEntry(){
+  const setup=$('#bSetup').value,es=$('#bEntry');
+  if(setup==='confluence'){es.innerHTML='<option value=silver_bullet>silver_bullet</option>';es.disabled=true;}
+  else{es.disabled=false;es.innerHTML=(BOPTS.setups[setup]||[]).map(g=>`<option>${g}</option>`).join('');}
+  previewBuilder();
+}
+async function saveBuilder(){
+  const m=$('#bMsg');
+  try{
+    const r=await (await fetch('/api/builder/save',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(builderBody())})).json();
+    if(!r.ok){m.innerHTML='<span class=neg>'+r.error+'</span>';return;}
+    m.innerHTML='saved <b style="color:var(--gold)">'+r.name+'</b> — loaded into the runner above';
+    await loadWizard(); const sel=$('#wSpec'); if(sel)sel.value=r.id;
+  }catch(e){m.innerHTML='<span class=neg>'+e+'</span>';}
+}
+async function loadBuilder(){
+  try{
+    BOPTS=await (await fetch('/api/builder/options')).json();
+    $('#bSetup').innerHTML=Object.keys(BOPTS.setups).map(s=>`<option>${s}</option>`).join('')+`<option value=confluence>confluence</option>`;
+    $('#bPreset').innerHTML=(BOPTS.base_presets||[]).map(p=>`<option>${p}</option>`).join('');
+    $('#bFilters').innerHTML=(BOPTS.filters||[]).map(f=>`<label class=muted style="font-size:12px;margin-right:12px"><input type=checkbox class=bFilt value="${f}"> ${f}</label>`).join('');
+    $('#bRegimes').innerHTML=(BOPTS.regimes||[]).map(r=>`<label class=muted style="font-size:12px;margin-right:12px;display:inline-block;white-space:nowrap"><input type=checkbox class=bReg value="${r}"> ${r}</label>`).join('');
+    $('#bSetup').addEventListener('change',fillBuilderEntry);
+    $('#bEntry').addEventListener('change',previewBuilder);
+    $('#bPreset').addEventListener('change',previewBuilder);
+    document.querySelectorAll('.bFilt,.bReg').forEach(x=>x.addEventListener('change',previewBuilder));
+    $('#bSave').addEventListener('click',saveBuilder);
+    fillBuilderEntry();
+  }catch(e){}
+}
+loadWizard();loadGenDatasets();loadBuilder();
 load();
 loadCandidates();
 """
@@ -862,6 +992,24 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <b>Strategy library</b><span class=muted id=libCount>—</span></div>
   <div class=muted style="font-size:12px;margin-top:3px">Every governed strategy — its entries, confluence gates, filters and exit. Click a card to load it into the runner above.</div>
   <div class=lib id=libRows></div>
+</div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Build a strategy · 4th variant</b><span class=muted style="font-size:12px">compose by role → gate to regimes → live score → save &amp; run</span></div>
+  <div class=muted style="font-size:12px;margin-top:3px">One thesis per strategy: pick a setup-class + its primary entry, add at most one coherent filter per category, and (optionally) gate it to the regimes where the edge lives. The redundancy guard and the framework stack are enforced live.</div>
+  <div class=up style="margin-top:10px">
+    <select id=bSetup title="setup-class"></select>
+    <select id=bEntry title="primary entry" style="min-width:150px"></select>
+    <select id=bPreset title="engine mechanics (TP/sizing/phase)"></select>
+    <input id=bName placeholder="name (custom_...)" style="width:150px">
+    <button class=go id=bSave>Save &amp; load</button>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:22px;flex-wrap:wrap">
+    <div><div class=muted style="font-size:12px">Filters (coherent — one per category)</div><div id=bFilters style="margin-top:5px"></div></div>
+    <div><div class=muted style="font-size:12px">Regime gate — trade only in these (empty = all regimes)</div><div id=bRegimes style="margin-top:5px"></div></div>
+  </div>
+  <div id=bPreview style="margin-top:12px"></div>
+  <div id=bMsg class=muted style="margin-top:6px"></div>
 </div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">

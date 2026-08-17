@@ -391,9 +391,13 @@ Action:      Long allowed
    `run.py --regime-filter`. Sluit de ontdek→finetune-lus: `edge_by_regime` zegt
    *waar* de edge zit, de gate handelt er alléén nog daar, effect opnieuw
    ongebiast op OOS gemeten. 106 tests groen.
-6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
-   → opslaan als spec → runnen. De role-getagde registry ís het skelet.
-   ← **volgende stap**
+6. ~~**4e-variant builder UI**~~ — ✅ **DONE**: paneel "Build a strategy · 4th
+   variant" in de cockpit — kies setup-class + primaire entry, vink coherente
+   filters aan (redundancy-guard live), gate op regimes → live `describe`-preview
+   (stack + score + gate) → opslaan als `custom_*`-spec → verschijnt in de
+   library + runner. Backend: `generator.spec_from_selection` (deterministisch,
+   defaults i.p.v. random) + `regime_filter` als persistent spec-veld
+   (`spec_to_config`). 109 tests groen.
 7. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als
    uitgelijnde OHLCV-series). Rolstructuur ligt er dan al; alleen de datalaag
    koppelen. *Diep L5 is losgelaten — geen onderdeel meer van het plan.*

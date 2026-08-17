@@ -552,24 +552,19 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         a["payout"] = dataclasses.asdict(p) if p else None
     _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
 
-    # payout playbook: per-account preset (asset·strategy + contracts + day-cap + SL-cap) to
-    # bank the ladder rung within the 8-day window inside the breach budget.
+    # payout playbook: per-account doctrine preset (track/phase → asset·strategy + contracts +
+    # day-trail) plus live payout progress. Follows the Operating Schema, not an optimizer.
     from .playbook import PlaybookParams, build_playbook
-    edge_stats = {x["sym"]: {"expectancy": x["expectancy"], "pf": x["pf"], "n": x["n"]} for x in assets}
     dom_asset: dict = defaultdict(lambda: defaultdict(int))
-    dom_strat: dict = defaultdict(lambda: defaultdict(int))
     for t in trades:
         dom_asset[t["acct"]][t["sym"]] += 1
-        if t.get("strat"):
-            dom_strat[t["acct"]][t["strat"]] += 1
     _pp = PlaybookParams()
     for a in accounts:
-        da, ds = dom_asset.get(a["full"]) or {}, dom_strat.get(a["full"]) or {}
-        asset = max(da, key=da.get) if da else None
-        strat = max(ds, key=ds.get) if ds else None
+        da = dom_asset.get(a["full"]) or {}
+        instrument = max(da, key=da.get) if da else None      # the real instrument (MGC/MES…)
         try:
-            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), asset, strat, edge_stats, _pp)
-        except Exception as exc:                       # never let sizing math break the dashboard
+            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), instrument, _pp)
+        except Exception as exc:                       # never let the playbook break the dashboard
             log.warning("playbook failed for %s: %r", a.get("full"), exc)
             a["playbook"] = None
     total_withdrawable = round(sum(p["withdrawable"] for p in _funded_p), 2)

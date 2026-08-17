@@ -1,79 +1,92 @@
-"""Payout Playbook sizing engine — deterministic checks on synthetic accounts."""
-from app.playbook import (PlaybookParams, base_asset, build_playbook, contract_label,
+"""Payout Playbook — grounded per-account route analysis (history × rules)."""
+import datetime as dt
+
+from app.playbook import (account_track, base_asset, build_playbook, contract_label,
                           ladder_rung, parse_size, recommend_setup)
 
 
-def test_ladder_rung_progression():
-    assert ladder_rung(50_000, 0) == 1_500
-    assert ladder_rung(50_000, 2) == 2_000
-    assert ladder_rung(50_000, 99) == 3_000        # clamps at the top rung
+def _hist(day_net: float, n: int) -> dict:
+    return {dt.date(2026, 1, 1) + dt.timedelta(days=i): day_net for i in range(n)}
 
 
-def test_parse_size_from_notion_fields():
+def test_ladder_and_parse():
+    assert ladder_rung(50_000, 0) == 1_500 and ladder_rung(50_000, 2) == 2_000
     assert parse_size("Milking (2c/day-trail $150)", None) == 2.0
-    assert parse_size("Pass-hunter (5c/TP144)", None) == 5.0
-    assert parse_size(None, "2-4 contracts") == 3.0
-    assert parse_size(None, "10 contracts") == 10.0
-    assert parse_size(None, None) is None
+    assert base_asset("MGC1!") == "GC"
 
 
-def test_base_asset_normalises_micros():
-    assert base_asset("MGC") == "GC" and base_asset("MGC1!") == "GC"
-    assert base_asset("MES") == "ES" and base_asset("ES") == "ES"
-    assert base_asset(None) is None
+def test_contract_label_keeps_micro_instrument():
+    assert contract_label(2, "MGC") == "2 MGC"      # NOT normalised to GC
+    assert contract_label(1, "MES") == "1 MES"
 
 
-def test_contract_label_whole_and_micros():
-    assert contract_label(0.7, "GC") == "7 MGC"        # sub-mini → micros
-    assert contract_label(7.5, "ES") == "7 ES + 5 MES"  # minis + micros
-    assert contract_label(3.0, "ES") == "3 ES"          # whole
-    assert contract_label(2.0, "MGC") == "2 GC"         # normalises the asset
+def test_track_classification():
+    assert account_track({"stage": "Funded", "size": 50_000, "dd_rule": "Trailing Equity Peak"}) == "trailing"
+    assert account_track({"stage": "Funded", "size": 250_000, "dd_rule": "Trailing"}) == "static"
+    assert account_track({"stage": "Eval", "size": 50_000}) == "eval"
 
 
-def test_recommend_keeps_current_validated_edge():
-    # account already running gold (micro) → keep GC · El Tesoro, no switch
-    rec = recommend_setup({"stage": "Funded"}, None, current_asset="MGC")
-    assert rec["asset"] == "GC" and rec["strategy"] == "El Tesoro" and rec["keep"]
+def test_recommend_keeps_the_real_micro_instrument():
+    r = recommend_setup({}, "trailing", "MGC")      # gold micro → El Tesoro, keep MGC
+    assert r["instrument"] == "MGC" and r["strategy"] == "El Tesoro" and r["keep"]
+    r2 = recommend_setup({}, "trailing", "NQ")      # NQ on funded = off-edge → MGC El Tesoro
+    assert r2["instrument"] == "MGC" and r2["off_edge"]
 
 
-def test_recommend_funded_defaults_to_gc_workhorse():
-    # no current edge, ES measured higher — still default to the robust GC workhorse
-    edge = {"GC": {"expectancy": 40, "pf": 1.2, "n": 200},
-            "ES": {"expectancy": 90, "pf": 1.3, "n": 200}}
-    rec = recommend_setup({"stage": "Funded"}, edge, current_asset=None)
-    assert rec["asset"] == "GC" and rec["strategy"] == "El Tesoro" and not rec["keep"]
+def _acct(**kw):
+    base = {"stage": "Funded", "size": 50_000, "firm": "Apex Trader Funding",
+            "dd_rule": "Trailing Equity Peak", "starting": 50_000}
+    base.update(kw)
+    return base
 
 
-def _daily(base: float, n: int = 40) -> dict:
-    out = {}
-    for i in range(n):
-        out[f"2026-01-{i+1:02d}"] = base + (90 if i % 2 else -70)   # real winners AND losers
-    return out
+def test_survival_route_when_dd_not_locked():
+    # only +$800 profit → below the $2600 lock → survival, 1 ct, route says how much to lock
+    a = _acct(current=50_800, buffer=1_800)
+    pb = build_playbook(a, _hist(150, 4), "MGC")
+    assert pb["phase"] == "survival" and pb["contracts"] == 1
+    assert pb["rec_instrument"] == "MGC" and pb["rec_strategy"] == "El Tesoro"
+    assert "1 MGC" in pb["route"] and "lock" in pb["route"].lower()
+    assert pb["locked"] is False and pb["profit"] == 800
 
 
-def test_healthy_gold_account_keeps_el_tesoro_and_sizes():
-    acct = {"size": 50_000, "stage": "Funded", "payouts_taken": 0, "buffer": 2_500,
-            "avg_loss": 140.0, "fase_config": "Milking (2c/day-trail $150)"}
-    pb = build_playbook(acct, _daily(60), "MGC", "El Tesoro",
-                        edge_stats={"GC": {"expectancy": 60, "pf": 1.3, "n": 200}},
-                        params=PlaybookParams(sims=400))
-    assert pb["rec_asset"] == "GC" and pb["rec_strategy"] == "El Tesoro" and not pb["switch"]
-    assert pb["source"] == "edge" and pb["contracts_label"]
-    assert pb["p_breach"] <= 0.15
-    assert pb["day_lock"] <= 0.30 * 1_500 + 1 and pb["sl_cap"]
+def test_milking_route_computes_days_and_bind():
+    # locked ($2700 profit) but a HIGH rung (payouts_taken=5 → $3000) still ahead → pace plan
+    a = _acct(current=52_700, buffer=2_600, payouts_taken=5,
+              payout={"above_safety": 100, "eligible": False, "trading_days": 6})
+    pb = build_playbook(a, _hist(200, 6), "MGC")
+    assert pb["phase"] == "milking" and pb["contracts"] == 2 and pb["target"] == 3_000
+    assert "to the rung" in pb["route"] and "Binds on" in pb["route"]
+    assert pb["day_cap"] == round(0.30 * max(2700, 3000))     # 30% × rung = 900
 
 
-def test_thin_data_falls_back_to_phase_default():
-    acct = {"size": 50_000, "stage": "Funded", "payouts_taken": 1, "buffer": 2_500,
-            "fase_config": "Milking (2c/day-trail $150)"}
-    pb = build_playbook(acct, {"2026-01-01": 100.0}, "GC", "El Tesoro",
-                        params=PlaybookParams(sims=200))
-    assert pb["source"] == "default" and pb["quality"] == "default"
-    assert pb["contracts"] == 2.0 and pb["contracts_label"] == "2 GC"   # the Milking default
+def test_thin_buffer_flags_survival_drop():
+    a = _acct(current=50_500, buffer=600)
+    pb = build_playbook(a, _hist(120, 3), "MGC")
+    assert pb["quality"] == "thin_buffer" and "critical" in pb["note"]
 
 
-def test_fresh_eval_gets_passhunter_default():
-    acct = {"size": 50_000, "stage": "Eval", "payouts_taken": 0, "buffer": 2_500}
-    pb = build_playbook(acct, {}, None, None, params=PlaybookParams(sims=200))
-    assert pb["source"] == "default" and pb["contracts"] == 5.0     # Pass-hunter 5c
-    assert pb["target"] == 3_000 and pb["mode"] == "eval-pass"
+def test_off_edge_nq_on_funded():
+    a = _acct(current=50_400, buffer=1_500)
+    pb = build_playbook(a, _hist(100, 3), "NQ")
+    assert pb["off_edge"] and pb["quality"] == "switch" and pb["rec_instrument"] == "MGC"
+
+
+def test_eval_sprint_route():
+    a = {"stage": "Eval", "size": 50_000, "firm": "Apex Trader Funding", "starting": 50_000, "current": 50_500}
+    pb = build_playbook(a, _hist(100, 3), "MNQ")
+    assert pb["track"] == "eval" and pb["phase"] == "eval-sprint" and pb["contracts"] == 5
+    assert "pass" in pb["route"].lower()
+
+
+def test_payout_ready_route():
+    a = _acct(current=53_500, buffer=3_000,
+              payout={"eligible": True, "withdrawable": 1500, "profit": 3500, "trading_days": 9})
+    pb = build_playbook(a, _hist(200, 9), "MGC")
+    assert pb["phase"] == "payout-ready" and "PAYOUT NOW" in pb["route"] and pb["quality"] == "payout"
+
+
+def test_non_apex_firm_flagged():
+    a = {"stage": "Eval", "size": 50_000, "firm": "My Funded Futures", "starting": 50_000, "current": 50_000}
+    pb = build_playbook(a, {}, None)
+    assert pb["firm_verified"] is False and "⚠" in pb["note"]

@@ -579,10 +579,10 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=playbook hidden>
     <h2 class=sec>Payout Playbook</h2>
-    <p class=sec-note>Per account: the best asset · strategy to run, and the preset to bank the ladder rung inside the 8-day window — sized as large as keeping the estimated chance of breaching the trailing DD under 15% allows ("not at any cost"). Contracts are tradeable (whole minis + micros). Rows marked <span class=calc>·def</span> fall back to the phase-start default (funded 2c / eval 5c) until the account has ≥5 traded days. Copy straight into your alerts. <span class=calc>Estimates from the account's own daily edge + Apex rules — verify. Set the rung in the Accounts DB (Payouts 0-6), keep Fase Config + DD Buffer $ current.</span></p>
-    <div class=tablewrap><table id=pbTable style="min-width:980px"><thead><tr>
-      <th>Account</th><th>Recommended run</th><th class=num>Rung → target</th><th class=num>Contracts</th>
-      <th class=num>Day lock / stop</th><th class=num>SL cap</th><th class=num>Reach / breach</th><th>Status</th>
+    <p class=sec-note>Each account's route to its next payout, read from its OWN history against the firm rules. Funded runs only the edge on the real instrument it trades (MGC · El Tesoro / MES · El Rey; NQ is eval-only). The path: <b style="color:var(--warn)">survival</b> 1 ct until the trailing DD locks → <b style="color:var(--ok)">milking</b> 2 ct, many small days ≤ the consistency cap → <b style="color:var(--gold)">payout</b> once the threshold + 8 days are met; legacy 250k/300k <b style="color:var(--aqua)">compound</b>. The Route column is decisive — what still has to happen and what binds (consistency, min-days, buffer). <span class=calc>Consistency cap = 30% × max(profit, rung). Rung = Accounts DB "Payouts (0-6)". Apex rules — verify.</span></p>
+    <div class=tablewrap><table id=pbTable style="min-width:1040px"><thead><tr>
+      <th>Account</th><th>Run</th><th>Phase</th><th style="text-align:left">Where it stands</th>
+      <th class=num>Rung → target</th><th style="text-align:left">Route to payout</th>
     </tr></thead><tbody></tbody></table></div>
   </section>
   <section role=tabpanel id=live hidden>
@@ -764,25 +764,31 @@ function renderPayout(){
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }
-const PB_BADGE={ok:["var(--ok)","ready"],target_unlikely:["var(--warn)","stretch"],
-  "default":["var(--aqua)","default"],fragile:["var(--crit)","fragile"]};
+const PB_PHASE={survival:["var(--warn)","survival"],milking:["var(--ok)","milking"],
+  "payout-ready":["var(--gold)","payout ✓"],compound:["var(--aqua)","compound"],
+  "eval-sprint":["var(--muted)","eval sprint"]};
 function renderPlaybook(){
   const rows=CMD.accounts.filter(a=>a.playbook);
   $("#pbTable tbody").innerHTML=rows.map(a=>{const p=a.playbook;
-    const sw=p.switch?` <span style="color:var(--warn)" title="currently running ${p.cur_asset||'—'}">↹ now ${p.cur_asset||'—'}</span>`:'';
-    const rec=`<b>${p.rec_asset}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}`;
+    const sw=p.switch?` <span style="color:${p.off_edge?'var(--crit)':'var(--warn)'}" title="currently ${p.cur_instrument||'—'}">↹ ${p.cur_instrument||'—'}</span>`:'';
+    const run=`<b>${p.rec_instrument||p.rec_base||'—'}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}<div class=calc>${p.contracts_label}</div>`;
+    const ph=PB_PHASE[p.phase]||["var(--muted)",p.phase];
+    const phase=`<span class=pill style="background:${ph[0]};color:#04121a">${ph[1]}</span>`;
+    const st=`<b class="${cls(p.profit||0)}">${p.profit!=null?signed(p.profit):'—'}</b> <span class=calc>P/L · ${p.trading_days}d</span>`
+      +(p.buffer!=null?`<br><span style="color:${p.buffer<1000?'var(--crit)':'var(--muted)'}">buf ${money0(p.buffer)}</span>`:'')
+      +(p.consistency_pct!=null?` <span class=calc>· ${p.consistency_pct}% top</span>`:'');
     const tgt=`<span class=calc>${p.target_label}</span> ${money0(p.target)}`;
-    const dc=p.source==='default'?' <span class=calc>·def</span>':'';
-    const con=p.contracts_label?`${p.contracts_label}${dc}`:'<span class=calc>—</span>';
-    const cap=p.day_lock==null?'<span class=calc>—</span>':(money0(p.day_lock)+' <span class=calc>/</span> '+(p.day_stop!=null?money0(p.day_stop):'—'));
-    const sl=p.sl_cap==null?'<span class=calc>—</span>':money0(p.sl_cap);
-    const rb=p.p_reach==null?'<span class=calc>—</span>':`<b class="${p.p_reach>=0.7?'pos':''}">${Math.round(p.p_reach*100)}%</b> <span class=calc>/</span> <b class="${p.p_breach>0.15?'neg':''}">${Math.round(p.p_breach*100)}%</b>`;
-    const b=PB_BADGE[p.quality]||["var(--dim)",p.quality];
-    return `<tr><td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span></td>
-      <td style="text-align:left">${rec}</td><td class=num>${tgt}</td><td class=num>${con}</td>
-      <td class=num>${cap}</td><td class=num>${sl}</td><td class=num>${rb}</td>
-      <td style="text-align:left;white-space:normal;max-width:280px"><span class=pill style="background:${b[0]};color:#04121a">${b[1]}</span> <span style="color:var(--muted)">${p.note||''}</span></td></tr>`;
-  }).join('')||'<tr><td colspan=8 class=calc>no accounts</td></tr>';
+    const flag=p.note?`<div style="color:var(--warn);font-size:11px;margin-bottom:3px">⚑ ${p.note}</div>`:'';
+    const rcol=p.quality==='payout'?'var(--gold)':'var(--ink)';
+    return `<tr>
+      <td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span></td>
+      <td style="text-align:left">${run}</td>
+      <td>${phase}</td>
+      <td style="text-align:left;font-size:12px;font-family:var(--mono)">${st}</td>
+      <td class=num>${tgt}</td>
+      <td style="text-align:left;white-space:normal;max-width:430px">${flag}<span style="color:${rcol}">${p.route}</span></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan=6 class=calc>no accounts</td></tr>';
 }
 function bar(label,pct,right,color){
   return `<div style="margin:9px 0;font-family:var(--mono);font-size:12px">

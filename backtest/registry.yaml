@@ -69,10 +69,10 @@ price_action:
     note: "CVD divergence ALONE ~45-50% win — a filter, not a signal. Combine, don't solo."
 
   divergence:
-    desc: "Regular/hidden divergence on an oscillator (RSI/MACD/CVD) vs price."
+    desc: "Regular/hidden divergence on an oscillator (RSI/MACD/CVD) vs price. osc_source=cvd enables the divergence entry."
     price_action: true
     provenance: sourced
-    engine: todo
+    engine: partial            # CVD-divergence entry wired; RSI/MACD divergence still TODO
     optimize: pivots
     params:
       pivot_lookback_left:    {default: 5,  min: 2,  max: 15,  step: 1, type: opt}
@@ -91,12 +91,22 @@ price_action:
     params:
       pivot_k:                {default: 3,     min: 2, max: 10, step: 1,        type: opt}   # SHARED with swing_stops
       structure_break_ref:    {default: close, options: [wick, close],         type: opt}   # only 'close' wired; 'wick' TODO
+      mode:                   {default: bos,   options: [bos, choch, both],     type: opt}   # bos=continuation, choch=reversal
 
-  liquidity_eqhl:
-    desc: "Equal highs/lows = resting-stop liquidity pools / sweep targets."
+  momentum:
+    desc: "Displacement / impulse bar (opening drive). Enter WITH a bar whose body >= x*ATR."
     price_action: true
     provenance: sourced
-    engine: todo
+    engine: implemented        # wired as an entry generator (Level B)
+    optimize: threshold
+    params:
+      body_atr:               {default: 1.0, min: 0.5, max: 3.0, step: 0.25, type: opt}
+
+  liquidity_eqhl:
+    desc: "Equal highs/lows = resting-stop liquidity pools / sweep targets. Presence enables the sweep+reclaim entry."
+    price_action: true
+    provenance: sourced
+    engine: partial            # sweep+reclaim entry wired off the confirmed swing; EQH/EQL tolerance TODO
     optimize: tolerance
     params:
       eqhl_tolerance_ticks:   {default: 2, min: 0, max: 10, step: 1, type: opt}
@@ -116,10 +126,10 @@ price_action:
       require_discount_for_long: {default: true, type: opt}
 
   order_block:
-    desc: "Last opposite candle before an impulse (OB); failed OB retested = Breaker."
+    desc: "Last opposite candle before an impulse (OB); failed OB retested = Breaker. Presence enables the OB-mitigation entry."
     price_action: true
     provenance: folklore
-    engine: todo
+    engine: implemented        # OB-mitigation entry wired (Level B); breaker variant TODO
     optimize: block
     params:
       ob_impulse_min_atr:     {default: 1.0,  min: 0.5, max: 3.0, step: 0.25, type: opt}
@@ -208,10 +218,10 @@ classic:
       slow: {default: 50, min: 20, max: 250, step: 10, type: opt}   # constraint: slow > fast
 
   moving_average:
-    desc: "SMA/EMA trend + crossovers. Long-term: 50/200 golden cross (watch on weekly)."
+    desc: "SMA/EMA trend + pullback entry. Long-term: 50/200 golden cross (watch on weekly). Presence enables the MA pullback entry."
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: partial            # trend-pullback entry wired (Level B); golden-cross-as-filter TODO
     optimize: coarse_menu      # prefer the canonical menu over dense 1-step sweeps
     canonical_menu: [9, 20, 21, 50, 100, 200]
     classic_pairs: [{fast: 50, slow: 200, name: golden_cross}, {fast: 9, slow: 21, name: short_swing}]
@@ -221,10 +231,10 @@ classic:
       type:        {default: EMA, options: [SMA, EMA],          type: opt}
 
   rsi:
-    desc: "Wilder momentum oscillator (0-100). OB/OS + divergence."
+    desc: "Wilder momentum oscillator (0-100). OB/OS reversion entry + divergence. Presence enables the RSI-reversion entry."
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: implemented        # RSI OB/OS reversion entry wired (Level B)
     optimize: thresholds       # length usually left at 14
     params:
       length:     {default: 14, min: 7,  max: 30, step: 1, type: opt}
@@ -232,10 +242,10 @@ classic:
       oversold:   {default: 30, min: 15, max: 35, step: 5, type: opt}
 
   macd:
-    desc: "(fastEMA - slowEMA), signal EMA, histogram. 12/26/9 near-universal."
+    desc: "(fastEMA - slowEMA), signal EMA, histogram. 12/26/9 near-universal. Presence enables the MACD-cross entry."
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: implemented        # MACD line/signal cross entry wired (Level B)
     optimize: low_priority     # swing/position traders rarely change it
     params:
       fast:   {default: 12, min: 5,  max: 20, step: 1, type: opt}
@@ -243,10 +253,10 @@ classic:
       signal: {default: 9,  min: 5,  max: 15, step: 1, type: opt}
 
   bollinger_bands:
-    desc: "20-SMA +/- k*stddev volatility envelope."
+    desc: "20-SMA +/- k*stddev volatility envelope. Presence enables the band-reversion entry."
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: partial            # band-reversion entry wired (SMA basis); ma_type EMA basis TODO
     optimize: multiplier
     params:
       length:      {default: 20,  min: 10,  max: 50,  step: 5,    type: opt}
@@ -309,10 +319,10 @@ classic:
       multiplier: {default: 3.0, min: 1.5, max: 4.0, step: 0.5, type: opt}
 
   donchian:
-    desc: "Highest-high/lowest-low breakout channel. Turtle 20/55."
+    desc: "Highest-high/lowest-low breakout channel. Turtle 20/55. Presence enables the channel-break entry."
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: implemented        # prior-N channel break entry wired (Level B)
     optimize: coarse_menu
     classic_menu: [20, 55]
     params:

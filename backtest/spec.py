@@ -243,15 +243,40 @@ _PARAM_MAP: dict[tuple[str, str], str] = {
     ("atr", "length"):               "atr_len",
     ("ema_cross", "fast"):           "ema_fast",
     ("ema_cross", "slow"):           "ema_slow",
+    # --- Level-B entry generators ---
+    ("divergence", "pivot_lookback_left"): "cvd_div_pivot_k",
+    ("order_block", "ob_impulse_min_atr"): "ob_impulse_atr",
+    ("order_block", "ob_max_age_bars"):    "ob_max_age",
+    ("order_block", "ob_mitigation_pct"):  "ob_mit_pct",
+    ("momentum", "body_atr"):        "momentum_body_atr",
+    ("macd", "fast"):                "macd_fast",
+    ("macd", "slow"):                "macd_slow",
+    ("macd", "signal"):              "macd_signal",
+    ("rsi", "length"):               "rsi_length",
+    ("rsi", "overbought"):           "rsi_ob",
+    ("rsi", "oversold"):             "rsi_os",
+    ("donchian", "length"):          "donchian_len",
+    ("moving_average", "length_fast"): "ma_fast",
+    ("moving_average", "length_slow"): "ma_slow",
+    ("moving_average", "type"):      "ma_type",
+    ("bollinger_bands", "length"):   "bb_len",
+    ("bollinger_bands", "stddev_mult"): "bb_mult",
 }
 # Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
-_TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
+_TOGGLE_CONSUMED: set[tuple[str, str]] = {
+    ("vwap", "vwap_veto"),
+    ("market_structure", "mode"),      # selects bos/choch generator
+    ("divergence", "osc_source"),      # cvd axis wires the divergence entry
+}
 
 # Groups whose presence/params actually change engine behaviour TODAY (via
 # _PARAM_MAP + the toggles). Everything else is engine:todo and inert until
 # wired, so the generator restricts its honest search to these.
-WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops",
-                                 "ema_cross", "market_structure")
+WIRED_GROUPS: tuple[str, ...] = (
+    "fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross", "market_structure",
+    "liquidity_eqhl", "divergence", "order_block", "momentum",
+    "macd", "rsi", "donchian", "moving_average", "bollinger_bands",
+)
 
 
 def effective_signature(cfg) -> tuple:
@@ -262,7 +287,15 @@ def effective_signature(cfg) -> tuple:
             bool(cfg.use_cvd_streak), int(cfg.cvd_trend_count), bool(cfg.use_vwap_veto),
             bool(cfg.stop_swing), int(cfg.pivot_k), round(float(cfg.swing_buf_ticks), 3),
             bool(cfg.use_ema_cross), int(cfg.ema_fast), int(cfg.ema_slow),
-            bool(cfg.use_bos_entry))
+            bool(cfg.use_bos_entry), bool(cfg.use_choch_entry), bool(cfg.use_liq_sweep),
+            bool(cfg.use_cvd_div), int(cfg.cvd_div_pivot_k), bool(cfg.use_order_block),
+            round(float(cfg.ob_impulse_atr), 3), int(cfg.ob_max_age), round(float(cfg.ob_mit_pct), 3),
+            bool(cfg.use_momentum), round(float(cfg.momentum_body_atr), 3),
+            bool(cfg.use_macd_cross), int(cfg.macd_fast), int(cfg.macd_slow), int(cfg.macd_signal),
+            bool(cfg.use_rsi_rev), int(cfg.rsi_length), round(float(cfg.rsi_ob), 3),
+            round(float(cfg.rsi_os), 3), bool(cfg.use_donchian), int(cfg.donchian_len),
+            bool(cfg.use_ma_pullback), int(cfg.ma_fast), int(cfg.ma_slow), str(cfg.ma_type),
+            bool(cfg.use_bb_revert), int(cfg.bb_len), round(float(cfg.bb_mult), 3))
 
 
 def spec_to_config(rspec: ResolvedSpec):
@@ -303,17 +336,39 @@ def spec_to_config(rspec: ResolvedSpec):
     over["use_vwap_veto"] = "vwap" in g and bool(g["vwap"].get("vwap_veto", True))
 
     # Entry generators (Level B). Presence of an explicit entry group turns its
-    # generator on: ema_cross -> EMA crossover, market_structure -> break-of-
-    # structure (BOS). A spec that declares any explicit entry but NO fvg group is
-    # a non-FVG strategy, so the default FVG entry is switched off (otherwise FVG
-    # stays on and the generators stack, in priority order). Specs/presets with no
-    # entry group at all keep the default FVG entry.
-    _ENTRY_GROUPS = {"ema_cross", "market_structure"}
+    # generator on. A spec that enables ANY non-FVG entry but declares no fvg
+    # group is a non-FVG strategy, so the default FVG entry is switched off;
+    # otherwise FVG stays on and the generators stack in the engine's priority
+    # order. Specs/presets with no entry group at all keep the default FVG entry.
+    entry_flags: dict[str, Any] = {}
     if "ema_cross" in g:
-        over["use_ema_cross"] = True
+        entry_flags["use_ema_cross"] = True
     if "market_structure" in g:
-        over["use_bos_entry"] = True
-    if (_ENTRY_GROUPS & set(g)) and "fvg" not in g:
+        mode = g["market_structure"].get("mode", "bos")
+        if mode in ("bos", "both"):
+            entry_flags["use_bos_entry"] = True
+        if mode in ("choch", "both"):
+            entry_flags["use_choch_entry"] = True
+    if "liquidity_eqhl" in g:
+        entry_flags["use_liq_sweep"] = True
+    if "divergence" in g and g["divergence"].get("osc_source") == "cvd":
+        entry_flags["use_cvd_div"] = True          # only the CVD axis is wired
+    if "order_block" in g:
+        entry_flags["use_order_block"] = True
+    if "momentum" in g:
+        entry_flags["use_momentum"] = True
+    if "macd" in g:
+        entry_flags["use_macd_cross"] = True
+    if "rsi" in g:
+        entry_flags["use_rsi_rev"] = True
+    if "donchian" in g:
+        entry_flags["use_donchian"] = True
+    if "moving_average" in g:
+        entry_flags["use_ma_pullback"] = True
+    if "bollinger_bands" in g:
+        entry_flags["use_bb_revert"] = True
+    over.update(entry_flags)
+    if entry_flags and "fvg" not in g:
         over["use_fvg_entry"] = False
 
     # Direct param maps (resolved values include registry defaults).

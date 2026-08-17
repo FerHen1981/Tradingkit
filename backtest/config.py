@@ -130,11 +130,43 @@ class Config:
     min_qty: float = 1.0
 
     # --- entry generators (Level B; FVG is the default entry) ---
+    # Each flag adds one pluggable entry generator; all default OFF so any preset
+    # without a spec (El Toro etc.) is byte-identical. Generators stack in the
+    # engine's priority order; the CVD/VWAP filters + stop/TP/sizing are shared.
     use_fvg_entry: bool = True           # FVG imbalance entry (El Toro's core)
     use_ema_cross: bool = False          # EMA fast/slow crossover entry
     ema_fast: int = 20
     ema_slow: int = 50
     use_bos_entry: bool = False          # break-of-structure (swing break) momentum entry
+    # --- price-action / order-flow entries ---
+    use_choch_entry: bool = False        # change-of-character (first counter-break) reversal
+    use_liq_sweep: bool = False          # liquidity sweep of a swing + reclaim (reversal)
+    use_cvd_div: bool = False            # price/CVD divergence at pivots (reversal)
+    cvd_div_pivot_k: int = 5
+    use_order_block: bool = False        # order-block mitigation (continuation)
+    ob_impulse_atr: float = 1.0          # impulse body >= x*ATR marks the OB
+    ob_max_age: int = 50                 # OB expires after N bars unmitigated
+    ob_mit_pct: float = 0.5              # how far into the OB zone counts as mitigation
+    use_momentum: bool = False           # displacement/impulse bar entry (momentum)
+    momentum_body_atr: float = 1.0       # entry when |close-open| >= x*ATR in-trend
+    # --- classic (analyst) entries ---
+    use_macd_cross: bool = False         # MACD line crosses its signal
+    macd_fast: int = 12
+    macd_slow: int = 26
+    macd_signal: int = 9
+    use_rsi_rev: bool = False            # RSI exits oversold/overbought (mean reversion)
+    rsi_length: int = 14
+    rsi_ob: float = 70.0
+    rsi_os: float = 30.0
+    use_donchian: bool = False           # close breaks the prior-N high/low channel
+    donchian_len: int = 20
+    use_ma_pullback: bool = False        # trend pullback-and-resume to a moving average
+    ma_fast: int = 50
+    ma_slow: int = 200
+    ma_type: str = "EMA"                 # "EMA" | "SMA"
+    use_bb_revert: bool = False          # Bollinger-band extreme reversion
+    bb_len: int = 20
+    bb_mult: float = 2.0
 
     # --- entry & stop ---
     entry_limit_mode: bool = True        # "Limit @ 50% FVG" vs market

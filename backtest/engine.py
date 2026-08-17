@@ -88,6 +88,9 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         else np.zeros(len(df), dtype=np.int64),
         "bos_dir": ind["bos_dir"].to_numpy() if "bos_dir" in ind
         else np.zeros(len(df), dtype=np.int64),
+        **{k: (ind[k].to_numpy() if k in ind else np.zeros(len(df), dtype=np.int64))
+           for k in ("choch_dir", "liq_dir", "cvddiv_dir", "ob_dir", "mom_dir",
+                     "macd_dir", "rsi_dir", "don_dir", "mapb_dir", "bb_dir")},
     }
 
 
@@ -110,6 +113,11 @@ class Engine:
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
         self.ema_cross_dir = a.get("ema_cross_dir")
         self.bos_dir = a.get("bos_dir")
+        self.choch_dir = a.get("choch_dir"); self.liq_dir = a.get("liq_dir")
+        self.cvddiv_dir = a.get("cvddiv_dir"); self.ob_dir = a.get("ob_dir")
+        self.mom_dir = a.get("mom_dir"); self.macd_dir = a.get("macd_dir")
+        self.rsi_dir = a.get("rsi_dir"); self.don_dir = a.get("don_dir")
+        self.mapb_dir = a.get("mapb_dir"); self.bb_dir = a.get("bb_dir")
 
         self.n = len(self.close)
         self._reset_state()
@@ -174,13 +182,23 @@ class Engine:
         # Each returns (dir, entry_ref, stop_up, stop_down); filters (CVD/VWAP)
         # and stop/TP/sizing are applied by the engine on top, so adding a
         # generator never touches the risk machinery.
-        gens = []
-        if self.cfg.use_fvg_entry:
-            gens.append(self._entry_fvg)
-        if self.cfg.use_ema_cross:
-            gens.append(self._entry_ema)
-        if self.cfg.use_bos_entry:
-            gens.append(self._entry_bos)
+        cfg = self.cfg
+        roster = [
+            (cfg.use_fvg_entry, self._entry_fvg),
+            (cfg.use_ema_cross, self._entry_ema),
+            (cfg.use_bos_entry, self._entry_bos),
+            (cfg.use_choch_entry, self._entry_choch),
+            (cfg.use_liq_sweep, self._entry_liq),
+            (cfg.use_cvd_div, self._entry_cvddiv),
+            (cfg.use_order_block, self._entry_ob),
+            (cfg.use_momentum, self._entry_mom),
+            (cfg.use_macd_cross, self._entry_macd),
+            (cfg.use_rsi_rev, self._entry_rsi),
+            (cfg.use_donchian, self._entry_don),
+            (cfg.use_ma_pullback, self._entry_mapb),
+            (cfg.use_bb_revert, self._entry_bb),
+        ]
+        gens = [m for on, m in roster if on]
         self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
 
     # --------------------------------------------------------------- helpers
@@ -625,6 +643,25 @@ class Engine:
         if d == 0:
             return 0, np.nan, np.nan, np.nan
         return d, self.close[i], np.nan, np.nan
+
+    def _mkt(self, arr, i: int):
+        """Shared shape for the market-at-close generators: read a per-bar dir
+        array, enter at the close, and leave the stop to the swing/fixed logic."""
+        d = int(arr[i]) if arr is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan
+
+    def _entry_choch(self, i):   return self._mkt(self.choch_dir, i)    # reversal (structure flip)
+    def _entry_liq(self, i):     return self._mkt(self.liq_dir, i)      # liquidity sweep + reclaim
+    def _entry_cvddiv(self, i):  return self._mkt(self.cvddiv_dir, i)   # price/CVD divergence
+    def _entry_ob(self, i):      return self._mkt(self.ob_dir, i)       # order-block mitigation
+    def _entry_mom(self, i):     return self._mkt(self.mom_dir, i)      # displacement/impulse bar
+    def _entry_macd(self, i):    return self._mkt(self.macd_dir, i)     # MACD line/signal cross
+    def _entry_rsi(self, i):     return self._mkt(self.rsi_dir, i)      # RSI OB/OS reversion
+    def _entry_don(self, i):     return self._mkt(self.don_dir, i)      # Donchian channel break
+    def _entry_mapb(self, i):    return self._mkt(self.mapb_dir, i)     # MA trend pullback
+    def _entry_bb(self, i):      return self._mkt(self.bb_dir, i)       # Bollinger reversion
 
     def _signal(self, i: int, can_trade: bool):
         """Ask the enabled entry generators (priority order); the first with a

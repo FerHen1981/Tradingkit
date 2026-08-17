@@ -1,0 +1,17 @@
+# RSI reversion — mean-reversion entry (Level B, classic).
+# Long when RSI crosses back UP out of oversold; short when it crosses back DOWN
+# out of overbought. Counter-trend, so NO trend filters (they'd suppress it).
+name: RSI_Reversion
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: false
+  max_active_groups: 3
+groups:
+  rsi:
+    length: 14
+    overbought: 70
+    oversold: 30
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

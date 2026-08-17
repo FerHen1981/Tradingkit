@@ -70,6 +70,123 @@ def _ema(x: np.ndarray, length: int) -> np.ndarray:
     return out
 
 
+def _ma(x: np.ndarray, length: int, kind: str = "EMA") -> np.ndarray:
+    """Moving average — EMA (default) or SMA — as a full-length array."""
+    n = max(int(length), 1)
+    if kind == "SMA":
+        return pd.Series(x).rolling(n, min_periods=n).mean().to_numpy()
+    return _ema(x, n)
+
+
+def _rsi(close: np.ndarray, length: int) -> np.ndarray:
+    """Wilder RSI (0-100), seeded on the first diff. NaN at bar 0."""
+    n = len(close)
+    out = np.full(n, np.nan)
+    if n < 2:
+        return out
+    avg_gain = avg_loss = 0.0
+    L = max(int(length), 1)
+    for i in range(1, n):
+        ch = close[i] - close[i - 1]
+        g = ch if ch > 0 else 0.0
+        l = -ch if ch < 0 else 0.0
+        if i == 1:
+            avg_gain, avg_loss = g, l
+        else:
+            avg_gain = (avg_gain * (L - 1) + g) / L
+            avg_loss = (avg_loss * (L - 1) + l) / L
+        if avg_loss == 0:
+            out[i] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            out[i] = 100.0 - 100.0 / (1.0 + rs)
+    return out
+
+
+def _cross_dir(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """+1 the bar `a` crosses above `b`, -1 the bar it crosses below, else 0."""
+    n = len(a)
+    above = a > b
+    out = np.zeros(n, dtype=np.int64)
+    out[1:] = np.where(above[1:] & ~above[:-1], 1,
+                       np.where(~above[1:] & above[:-1], -1, 0))
+    return out
+
+
+def _order_block_dir(open_, high, low, close, atr, impulse_atr, max_age, mit_pct):
+    """Order-block mitigation entry (continuation). An impulse bar (body >=
+    impulse_atr*ATR) marks the last opposite candle before it as an OB zone;
+    a later bar that trades back into that zone fires an entry. Lookahead-safe:
+    the OB is built from bars <= i, mitigation is tested on the current bar, and
+    an OB never fires on the bar that created it. One-shot per zone."""
+    n = len(close)
+    out = np.zeros(n, dtype=np.int64)
+    bull_top = bull_bot = np.nan; bull_age = -1
+    bear_top = bear_bot = np.nan; bear_age = -1
+    for i in range(1, n):
+        # age existing OBs, expire the stale ones
+        if bull_age >= 0:
+            bull_age += 1
+            if bull_age > max_age:
+                bull_top = bull_bot = np.nan; bull_age = -1
+        if bear_age >= 0:
+            bear_age += 1
+            if bear_age > max_age:
+                bear_top = bear_bot = np.nan; bear_age = -1
+        # mitigation (OB set on a prior bar) -> fire, one-shot
+        if not np.isnan(bull_top):
+            trig = bull_top - mit_pct * (bull_top - bull_bot)
+            if low[i] <= trig:
+                out[i] = 1
+                bull_top = bull_bot = np.nan; bull_age = -1
+        if out[i] == 0 and not np.isnan(bear_top):
+            trig = bear_bot + mit_pct * (bear_top - bear_bot)
+            if high[i] >= trig:
+                out[i] = -1
+                bear_top = bear_bot = np.nan; bear_age = -1
+        # detect a new impulse this bar -> record the opposite candle as the OB
+        thr = impulse_atr * atr[i]
+        if thr > 0:
+            body = close[i] - open_[i]
+            if body >= thr:                       # up-impulse -> bullish OB
+                for j in range(i - 1, max(i - 6, -1), -1):
+                    if close[j] < open_[j]:
+                        bull_bot, bull_top, bull_age = low[j], high[j], 0
+                        break
+            elif -body >= thr:                    # down-impulse -> bearish OB
+                for j in range(i - 1, max(i - 6, -1), -1):
+                    if close[j] > open_[j]:
+                        bear_bot, bear_top, bear_age = low[j], high[j], 0
+                        break
+    return out
+
+
+def _cvd_div_dir(low, high, close, cvd, k):
+    """Price/CVD divergence at confirmed pivots (reversal). Bullish = price lower
+    low but CVD higher low; bearish = price higher high but CVD lower high. Uses
+    the same pivot window as _pivot_confirmed (confirmed at b+k), so it is
+    lookahead-safe and fires on the confirmation bar."""
+    n = len(close)
+    out = np.zeros(n, dtype=np.int64)
+    prev_pl = prev_pl_cvd = np.nan
+    prev_ph = prev_ph_cvd = np.nan
+    for i in range(n):
+        b = i - k
+        if b - k < 0 or b + k >= n:
+            continue
+        cl = low[b]
+        if cl < low[b - k:b].min() and cl < low[b + 1:b + k + 1].min():
+            if not np.isnan(prev_pl) and cl < prev_pl and cvd[b] > prev_pl_cvd:
+                out[i] = 1
+            prev_pl, prev_pl_cvd = cl, cvd[b]
+        ch = high[b]
+        if ch > high[b - k:b].max() and ch > high[b + 1:b + k + 1].max():
+            if out[i] == 0 and not np.isnan(prev_ph) and ch > prev_ph and cvd[b] < prev_ph_cvd:
+                out[i] = -1
+            prev_ph, prev_ph_cvd = ch, cvd[b]
+    return out
+
+
 def _atr(high, low, close, length):
     """Wilder's ATR (RMA of true range), matching Pine ta.atr."""
     n = len(close)
@@ -106,8 +223,11 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     high = d["High"].to_numpy(dtype=float)
     low = d["Low"].to_numpy(dtype=float)
     close = d["Close"].to_numpy(dtype=float)
+    open_ = d["Open"].to_numpy(dtype=float)
     vol = d["Volume"].to_numpy(dtype=float)
     delta = d["Delta"].to_numpy(dtype=float)
+    cvd = (d["CVD_close"].to_numpy(dtype=float) if "CVD_close" in d.columns
+           else np.cumsum(delta))
     new_session = d["new_session"].to_numpy(dtype=bool)
     mintick = cfg.contract.mintick
     n = len(d)
@@ -224,5 +344,127 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         out["bos_dir"] = bos
     else:
         out["bos_dir"] = np.zeros(n, dtype=np.int64)
+
+    ph_arr = out["piv_high"].to_numpy()
+    pl_arr = out["piv_low"].to_numpy()
+
+    # --- Change of character (CHoCH) — first counter-break of structure --------
+    # Reversal complement of BOS: after price has been making the break one way,
+    # the FIRST close back through the opposite confirmed swing flags a regime
+    # flip. Modelled as a crossover the OTHER way vs BOS, so a bullish CHoCH =
+    # close crosses back above the swing high after trading below the swing low.
+    if cfg.use_choch_entry:
+        below_lo = close < pl_arr
+        above_hi = close > ph_arr
+        choch = np.zeros(n, dtype=np.int64)
+        # long CHoCH: was below the swing low, now closes above the swing high
+        # short CHoCH: was above the swing high, now closes below the swing low
+        choch[1:] = np.where(above_hi[1:] & below_lo[:-1], 1,
+                             np.where(below_lo[1:] & above_hi[:-1], -1, 0))
+        out["choch_dir"] = choch
+    else:
+        out["choch_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Liquidity sweep + reclaim (reversal) ---------------------------------
+    # Bullish: the bar's low takes out the last confirmed swing low (sweeps the
+    # resting liquidity) but the CLOSE reclaims back above it. Bearish mirror.
+    if cfg.use_liq_sweep:
+        swept_lo = (low < pl_arr) & (close > pl_arr)
+        swept_hi = (high > ph_arr) & (close < ph_arr)
+        liq = np.where(swept_lo, 1, np.where(swept_hi, -1, 0)).astype(np.int64)
+        out["liq_dir"] = liq
+    else:
+        out["liq_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- CVD divergence at pivots (reversal) ----------------------------------
+    if cfg.use_cvd_div:
+        out["cvddiv_dir"] = _cvd_div_dir(low, high, close, cvd, int(cfg.cvd_div_pivot_k))
+    else:
+        out["cvddiv_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Order-block mitigation (continuation) --------------------------------
+    if cfg.use_order_block:
+        out["ob_dir"] = _order_block_dir(open_, high, low, close, atr,
+                                         cfg.ob_impulse_atr, int(cfg.ob_max_age), cfg.ob_mit_pct)
+    else:
+        out["ob_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Momentum / displacement bar (momentum) -------------------------------
+    # Enter WITH a bar whose body is >= momentum_body_atr * ATR (a displacement /
+    # opening-drive impulse). Direction = sign of the bar body.
+    if cfg.use_momentum:
+        body = close - open_
+        thr = cfg.momentum_body_atr * atr
+        mom = np.where((body >= thr) & (thr > 0), 1,
+                       np.where((-body >= thr) & (thr > 0), -1, 0)).astype(np.int64)
+        out["mom_dir"] = mom
+    else:
+        out["mom_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- MACD line / signal cross (momentum, classic) -------------------------
+    if cfg.use_macd_cross:
+        macd_line = _ema(close, cfg.macd_fast) - _ema(close, cfg.macd_slow)
+        signal = _ema(macd_line, cfg.macd_signal)
+        out["macd_dir"] = _cross_dir(macd_line, signal)
+    else:
+        out["macd_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- RSI reversion — exit of oversold/overbought (mean reversion) ---------
+    if cfg.use_rsi_rev:
+        rsi = _rsi(close, cfg.rsi_length)
+        os_prev = np.zeros(n, dtype=bool); ob_prev = np.zeros(n, dtype=bool)
+        os_prev[1:] = rsi[:-1] <= cfg.rsi_os      # was oversold on the prior bar
+        ob_prev[1:] = rsi[:-1] >= cfg.rsi_ob
+        rr = np.where(os_prev & (rsi > cfg.rsi_os), 1,      # crossed back up out of OS -> long
+                      np.where(ob_prev & (rsi < cfg.rsi_ob), -1, 0)).astype(np.int64)
+        out["rsi_dir"] = rr
+    else:
+        out["rsi_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Donchian channel break (breakout/breakdown, classic) -----------------
+    if cfg.use_donchian:
+        dl = int(cfg.donchian_len)
+        upper = pd.Series(high).rolling(dl, min_periods=dl).max().shift(1).to_numpy()
+        lower = pd.Series(low).rolling(dl, min_periods=dl).min().shift(1).to_numpy()
+        up = close > upper; dn = close < lower
+        don = np.zeros(n, dtype=np.int64)
+        don[1:] = np.where(up[1:] & ~up[:-1], 1, np.where(dn[1:] & ~dn[:-1], -1, 0))
+        out["don_dir"] = don
+    else:
+        out["don_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Moving-average trend pullback (trend following / pullback) -----------
+    # In an uptrend (fast MA > slow MA) enter when the bar dips to/through the
+    # fast MA but closes back above it (a pullback-and-resume). Bearish mirror.
+    if cfg.use_ma_pullback:
+        fast = _ma(close, cfg.ma_fast, cfg.ma_type)
+        slow = _ma(close, cfg.ma_slow, cfg.ma_type)
+        up_tr = fast > slow
+        long_pb = up_tr & (low <= fast) & (close > fast)
+        short_pb = (~up_tr) & (high >= fast) & (close < fast)
+        mp = np.where(long_pb, 1, np.where(short_pb, -1, 0)).astype(np.int64)
+        # guard the NaN warm-up (rolling SMA leaves leading NaN -> comparisons False)
+        mp[np.isnan(slow)] = 0
+        out["mapb_dir"] = mp
+    else:
+        out["mapb_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Bollinger-band extreme reversion (mean reversion / range) ------------
+    # Long when the bar pokes below the lower band but closes back inside;
+    # short when it pokes above the upper band and closes back inside.
+    if cfg.use_bb_revert:
+        bl = int(cfg.bb_len)
+        cs = pd.Series(close)
+        basis = cs.rolling(bl, min_periods=bl).mean().to_numpy()
+        sd = cs.rolling(bl, min_periods=bl).std(ddof=0).to_numpy()
+        upper = basis + cfg.bb_mult * sd
+        lower = basis - cfg.bb_mult * sd
+        long_rv = (low < lower) & (close > lower)
+        short_rv = (high > upper) & (close < upper)
+        bb = np.where(long_rv, 1, np.where(short_rv, -1, 0)).astype(np.int64)
+        bb[np.isnan(sd)] = 0
+        out["bb_dir"] = bb
+    else:
+        out["bb_dir"] = np.zeros(n, dtype=np.int64)
 
     return out

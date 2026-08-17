@@ -110,12 +110,31 @@ the bar's regime matches the generator's declared `suits`.
 - **B1 — first cross entry (`ema_cross`) end-to-end.** ✅ DONE. El Toro identical
   (404 / PF 1.22 / $11,437.7); EMA_Cross_20_50 = a genuinely different strategy
   (9,680 trades, PF 1.19). Proves the pluggable-generator + market-entry path.
-- **B2 — order-flow/PA entries, one-per-smoke** (each carries lookahead risk, so
-  each gets its own VPS smoke with El Toro as the regression guard):
-  - `structure_bos` — ✅ LANDED (this change). Group `market_structure`; presence
-    enables the BOS entry (close-break of the last confirmed swing, swing stop on
-    the opposite pivot). Spec: `specs/bos.yaml`. CHoCH + wick-ref still TODO.
-  - next: `liquidity_sweep`, `cvd_divergence`, `order_block`, `sweep_reversal`.
+- **B2/B3 — full wireable family LANDED (batch).** The whole directional roster
+  is now wired, each guarded by a `use_*` flag (default off → El Toro identical),
+  each lookahead-safe, for one combined VPS test pass. Generator → group → spec:
+
+  | Generator | Group | Spec | Family |
+  |---|---|---|---|
+  | `structure_bos` | market_structure (mode:bos) | bos.yaml | breakout/continuation |
+  | `structure_choch` | market_structure (mode:choch) | choch.yaml | reversal |
+  | `liquidity_sweep` | liquidity_eqhl | liquidity_sweep.yaml | liquidity/stop-run |
+  | `cvd_divergence` | divergence (osc_source:cvd) | cvd_divergence.yaml | order-flow |
+  | `order_block` | order_block | order_block.yaml | continuation |
+  | `momentum_impulse` | momentum | momentum.yaml | momentum |
+  | `macd_cross` | macd | macd_cross.yaml | momentum (classic) |
+  | `rsi_reversion` | rsi | rsi_reversion.yaml | mean reversion (classic) |
+  | `donchian_break` | donchian | donchian.yaml | breakout (classic) |
+  | `ma_pullback` | moving_average | ma_pullback.yaml | trend/pullback (classic) |
+  | `bb_revert` | bollinger_bands | bb_revert.yaml | mean reversion/range (classic) |
+
+  Design note: the CVD-streak + VWAP-veto filters are TREND filters, so the
+  reversal/reversion specs (choch, liquidity_sweep, cvd_divergence, rsi_reversion,
+  bb_revert) deliberately omit them — applying a with-trend filter to a
+  counter-trend entry would suppress nearly all of its trades.
+- **Still TODO (honest):** liquidity EQH/EQL tolerance (sweep uses the confirmed
+  swing for now), RSI/MACD divergence (only the CVD axis is wired), OB breaker
+  variant, BB EMA-basis, structure wick-ref.
 - **B3 — classic entries:** `macd_cross`, `rsi_reversion`.
 - **B4 — regime context** gate (trend/range/turning) + premium/discount filter.
 - **B5 — grow the generator's search space** to all wired entries; re-run the

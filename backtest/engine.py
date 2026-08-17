@@ -164,6 +164,12 @@ class Engine:
         self._cur_i = self.start_bar
         self.trades: list[Trade] = []
 
+        # Pluggable entry generators, in priority order. FVG is #1; more are
+        # wired in later (Level B). Each returns (dir, entry_ref, stop_up,
+        # stop_down); filters (CVD/VWAP) and stop/TP/sizing are applied by the
+        # engine on top, so adding a generator never touches the risk machinery.
+        self._gens = (self._entry_fvg,)
+
     # --------------------------------------------------------------- helpers
     def _dist(self, units: float) -> float:
         """Convert a strategy distance input to a price distance per unit_mode.
@@ -580,13 +586,28 @@ class Engine:
             self.acct_halt_reason = "CHALLENGE PASSED"
 
     # -------------------------------------------------------------- signals
+    def _entry_fvg(self, i: int):
+        """Entry generator #1 — Fair Value Gap. Returns (dir, entry_ref, stop_up, stop_down)."""
+        if not self.fvg_pass[i]:
+            return 0, np.nan, np.nan, np.nan
+        d = int(self.fvg_dir[i])
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.fvg_mid[i], self.fvg_top[i], self.fvg_bot[i]
+
     def _signal(self, i: int, can_trade: bool):
-        d = self.fvg_dir[i]
-        if not self.fvg_pass[i] or d == 0:
-            return False, False, np.nan, np.nan, np.nan
-        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
-        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
-        return long0, short0, self.fvg_mid[i], self.fvg_top[i], self.fvg_bot[i]
+        """Ask the enabled entry generators (priority order); the first with a
+        direction wins. Filters (CVD streak + VWAP veto) gate the direction, and
+        the generator's refs become entry/stop hints. With only FVG enabled this
+        reproduces the original FVG signal exactly."""
+        for gen in self._gens:
+            d, entry_ref, stop_up, stop_down = gen(i)
+            if d == 0:
+                continue
+            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
+            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
+            return long0, short0, entry_ref, stop_up, stop_down
+        return False, False, np.nan, np.nan, np.nan
 
     def _memory(self, i: int, can_trade: bool, long0: bool, short0: bool):
         cfg = self.cfg

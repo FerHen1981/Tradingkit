@@ -340,10 +340,15 @@ Action:      Long allowed
    swing-stop. Vervangt de random-subset; standaard in de mill
    (`generate.py --sampler role`, met `--regimes`). Legacy random-subset blijft
    via `--sampler random`. 95 tests groen; end-to-end door de engine bewezen.
-5. **Scoring als prior** — 0–100 grade berekenen en **naast** de funnel-KPI's
-   tonen; funnel blijft de rechter (§8). ← **volgende stap**
+5. ~~**Scoring als prior**~~ — ✅ **DONE**: `scoring.score_strategy` → 0–100
+   setup-grade (A+/A/B/Observation/No-Trade, §8-gewichten) uit de decision-stack
+   + regime-fit. Puur **prior/display**: getoond in de Strategy Library (grade-pill),
+   run-detail (score-blok) en de candidates-leaderboard; de **OOS-funnel blijft de
+   rechter**. Ongevulde optionele lagen krijgen een neutrale baseline (niet nul) —
+   trouw aan de "meer ≠ beter"-ethos. 100 tests groen.
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
    → opslaan als spec → runnen. De role-getagde registry ís het skelet.
+   ← **volgende stap**
 7. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als
    uitgelijnde OHLCV-series). Rolstructuur ligt er dan al; alleen de datalaag
    koppelen. *Diep L5 is losgelaten — geen onderdeel meer van het plan.*

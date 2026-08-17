@@ -581,6 +581,16 @@ function render(){
 function kvs(obj,pre){return Object.entries(obj||{}).map(([k,v])=>{
   if(v&&typeof v==='object')return kvs(v,(pre?pre+'.':'')+k);
   return `<span class=tag style="margin:2px">${(pre?pre+'.':'')+k}: <b style="color:var(--sand)">${v}</b></span>`}).join('');}
+function scoreHtml(desc){
+  const sc=desc&&desc.score; if(!sc)return '';
+  const comps=Object.entries(sc.components||{}).map(([k,v])=>{
+    const L=k.split('_')[0];
+    return `<span class=tag style="margin:2px">${L}: <b style="color:var(--sand)">${v}</b></span>`}).join('');
+  return `<div style="margin-top:10px"><b>Setup score</b> `
+    +`<span class=tag style="color:var(--azure)">${sc.grade} · ${sc.score}/100</span> `
+    +`<span class=muted>${sc.note||''}</span>`
+    +`<div style="margin-top:5px">${comps}</div></div>`;
+}
 function regimeHtml(reg){
   if(!reg||reg.error||!reg.distribution)return '';
   const d=reg.distribution,keys=Object.keys(d);
@@ -630,6 +640,7 @@ async function showDetail(id){
     <div class=lensrow>data window: ${w.first||'?'} → ${w.last||'?'} · ${(w.bars_1m||0).toLocaleString()} 1m bars${r.segment&&r.segment!=='all'?' · <b style="color:var(--gold)">'+r.segment.toUpperCase()+'</b> (holdout '+(r.holdout_days||0)+'d)':''} · source ${r.source||''}</div>
     ${grp}
     ${stackHtml(r.desc,r.regime)}
+    ${scoreHtml(r.desc)}
     ${regimeHtml(r.regime)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
@@ -708,9 +719,11 @@ function libCard(s){
     +`<div class=row>killzones <b>${(c.killzones||[]).join(' · ')}</b> · lookback ${c.lookback}</div>`:'';
   const filt=(d.filters||[]).length?`<div class=row>filters ${d.filters.join(' · ')}</div>`:'';
   const ex=d.exit||{};
+  const sc=d.score;
+  const gradePill=sc?`<span class=tag title="setup-quality prior (framework §8) — not a verdict; the OOS funnel judges" style="color:var(--azure)">${sc.grade} · ${sc.score}</span>`:'';
   return `<div class=card data-id="${s.id}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-      <span class=ct>${s.title||s.name}</span>${famPill(d.family)}</div>
+      <span class=ct>${s.title||s.name}</span><span style="display:flex;gap:6px;align-items:center">${gradePill}${famPill(d.family)}</span></div>
     <div class=row>entry <b>${(d.entries||[]).join(', ')||'—'}</b></div>
     ${conf}${filt}
     <div class=row>exit · stop <b>${ex.stop||'?'}</b> · target <b>${ex.target||'?'}</b> · ${(ex.manage||[]).join('+')}</div>

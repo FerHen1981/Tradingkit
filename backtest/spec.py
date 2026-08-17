@@ -439,6 +439,14 @@ def describe_config(cfg) -> dict:
     out["stack_summary"] = " · ".join(
         f"{r['layer']} {r['role']}: {', '.join(r['groups'])}"
         for r in out["stack"] if r["active"])
+
+    # Setup-quality score — a PRIOR/DISPLAY (framework §8), never a gate. Regime-
+    # agnostic here; callers with a target/observed regime can re-score sharper.
+    try:
+        from .scoring import score_strategy
+        out["score"] = score_strategy(out)
+    except Exception:
+        pass
     return out
 
 

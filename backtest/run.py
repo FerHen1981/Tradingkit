@@ -206,6 +206,12 @@ def main():
             meta["regime"] = ind_mod.regime_summary(reg["regime"])
         except Exception as e:
             meta["regime"] = {"error": str(e)}
+        try:                                   # sharpen the setup score with the run's regime
+            from .scoring import score_strategy
+            dom = meta["regime"].get("dominant") if isinstance(meta.get("regime"), dict) else None
+            meta["desc"]["score"] = score_strategy(meta["desc"], regime=dom)
+        except Exception:
+            pass
         if args.spec:
             meta["groups"] = rspec.groups
         artifacts = {"kpis.json": json.dumps(kpi_obj, indent=2, default=str)}

@@ -26,7 +26,8 @@ from .config import contract
 from .engine import Engine
 from .generator import sample_batch
 from .metrics import kpis
-from .spec import (WIRED_GROUPS, effective_signature, load_registry,
+from .scoring import score_strategy
+from .spec import (WIRED_GROUPS, describe_config, effective_signature, load_registry,
                    spec_to_config, validate_spec)
 
 
@@ -124,7 +125,9 @@ def main():
             continue
         if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
             ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
-            survivors.append({"spec": spec, "kpis": k, "ignored": ignored})
+            sc = score_strategy(describe_config(cfg), regime=spec.get("target_regime"),
+                                setup_class=spec.get("setup_class"))
+            survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
         if i % 25 == 0:
             print(f"    {i}/{len(batch)}  survivors={len(survivors)}  distinct={len(seen)}  "
                   f"dups={dups}  errors={errors}  ({time.time()-t0:.0f}s)")
@@ -134,8 +137,12 @@ def main():
           f"({len(batch)} sampled, {dups} inert dups collapsed, {errors} errored, {time.time()-t0:.0f}s)")
     for s in survivors[:min(args.top, 20)]:
         k = s["kpis"]
+        g = (s.get("score") or {}).get("grade", "?")
+        sc = (s.get("score") or {}).get("score", 0)
+        setup = s["spec"].get("setup_class", "")
         print(f"    PF {k['profit_factor']:.2f}  win {k.get('win_rate_pct', 0)}%  "
-              f"trades {k['trades']}  net ${k['net_profit']:,.0f}  {list(s['spec']['groups'])}")
+              f"trades {k['trades']}  net ${k['net_profit']:,.0f}  "
+              f"[{g} {sc} · {setup}]  {list(s['spec']['groups'])}")
 
     if args.lab:
         from .lab.runs import fingerprint, make_run_id, record_run
@@ -149,7 +156,9 @@ def main():
                         "timeframe": args.tf, "lens": "classic", "segment": "is", "kind": "generated",
                         "source": f"generator:seed{args.seed}", "window": {},
                         "created_at": datetime.now(timezone.utc).isoformat(),
-                        "kpis": k, "groups": spec["groups"], "ignored": s.get("ignored", [])},
+                        "kpis": k, "groups": spec["groups"], "ignored": s.get("ignored", []),
+                        "score": s.get("score"), "setup_class": spec.get("setup_class"),
+                        "target_regime": spec.get("target_regime")},
                        {"kpis.json": json.dumps(k, default=str)})
         summ = lab_root() / f"candidates_seed{args.seed}.json"
         summ.write_text(json.dumps([{"spec": s["spec"], "kpis_is": s["kpis"],

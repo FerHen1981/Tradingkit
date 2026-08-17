@@ -124,8 +124,17 @@ def test_consistency_broken_heals_as_total_wins_grow():
     assert pb["broken"] and pb["heal_total"] == round(1383 / 0.30)   # total wins needed = 4610
     total_win = round(1383 / 0.73)                                   # denominator = SUM of wins, not net
     assert pb["heal_deficit"] == round(4610 - total_win)             # grow wins by this much
-    assert pb["day_cap"] == 1383                                     # optimize UP to the outlier, not $150
-    assert pb["days_to_heal"] and "run days up to" in pb["note"]     # bigger days heal faster
+    # buffer $2,000 → DLL $400 → safe heal day-cap = min(best 1383, 3×400) = 1200 (risk/reward-bounded)
+    assert pb["day_cap"] == 1200 and pb["risk_capped"] and "SAFE" in pb["note"]
+    assert pb["days_to_heal"]
+
+
+def test_broken_heal_uses_full_outlier_when_buffer_is_roomy():
+    a = _acct(current=51_898, buffer=8_000, payouts_taken=0,       # roomy buffer → DLL $1,600, 3:1 = $4,800 > best
+              payout={"eligible": False, "trading_days": 3, "consistency_pct": 73.0, "profit": 1898})
+    hist = {dt.date(2026, 1, 1): 1383, dt.date(2026, 1, 2): 300, dt.date(2026, 1, 3): 215}
+    pb = build_playbook(a, hist, "MES")
+    assert pb["day_cap"] == 1383 and not pb["risk_capped"] and "run days up to" in pb["note"]
 
 
 def test_non_apex_firm_flagged():

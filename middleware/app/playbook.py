@@ -57,6 +57,7 @@ class PlaybookParams:
     max_position: float = 10.0
     dll_pct: float = 0.20                # daily loss limit = this share of the remaining buffer
     cons_margin: float = 0.67            # pace to ~this × the 30% ceiling → margin under the wall
+    reward_risk: float = 3.0             # heal day-cap ≤ this × the DLL (risk/reward-bounded)
 
 
 def resolve_firm(firm: str | None) -> dict:
@@ -323,11 +324,17 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     heal_deficit = round(max(0, heal_total - total_win)) if broken else 0
 
     days_plan = days_to_heal = None
+    risk_capped = False
     if track == "eval" or maxed:
         set_day_cap = None
     elif broken:
-        set_day_cap = round(best_day)                    # optimize UP — run days up to the outlier, never over
-        days_to_heal = math.ceil(heal_deficit / best_day) if best_day > 0 else None
+        # optimize UP toward the outlier, but bound by risk/reward: don't chase a day bigger than
+        # reward_risk × the DLL the buffer safely allows — else the size to hit it risks a breach.
+        ideal = round(best_day)
+        safe = round(p.reward_risk * dll) if dll else ideal
+        set_day_cap = min(ideal, safe) if safe else ideal
+        risk_capped = set_day_cap < ideal
+        days_to_heal = math.ceil(heal_deficit / set_day_cap) if set_day_cap > 0 else None
     elif profit < safety:
         set_day_cap = round(min(day_trail or 150, soft_cap))
     elif to_full > 0:
@@ -339,10 +346,13 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     if broken:
         if quality == "ok":
             quality = "consistency"
-        risk = (f" — but buffer ${int(buffer)} is thin for days that big; resetting may be safer"
-                if (buffer is not None and buffer < 2 * best_day) else "")
-        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — heal FAST: run days up to ${best_day:,.0f} "
-                     f"(never over) so total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d){risk}")
+        if risk_capped:
+            flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — buffer thin, so heal at the SAFE "
+                         f"day-cap ${set_day_cap:,.0f} (DLL ${dll:,.0f}, {p.reward_risk:.0f}:1): total wins reach "
+                         f"${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d)")
+        else:
+            flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% of wins — heal FAST: run days up to ${set_day_cap:,.0f} "
+                         f"(never over) so total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d)")
     elif consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
         if quality == "ok":
             quality = "consistency"
@@ -359,7 +369,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "day_cap": set_day_cap, "dll": dll, "days_plan": days_plan,
         "day_trail": day_trail, "cons_cap": cons_cap, "consistency_limit": limit,
         "broken": broken, "heal_total": heal_total or None, "heal_deficit": heal_deficit or None,
-        "days_to_heal": days_to_heal,
+        "days_to_heal": days_to_heal, "risk_capped": risk_capped,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),
         "consistency_pct": consistency_pct, "daily_rate": round(daily_rate) if daily_rate else None,
         "buffer": buffer, "eligible": eligible,

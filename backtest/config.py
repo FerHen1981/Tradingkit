@@ -369,8 +369,25 @@ EL_MATADOR_TUNED = EL_MATADOR.with_(
     enabled_hours=frozenset(range(9, 16)),
 )
 
+# Management preset for CONFLUENCE reversals (Silver Bullet et al.): the entry
+# edge is a high hit-rate, so the job of management is to LET WINNERS RUN to a
+# clean R target, not protect a funded account. So: limit entry + swing stop
+# (inherited), but break-even and trailing OFF (they scratch/cap the winners —
+# see the SB batch: 351 BE-scratches, only 58 real TPs) and an R-multiple 2.0
+# target. Research-lens tuning; account phase is irrelevant under --research.
+EL_SILVER = EL_DORADO.with_(
+    name="EL_SILVER",
+    tp_mode="R-multiple",
+    r_multiple=2.0,
+    use_breakeven=False,
+    use_trail=False,
+    use_recov_trail=False,
+    confirm_bars=0,
+)
+
 PRESETS = {
     "EL_TORO": EL_TORO,
+    "EL_SILVER": EL_SILVER,
     "EL_TORO_TUNED": EL_TORO_TUNED,
     "EL_MATADOR": EL_MATADOR,
     "EL_MATADOR_TUNED": EL_MATADOR_TUNED,

@@ -5,14 +5,15 @@
 #   2. a same-direction liquidity sweep fired within the last confl_lookback bars
 #   3. price is on the correct side of session VWAP (bias)
 #   4. the FVG passes the displacement gap filter below
-# Stop beyond the swept wick (swing_stops); R-multiple TP comes from EL_DORADO.
+# Stop beyond the swept wick (swing_stops); R-multiple TP from EL_SILVER.
 #
-# base_preset EL_DORADO gives an R-multiple (2.5) target instead of El Toro's
-# fixed 122-tick TP — a mean-threshold reversal wants an R-based target, not a
-# trend-shaped fixed one (the batch test showed why fixed TP mis-fits reversals).
+# base_preset EL_SILVER = confluence-reversal management: limit entry + swing
+# stop, but break-even and trailing OFF with a clean 2R target. The first SB run
+# (on EL_DORADO) hit 60.7% win but only PF 0.91 because BE/trail scratched the
+# winners (351 BE-stops, 58 TPs); a high hit-rate edge must be allowed to run.
 name: Silver_Bullet
 base_asset: NQ
-base_preset: EL_DORADO
+base_preset: EL_SILVER      # let winners run: BE/trail OFF, clean 2R target
 
 policy:
   price_action_only: true

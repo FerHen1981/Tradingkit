@@ -355,7 +355,9 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # expectancy). es is None when trade data is too thin → fall back to the doctrine size.
     cur_size = parse_size(account.get("fase_config"), account.get("pos_band"))
     es = edge_size(account, cur_size, trading_days, dll, p)
-    set_size = es["size"] if es else float(contracts)
+    # eval is a pass-hunter: keep the AGGRESSIVE doctrine size (5c), never the conservative
+    # risk-optimal edge size. Funded milking/survival uses the edge size.
+    set_size = float(contracts) if track == "eval" else (es["size"] if es else float(contracts))
     soft_cap = round(cons_cap * p.cons_margin)
 
     # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days; the ceiling

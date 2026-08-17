@@ -100,6 +100,21 @@ def test_eval_sprint_route():
     assert pb["track"] == "eval" and pb["contracts"] == 5 and "pass" in pb["route"].lower()
 
 
+def test_exact_settables_day_cap_and_dll():
+    # building to the full cap: day-cap paces to_full over the window; DLL = 20% of the buffer
+    a = _acct(current=53_000, buffer=2_600, payouts_taken=0,
+              payout={"eligible": False, "trading_days": 6, "days_to_go": 2})
+    pb = build_playbook(a, _hist(200, 6), "MGC")
+    assert pb["day_cap"] == 550 and pb["days_plan"] == 2      # to_full 1100 / 2 days
+    assert pb["dll"] == 520 and pb["cons_cap"] == 1_230       # 20% of 2600 ; 30% of 4100
+
+
+def test_survival_settables_stay_small():
+    a = _acct(current=50_800, buffer=1_800)
+    pb = build_playbook(a, _hist(150, 4), "MGC")
+    assert pb["day_cap"] == 150 and pb["dll"] == 360          # doctrine trail ; 20% of 1800
+
+
 def test_non_apex_firm_flagged():
     a = {"stage": "Eval", "size": 50_000, "firm": "My Funded Futures", "starting": 50_000, "current": 50_000}
     pb = build_playbook(a, {}, None)

@@ -306,6 +306,27 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         quality = quality if quality != "ok" else "firm"
         flags.append(f"⚠ {firm or 'firm'} rules {rules['note']}")
 
+    # --- exact, status-based settables to paste straight into the alert ---
+    # DLL (daily loss limit): never risk more than ~20% of the remaining buffer in a day,
+    # and respect the firm's daily-loss cap (Daily Buffer $) when it's tracked.
+    dll = None
+    if buffer:
+        dll = round(0.2 * buffer)
+        if account.get("daily_buffer"):
+            dll = min(dll, round(account["daily_buffer"]))
+    # day-cap (daily profit target/trail to set): pace to_full over the days it takes to bank the
+    # full cap while every day stays under the 30% ceiling. Survival stays small (just reach safety).
+    days_plan = None
+    if track == "eval" or maxed:
+        set_day_cap = None
+    elif profit < safety:
+        set_day_cap = round(min(day_trail or 150, cons_cap))
+    elif to_full > 0:
+        days_plan = max(need_days, math.ceil(to_full / cons_cap) if cons_cap > 0 else 1, 1)
+        set_day_cap = min(round(to_full / days_plan), cons_cap)
+    else:
+        set_day_cap = round(min(day_trail or cons_cap, cons_cap))
+
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],
         "target": round(target), "target_label": target_label, "route": route,
@@ -313,7 +334,9 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "rec_strategy": rec["strategy"], "rec_why": rec["why"],
         "switch": not rec["keep"] and cur_instrument is not None, "off_edge": bool(rec.get("off_edge")),
         "contracts": contracts, "contracts_label": contract_label(contracts, inst),
-        "day_trail": day_trail, "cons_cap": cons_cap, "day_cap": day_cap, "consistency_limit": limit,
+        # exact settables for the alert: status-based day-cap (profit) + DLL (loss) + the 30% ceiling
+        "day_cap": set_day_cap, "dll": dll, "days_plan": days_plan,
+        "day_trail": day_trail, "cons_cap": cons_cap, "consistency_limit": limit,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),
         "consistency_pct": consistency_pct, "daily_rate": round(daily_rate) if daily_rate else None,
         "buffer": buffer, "eligible": eligible,

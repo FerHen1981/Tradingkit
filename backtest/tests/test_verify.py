@@ -9,10 +9,10 @@ def test_holds_out_of_sample():
 
 
 def test_edge_decayed():
-    # OOS PF collapses relative to IS -> fails the retain ratio
-    v = _verdict({"profit_factor": 1.8}, {"profit_factor": 1.0, "trades": 50},
+    # OOS PF is above the floor but collapses relative to IS -> fails retain ratio
+    v = _verdict({"profit_factor": 2.5}, {"profit_factor": 1.2, "trades": 50},
                  min_trades=20, min_pf=1.05, retain=0.6)
-    assert not v["pass"] and "decayed" in v["reason"]
+    assert not v["pass"] and "decayed" in v["reason"] and v["retain"] == 0.48
 
 
 def test_too_few_oos_trades():

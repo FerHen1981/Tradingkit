@@ -29,7 +29,8 @@ from .metrics import kpis
 from .spec import load_registry, spec_to_config, validate_spec
 
 
-def _screen_one(spec, registry, df_tf, asset):
+def run_classic(spec, registry, df_tf, asset):
+    """Run one candidate spec through the classic lens on a prepared tf frame."""
     rspec = validate_spec(spec, registry)
     cfg, _ = spec_to_config(rspec)
     if asset:
@@ -76,7 +77,7 @@ def main():
     survivors, errors, t0 = [], 0, time.time()
     for i, spec in enumerate(batch, 1):
         try:
-            k = _screen_one(spec, registry, df_tf, args.base_asset)
+            k = run_classic(spec, registry, df_tf, args.base_asset)
         except Exception:
             errors += 1
             continue
@@ -109,8 +110,8 @@ def main():
                         "kpis": k, "groups": spec["groups"]},
                        {"kpis.json": json.dumps(k, default=str)})
         summ = lab_root() / f"candidates_seed{args.seed}.json"
-        summ.write_text(json.dumps([{"name": s["spec"]["name"], "groups": s["spec"]["groups"],
-                                     "kpis": s["kpis"]} for s in survivors], indent=2, default=str))
+        summ.write_text(json.dumps([{"spec": s["spec"], "kpis_is": s["kpis"]}
+                                    for s in survivors], indent=2, default=str))
         print(f"  recorded top {min(len(survivors), args.top)} survivors + summary -> {summ}")
 
 

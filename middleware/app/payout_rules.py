@@ -26,9 +26,18 @@ APEX_DD = {25_000: 1_500, 50_000: 2_500, 100_000: 3_000, 150_000: 5_000,
            250_000: 6_500, 300_000: 7_500}
 SAFETY_NET = {sz: dd + 100 for sz, dd in APEX_DD.items()}   # min profit to leave in on payout
 
+# Apex PA payout ladder — max withdrawal per payout, rungs 1..6 (50k; scaled for other sizes).
+APEX_LADDER_50K = [1_500, 1_500, 2_000, 2_500, 2_500, 3_000]
+
 MIN_TRADING_DAYS = 8
 MIN_DAY_PROFIT = 50.0
 CONSISTENCY_LIMIT = 0.30                                    # best day ≤ 30% of total profit
+
+
+def ladder_caps(size) -> list:
+    """Max payout per rung, scaled from the Apex 50k ladder for other account sizes."""
+    scale = (int(size) if size else 50_000) / 50_000
+    return [round(x * scale) for x in APEX_LADDER_50K]
 
 
 @dataclass
@@ -46,16 +55,20 @@ class Payout:
     trading_days: int
     consistency_pct: float | None
     safety_net_balance: float | None
-    withdrawable: float          # only > 0 when it's a PA account AND every rule is met
+    withdrawable: float          # only > 0 when it's a PA account AND every rule is met (capped at the rung)
     eligible: bool
-    above_safety: float = 0.0    # $ above the safety net (the *potential*, gated by the rules)
+    above_safety: float = 0.0    # $ above the safety net (the total room, before the rung cap)
     days_to_go: int = 0          # trading days still needed
     safety_gap: float = 0.0      # $ still needed to reach the safety-net balance
+    cap: float = 0.0             # max withdrawal THIS payout (ladder rung)
+    total_cap: float = 0.0       # total the ladder pays over all rungs
+    rung: int = 0                # current rung index (payouts taken)
     rules: list = field(default_factory=list)
 
 
-def evaluate(size, starting, current, stage, daily_pnl: dict) -> Payout | None:
-    """daily_pnl: {date: realized_net} for this account. stage: 'Funded' | 'Eval'."""
+def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int = 0) -> Payout | None:
+    """daily_pnl: {date: realized_net} for this account. stage: 'Funded' | 'Eval'.
+    payouts_taken: rungs already banked → selects the ladder cap on the withdrawable."""
     if size is None or starting is None or current is None:
         return None
     size = int(size)
@@ -100,10 +113,15 @@ def evaluate(size, starting, current, stage, daily_pnl: dict) -> Payout | None:
     rules.append(Rule("Safety net", meets_safety,
                       f"balance ${current:,.0f} above ${safety_bal:,.0f}"
                       if meets_safety else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}"))
-    # PA account AND every rule met → withdrawable; otherwise no pay day (0).
+    # ladder: you can only withdraw up to the current rung's cap per payout.
+    caps = ladder_caps(size)
+    rung = max(0, min(int(payouts_taken or 0), len(caps) - 1))
+    cap = float(caps[rung])
+    # PA account AND every rule met → withdrawable (capped at the rung); otherwise no pay day (0).
     eligible = meets_days and meets_cons and meets_safety and above_safety > 0
-    withdrawable = above_safety if eligible else 0.0
+    withdrawable = round(min(above_safety, cap), 2) if eligible else 0.0
     return Payout("Funded", profit, None, trading_days,
                   None if consistency is None else round(100 * consistency, 1),
                   round(safety_bal, 2), withdrawable, eligible, above_safety=above_safety,
-                  days_to_go=days_to_go, safety_gap=safety_gap, rules=rules)
+                  days_to_go=days_to_go, safety_gap=safety_gap,
+                  cap=cap, total_cap=float(sum(caps)), rung=rung, rules=rules)

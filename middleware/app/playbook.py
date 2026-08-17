@@ -17,9 +17,8 @@ import re
 import statistics
 from dataclasses import dataclass
 
-from .payout_rules import APEX_TARGET, CONSISTENCY_LIMIT, MIN_TRADING_DAYS
-
-APEX_LADDER_50K = [1_500, 1_500, 2_000, 2_500, 2_500, 3_000]   # max payout per rung 1..6
+from .payout_rules import (APEX_LADDER_50K, APEX_TARGET, CONSISTENCY_LIMIT, MIN_TRADING_DAYS,
+                           ladder_caps)
 
 BASES = ("GC", "ES", "NQ", "YM", "CL")
 _MICRO = {"GC": "MGC", "ES": "MES", "NQ": "MNQ", "YM": "MYM", "CL": "MCL"}
@@ -96,13 +95,6 @@ def dd_amount(account: dict, size: float | None) -> float:
     if m:
         return float(m.group(1))
     return float(APEX_DD.get(int(size or 0), 2_500))
-
-
-def ladder_caps(size: float | None, ladder: list | None = None) -> list:
-    """Max payout per rung, scaled from the Apex 50k ladder for other sizes."""
-    base = ladder or APEX_LADDER_50K
-    scale = (size or 50_000) / 50_000
-    return [round(x * scale) for x in base]
 
 
 def parse_size(fase_config: str | None, pos_band: str | None) -> float | None:
@@ -242,16 +234,18 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     daily_rate = statistics.median(green) if green else None            # $/green-day, for pacing only
     best_day = green[0] if green else 0.0
 
-    # --- max-payout mechanics: put the ladder CAP on top of the engine's above-safety figure ---
-    caps = ladder_caps(size_usd, rules["ladder"])
-    cap = caps[min(payouts_taken, len(caps) - 1)]           # max withdrawal THIS step (L5 is uncapped)
-    total_cap, total_paid = sum(caps), round(account.get("payout_total") or 0)
+    # --- max-payout mechanics: the ladder CAP + safety come from the ONE engine (payout_rules),
+    # the same source L5 renders. Fallbacks only for thin unit-test payloads. ---
+    _caps = ladder_caps(size_usd)
+    cap = round(pay["cap"]) if pay.get("cap") else _caps[max(0, min(payouts_taken, len(_caps) - 1))]
+    total_cap = round(pay["total_cap"]) if pay.get("total_cap") else sum(_caps)
+    total_paid = round(account.get("payout_total") or 0)
     safety_bal = pay.get("safety_net_balance")
     dd = dd_amount(account, size_usd)
     safety = round(safety_bal - starting) if (safety_bal is not None and starting is not None) else round(dd + 100)
     above_safety = round(pay.get("above_safety")) if pay.get("above_safety") is not None \
         else round(max(0.0, profit - safety))
-    withdrawable_now = round(min(above_safety, cap))
+    withdrawable_now = round(min(above_safety, cap))         # what you can actually pull this step
     maxed = total_cap > 0 and total_paid >= total_cap
     need_days = days_to_go if days_to_go is not None else max(0, min_days - trading_days)
 

@@ -548,7 +548,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         daily[t["acct"]][t["close"]] = round(daily[t["acct"]][t["close"]] + t["net"], 2)
     for a in accounts:
         p = _eval_payout(a.get("size"), a.get("starting"), a.get("current"),
-                         a["stage"], dict(daily.get(a["full"], {})))
+                         a["stage"], dict(daily.get(a["full"], {})), int(a.get("payouts_taken") or 0))
         a["payout"] = dataclasses.asdict(p) if p else None
     _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
 

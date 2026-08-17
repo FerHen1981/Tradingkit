@@ -758,9 +758,10 @@ function renderPayout(){
   $("#payoutCards").innerHTML=funded.map(a=>{const p=a.payout;
     const chk=(p.rules||[]).map(r=>{const c=r.ok?'var(--ok)':'var(--warn)';
       return `<div class=row><span style="color:var(--muted)">${r.name}</span><b style="font-weight:500;color:var(--ink)"><span style="color:${c}">●</span> ${r.detail}</b></div>`}).join('');
+    const capNote=p.cap?`rung ${(p.rung||0)+1} · cap ${money0(p.cap)}`+(p.above_safety>p.cap?` · ${money0(p.above_safety-p.cap)} above cap carries`:''):'';
     const head=p.eligible
-      ? `<div class="big pos" style="font-size:23px">${money0(p.withdrawable)}</div><div class=ey style="color:var(--ok)">withdrawable · eligible</div>`
-      : `<div style="font-family:var(--mono);font-size:15px;color:var(--muted);margin:8px 0 3px">Not yet eligible</div><div class=ey>${p.above_safety>0?'potential '+money0(p.above_safety)+' at payout':'below safety net'}</div>`;
+      ? `<div class="big pos" style="font-size:23px">${money0(p.withdrawable)}</div><div class=ey style="color:var(--ok)">withdrawable · eligible</div><div class=calc>${capNote}</div>`
+      : `<div style="font-family:var(--mono);font-size:15px;color:var(--muted);margin:8px 0 3px">Not yet eligible</div><div class=ey>${p.above_safety>0?'potential '+money0(Math.min(p.above_safety,p.cap||p.above_safety))+' at payout':'below safety net'}</div><div class=calc>${capNote}</div>`;
     return `<div class=card><div class=ey style="color:var(--ink);font-size:13px;letter-spacing:0;text-transform:none">${a.id} · <span style="color:var(--muted)">${a.firm}</span></div>
       ${head}<div style="margin-top:10px">${chk}</div></div>`}).join('')||'<div class=calc>no funded accounts</div>';
 }

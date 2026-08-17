@@ -245,6 +245,20 @@ _PARAM_MAP: dict[tuple[str, str], str] = {
 # Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
 _TOGGLE_CONSUMED: set[tuple[str, str]] = {("vwap", "vwap_veto")}
 
+# Groups whose presence/params actually change engine behaviour TODAY (via
+# _PARAM_MAP + the toggles). Everything else is engine:todo and inert until
+# wired, so the generator restricts its honest search to these.
+WIRED_GROUPS: tuple[str, ...] = ("fvg", "cvd_delta", "vwap", "swing_stops")
+
+
+def effective_signature(cfg) -> tuple:
+    """The engine fields that genuinely change behaviour — used to collapse
+    candidates that differ only in inert (unwired) knobs, so the search is honest."""
+    return (bool(cfg.use_gap_filter), round(float(cfg.gap_min_ticks), 3),
+            round(float(cfg.gap_max_ticks), 3), bool(cfg.use_cvd_filter),
+            bool(cfg.use_cvd_streak), int(cfg.cvd_trend_count), bool(cfg.use_vwap_veto),
+            bool(cfg.stop_swing), int(cfg.pivot_k), round(float(cfg.swing_buf_ticks), 3))
+
 
 def spec_to_config(rspec: ResolvedSpec):
     """Turn a validated spec into an engine Config.

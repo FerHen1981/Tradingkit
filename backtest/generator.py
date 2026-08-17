@@ -68,11 +68,14 @@ def _repair(spec: dict) -> dict:
 def sample_spec(registry: dict, rng: random.Random, *, base_asset: str = "NQ",
                 timeframe: str | None = None, price_action_only: bool = False,
                 min_groups: int = 2, max_groups: int | None = None,
-                base_preset: str | None = None) -> dict:
+                base_preset: str | None = None, wired_only: bool = False) -> dict:
+    from .spec import WIRED_GROUPS
     groups_reg = _all_groups(registry)
     pool = [g for g, (fam, gd) in groups_reg.items()
             if (not price_action_only or gd.get("price_action"))
             and _params(gd) and not gd.get("requires_data")]     # skip data-gated (footprint)
+    if wired_only:
+        pool = [g for g in pool if g in WIRED_GROUPS]            # only genuinely-wired indicators
     maxg = max_groups or (registry.get("policy") or {}).get("max_active_groups", 8)
     lo = min(min_groups, len(pool))
     hi = min(maxg, len(pool))

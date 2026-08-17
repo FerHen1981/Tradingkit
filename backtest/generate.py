@@ -26,18 +26,27 @@ from .config import contract
 from .engine import Engine
 from .generator import sample_batch
 from .metrics import kpis
-from .spec import load_registry, spec_to_config, validate_spec
+from .spec import (WIRED_GROUPS, effective_signature, load_registry,
+                   spec_to_config, validate_spec)
+
+
+def _cfg_for(spec, registry, asset):
+    rspec = validate_spec(spec, registry)
+    cfg, unmapped = spec_to_config(rspec)
+    if asset:
+        cfg = cfg.with_(contract=contract(asset))
+    return cfg, unmapped
+
+
+def run_cfg(cfg, df_tf):
+    ind = ind_mod.compute(df_tf, cfg)
+    return kpis(Engine(cfg, df_tf, ind, research_mode=True).run())
 
 
 def run_classic(spec, registry, df_tf, asset):
     """Run one candidate spec through the classic lens on a prepared tf frame."""
-    rspec = validate_spec(spec, registry)
-    cfg, _ = spec_to_config(rspec)
-    if asset:
-        cfg = cfg.with_(contract=contract(asset))
-    ind = ind_mod.compute(df_tf, cfg)
-    res = Engine(cfg, df_tf, ind, research_mode=True).run()
-    return kpis(res)
+    cfg, _ = _cfg_for(spec, registry, asset)
+    return run_cfg(cfg, df_tf)
 
 
 def main():
@@ -55,6 +64,8 @@ def main():
     ap.add_argument("--base-asset", default="NQ")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--top", type=int, default=50, help="how many survivors to record")
+    ap.add_argument("--include-unwired", action="store_true",
+                    help="also sample engine:todo indicators (inert today — for experiments only)")
     ap.add_argument("--lab", action="store_true", help="record survivors + a candidates summary in $LAB_DIR")
     args = ap.parse_args()
 
@@ -70,26 +81,40 @@ def main():
 
     batch = sample_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
                          timeframe=args.tf, price_action_only=args.price_action_only,
-                         max_groups=args.max_groups, base_preset=args.base_preset)
+                         max_groups=args.max_groups, base_preset=args.base_preset,
+                         wired_only=not args.include_unwired)
+    if args.include_unwired:
+        print("  WARNING: --include-unwired samples engine:todo indicators that are inert today; "
+              "candidates collapse to their wired core (dedup below still applies).")
+    else:
+        print(f"  honest search: only wired indicators {list(WIRED_GROUPS)} "
+              f"(engine:todo blocks not searched — grow via the wiring roadmap)")
     print(f"  sampled {len(batch)} candidates; screening (min trades {args.min_trades}, "
           f"PF {args.min_pf}) ...")
 
-    survivors, errors, t0 = [], 0, time.time()
+    survivors, errors, dups, seen, t0 = [], 0, 0, set(), time.time()
     for i, spec in enumerate(batch, 1):
         try:
-            k = run_classic(spec, registry, df_tf, args.base_asset)
+            cfg, unmapped = _cfg_for(spec, registry, args.base_asset)
+            sig = effective_signature(cfg)
+            if sig in seen:            # same *effective* strategy (inert-only difference) — skip
+                dups += 1
+                continue
+            seen.add(sig)
+            k = run_cfg(cfg, df_tf)
         except Exception:
             errors += 1
             continue
         if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
-            survivors.append({"spec": spec, "kpis": k})
+            ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
+            survivors.append({"spec": spec, "kpis": k, "ignored": ignored})
         if i % 25 == 0:
-            print(f"    {i}/{len(batch)}  survivors={len(survivors)}  errors={errors}  "
-                  f"({time.time()-t0:.0f}s)")
+            print(f"    {i}/{len(batch)}  survivors={len(survivors)}  distinct={len(seen)}  "
+                  f"dups={dups}  errors={errors}  ({time.time()-t0:.0f}s)")
 
     survivors.sort(key=lambda s: s["kpis"].get("profit_factor", 0), reverse=True)
-    print(f"\n  DONE: {len(survivors)} survivors of {len(batch)} "
-          f"({time.time()-t0:.0f}s, {errors} errored)")
+    print(f"\n  DONE: {len(survivors)} survivors of {len(seen)} DISTINCT effective configs "
+          f"({len(batch)} sampled, {dups} inert dups collapsed, {errors} errored, {time.time()-t0:.0f}s)")
     for s in survivors[:min(args.top, 20)]:
         k = s["kpis"]
         print(f"    PF {k['profit_factor']:.2f}  win {k.get('win_rate_pct', 0)}%  "
@@ -107,11 +132,12 @@ def main():
                         "timeframe": args.tf, "lens": "classic", "segment": "is", "kind": "generated",
                         "source": f"generator:seed{args.seed}", "window": {},
                         "created_at": datetime.now(timezone.utc).isoformat(),
-                        "kpis": k, "groups": spec["groups"]},
+                        "kpis": k, "groups": spec["groups"], "ignored": s.get("ignored", [])},
                        {"kpis.json": json.dumps(k, default=str)})
         summ = lab_root() / f"candidates_seed{args.seed}.json"
-        summ.write_text(json.dumps([{"spec": s["spec"], "kpis_is": s["kpis"]}
-                                    for s in survivors], indent=2, default=str))
+        summ.write_text(json.dumps([{"spec": s["spec"], "kpis_is": s["kpis"],
+                                     "ignored": s.get("ignored", [])} for s in survivors],
+                                   indent=2, default=str))
         print(f"  recorded top {min(len(survivors), args.top)} survivors + summary -> {summ}")
 
 

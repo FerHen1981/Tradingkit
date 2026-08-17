@@ -67,3 +67,25 @@ def test_deterministic_seed():
     a = sample_batch(20, REG, seed=42)
     b = sample_batch(20, REG, seed=42)
     assert [s["groups"] for s in a] == [s["groups"] for s in b]
+
+
+def test_wired_only_restricts_pool():
+    from backtest.spec import WIRED_GROUPS
+    for s in sample_batch(40, REG, seed=11, wired_only=True):
+        assert all(g in WIRED_GROUPS for g in s["groups"])
+
+
+def test_effective_signature_collapses_inert_params():
+    from backtest.spec import spec_to_config, effective_signature
+    base = {"name": "a", "base_asset": "NQ", "base_preset": "EL_TORO",
+            "policy": {"price_action_only": False, "max_active_groups": 6},
+            "groups": {"cvd_delta": {"cvd_trend_count": 4, "cvd_slope_lookback": 20}}}
+    other = json.loads(json.dumps(base))
+    other["groups"]["cvd_delta"]["cvd_slope_lookback"] = 55        # inert (unwired) knob
+    ca, _ = spec_to_config(validate_spec(base, REG))
+    cb, _ = spec_to_config(validate_spec(other, REG))
+    assert effective_signature(ca) == effective_signature(cb)     # same effective strategy
+    # but changing a WIRED knob must change the signature
+    other["groups"]["cvd_delta"]["cvd_trend_count"] = 7
+    cc, _ = spec_to_config(validate_spec(other, REG))
+    assert effective_signature(cc) != effective_signature(ca)

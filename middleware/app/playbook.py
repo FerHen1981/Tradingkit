@@ -294,12 +294,6 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         if quality == "ok":
             quality = "thin_buffer"
         flags.append(f"buffer ${int(buffer)} thin — 1 {inst} until it re-locks")
-    # per-account consistency signal (from the engine): flag when one day already eats a big
-    # share of total profit — approaching the 30% wall that would void the payout.
-    if consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
-        if quality == "ok":
-            quality = "consistency"
-        flags.append(f"consistency {consistency_pct:.0f}% on one day — spread more (max {limit*100:.0f}%)")
 
     if rec.get("off_edge"):
         quality = "switch"
@@ -316,12 +310,22 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         dll = round(p.dll_pct * buffer)
         if account.get("daily_buffer"):
             dll = min(dll, round(account["daily_buffer"]))
-    # day-cap (daily profit target/trail to set): pace to_full so every day stays at a CONSERVATIVE
-    # soft target (~cons_margin × the 30% ceiling) — margin under the wall, spread over more days.
+    # day-cap (daily profit target/trail to set): pace so every day stays at a CONSERVATIVE soft
+    # target (~cons_margin × the 30% ceiling) — margin under the wall, spread over more days.
     soft_cap = round(cons_cap * p.cons_margin)
-    days_plan = None
+
+    # consistency HEALING: a day already > 30% of total is locked in. The only way back under 30%
+    # is to grow total to best_day / 30% — with small days, never another big one.
+    broken = bool(consistency_pct is not None and limit and consistency_pct > 100 * limit)
+    heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0
+    heal_deficit = round(max(0, heal_total - profit)) if broken else 0
+
+    days_plan = days_to_heal = None
     if track == "eval" or maxed:
         set_day_cap = None
+    elif broken:
+        set_day_cap = round(min(day_trail or 150, soft_cap))          # small — dilute, never repeat a big day
+        days_to_heal = math.ceil(heal_deficit / set_day_cap) if (set_day_cap and heal_deficit > 0) else 0
     elif profit < safety:
         set_day_cap = round(min(day_trail or 150, soft_cap))
     elif to_full > 0:
@@ -329,6 +333,17 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         set_day_cap = min(round(to_full / days_plan), soft_cap)
     else:
         set_day_cap = round(min(day_trail or soft_cap, soft_cap))
+
+    if broken:
+        if quality == "ok":
+            quality = "consistency"
+        prac = "" if (cap and heal_deficit <= 2 * cap) else " — likely won't pay this cycle"
+        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% > 30% — cap days at ${set_day_cap:,.0f}; "
+                     f"grow total to ${heal_total:,.0f} (+${heal_deficit:,.0f}, ~{days_to_heal}d) to clear 30%{prac}")
+    elif consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
+        if quality == "ok":
+            quality = "consistency"
+        flags.append(f"consistency {consistency_pct:.0f}% on one day — spread more (max {limit*100:.0f}%)")
 
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],
@@ -340,6 +355,8 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         # exact settables for the alert: status-based day-cap (profit) + DLL (loss) + the 30% ceiling
         "day_cap": set_day_cap, "dll": dll, "days_plan": days_plan,
         "day_trail": day_trail, "cons_cap": cons_cap, "consistency_limit": limit,
+        "broken": broken, "heal_total": heal_total or None, "heal_deficit": heal_deficit or None,
+        "days_to_heal": days_to_heal,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),
         "consistency_pct": consistency_pct, "daily_rate": round(daily_rate) if daily_rate else None,
         "buffer": buffer, "eligible": eligible,

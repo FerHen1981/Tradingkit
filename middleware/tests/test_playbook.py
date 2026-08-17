@@ -115,6 +115,18 @@ def test_survival_settables_stay_small():
     assert pb["day_cap"] == 150 and pb["dll"] == 360          # doctrine trail ; 20% of 1800
 
 
+def test_consistency_broken_gives_concrete_heal_plan():
+    # a $1,383 top day on $1,898 profit → 73% > 30%: cap small + grow total to best/30%
+    a = _acct(current=51_898, buffer=2_000, payouts_taken=0,
+              payout={"eligible": False, "trading_days": 3, "consistency_pct": 73.0, "profit": 1898})
+    hist = {dt.date(2026, 1, 1): 1383, dt.date(2026, 1, 2): 300, dt.date(2026, 1, 3): 215}
+    pb = build_playbook(a, hist, "MES")
+    assert pb["broken"] and pb["day_cap"] == 150                     # small — dilute, never repeat
+    assert pb["heal_total"] == round(1383 / 0.30)                    # 4610
+    assert pb["heal_deficit"] == round(1383 / 0.30 - 1898)           # 2712
+    assert pb["days_to_heal"] and "clear 30%" in pb["note"]
+
+
 def test_non_apex_firm_flagged():
     a = {"stage": "Eval", "size": 50_000, "firm": "My Funded Futures", "starting": 50_000, "current": 50_000}
     pb = build_playbook(a, {}, None)

@@ -267,6 +267,9 @@ _TOGGLE_CONSUMED: set[tuple[str, str]] = {
     ("vwap", "vwap_veto"),
     ("market_structure", "mode"),      # selects bos/choch generator
     ("divergence", "osc_source"),      # cvd axis wires the divergence entry
+    ("silver_bullet", "require_sweep"),  # -> confluence require list
+    ("silver_bullet", "require_bias"),
+    ("silver_bullet", "entry_fill_pct"),  # FVG limit is the 50% mid (0.5)
 }
 
 # Groups whose presence/params actually change engine behaviour TODAY (via
@@ -276,6 +279,7 @@ WIRED_GROUPS: tuple[str, ...] = (
     "fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross", "market_structure",
     "liquidity_eqhl", "divergence", "order_block", "momentum",
     "macd", "rsi", "donchian", "moving_average", "bollinger_bands",
+    "silver_bullet",
 )
 
 
@@ -295,7 +299,9 @@ def effective_signature(cfg) -> tuple:
             bool(cfg.use_rsi_rev), int(cfg.rsi_length), round(float(cfg.rsi_ob), 3),
             round(float(cfg.rsi_os), 3), bool(cfg.use_donchian), int(cfg.donchian_len),
             bool(cfg.use_ma_pullback), int(cfg.ma_fast), int(cfg.ma_slow), str(cfg.ma_type),
-            bool(cfg.use_bb_revert), int(cfg.bb_len), round(float(cfg.bb_mult), 3))
+            bool(cfg.use_bb_revert), int(cfg.bb_len), round(float(cfg.bb_mult), 3),
+            bool(cfg.use_confluence), str(cfg.confl_primary), tuple(cfg.confl_require),
+            int(cfg.confl_lookback))
 
 
 def spec_to_config(rspec: ResolvedSpec):
@@ -370,6 +376,24 @@ def spec_to_config(rspec: ResolvedSpec):
     over.update(entry_flags)
     if entry_flags and "fvg" not in g:
         over["use_fvg_entry"] = False
+
+    # Confluence layer (Level C) — the Silver Bullet. Presence of the
+    # silver_bullet group switches the engine to confluence mode: an FVG primary
+    # (limit @ 50%) that only fires within the ICT kill-zone hours AND after a
+    # same-direction liquidity sweep (require_sweep) AND on the right side of VWAP
+    # (require_bias). The sweep array must be computed, so use_liq_sweep is forced.
+    if "silver_bullet" in g:
+        sb = g["silver_bullet"]
+        req: list[str] = []
+        if sb.get("require_sweep", True):
+            req.append("liq_sweep")
+        if sb.get("require_bias", True):
+            req.append("bias_vwap")
+        over["use_confluence"] = True
+        over["confl_primary"] = "fvg"
+        over["confl_require"] = tuple(req)
+        over["use_liq_sweep"] = True                       # compute liq_dir for the gate
+        over["enabled_hours"] = frozenset({3, 10, 14})     # SB kill-zones (fixed windows_ET)
 
     # Direct param maps (resolved values include registry defaults).
     for (grp, param), field_name in _PARAM_MAP.items():

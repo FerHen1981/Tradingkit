@@ -168,6 +168,17 @@ class Config:
     bb_len: int = 20
     bb_mult: float = 2.0
 
+    # --- confluence layer (Level C): require several mechanisms for ONE entry ---
+    # When on, the roster's OR-of-generators is replaced by a single PRIMARY
+    # trigger that only fires when every required condition also holds (AND +
+    # a light sequence: a required event must have fired within confl_lookback
+    # bars, same direction). This is what turns single triggers into real
+    # confluence strategies (e.g. the ICT Silver Bullet).
+    use_confluence: bool = False
+    confl_primary: str = "fvg"           # generator that produces the entry price/dir
+    confl_require: tuple = ()            # ("liq_sweep","cvd_div","bos","bias_vwap")
+    confl_lookback: int = 18             # bars within which a required event must have fired
+
     # --- entry & stop ---
     entry_limit_mode: bool = True        # "Limit @ 50% FVG" vs market
     expiry_bars: int = 12                # resting limit lifetime

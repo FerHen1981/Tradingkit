@@ -84,6 +84,7 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
         "veto_short": ind["veto_short"].to_numpy(bool),
+        "vwap": ind["vwap"].to_numpy() if "vwap" in ind else np.full(len(df), np.nan),
         "ema_cross_dir": ind["ema_cross_dir"].to_numpy() if "ema_cross_dir" in ind
         else np.zeros(len(df), dtype=np.int64),
         "bos_dir": ind["bos_dir"].to_numpy() if "bos_dir" in ind
@@ -118,6 +119,7 @@ class Engine:
         self.mom_dir = a.get("mom_dir"); self.macd_dir = a.get("macd_dir")
         self.rsi_dir = a.get("rsi_dir"); self.don_dir = a.get("don_dir")
         self.mapb_dir = a.get("mapb_dir"); self.bb_dir = a.get("bb_dir")
+        self.vwap = a.get("vwap")
 
         self.n = len(self.close)
         self._reset_state()
@@ -200,6 +202,16 @@ class Engine:
         ]
         gens = [m for on, m in roster if on]
         self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
+
+        # Confluence layer (Level C): a single primary trigger gated by required
+        # conditions. Bypasses the OR-roster above when cfg.use_confluence is set.
+        prim_map = {"fvg": self._entry_fvg, "bos": self._entry_bos,
+                    "ema": self._entry_ema, "liq": self._entry_liq}
+        self._primary_gen = prim_map.get(cfg.confl_primary, self._entry_fvg)
+        self._confl_arrays = {"liq_sweep": self.liq_dir, "cvd_div": self.cvddiv_dir,
+                              "bos": self.bos_dir}
+        self._last_up = {}       # mechanism -> last bar it fired +1
+        self._last_dn = {}       # mechanism -> last bar it fired -1
 
     # --------------------------------------------------------------- helpers
     def _dist(self, units: float) -> float:
@@ -454,8 +466,9 @@ class Engine:
         long_sig, short_sig = long0, short0
         sig_mid, sig_top, sig_bot = mid, top, bot
 
-        # FVG confirmation memory
-        if cfg.confirm_bars > 0:
+        # FVG confirmation memory (skipped under confluence — it would re-arm an
+        # FVG signal outside the confluence gate)
+        if cfg.confirm_bars > 0 and not cfg.use_confluence:
             long_sig, short_sig, sig_mid, sig_top, sig_bot = self._memory(
                 i, can_trade, long0, short0)
 
@@ -663,11 +676,49 @@ class Engine:
     def _entry_mapb(self, i):    return self._mkt(self.mapb_dir, i)     # MA trend pullback
     def _entry_bb(self, i):      return self._mkt(self.bb_dir, i)       # Bollinger reversion
 
+    def _update_confl_mem(self, i: int):
+        """Record, per confluence mechanism, the last bar it fired each way."""
+        for name, arr in self._confl_arrays.items():
+            v = int(arr[i]) if arr is not None else 0
+            if v == 1:
+                self._last_up[name] = i
+            elif v == -1:
+                self._last_dn[name] = i
+
+    def _confluence_ok(self, cond: str, i: int, d: int) -> bool:
+        """Is one required confluence condition satisfied for a direction-`d` entry?"""
+        if cond in self._confl_arrays:              # a same-direction event within lookback
+            last = self._last_up if d == 1 else self._last_dn
+            j = last.get(cond)
+            return j is not None and (i - j) <= self.cfg.confl_lookback
+        if cond == "bias_vwap":                     # stateless: on the right side of VWAP
+            if self.vwap is None or np.isnan(self.vwap[i]):
+                return True
+            return (self.close[i] > self.vwap[i]) if d == 1 else (self.close[i] < self.vwap[i])
+        return True                                 # unknown condition -> don't block
+
+    def _signal_confluence(self, i: int, can_trade: bool):
+        """One primary trigger, only accepted when every required condition holds
+        (AND + light sequence). The primary supplies the entry price/stop refs;
+        the base CVD/VWAP filters still apply on top, exactly as for the roster."""
+        self._update_confl_mem(i)
+        d, entry_ref, stop_up, stop_down = self._primary_gen(i)
+        if d == 0:
+            return False, False, np.nan, np.nan, np.nan
+        for cond in self.cfg.confl_require:
+            if not self._confluence_ok(cond, i, d):
+                return False, False, np.nan, np.nan, np.nan
+        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
+        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
+        return long0, short0, entry_ref, stop_up, stop_down
+
     def _signal(self, i: int, can_trade: bool):
         """Ask the enabled entry generators (priority order); the first with a
         direction wins. Filters (CVD streak + VWAP veto) gate the direction, and
         the generator's refs become entry/stop hints. With only FVG enabled this
         reproduces the original FVG signal exactly."""
+        if self.cfg.use_confluence:
+            return self._signal_confluence(i, can_trade)
         for gen in self._gens:
             d, entry_ref, stop_up, stop_down = gen(i)
             if d == 0:

@@ -159,10 +159,10 @@ price_action:
       stop_buffer_ticks:      {default: 4, min: 0, max: 20, step: 1, type: opt}
 
   silver_bullet:
-    desc: "Time-gated FVG entry: within a fixed ET window, bias -> sweep -> displacement FVG -> return-to-gap."
+    desc: "Time-gated FVG confluence: within a fixed ET window, bias -> sweep -> displacement FVG -> return-to-gap. Presence switches the engine to confluence mode (Level C)."
     price_action: true
     provenance: folklore       # the windows are ICT convention, no published edge
-    engine: todo
+    engine: partial            # confluence gate wired (killzone + prior sweep + VWAP bias); HTF-draw bias + strict sequence-state TODO
     optimize: gate_only        # optimizable content lives in the fvg block; SB just gates it
     windows_ET:                # FIXED — test as on/off switches, never optimizer free vars
       london_sb:  {start: "03:00", end: "04:00", type: fixed}

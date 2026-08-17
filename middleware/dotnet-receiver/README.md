@@ -61,37 +61,60 @@ Staat het script niet op `MEX_RENDER_SCRIPT`, dan blijft alles tekst.
 Twee losse onderdelen. De renderer is een los bestand dat per bericht wordt aangeroepen,
 dus die heeft géén herstart nodig — het volgende event pakt de nieuwe versie.
 
-    RAW=https://raw.githubusercontent.com/FerHen1981/Tradingkit/claude/legacy-accounts-scripts-analysis-ui0j6m/middleware
+Haal de bestanden met `git`, niet met `curl` op raw.githubusercontent: die geeft bij
+herhaald gebruik een 429, en `curl -o` schrijft rechtstreeks naar het doelbestand — een
+mislukte download laat je dan met een leeg bestand achter.
 
-    # 1 — renderer (geen herstart nodig)
+    cd /tmp && rm -rf tk
+    git clone --depth 1 -b claude/legacy-accounts-scripts-analysis-ui0j6m \
+      https://github.com/FerHen1981/Tradingkit.git tk
+
+    # 1 — renderer (geen herstart nodig, wordt per bericht aangeroepen)
     cp /root/mex-renderer/render-signal.js /root/mex-renderer/render-signal.js.bak
-    curl -fsSL -o /root/mex-renderer/render-signal.js $RAW/renderer/render-signal.js
+    cp tk/middleware/renderer/render-signal.js /root/mex-renderer/render-signal.js
 
     # 2 — receiver
     cd /root/mex-middleware-b
     cp src/Mex.Journal.Receiver/Program.cs src/Mex.Journal.Receiver/Program.cs.bak
-    curl -fsSL -o src/Mex.Journal.Receiver/Program.cs $RAW/dotnet-receiver/Program.cs
-    dotnet build -c Release
+    cp /tmp/tk/middleware/dotnet-receiver/Program.cs src/Mex.Journal.Receiver/Program.cs
+
+    # controleer dát je de nieuwe versie hebt vóór je bouwt
+    grep -c BlockedGate src/Mex.Journal.Receiver/Program.cs      # >= 1
+    grep -c "SIGNAL_BLOCKED:" /root/mex-renderer/render-signal.js # >= 1
+
+**De receiver staat niet in `MexJournal.sln`.** Een kale `dotnet build -c Release` bouwt
+hem dus níét — dan draait je oude binary door en lijkt de deploy stil te mislukken. Bouw
+het project expliciet:
+
+    dotnet build src/Mex.Journal.Receiver -c Release
     systemctl restart mex-receiver
-    curl -s localhost:PORT/health        # renderEnabled + renderScript moeten kloppen
+    sleep 2
+    PID=$(systemctl show -p MainPID --value mex-receiver)
+    PORT=$(ss -lntp | grep "pid=$PID," | awk '{print $4}' | sed 's/.*://' | head -1)
+    curl -s "localhost:$PORT/health"; echo    # renderEnabled + renderScript moeten kloppen
 
-Rooktest zonder op een echte trade te wachten — post een nagebootst Pine-bericht:
+Rooktest zonder op een echte trade te wachten. Het secret komt uit de procesomgeving —
+`systemctl show -p Environment` zet er `Environment=` vóór en werkt niet met een
+EnvironmentFile:
 
+    SECRET=$(tr '\0' '\n' < /proc/$PID/environ | sed -n 's/^MEX_WEBHOOK_SECRET=//p')
+    U="localhost:$PORT/signal/$SECRET"
     H='content-type: application/json'
-    U="https://<host>/signal/$MEX_WEBHOOK_SECRET"
-    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⚙️ MGC1! CONFIG","description":"ver=v6.9.2;acct=TEST;qty=4","footer":{"text":"MGC1!"}}]}'
-    # -> {"accepted":true,"kind":"discord","tier":"B","card":"queued"}
+    post(){ curl -s -w ' [%{http_code}]\n' -X POST "$U" -H "$H" -d "$1"; }
 
-    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup ... blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
-    # -> tier B, card queued   (de eerste terminale blokkade van vandaag)
-    sleep 6   # body-hash-dedupe is 5s; anders meet je die i.p.v. de poort
-    # ...zelfde commando nogmaals -> {"accepted":true,"kind":"discord","suppressed":true}
+    post '{"embeds":[{"title":"⚙️ MGC1! CONFIG","description":"ver=v6.9.2;acct=TEST;qty=4","footer":{"text":"MGC1!"}}]}'
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
+    sleep 6   # body-hash-dedupe is 5s; zonder wachten meet je die i.p.v. de poort
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Stop invalid","footer":{"text":"MGC1!"}}]}'
 
-    curl -s -X POST "$U" -H "$H" -d '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup ... blocked by: Stop invalid","footer":{"text":"MGC1!"}}]}'
-    # -> suppressed (routineblokkade, komt nooit door)
+Verwacht, op volgorde: `tier B / card queued`, `tier B / card queued`, `suppressed`,
+`suppressed`. Altijd `-w '%{http_code}'` meesturen — een leeg antwoord bij `404` (fout
+secret) is anders niet te onderscheiden van een stille fout.
 
 Let op: met `MEX_DRY_RUN=true` wordt er niets gepost — de kaart rendert wel en het
-resultaat staat in het journaal, maar Discord ziet niets.
+resultaat staat in het journaal, maar Discord ziet niets. Staat hij op `false`, dan komen
+deze testkaarten écht in je kanaal.
 
-Terug bij problemen: `cp Program.cs.bak Program.cs && dotnet build -c Release && systemctl restart mex-receiver`
-(en `cp render-signal.js.bak render-signal.js` voor de renderer).
+Terug bij problemen: `.bak` terugzetten, `dotnet build src/Mex.Journal.Receiver -c Release`,
+`systemctl restart mex-receiver` (de renderer heeft alleen de `cp` terug nodig).

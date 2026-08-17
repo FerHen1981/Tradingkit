@@ -452,6 +452,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(_candidates())
         if u.path == "/api/builder/options":
             return self._json(_builder_options())
+        if u.path == "/api/fleet":
+            from .fleet import load_fleet
+            return self._json({"fleet": load_fleet()})
         return self._send(404, "not found", "text/plain")
 
     # -- POST --
@@ -490,6 +493,19 @@ class Handler(BaseHTTPRequestHandler):
             fn = _builder_preview if u.path.endswith("preview") else _builder_save
             b, code = fn(jb)
             return self._json(b, code)
+        if u.path in ("/api/fleet/promote", "/api/fleet/demote"):
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length).decode("utf-8", "replace") if length > 0 else "{}"
+            try:
+                jb = json.loads(raw)
+            except Exception:
+                jb = {}
+            from .fleet import promote, demote
+            try:
+                fleet = demote(jb.get("id")) if u.path.endswith("demote") else promote(jb)
+                return self._json({"ok": True, "fleet": fleet})
+            except Exception as e:
+                return self._json({"ok": False, "error": str(e)})
         return self._send(404, "not found", "text/plain")
 
     def _upload(self, q):
@@ -756,9 +772,51 @@ async function showDetail(id){
     ${regimeHtml(r.regime)}
     ${edgeHtml(r.edge_by_regime)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
-    <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>`;
+    <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>
+    <div class=up style="margin-top:14px">
+      <label class=field><span class=fld>Promote as</span><select id=promStatus>
+        <option value=eval>eval</option><option value=funded>funded</option><option value=validated>validated</option>
+      </select></label>
+      <button class=go id=promBtn>Promote to fleet</button>
+      <span id=promMsg class=muted></span>
+    </div>`;
+  const lens=(r.lens||'').toLowerCase();
+  const ps=$('#promStatus'); if(ps)ps.value=lens==='funded'?'funded':lens==='funnel'?'eval':'validated';
+  const pb=$('#promBtn');
+  if(pb)pb.addEventListener('click',()=>promoteRun(r));
   d.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
+async function promoteRun(r){
+  const body={id:r.source||('run:'+r.run_id), name:r.strategy||r.run_id, asset:r.asset||'',
+    status:$('#promStatus').value, kpis:r.kpis||null, run_id:r.run_id||null, timeframe:r.timeframe||''};
+  try{
+    const j=await (await fetch('/api/fleet/promote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    const m=$('#promMsg');
+    if(j.ok){m.innerHTML='✓ promoted to fleet';renderFleet(j.fleet);}
+    else m.innerHTML='<span class=neg>'+(j.error||'failed')+'</span>';
+  }catch(e){$('#promMsg').innerHTML='<span class=neg>'+e+'</span>';}
+}
+function renderFleet(fleet){
+  const el=$('#fleetRows'); if(!el)return;
+  if(!fleet||!fleet.length){el.innerHTML='<div class=muted>no strategies yet — promote one from a run</div>';$('#fleetCount').textContent='0';return;}
+  const badge=s=>`<span class="fam fam-${s==='funded'?'confluence':s==='eval'?'trend':'mixed'}">${s}</span>`;
+  el.innerHTML=fleet.map(f=>{
+    const pf=(f.kpis||{}).profit_factor;
+    return `<div class=lensrow style="display:flex;align-items:center;gap:12px;margin-top:4px">
+      <span class=tag style="min-width:120px;display:inline-block;color:var(--sand)">${f.name}</span>
+      ${badge(f.status||'validated')}
+      <span class=muted>${f.asset||''}</span>
+      ${pf?`<span class=muted>PF <b style="color:var(--gold)">${pf}</b></span>`:''}
+      ${f.seed?'<span class=muted>seed</span>':''}
+      <button class=linkbtn data-fid="${f.id}" style="margin-left:auto;color:var(--rose)">remove</button>
+    </div>`;}).join('');
+  $('#fleetCount').textContent=fleet.length+' strateg'+(fleet.length===1?'y':'ies');
+  el.querySelectorAll('button[data-fid]').forEach(b=>b.addEventListener('click',async()=>{
+    const j=await (await fetch('/api/fleet/demote',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:b.dataset.fid})})).json();
+    if(j.ok)renderFleet(j.fleet);
+  }));
+}
+async function loadFleet(){try{const j=await (await fetch('/api/fleet')).json();renderFleet(j.fleet||[]);}catch(e){}}
 function fillKpis(){
   const b=STATS.best,bl=b?((b.kpis||{}).profit_factor||0).toFixed(2):'—';
   $('#kpis').innerHTML=kpi(STATS.runs||0,'runs')+kpi((STATS.assets||[]).length,'assets')
@@ -973,6 +1031,7 @@ showTab('create');
 loadWizard();loadGenDatasets();loadBuilder();
 load();
 loadCandidates();
+loadFleet();
 """
 
 LOGIN_HTML = f"""<!doctype html><html><head>{_HEAD}
@@ -1103,6 +1162,13 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
 <!-- ===================== 4 · RUNS ===================== -->
 <div class=tab id=tab-runs>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Fleet</b><span class=muted id=fleetCount>—</span></div>
+    <div class=hint>Your validated / production strategies — the list you build on. Promote a strategy from any run below; the eight ported fleet strategies are seeded here.</div>
+    <div id=fleetRows style="margin-top:10px"></div>
+  </div>
 
   <div class=bar>
     <select id=fAsset><option value="">All assets</option></select>

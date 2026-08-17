@@ -72,6 +72,9 @@ def main():
     ap.add_argument("--regimes", default="",
                     help="comma-separated regime hints to spread role-composed candidates across "
                          "(e.g. 'Strong Bull Trend,Low-Volatility Range'); empty = unbiased")
+    ap.add_argument("--setup-class", default="",
+                    help="constrain the search to ONE thesis (trend_pullback|breakout|"
+                         "mean_reversion|reversal|confluence); empty = discover across all")
     ap.add_argument("--lab", action="store_true", help="record survivors + a candidates summary in $LAB_DIR")
     args = ap.parse_args()
 
@@ -88,14 +91,18 @@ def main():
     if args.sampler == "role":
         from .generator import compose_batch
         regimes = [r.strip() for r in args.regimes.split(",") if r.strip()] or None
+        setup_class = args.setup_class.strip() or None
+        kw = {"setup_class": setup_class} if setup_class else {}
         batch = compose_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
                               timeframe=args.tf, price_action_only=args.price_action_only,
-                              base_preset=args.base_preset, regimes=regimes)
+                              base_preset=args.base_preset, regimes=regimes, **kw)
         classes = {}
         for s in batch:
             classes[s.get("setup_class", "?")] = classes.get(s.get("setup_class", "?"), 0) + 1
-        print(f"  role-composer (framework §4): one slot per layer, redundancy-guarded. "
-              f"setup-classes {classes}" + (f"; regimes {regimes}" if regimes else ""))
+        thesis = f"thesis={setup_class}" if setup_class else "all theses"
+        print(f"  role-composer (framework §4), {thesis}: one slot per layer, redundancy-guarded. "
+              f"filters/entries are DISCOVERED. setup-classes {classes}"
+              + (f"; regimes {regimes}" if regimes else ""))
     else:
         batch = sample_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
                              timeframe=args.tf, price_action_only=args.price_action_only,

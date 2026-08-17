@@ -391,14 +391,19 @@ Action:      Long allowed
    `run.py --regime-filter`. Sluit de ontdek→finetune-lus: `edge_by_regime` zegt
    *waar* de edge zit, de gate handelt er alléén nog daar, effect opnieuw
    ongebiast op OOS gemeten. 106 tests groen.
-6. ~~**4e-variant builder UI**~~ — ✅ **DONE**: paneel "Build a strategy · 4th
-   variant" in de cockpit — kies setup-class + primaire entry, vink coherente
-   filters aan (redundancy-guard live), gate op regimes → live `describe`-preview
-   (stack + score + gate) → opslaan als `custom_*`-spec → verschijnt in de
-   library + runner. Backend: `generator.spec_from_selection` (deterministisch,
-   defaults i.p.v. random) + `regime_filter` als persistent spec-veld
-   (`spec_to_config`). 109 tests groen.
-7. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als
+6. ~~**Create = thesis-gestuurde Discovery**~~ — ✅ **DONE**: de handmatige
+   "Build a strategy" (filters/entry/mechanics vooraf kiezen) is vervangen door
+   **"Discover strategies"** — je zaait een **thesis** (setup-class) + optioneel
+   een regime-focus; de begrensde factory-zoektocht (`generate --setup-class`)
+   **ontdekt** entry/filters/params, screent IS, verifieert OOS. **Filters zijn
+   een uitkomst van de test, geen invoer** — trouw aan de bias-vrije ethos.
+   Thesis="Any" = brede ongebiaste discovery. 117 tests groen.
+7. ~~**Fleet + promotie (produceren)**~~ — ✅ **DONE**: fleet-register
+   (`fleet.json`), geseed met de 8 geporte fleet-strategieën (NQ·ES·GC, eval/
+   funded); "Promote to fleet" in de run-detail; Fleet-paneel in tab 4. Plus
+   bulk-`ingest` voor datasets en `prune` voor opruimen. Research → getest →
+   **gepromoveerd**.
+8. **Later (🔴 data, optioneel):** L0 cross-market feed (DXY/VIX/yields als
    uitgelijnde OHLCV-series). Rolstructuur ligt er dan al; alleen de datalaag
    koppelen. *Diep L5 is losgelaten — geen onderdeel meer van het plan.*
 

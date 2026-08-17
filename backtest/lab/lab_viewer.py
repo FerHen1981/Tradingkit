@@ -318,7 +318,13 @@ def _start_generate(q) -> tuple[dict, int]:
         cmd += ["--coarse-since", since]
     if (q.get("pao") or ["0"])[0] in ("1", "true", "on"):
         cmd += ["--price-action-only"]
-    return _spawn(cmd, "generate " + " ".join(cmd[cmd.index("--n"):])), 200
+    setup = (q.get("setup_class") or [""])[0].strip()
+    if setup and setup != "any":
+        cmd += ["--setup-class", setup]
+    regimes = (q.get("regimes") or [""])[0].strip()
+    if regimes:
+        cmd += ["--regimes", regimes]
+    return _spawn(cmd, "discover " + " ".join(cmd[cmd.index("--n"):])), 200
 
 
 def _start_verify(q) -> tuple[dict, int]:
@@ -943,7 +949,8 @@ $('#wRun').addEventListener('click',()=>{
 function gqs(){return 'dataset='+encodeURIComponent($('#gDs').value)+'&n='+encodeURIComponent($('#gN').value)+
   '&tf='+encodeURIComponent($('#gTf').value)+'&since='+encodeURIComponent($('#gSince').value)+
   '&holdout='+encodeURIComponent($('#gHold').value)+'&preset='+encodeURIComponent($('#gPreset').value)+
-  '&pao='+($('#gPao').checked?'1':'0')+'&seed='+encodeURIComponent($('#gSeed').value||'0');}
+  '&pao='+($('#gPao').checked?'1':'0')+'&seed='+encodeURIComponent($('#gSeed').value||'0')+
+  '&setup_class='+encodeURIComponent($('#gThesis').value||'any')+'&regimes='+encodeURIComponent($('#gRegime').value||'');}
 $('#gRun').addEventListener('click',()=>{if(!$('#gDs').value){$('#gLog').style.display='block';$('#gLog').textContent='Upload a dataset first.';return}
   postJob('/api/generate',gqs(),'#gLog','#gRun',()=>{load();loadCandidates();});});
 $('#gVerify').addEventListener('click',()=>postJob('/api/verify',gqs(),'#gLog','#gVerify',()=>{load();loadCandidates();}));
@@ -1028,7 +1035,7 @@ const gAdvT=$('#gAdvToggle');
 if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.style.display!=='none';a.style.display=open?'none':'flex';gAdvT.textContent=open?'+ advanced':'− advanced';});
 showTab('create');
 
-loadWizard();loadGenDatasets();loadBuilder();
+loadWizard();loadGenDatasets();
 load();
 loadCandidates();
 loadFleet();
@@ -1079,38 +1086,26 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Build a strategy</b><span class=muted>custom — compose by role</span></div>
-    <div class=hint>One thesis per strategy: pick a setup-class and its entry, add at most one filter per category, optionally gate it to the regimes where the edge lives. The redundancy guard and the score update live; Save loads it into Test.</div>
-    <div class=up style="margin-top:12px">
-      <label class=field><span class=fld>Setup-class</span><select id=bSetup title="the strategy's thesis"></select></label>
-      <label class=field><span class=fld>Primary entry</span><select id=bEntry style="min-width:150px" title="the signal that triggers a trade"></select></label>
-      <label class=field><span class=fld>Mechanics (preset)</span><select id=bPreset title="stop/target/sizing/account phase inherited from this preset"></select></label>
-    </div>
-    <div style="margin-top:14px"><div class=fld>Filters — coherent, one per category</div><div class=chips id=bFilters></div></div>
-    <div style="margin-top:14px"><div class=fld>Regime gate — trade only in these · empty = all regimes</div><div class=chips id=bRegimes></div></div>
-    <div id=bPreview style="margin-top:14px"></div>
-    <div class=up style="margin-top:14px">
-      <label class=field><span class=fld>Name</span><input id=bName placeholder="custom_…" style="width:170px"></label>
-      <button class=go id=bSave>Save &amp; test</button>
-      <span id=bMsg class=muted></span>
-    </div>
-  </div>
-
-  <div class=panel>
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
-    <div class=hint>Saved &amp; governed strategies — grade, entries, gates, exit and framework stack. Click a card to load it into Test.</div>
-    <div class=lib id=libRows></div>
-  </div>
-
-  <div class=panel>
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Generate strategies</b><span class=muted>factory — unbiased discovery</span></div>
-    <div class=hint>Sample many role-composed candidates, screen them in-sample, then Verify OOS. Survivors appear in Test → Candidates.</div>
+      <b class=sub>Discover strategies</b><span class=muted>seed a thesis — the machine finds the rest</span></div>
+    <div class=hint>You set the <b>thesis</b> (and optionally a regime to focus on); the search <b>discovers</b> the entry, filters and params — screens them in-sample, then Verify OOS. Filters are an <b>outcome</b> of the test, never picked up front. Leave the thesis on "Any" for unbiased broad discovery. Results appear in Test → Candidates.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Dataset</span><select id=gDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Thesis</span><select id=gThesis title="constrain the search to one setup-class, or Any for broad discovery">
+        <option value=any>Any thesis (broad)</option>
+        <option value=trend_pullback>trend pullback</option>
+        <option value=breakout>breakout</option>
+        <option value=mean_reversion>mean reversion</option>
+        <option value=reversal>reversal</option>
+        <option value=confluence>confluence</option>
+      </select></label>
+      <label class=field><span class=fld>Regime focus</span><select id=gRegime title="bias the search toward a regime's favoured setups (optional)">
+        <option value="">All regimes</option>
+        <option>Strong Bull Trend</option><option>Controlled Bull Trend</option>
+        <option>Strong Bear Trend</option><option>Controlled Bear Trend</option>
+        <option>Compression</option><option>Low-Volatility Range</option><option>High-Volatility Range</option>
+      </select></label>
       <label class=field><span class=fld>Candidates</span><input id=gN value=100 style="width:70px"></label>
-      <button class=go id=gRun>Generate</button>
+      <button class=go id=gRun>Discover</button>
       <button id=gVerify>Verify OOS</button>
       <button class=linkbtn id=gAdvToggle>+ advanced</button>
     </div>
@@ -1119,10 +1114,17 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <label class=field><span class=fld>Coarse since</span><input id=gSince placeholder="2022-01-01" style="width:150px"></label>
       <label class=field><span class=fld>OOS holdout (d)</span><input id=gHold value=365 style="width:80px"></label>
       <label class=field><span class=fld>Seed</span><input id=gSeed value=0 style="width:60px"></label>
-      <label class=field><span class=fld>Mechanics</span><select id=gPreset><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select></label>
+      <label class=field><span class=fld>Mechanics</span><select id=gPreset title="risk/exit/account template inherited by every candidate"><option>EL_TORO</option><option>EL_DORADO</option><option>EL_MATADOR</option><option>EL_PATRON</option></select></label>
       <label class=field><span class=fld>Price-action</span><span style="padding:8px 0"><input type=checkbox id=gPao> PA-only</span></label>
     </div>
     <pre id=gLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:240px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
+    <div class=hint>Governed + promoted strategies — grade, entries, gates, exit and framework stack. Click a card to load it into Test.</div>
+    <div class=lib id=libRows></div>
   </div>
 
 </div>

@@ -764,6 +764,16 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 <div class=kpis id=kpis></div>
 
 <div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
+  <b>Upload dataset</b><span class=muted style="font-size:12px">raw export → normalized → cataloged · needed before any run</span></div>
+  <div class=up style="margin-top:10px">
+    <input id=dsname placeholder="dataset name (e.g. NQ_1m)" style="width:180px">
+    <input id=dssym placeholder="symbol (NQ)" style="width:110px">
+    <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
+    <button class=go id=upbtn>Upload</button>
+  </div><div id=msg class=muted style="margin-top:8px"></div>
+</div>
+
+<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
   <b>Run a backtest</b><span class=muted style="font-size:12px">spec × dataset × timeframes → the 3 lenses</span></div>
   <div class=up style="margin-top:10px">
     <select id=wSpec style="min-width:190px"></select>
@@ -808,16 +818,6 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
     <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
   </tr></thead><tbody id=lbrows></tbody></table>
-</div>
-
-<div class=panel><div style="display:flex;justify-content:space-between;align-items:center">
-  <b>Upload dataset</b><span class=muted style="font-size:12px">raw export → normalized → cataloged</span></div>
-  <div class=up style="margin-top:10px">
-    <input id=dsname placeholder="dataset name (e.g. NQ_1m)" style="width:180px">
-    <input id=dssym placeholder="symbol (NQ)" style="width:110px">
-    <label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label>
-    <button class=go id=upbtn>Upload</button>
-  </div><div id=msg class=muted style="margin-top:8px"></div>
 </div>
 
 <div class=panel id=journey>

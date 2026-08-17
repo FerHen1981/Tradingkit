@@ -41,10 +41,16 @@ def test_recommend_keeps_micro_instrument():
     assert recommend_setup({}, "trailing", "NQ")["off_edge"]
 
 
-def test_eval_default_is_el_toro():
-    # no current asset, no data → default eval passer is NQ · El Toro (not the old El Minero)
+def test_eval_default_is_el_toro_on_mini():
+    # no current asset, no data → default eval passer is NQ · El Toro on the full MINI (not micro)
     r = recommend_setup({"stage": "Eval"}, "eval", None)
-    assert r["base"] == "NQ" and r["strategy"] == "El Toro" and r["instrument"] == "MNQ"
+    assert r["base"] == "NQ" and r["strategy"] == "El Toro" and r["instrument"] == "NQ"
+
+
+def test_eval_keeps_mini_even_if_on_micro():
+    # eval should run the mini; a micro-traded eval account is normalised up to the mini
+    r = recommend_setup({"stage": "Eval"}, "eval", "MNQ")
+    assert r["instrument"] == "NQ" and r["strategy"] == "El Toro"
 
 
 def test_eval_ranks_by_registered_passes():

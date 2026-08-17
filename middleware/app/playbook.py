@@ -156,10 +156,11 @@ def account_phase(track: str, account: dict) -> str:
     return "survival"
 
 
-# Default instrument per track: small trailing/eval 50k accounts trade MICROS (MGC/MES);
-# roomy legacy static accounts trade full minis (GC/ES). Results come from the micro, so
-# we keep the real instrument the account trades and never normalise it away.
-_DEFAULT_INSTRUMENT = {"trailing": "MGC", "static": "GC", "eval": "MGC"}
+# Default instrument per track — different goals, different tools:
+#   funded trailing (survive/milk) → MICROS (MGC/MES), small and conservative;
+#   eval (pass-hunter, hit the target fast) → full MINIS (NQ/GC/ES), aggressive;
+#   legacy static (compound, roomy buffer) → full minis.
+_DEFAULT_INSTRUMENT = {"trailing": "MGC", "static": "GC", "eval": "NQ"}
 
 
 def recommend_setup(account: dict, track: str, current_instrument: str | None,
@@ -170,8 +171,10 @@ def recommend_setup(account: dict, track: str, current_instrument: str | None,
     b = base_asset(inst)
     table = EVAL_STRAT if track == "eval" else FUNDED_STRAT
     if b in table:                                           # already on a validated edge → keep it
-        return {"instrument": inst, "base": b, "strategy": table[b], "keep": True,
-                "why": f"keep {inst} · {table[b]}"}
+        # eval trades the full MINI (aggressive pass-hunter); funded keeps its actual micro.
+        keep_inst = b if track == "eval" else inst
+        return {"instrument": keep_inst, "base": b, "strategy": table[b], "keep": True,
+                "why": f"keep {keep_inst} · {table[b]}" + (" (mini)" if track == "eval" else "")}
     if track == "eval":
         # data-driven: rank eval assets by MEASURED fleet net; default order El Toro-first (NQ has
         # been the top eval passer in practice — the old El Minero default was a stale schema claim).
@@ -187,7 +190,7 @@ def recommend_setup(account: dict, track: str, current_instrument: str | None,
         best_passes = (es.get(best, {}).get("passes") or 0)
         why = (f"{best} · {table[best]} — most eval passes ({best_passes}) [Notion]" if best_passes
                else f"{best} · {table[best]} — default eval passer (set Strategy in the Accounts DB to rank on real passes)")
-        return {"instrument": _MICRO.get(best, best), "base": best, "strategy": table[best],
+        return {"instrument": best, "base": best, "strategy": table[best],   # best = the full MINI (eval = aggressive)
                 "keep": False, "why": why}
     off = b in ("NQ", "YM")
     return {"instrument": _DEFAULT_INSTRUMENT[track], "base": "GC", "strategy": "El Tesoro",

@@ -200,29 +200,32 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     rec = recommend_setup(account, track, cur_instrument)
     inst = rec["instrument"]
 
-    # --- state from the account's OWN history + ledger ---
-    daily = daily_pnl or {}
-    green = sorted((v for v in daily.values() if v >= 50), reverse=True)
-    trading_days = len(green)
-    best_day = green[0] if green else 0.0
-    daily_rate = statistics.median(green) if green else None            # realistic $/green-day
+    # --- state: consume the Payout engine (SAME rules as the L5 Payout panel), plus history ---
     pay = account.get("payout") or {}
     current, starting = account.get("current"), account.get("starting")
-    profit = round((current - starting) if (current is not None and starting is not None)
-                   else (pay.get("profit") or 0.0))
-    consistency_pct = round(100 * best_day / profit) if profit > 0 else None
-    buffer = account.get("buffer")
+    profit = round(pay.get("profit") if pay.get("profit") is not None
+                   else ((current - starting) if (current is not None and starting is not None) else 0.0))
+    trading_days = pay.get("trading_days") or 0
+    consistency_pct = pay.get("consistency_pct")
+    days_to_go = pay.get("days_to_go")
     eligible = bool(pay.get("eligible"))
+    buffer = account.get("buffer")
+    green = sorted((v for v in (daily_pnl or {}).values() if v >= 50), reverse=True)
+    daily_rate = statistics.median(green) if green else None            # $/green-day, for pacing only
+    best_day = green[0] if green else 0.0
 
-    # --- max-payout mechanics (per cycle; days + consistency reset after each payout) ---
+    # --- max-payout mechanics: put the ladder CAP on top of the engine's above-safety figure ---
     caps = ladder_caps(size_usd, rules["ladder"])
-    cap = caps[min(payouts_taken, len(caps) - 1)]           # max withdrawal THIS step
+    cap = caps[min(payouts_taken, len(caps) - 1)]           # max withdrawal THIS step (L5 is uncapped)
     total_cap, total_paid = sum(caps), round(account.get("payout_total") or 0)
+    safety_bal = pay.get("safety_net_balance")
     dd = dd_amount(account, size_usd)
-    safety = round(dd + 100)                                 # profit that must stay in on payout
-    above_safety = round(max(0.0, profit - safety))
+    safety = round(safety_bal - starting) if (safety_bal is not None and starting is not None) else round(dd + 100)
+    above_safety = round(pay.get("above_safety")) if pay.get("above_safety") is not None \
+        else round(max(0.0, profit - safety))
     withdrawable_now = round(min(above_safety, cap))
     maxed = total_cap > 0 and total_paid >= total_cap
+    need_days = days_to_go if days_to_go is not None else max(0, min_days - trading_days)
 
     if funded:
         target, target_label = float(safety + cap), f"rung {payouts_taken + 1} · ${cap:,.0f}"   # profit for FULL cap
@@ -258,13 +261,11 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
                  + f", then reset to rung {payouts_taken + 2}.")
     elif profit >= target:                                   # enough for the full cap; days/consistency pending
         phase = mname
-        need_days = max(0, min_days - trading_days)
         route = (f"Full ${cap:,.0f} in reach (P/L ${profit:,.0f} ≥ ${target:,.0f}). {need_days} more trading day(s) "
                  f"+ spread (day ≤ ${day_cap:,.0f}), then withdraw the full ${cap:,.0f}.")
     elif profit >= safety:                                   # can withdraw now, but building to the full cap
         phase = mname
         rate = daily_rate or day_cap * 0.5
-        need_days = max(0, min_days - trading_days)
         days_needed = max(need_days, math.ceil(to_full / rate) if rate > 0 else 0, 1)
         route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap "
                  f"(~{days_needed} days ≤ ${day_cap:,.0f}/day). Banking now leaves ${leaving:,.0f} on the table.")

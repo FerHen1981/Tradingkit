@@ -172,9 +172,9 @@ class Engine:
         # and stop/TP/sizing are applied by the engine on top, so adding a
         # generator never touches the risk machinery.
         gens = []
-        if cfg.use_fvg_entry:
+        if self.cfg.use_fvg_entry:
             gens.append(self._entry_fvg)
-        if cfg.use_ema_cross:
+        if self.cfg.use_ema_cross:
             gens.append(self._entry_ema)
         self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
 

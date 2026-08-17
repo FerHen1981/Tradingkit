@@ -45,7 +45,8 @@ DOCTRINE = {
 
 # lock_at = profit at which the Apex trailing DD stops trailing (floor locks at start+$100).
 _APEX_RULES = {"ladder": APEX_LADDER_50K, "consistency": CONSISTENCY_LIMIT, "min_days": MIN_TRADING_DAYS,
-               "eval_target": APEX_TARGET, "lock_at": 2_600, "verified": True, "note": ""}
+               "eval_target": APEX_TARGET, "lock_at": 2_600, "min_payout": 500, "days_reset": True,
+               "verified": True, "note": ""}
 _ASSUMED_RULES = {**_APEX_RULES, "verified": False, "note": "assumed Apex-like — set real firm rules"}
 FIRM_RULES = {"Apex Trader Funding": _APEX_RULES, "Apex": _APEX_RULES}
 
@@ -79,6 +80,26 @@ def ladder_rung(size: float | None, payouts_taken: int, ladder: list | None = No
     if size and size != 50_000:
         rung = round(rung * (size / 50_000) / 500) * 500 or rung
     return float(rung)
+
+
+def dd_amount(account: dict, size: float | None) -> float:
+    """The account's drawdown $ — drives the safety net. From DD Amount $, else the EOD/Static
+    number in the Drawdown Rule ('EOD ($2000)' → 2000), else the Apex default for its size."""
+    from .payout_rules import APEX_DD
+    a = account.get("dd_amount")
+    if a:
+        return float(a)
+    m = re.search(r"\$?\s*(\d{3,6})", account.get("dd_rule") or "")
+    if m:
+        return float(m.group(1))
+    return float(APEX_DD.get(int(size or 0), 2_500))
+
+
+def ladder_caps(size: float | None, ladder: list | None = None) -> list:
+    """Max payout per rung, scaled from the Apex 50k ladder for other sizes."""
+    base = ladder or APEX_LADDER_50K
+    scale = (size or 50_000) / 50_000
+    return [round(x * scale) for x in base]
 
 
 def parse_size(fase_config: str | None, pos_band: str | None) -> float | None:
@@ -179,12 +200,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     rec = recommend_setup(account, track, cur_instrument)
     inst = rec["instrument"]
 
-    if funded:
-        target, target_label = ladder_rung(size_usd, payouts_taken, rules["ladder"]), f"rung {payouts_taken + 1}"
-    else:
-        target, target_label = float(rules["eval_target"].get(int(size_usd or 0), 3_000)), "pass target"
-
-    # --- state read from the account's OWN history + ledger ---
+    # --- state from the account's OWN history + ledger ---
     daily = daily_pnl or {}
     green = sorted((v for v in daily.values() if v >= 50), reverse=True)
     trading_days = len(green)
@@ -193,63 +209,81 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     pay = account.get("payout") or {}
     current, starting = account.get("current"), account.get("starting")
     profit = round((current - starting) if (current is not None and starting is not None)
-                   else (pay.get("profit") or 0.0), 0)
+                   else (pay.get("profit") or 0.0))
     consistency_pct = round(100 * best_day / profit) if profit > 0 else None
     buffer = account.get("buffer")
-    locked = profit >= lock_at
     eligible = bool(pay.get("eligible"))
-    day_cap = round(limit * max(profit, target))                         # max single day (consistency)
 
+    # --- max-payout mechanics (per cycle; days + consistency reset after each payout) ---
+    caps = ladder_caps(size_usd, rules["ladder"])
+    cap = caps[min(payouts_taken, len(caps) - 1)]           # max withdrawal THIS step
+    total_cap, total_paid = sum(caps), round(account.get("payout_total") or 0)
+    dd = dd_amount(account, size_usd)
+    safety = round(dd + 100)                                 # profit that must stay in on payout
+    above_safety = round(max(0.0, profit - safety))
+    withdrawable_now = round(min(above_safety, cap))
+    maxed = total_cap > 0 and total_paid >= total_cap
+
+    if funded:
+        target, target_label = float(safety + cap), f"rung {payouts_taken + 1} · ${cap:,.0f}"   # profit for FULL cap
+    else:
+        target, target_label = float(rules["eval_target"].get(int(size_usd or 0), 3_000)), "pass target"
+    to_full = round(max(0.0, target - profit))
+    leaving = round(max(0.0, cap - withdrawable_now))
+    day_cap = round(limit * (target if funded else max(profit, target)))   # 30% of the eventual total
+
+    if track == "eval":
+        contracts = 5
+    elif track == "static":
+        contracts = 3 if (size_usd or 0) >= 300_000 else 2
+    else:                                                   # trailing
+        contracts = 1 if profit < safety else 2
+    mname = "compound" if track == "static" else "milking"
     quality, flags = "ok", []
 
-    # --- decide the phase and the decisive route from where the account actually stands ---
+    # --- decide the phase + the decisive route from where the account actually stands ---
     if track == "eval":
-        phase, contracts = "eval-sprint", 5
-        remaining = round(target - profit)
-        route = (f"Eval sprint — {contracts} {inst} · {rec['strategy']}. ${remaining:.0f} of ${target:.0f} to pass; "
-                 "variance lot, aim ~1 pass/day, reset on breach.")
-    elif track == "static":
-        phase, contracts = "compound", (3 if (size_usd or 0) >= 300_000 else 2)
-        remaining = round(target - profit)
-        route = (f"Compound — {contracts} {inst} GC+ES parallel, roomy buffer. ${remaining:.0f} to the rung; "
-                 f"consistency slack (keep any day ≤ ${day_cap:.0f}).")
-    elif eligible:
-        phase, contracts, quality = "payout-ready", 2, "payout"
-        w = round(pay.get("withdrawable") or pay.get("above_safety") or 0)
-        route = (f"PAYOUT NOW — request ${w:.0f}, then reset to rung {payouts_taken + 2}. "
-                 f"Hold 1–2 {inst} to protect the floor meanwhile.")
-    elif not locked:
-        phase, contracts = "survival", 1
-        to_lock = round(max(0, lock_at - profit))
-        route = (f"Survival — 1 {inst} only. +${to_lock:.0f} profit to lock the trailing DD "
-                 f"(buffer ${int(buffer) if buffer is not None else 0}). Small green days ≤ ${day_cap:.0f}; surviving IS the job.")
-        if buffer is not None and buffer < 700:
+        phase = "eval-sprint"
+        route = (f"Eval sprint — 5 {inst} · {rec['strategy']}. ${to_full:.0f} of ${target:.0f} to pass; "
+                 "variance lot, ~1 pass/day, reset on breach.")
+    elif maxed:
+        phase, contracts, quality = "maxed", 1, "maxed"
+        route = (f"Maxed — ${total_paid:,.0f} of ${total_cap:,.0f} ladder paid. Minimize risk: bank & hold "
+                 f"1 {inst}, shift size to newer accounts.")
+    elif eligible and above_safety >= cap:
+        phase, quality = "payout-ready", "payout"
+        extra = round(above_safety - cap)
+        route = (f"PAYOUT — pull the FULL ${cap:,.0f} now"
+                 + (f" (${extra:,.0f} above the cap carries to next cycle)" if extra > 0 else "")
+                 + f", then reset to rung {payouts_taken + 2}.")
+    elif profit >= target:                                   # enough for the full cap; days/consistency pending
+        phase = mname
+        need_days = max(0, min_days - trading_days)
+        route = (f"Full ${cap:,.0f} in reach (P/L ${profit:,.0f} ≥ ${target:,.0f}). {need_days} more trading day(s) "
+                 f"+ spread (day ≤ ${day_cap:,.0f}), then withdraw the full ${cap:,.0f}.")
+    elif profit >= safety:                                   # can withdraw now, but building to the full cap
+        phase = mname
+        rate = daily_rate or day_cap * 0.5
+        need_days = max(0, min_days - trading_days)
+        days_needed = max(need_days, math.ceil(to_full / rate) if rate > 0 else 0, 1)
+        route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap "
+                 f"(~{days_needed} days ≤ ${day_cap:,.0f}/day). Banking now leaves ${leaving:,.0f} on the table.")
+        if leaving > 0:
+            flags.append(f"cap ${cap:,.0f} — don't bank early and leave ${leaving:,.0f}")
+    else:                                                    # below the safety net → can't withdraw yet
+        phase = "compound" if track == "static" else "survival"
+        to_safety = round(safety - profit)
+        route = (f"{'Build' if track == 'static' else 'Survival'} — {contracts} {inst}. +${to_safety:,.0f} to the "
+                 f"safety net (${safety:,.0f}); withdrawals unlock there, then build to the full ${cap:,.0f} cap. "
+                 f"Small days ≤ ${day_cap:,.0f}.")
+        if track != "static" and buffer is not None and buffer < 700:
             quality = "thin_buffer"
             flags.append(f"buffer ${int(buffer)} critical — one bad day breaches")
-    else:
-        phase, contracts = "milking", 2
-        remaining = round(max(0, target - profit))
-        need_days = max(0, min_days - trading_days)
-        if remaining <= 0:                              # rung already earned → only days + consistency left
-            route = (f"Milking — 2 {inst}. Rung ${target:.0f} already banked (P/L ${profit:.0f}). "
-                     f"{need_days} more trading day(s) + keep any day ≤ ${day_cap:.0f} (consistency), then withdraw.")
-        else:
-            rate = daily_rate or day_cap * 0.5
-            by_rate = math.ceil(remaining / rate) if rate > 0 else 0
-            by_cons = math.ceil(remaining / day_cap) if day_cap > 0 else 0
-            days_needed = max(need_days, by_rate, by_cons, 1)
-            per_day = round(remaining / days_needed)
-            if need_days >= max(by_rate, by_cons):
-                bind = f"the {min_days}-day minimum ({trading_days}/{min_days} done)"
-            elif by_cons > by_rate:
-                bind = f"consistency (no day > ${day_cap:.0f})"
-            else:
-                bind = "your pace"
-            route = (f"Milking — 2 {inst}. ${remaining:.0f} to the rung over ~{days_needed} more day(s) "
-                     f"(~${per_day:.0f}/day, cap ${day_cap:.0f}). Binds on {bind}.")
-        if buffer is not None and buffer < 1_000:
+
+    if track == "trailing" and phase in ("milking", "payout-ready") and buffer is not None and buffer < 1_000:
+        if quality == "ok":
             quality = "thin_buffer"
-            flags.append(f"buffer ${int(buffer)} thin — drop to 1 {inst} until it re-locks")
+        flags.append(f"buffer ${int(buffer)} thin — 1 {inst} until it re-locks")
 
     if rec.get("off_edge"):
         quality = "switch"
@@ -268,6 +302,11 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "day_cap": day_cap, "consistency_limit": limit,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),
         "consistency_pct": consistency_pct, "daily_rate": round(daily_rate) if daily_rate else None,
-        "buffer": buffer, "eligible": eligible, "locked": locked,
-        "quality": quality, "note": " · ".join(flags),
+        "buffer": buffer, "eligible": eligible,
+        # max-payout fields
+        "cap": cap if funded else None, "safety": safety if funded else None,
+        "above_safety": above_safety if funded else None, "withdrawable_now": withdrawable_now if funded else None,
+        "to_full": to_full, "leaving": leaving if funded else None,
+        "total_paid": total_paid if funded else None, "total_cap": total_cap if funded else None,
+        "maxed": bool(maxed), "quality": quality, "note": " · ".join(flags),
     }

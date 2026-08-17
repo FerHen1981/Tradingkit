@@ -233,7 +233,12 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         target, target_label = float(rules["eval_target"].get(int(size_usd or 0), 3_000)), "pass target"
     to_full = round(max(0.0, target - profit))
     leaving = round(max(0.0, cap - withdrawable_now))
-    day_cap = round(limit * (target if funded else max(profit, target)))   # 30% of the eventual total
+    # TWO distinct daily numbers, deliberately kept apart:
+    #  - day_trail: how you RUN a day (doctrine milking $150 / your Fase Config) — small.
+    #  - cons_cap:  the consistency CEILING you must never exceed = 30% of the eventual total.
+    day_trail = parse_day_trail(account.get("fase_config")) or (150 if funded else None)
+    cons_cap = round(limit * (target if funded else max(profit, target)))
+    day_cap = cons_cap                                          # back-compat alias
 
     if track == "eval":
         contracts = 5
@@ -261,14 +266,16 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
                  + f", then reset to rung {payouts_taken + 2}.")
     elif profit >= target:                                   # enough for the full cap; days/consistency pending
         phase = mname
-        route = (f"Full ${cap:,.0f} in reach (P/L ${profit:,.0f} ≥ ${target:,.0f}). {need_days} more trading day(s) "
-                 f"+ spread (day ≤ ${day_cap:,.0f}), then withdraw the full ${cap:,.0f}.")
+        route = (f"Full ${cap:,.0f} in reach (P/L ${profit:,.0f} ≥ ${target:,.0f}). {need_days} more small trading day(s) "
+                 f"(keep every day < ${cons_cap:,.0f} = 30% consistency), then withdraw the full ${cap:,.0f}.")
     elif profit >= safety:                                   # can withdraw now, but building to the full cap
         phase = mname
-        rate = daily_rate or day_cap * 0.5
+        rate = daily_rate or (day_trail or cons_cap * 0.3)
         days_needed = max(need_days, math.ceil(to_full / rate) if rate > 0 else 0, 1)
-        route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap "
-                 f"(~{days_needed} days ≤ ${day_cap:,.0f}/day). Banking now leaves ${leaving:,.0f} on the table.")
+        trail_txt = f"milk ~${day_trail:,.0f}/day" if day_trail else "small days"
+        route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap: "
+                 f"{trail_txt} over ~{days_needed} days (never a day > ${cons_cap:,.0f} = 30% consistency). "
+                 f"Banking now leaves ${leaving:,.0f} on the table.")
         if leaving > 0:
             flags.append(f"cap ${cap:,.0f} — don't bank early and leave ${leaving:,.0f}")
     else:                                                    # below the safety net → can't withdraw yet
@@ -276,7 +283,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         to_safety = round(safety - profit)
         route = (f"{'Build' if track == 'static' else 'Survival'} — {contracts} {inst}. +${to_safety:,.0f} to the "
                  f"safety net (${safety:,.0f}); withdrawals unlock there, then build to the full ${cap:,.0f} cap. "
-                 f"Small days ≤ ${day_cap:,.0f}.")
+                 f"Keep days small (well under the ${cons_cap:,.0f} consistency ceiling).")
         if track != "static" and buffer is not None and buffer < 700:
             quality = "thin_buffer"
             flags.append(f"buffer ${int(buffer)} critical — one bad day breaches")
@@ -285,6 +292,12 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         if quality == "ok":
             quality = "thin_buffer"
         flags.append(f"buffer ${int(buffer)} thin — 1 {inst} until it re-locks")
+    # per-account consistency signal (from the engine): flag when one day already eats a big
+    # share of total profit — approaching the 30% wall that would void the payout.
+    if consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
+        if quality == "ok":
+            quality = "consistency"
+        flags.append(f"consistency {consistency_pct:.0f}% on one day — spread more (max {limit*100:.0f}%)")
 
     if rec.get("off_edge"):
         quality = "switch"
@@ -300,7 +313,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "rec_strategy": rec["strategy"], "rec_why": rec["why"],
         "switch": not rec["keep"] and cur_instrument is not None, "off_edge": bool(rec.get("off_edge")),
         "contracts": contracts, "contracts_label": contract_label(contracts, inst),
-        "day_cap": day_cap, "consistency_limit": limit,
+        "day_trail": day_trail, "cons_cap": cons_cap, "day_cap": day_cap, "consistency_limit": limit,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),
         "consistency_pct": consistency_pct, "daily_rate": round(daily_rate) if daily_rate else None,
         "buffer": buffer, "eligible": eligible,

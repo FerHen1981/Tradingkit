@@ -774,10 +774,12 @@ function renderPlaybook(){
     const run=`<b>${p.rec_instrument||p.rec_base||'—'}</b> <span style="color:var(--muted)">${p.rec_strategy}</span>${sw}<div class=calc>${p.contracts_label}</div>`;
     const ph=PB_PHASE[p.phase]||["var(--muted)",p.phase];
     const phase=`<span class=pill style="background:${ph[0]};color:#04121a">${ph[1]}</span>`;
+    const consWarn=p.consistency_pct!=null&&p.consistency_pct>=20;
     const st=`<b class="${cls(p.profit||0)}">${p.profit!=null?signed(p.profit):'—'}</b> <span class=calc>P/L · ${p.trading_days}d</span>`
       +(p.buffer!=null?`<br><span style="color:${p.buffer<1000?'var(--crit)':'var(--muted)'}">buf ${money0(p.buffer)}</span>`:'')
-      +(p.consistency_pct!=null?` <span class=calc>· ${p.consistency_pct}% top</span>`:'')
-      +(p.withdrawable_now!=null?`<br><span class=calc>pull ${money0(p.withdrawable_now)}/${money0(p.cap)}${p.total_cap?' · paid '+money0(p.total_paid)+'/'+money0(p.total_cap):''}</span>`:'');
+      +(p.consistency_pct!=null?` <span style="color:${consWarn?'var(--warn)':'var(--muted)'}">· ${p.consistency_pct}% top day</span>`:'')
+      +(p.withdrawable_now!=null?`<br><span class=calc>pull ${money0(p.withdrawable_now)}/${money0(p.cap)}${p.total_cap?' · paid '+money0(p.total_paid)+'/'+money0(p.total_cap):''}</span>`:'')
+      +((p.day_trail||p.cons_cap)?`<br><span class=calc>trail ${p.day_trail?money0(p.day_trail):'—'} · 30% ceil ${p.cons_cap?money0(p.cons_cap):'—'}</span>`:'');
     const tgt=p.cap!=null?`<span class=calc>${p.target_label}</span><br><span class=calc>need P/L ${money0(p.target)}</span>`
       :`<span class=calc>${p.target_label}</span> ${money0(p.target)}`;
     const flag=p.note?`<div style="color:var(--warn);font-size:11px;margin-bottom:3px">⚑ ${p.note}</div>`:'';

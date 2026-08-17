@@ -172,6 +172,9 @@ price_action:
       require_sweep:          {default: true, type: opt}
       require_bias:           {default: true, type: opt}
       entry_fill_pct:         {default: 0.5, min: 0.0, max: 1.0, step: 0.1, type: opt}
+      london:                 {default: true, type: opt}   # 03-04 ET window (medium prob)
+      ny_am:                  {default: true, type: opt}   # 10-11 ET window (highest prob per ICT)
+      ny_pm:                  {default: true, type: opt}   # 14-15 ET window (lowest prob)
 
   kill_zones:
     desc: "Session windows as coarse regime gates (ET)."

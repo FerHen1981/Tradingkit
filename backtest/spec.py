@@ -270,6 +270,9 @@ _TOGGLE_CONSUMED: set[tuple[str, str]] = {
     ("silver_bullet", "require_sweep"),  # -> confluence require list
     ("silver_bullet", "require_bias"),
     ("silver_bullet", "entry_fill_pct"),  # FVG limit is the 50% mid (0.5)
+    ("silver_bullet", "london"),          # -> enabled_hours kill-zone selection
+    ("silver_bullet", "ny_am"),
+    ("silver_bullet", "ny_pm"),
 }
 
 # Groups whose presence/params actually change engine behaviour TODAY (via
@@ -393,7 +396,15 @@ def spec_to_config(rspec: ResolvedSpec):
         over["confl_primary"] = "fvg"
         over["confl_require"] = tuple(req)
         over["use_liq_sweep"] = True                       # compute liq_dir for the gate
-        over["enabled_hours"] = frozenset({3, 10, 14})     # SB kill-zones (fixed windows_ET)
+        # kill-zone hours from the selected windows (ICT ranks NY-AM > London > NY-PM)
+        hrs = []
+        if sb.get("london", True):
+            hrs.append(3)
+        if sb.get("ny_am", True):
+            hrs.append(10)
+        if sb.get("ny_pm", True):
+            hrs.append(14)
+        over["enabled_hours"] = frozenset(hrs or {3, 10, 14})
 
     # Direct param maps (resolved values include registry defaults).
     for (grp, param), field_name in _PARAM_MAP.items():

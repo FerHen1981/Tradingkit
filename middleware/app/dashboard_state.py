@@ -174,6 +174,7 @@ def _load_accounts(token: str) -> list[dict]:
                     "daily_buffer": _num(p.get("Daily Buffer $")),
                     "dd_amount": _num(p.get("DD Amount $")),
                     "status": _sel(p.get("Status")),                 # Active Eval / Funded / Milking / ...
+                    "strategy": _sel(p.get("Strategy")),             # which strategy this account runs (for pass counts)
                     "payout_total": _num(p.get("Payout Total ($)")),
                 })
             if not data.get("has_more"):
@@ -554,7 +555,7 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
 
     # payout playbook: per-account doctrine preset (track/phase → asset·strategy + contracts +
     # day-trail) plus live payout progress. Follows the Operating Schema, not an optimizer.
-    from .playbook import PlaybookParams, base_asset, build_playbook
+    from .playbook import STRAT_ASSET, PlaybookParams, base_asset, build_playbook
     dom_asset: dict = defaultdict(lambda: defaultdict(int))
     for t in trades:
         dom_asset[t["acct"]][t["sym"]] += 1
@@ -562,6 +563,14 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
     edge_stats: dict = {}
     for x in assets:
         edge_stats[base_asset(x["sym"])] = {"net": x["net"], "expectancy": x["expectancy"], "n": x["n"]}
+    # registered eval passes per strategy → asset (Notion Accounts DB): an account that reached a
+    # funded status passed its eval on its Strategy. Counts across the WHOLE fleet, not the filter.
+    _PASSED = {"Funded Account", "Milking", "Milked"}
+    for a in accounts_src:
+        base = STRAT_ASSET.get(a.get("strategy") or "")
+        if base and (a.get("status") in _PASSED):
+            edge_stats.setdefault(base, {}).setdefault("passes", 0)
+            edge_stats[base]["passes"] += 1
     _pp = PlaybookParams()
     for a in accounts:
         da = dom_asset.get(a["full"]) or {}

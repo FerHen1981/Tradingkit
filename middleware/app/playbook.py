@@ -28,6 +28,10 @@ _MICRO = {"GC": "MGC", "ES": "MES", "NQ": "MNQ", "YM": "MYM", "CL": "MCL"}
 FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}
 EVAL_STRAT = {"GC": "El Minero", "ES": "El León", "NQ": "El Toro", "YM": "El Toro"}
 
+# Strategy name (Notion Accounts DB "Strategy" field) → base asset, for counting eval passes.
+STRAT_ASSET = {"El Tesoro": "GC", "El Minero": "GC", "El Rey": "ES", "El León": "ES", "El Leon": "ES",
+               "El Toro": "NQ", "El Matador": "NQ", "El Dorado": "NQ", "El Patrón": "NQ", "El Patron": "NQ"}
+
 # Doctrine presets per phase (contracts + $ day-trail). The Operating Schema numbers.
 DOCTRINE = {
     "survival":     {"contracts": 1, "day_trail": None,
@@ -177,11 +181,12 @@ def recommend_setup(account: dict, track: str, current_instrument: str | None,
 
         def rank(sym: str) -> tuple:
             s = es.get(sym) or {}
-            return (1 if (s.get("n") or 0) >= 20 else 0, s.get("net") or -1e18, -order.index(sym))
+            # registered eval passes (from Notion) win; then measured net; then the El Toro default.
+            return (s.get("passes") or 0, s.get("net") or -1e18, -order.index(sym))
         best = max(cand, key=rank)
-        measured = (es.get(best, {}).get("n") or 0) >= 20
-        why = (f"{best} · {table[best]} — top measured eval passer" if measured
-               else f"{best} · {table[best]} — default eval passer (verify vs actual pass counts)")
+        best_passes = (es.get(best, {}).get("passes") or 0)
+        why = (f"{best} · {table[best]} — most eval passes ({best_passes}) [Notion]" if best_passes
+               else f"{best} · {table[best]} — default eval passer (set Strategy in the Accounts DB to rank on real passes)")
         return {"instrument": _MICRO.get(best, best), "base": best, "strategy": table[best],
                 "keep": False, "why": why}
     off = b in ("NQ", "YM")

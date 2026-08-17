@@ -47,11 +47,11 @@ def test_eval_default_is_el_toro():
     assert r["base"] == "NQ" and r["strategy"] == "El Toro" and r["instrument"] == "MNQ"
 
 
-def test_eval_measured_leader_overrides_default():
-    # GC measured with the best net → data drives the pick over the El Toro default
-    edge = {"GC": {"net": 9000, "expectancy": 60, "n": 200}, "NQ": {"net": 1000, "expectancy": 5, "n": 200}}
+def test_eval_ranks_by_registered_passes():
+    # registered eval passes (from Notion) win over net: NQ has more passes → El Toro, despite lower net
+    edge = {"NQ": {"net": 1000, "passes": 12, "n": 200}, "GC": {"net": 9000, "passes": 3, "n": 200}}
     r = recommend_setup({"stage": "Eval"}, "eval", None, edge)
-    assert r["base"] == "GC" and r["strategy"] == "El Minero" and "measured" in r["why"]
+    assert r["base"] == "NQ" and r["strategy"] == "El Toro" and "passes (12)" in r["why"]
 
 
 def test_survival_below_safety_net():

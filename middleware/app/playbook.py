@@ -55,6 +55,8 @@ FIRM_RULES = {"Apex Trader Funding": _APEX_RULES, "Apex": _APEX_RULES}
 class PlaybookParams:
     horizon: int = MIN_TRADING_DAYS      # 8 trading days to the payout window
     max_position: float = 10.0
+    dll_pct: float = 0.20                # daily loss limit = this share of the remaining buffer
+    cons_margin: float = 0.67            # pace to ~this × the 30% ceiling → margin under the wall
 
 
 def resolve_firm(firm: str | None) -> dict:
@@ -311,21 +313,22 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # and respect the firm's daily-loss cap (Daily Buffer $) when it's tracked.
     dll = None
     if buffer:
-        dll = round(0.2 * buffer)
+        dll = round(p.dll_pct * buffer)
         if account.get("daily_buffer"):
             dll = min(dll, round(account["daily_buffer"]))
-    # day-cap (daily profit target/trail to set): pace to_full over the days it takes to bank the
-    # full cap while every day stays under the 30% ceiling. Survival stays small (just reach safety).
+    # day-cap (daily profit target/trail to set): pace to_full so every day stays at a CONSERVATIVE
+    # soft target (~cons_margin × the 30% ceiling) — margin under the wall, spread over more days.
+    soft_cap = round(cons_cap * p.cons_margin)
     days_plan = None
     if track == "eval" or maxed:
         set_day_cap = None
     elif profit < safety:
-        set_day_cap = round(min(day_trail or 150, cons_cap))
+        set_day_cap = round(min(day_trail or 150, soft_cap))
     elif to_full > 0:
-        days_plan = max(need_days, math.ceil(to_full / cons_cap) if cons_cap > 0 else 1, 1)
-        set_day_cap = min(round(to_full / days_plan), cons_cap)
+        days_plan = max(need_days, math.ceil(to_full / soft_cap) if soft_cap > 0 else 1, 1)
+        set_day_cap = min(round(to_full / days_plan), soft_cap)
     else:
-        set_day_cap = round(min(day_trail or cons_cap, cons_cap))
+        set_day_cap = round(min(day_trail or soft_cap, soft_cap))
 
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],

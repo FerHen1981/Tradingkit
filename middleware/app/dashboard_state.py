@@ -129,10 +129,61 @@ def _phase(account: str) -> str:
     return "Funded" if account.upper().startswith(("PA", "PAAPEX")) else "Eval"
 
 
+_FRAMEWORK_DB = os.environ.get("NOTION_FRAMEWORK_DB", "1ddb61ea444d8168a40f000b8d3d33ea")
+_STRATS = ["El Tesoro", "El Rey", "El Minero", "El León", "El Toro", "El Matador", "El Dorado", "El Patron"]
+
+
+def _deaccent(s: str) -> str:
+    import unicodedata
+    s = s.replace("Ξ", "E").replace("ξ", "e")                     # MΞX branding uses Ξ for E
+    return "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
+
+
+def _canon_strategy(name: str | None) -> str | None:
+    """'🐂 El Toro — NQ Research' / '💎 ΞL TΞSORO — MGC Funded' → 'El Toro' / 'El Tesoro'."""
+    if not name:
+        return None
+    up = _deaccent(name).upper()
+    for k in _STRATS:
+        if _deaccent(k).upper() in up:
+            return k
+    return None
+
+
+def _rel_ids(prop) -> list:
+    return [x.get("id") for x in (prop or {}).get("relation", []) if x.get("id")]
+
+
+def _framework_strategies(client, token: str) -> dict:
+    """Map every Framework page that names a strategy → the canonical strategy name."""
+    fmap: dict = {}
+    cursor = None
+    while True:
+        body = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        r = client.post(f"{_API}/databases/{_FRAMEWORK_DB}/query", headers=_headers(token), json=body)
+        r.raise_for_status()
+        data = r.json()
+        for page in data.get("results", []):
+            strat = _canon_strategy(_title(page.get("properties", {}).get("Name")))
+            if strat:
+                fmap[page["id"]] = strat
+        if not data.get("has_more"):
+            break
+        cursor = data.get("next_cursor")
+    return fmap
+
+
 def _load_accounts(token: str) -> list[dict]:
     import httpx
     out: list[dict] = []
     with httpx.Client(timeout=15.0) as client:
+        try:
+            fmap = _framework_strategies(client, token)      # Framework page → strategy name
+        except Exception as exc:
+            log.warning("framework map load failed: %r", exc)
+            fmap = {}
         cursor = None
         while True:
             body = {"page_size": 100}
@@ -174,7 +225,9 @@ def _load_accounts(token: str) -> list[dict]:
                     "daily_buffer": _num(p.get("Daily Buffer $")),
                     "dd_amount": _num(p.get("DD Amount $")),
                     "status": _sel(p.get("Status")),                 # Active Eval / Funded / Milking / ...
-                    "strategy": _sel(p.get("Strategy")),             # which strategy this account runs (for pass counts)
+                    # strategy: the manual Strategy select wins; else resolve the Framework relation.
+                    "strategy": (_sel(p.get("Strategy"))
+                                 or next((fmap[i] for i in _rel_ids(p.get("Framework")) if i in fmap), None)),
                     "payout_total": _num(p.get("Payout Total ($)")),
                 })
             if not data.get("has_more"):

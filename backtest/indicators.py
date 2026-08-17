@@ -421,6 +421,16 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     # --- ATR (computed above; reused for the ATR unit mode) -------------------
     out["atr"] = atr
 
+    # --- Regime gate (causal) --------------------------------------------------
+    # Empty filter = trade every regime (all True, no cost). Otherwise the per-bar
+    # regime tag (no look-ahead) must be in the allowed set for an entry to fire.
+    if cfg.regime_filter:
+        labels = classify_regime(d, cfg)["regime"]
+        allowed = set(cfg.regime_filter)
+        out["regime_ok"] = np.array([lab in allowed for lab in labels], dtype=bool)
+    else:
+        out["regime_ok"] = np.ones(n, dtype=bool)
+
     # --- VWAP veto -------------------------------------------------------------
     if cfg.use_vwap_veto:
         out["veto_long"] = close > out["vwap"].to_numpy()

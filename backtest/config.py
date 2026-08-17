@@ -224,6 +224,10 @@ class Config:
     adx_trend: float = 25.0              # ADX >= this = a real trend (else controlled/flat)
     regime_atr_lookback: int = 100       # window for the ATR volatility percentile
     regime_slope_lookback: int = 20      # bars for slow-MA slope + ATR direction
+    # Optional regime GATE: when non-empty, entries fire ONLY when the causal
+    # per-bar regime tag is in this set (finetune "trade the right conditions").
+    # Empty = trade every regime (no gate, zero cost). See lab/FRAMEWORK.md §8a.
+    regime_filter: frozenset = frozenset()
 
     # --- time gate ---
     trade_days: tuple = (0, 1, 2, 3, 4)  # Mon..Fri (ET weekday, 0=Mon)

@@ -293,6 +293,16 @@ run-detail zet "assumed" (regime-fit in de score) naast "realized"
 dat mean-reversion óók in een Strong Bull Trend werkt, dan zie je dat — de matrix
 onderdrukt het niet.
 
+**Regime-gate (finetune-tool).** Zodra `edge_by_regime` laat zien *waar* de edge
+zit, zet je dat om in een échte verbetering met `cfg.regime_filter`: entries
+vuren dan alléén in de gekozen regimes (causaal via `classify_regime`, gecheckt
+op zowel signaal- als fill-bar, zodat elke trade — en dus de attributie —
+consistent binnen de filter valt). Leeg filter = alle regimes (no-op, nul kosten).
+CLI: `run.py --regime-filter "Strong Bull Trend,Controlled Bull Trend"`. Cruciaal:
+het effect wordt daarna **opnieuw ongebiast op OOS gemeten** — lift het de PF
+echt, of snoei je toevallige trades weg? De gate verzint geen edge (op ruis blijft
+het een no-op); hij concentreert een bestaande edge.
+
 **Hard veto's** (blokkeren ongeacht score — dit zijn wél poorten):
 major macro-release imminent · onacceptabel grote/technisch onmogelijke stop ·
 extreme volatility-event · onvoldoende participation/liquidity · slechte
@@ -375,6 +385,12 @@ Action:      Long allowed
    regime uit — opgeslagen per run (`meta.edge_by_regime`), getoond in de
    run-detail als "Realized edge by regime". Zo is regime een **gemeten uitkomst**
    die de §6-matrix toetst, geen aanname die hem oplegt. 103 tests groen.
+5c. ~~**Regime-gate op entries**~~ — ✅ **DONE** (§8a): `cfg.regime_filter` —
+   entries vuren alléén in gekozen regimes (causaal, gecheckt op signaal- én
+   fill-bar → consistent met de attributie). Leeg = alle regimes (no-op). CLI
+   `run.py --regime-filter`. Sluit de ontdek→finetune-lus: `edge_by_regime` zegt
+   *waar* de edge zit, de gate handelt er alléén nog daar, effect opnieuw
+   ongebiast op OOS gemeten. 106 tests groen.
 6. **4e-variant builder UI** — vink per laag een rol aan → live `describe`-preview
    → opslaan als spec → runnen. De role-getagde registry ís het skelet.
    ← **volgende stap**

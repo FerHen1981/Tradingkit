@@ -422,6 +422,8 @@ def describe_config(cfg) -> dict:
         filt.append("VWAP veto")
     if cfg.use_gap_filter:
         filt.append(f"gap {cfg.gap_min_ticks:g}-{cfg.gap_max_ticks:g}t")
+    if getattr(cfg, "regime_filter", None):
+        filt.append("regime gate: " + ", ".join(sorted(cfg.regime_filter)))
     out["filters"] = filt
 
     tp = ({"R-multiple": f"{cfg.r_multiple:g}R", "Swing structure": "swing",

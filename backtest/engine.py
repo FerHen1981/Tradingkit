@@ -84,6 +84,8 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
         "veto_short": ind["veto_short"].to_numpy(bool),
+        "regime_ok": (ind["regime_ok"].to_numpy(bool) if "regime_ok" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
         "vwap": ind["vwap"].to_numpy() if "vwap" in ind else np.full(len(df), np.nan),
         "ema_cross_dir": ind["ema_cross_dir"].to_numpy() if "ema_cross_dir" in ind
         else np.zeros(len(df), dtype=np.int64),
@@ -112,6 +114,7 @@ class Engine:
         self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]; self.atr = a["atr"]
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
+        self.regime_ok = a["regime_ok"]
         self.ema_cross_dir = a.get("ema_cross_dir")
         self.bos_dir = a.get("bos_dir")
         self.choch_dir = a.get("choch_dir"); self.liq_dir = a.get("liq_dir")
@@ -306,8 +309,11 @@ class Engine:
     # --------------------------------------------------------------- broker
     def _broker(self, i: int):
         """Fills that use orders resting from prior bars."""
-        # 1) resting limit entry
-        if self.pos == 0 and self.pend_dir != 0 and self.cfg.entry_limit_mode:
+        # 1) resting limit entry — also honour the regime gate at FILL time, so a
+        # limit placed in an allowed regime that only fills after the regime flips
+        # is not taken (keeps the gate consistent with edge_by_regime, which
+        # attributes by entry_bar = the fill bar).
+        if self.pos == 0 and self.pend_dir != 0 and self.cfg.entry_limit_mode and self.regime_ok[i]:
             if i > self.pend_bar:  # earliest fill is the bar after placement
                 if self.pend_dir == 1 and self.low[i] <= self.pend_limit:
                     self._fill_entry(i, self.pend_limit)
@@ -708,8 +714,8 @@ class Engine:
         for cond in self.cfg.confl_require:
             if not self._confluence_ok(cond, i, d):
                 return False, False, np.nan, np.nan, np.nan
-        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
-        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
+        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
+        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
         return long0, short0, entry_ref, stop_up, stop_down
 
     def _signal(self, i: int, can_trade: bool):
@@ -723,8 +729,8 @@ class Engine:
             d, entry_ref, stop_up, stop_down = gen(i)
             if d == 0:
                 continue
-            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
-            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
+            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
+            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
             return long0, short0, entry_ref, stop_up, stop_down
         return False, False, np.nan, np.nan, np.nan
 
@@ -744,7 +750,7 @@ class Engine:
                 m = self.mem[k]
                 age = i - m["bar"]
                 if 1 <= age <= cb:
-                    ok = (self.bull_cvd[i] and self.veto_long[i]) if m["dir"] == 1 else (self.bear_cvd[i] and self.veto_short[i])
+                    ok = self.regime_ok[i] and ((self.bull_cvd[i] and self.veto_long[i]) if m["dir"] == 1 else (self.bear_cvd[i] and self.veto_short[i]))
                     if ok:
                         mem_dir, mem_mid, mem_top, mem_bot = m["dir"], m["mid"], m["top"], m["bot"]
                         self.mem.pop(k)

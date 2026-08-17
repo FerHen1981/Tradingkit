@@ -61,6 +61,9 @@ def main():
     ap.add_argument("--all", action="store_true", help="run both presets")
     ap.add_argument("--firm", help="prop-firm program key (e.g. apex_100k_eod, topstep_50k_eval) — overlays that firm's account rules; see backtest/firms.py")
     ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
+    ap.add_argument("--regime-filter", default="",
+                    help="finetune: comma-separated regimes to trade ONLY in "
+                         "(e.g. 'Strong Bull Trend,Controlled Bull Trend'); empty = all regimes")
     ap.add_argument("--unit-mode", choices=["Ticks", "Points", "%", "ATR"],
                     help="override distance unit (use ATR to port a config across instruments)")
     ap.add_argument("--tf", help="timeframe(s) to aggregate the 1m source to; comma-list sweeps "
@@ -239,6 +242,9 @@ def main():
             cfg = cfg.with_(contract=contract(args.symbol))
         if args.unit_mode:
             cfg = cfg.with_(unit_mode=args.unit_mode)
+        if args.regime_filter:
+            cfg = cfg.with_(regime_filter=frozenset(
+                r.strip() for r in args.regime_filter.split(",") if r.strip()))
         if args.funnel:
             ind = ind_mod.compute(dtf, cfg)
             t0 = time.time()

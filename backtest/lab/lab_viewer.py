@@ -253,9 +253,27 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
                 _JOBS[job_id]["log"] = log[-80:]
                 _JOBS[job_id]["run_ids"] = run_ids
         p.wait()
-        upd(status="done" if p.returncode == 0 else "error", rc=p.returncode)
+        rc = p.returncode
+        if rc == 0:
+            upd(status="done", rc=rc, error=None)
+        else:
+            # A non-zero exit means the run failed — surface WHY in the UI, not a
+            # silent "done". SIGKILL (137 / -9) is almost always the OOM killer on
+            # a big 1m dataset; sub-runs that died echo "SUBRUN-FAIL <sym> rc=...".
+            tail = "\n".join(log[-12:])
+            killed = rc in (-9, 137) or "rc=137" in tail or "rc=-9" in tail
+            subfails = [l for l in log if l.startswith("SUBRUN-FAIL")]
+            if killed:
+                err = ("Out of memory — a run was killed by the system. This dataset is "
+                       "large on 1m; run one contract at a time, set a 'Coarse since' "
+                       "date, or use a higher timeframe.")
+            elif subfails:
+                err = "A run failed: " + "; ".join(subfails)
+            else:
+                err = f"The run exited with code {rc}. See the log for details."
+            upd(status="error", rc=rc, error=err)
     except Exception as e:
-        upd(status="error", error=str(e))
+        upd(status="error", error=f"Could not start the run: {e}")
 
 
 def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False) -> tuple[dict, int]:
@@ -287,13 +305,20 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False)
 
     # Optional micro-twin comparison: run the full contract AND its micro (GC+MGC,
     # ES+MES, …) side by side — same price data, different contract size — so both
-    # land in Runs next to each other. Chained in one job so the log shows both.
+    # land in Runs next to each other. Two SEPARATE processes (memory freed between
+    # them, so the big 1m frame doesn't OOM), but each sub-run's exit code is
+    # captured: a killed/failed first contract echoes SUBRUN-FAIL and the whole job
+    # exits non-zero, so the UI shows an error instead of a silent "done".
     sym = ds[dataset].get("symbol") or ""
     twin = micro_twin(sym) if (micro and sym) else None
     if twin:
         import shlex
-        pair = [cmd + ["--symbol", sym], cmd + ["--symbol", twin]]
-        run_cmd = ["sh", "-c", " ; ".join(" ".join(shlex.quote(x) for x in c) for c in pair)]
+        a = " ".join(shlex.quote(x) for x in cmd + ["--symbol", sym])
+        b = " ".join(shlex.quote(x) for x in cmd + ["--symbol", twin])
+        script = (f'{a}; e1=$?; [ $e1 -ne 0 ] && echo "SUBRUN-FAIL {sym} rc=$e1"; '
+                  f'{b}; e2=$?; [ $e2 -ne 0 ] && echo "SUBRUN-FAIL {twin} rc=$e2"; '
+                  f'[ $e1 -ne 0 -o $e2 -ne 0 ] && exit 1 || exit 0')
+        run_cmd = ["sh", "-c", script]
         label = " ".join(cmd[2:]) + f"  [{sym}+{twin}]"
     else:
         run_cmd, label = cmd, " ".join(cmd[2:])
@@ -636,6 +661,9 @@ tr:hover td{background:rgba(14,42,94,.5)}
 .jbar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--gold2),var(--gold));border-radius:99px;transition:width .5s ease}
 .jbar-cap{font-family:var(--mono);font-size:11px;color:var(--sub);margin-top:6px;letter-spacing:.03em}
 .jbar-cap .jbar-pct{color:var(--gold);font-weight:700}
+.jerr{display:none;margin:10px 0 0;padding:11px 13px;background:rgba(224,121,110,.12);
+ border:1px solid var(--rose);border-radius:3px;color:var(--sand);font-size:12.5px;line-height:1.5}
+.jerr b{color:var(--rose)}
 .lens{border:1px solid var(--line);border-radius:4px;padding:14px 16px;margin-top:10px;background:rgba(8,29,70,.32)}
 .lens h3{margin:0 0 2px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--gold);letter-spacing:-.01em}
 .lens .q{color:var(--sub);font-size:12px;margin-bottom:8px}
@@ -968,9 +996,18 @@ function _barFor(log){
   }
   return bar;
 }
+function _errFor(log){
+  let e=log.nextElementSibling;
+  if(!e||!e.classList||!e.classList.contains('jerr')){
+    e=document.createElement('div');e.className='jerr';
+    log.parentNode.insertBefore(e,log.nextSibling);
+  }
+  return e;
+}
 function watchJob(id,logSel,btnSel,onDone){
   const log=$(logSel);log.style.display='block';
   const bar=_barFor(log);bar.style.display='block';
+  const errBox=_errFor(log);errBox.style.display='none';
   const fill=bar.querySelector('.jbar-fill'),pct=bar.querySelector('.jbar-pct'),note=bar.querySelector('.jbar-note');
   const iv=setInterval(async()=>{
     const j=await (await fetch('/api/run/status?job='+id)).json();
@@ -980,9 +1017,16 @@ function watchJob(id,logSel,btnSel,onDone){
     log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
     if(j.status==='done'||j.status==='error'){clearInterval(iv);if(btnSel)$(btnSel).disabled=false;
       fill.style.width='100%';pct.textContent=j.status==='done'?'100%':'';note.textContent=j.status;
-      if(j.status!=='running')setTimeout(()=>{bar.style.display='none'},1200);
-      log.textContent+='\n\n['+j.status+(j.rc!==undefined?' rc='+j.rc:'')+
-        (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s)':'')+']';
+      setTimeout(()=>{bar.style.display='none'},1200);
+      if(j.status==='error'){
+        errBox.style.display='block';
+        errBox.innerHTML='<b>Run failed'+(j.rc!==undefined?' (exit '+j.rc+')':'')+'.</b> '+
+          ((j.error||'See the log below.').replace(/</g,'&lt;'));
+      } else {
+        errBox.style.display='none';
+        log.textContent+='\n\n[done'+(j.rc!==undefined?' rc='+j.rc:'')+
+          (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s)':'')+']';
+      }
       if(onDone)onDone(j);}
   },1500);
 }

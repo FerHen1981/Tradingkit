@@ -26,27 +26,11 @@ def _emit_progress(done: int, total: int, note: str = "") -> None:
     print(f"PROGRESS {done} {total} {note}", flush=True)
 
 
-# Above this many bars, classify the regime tag on a 15-minute resample instead
-# of every 1m bar. Regime is a higher-timeframe concept (MA200 + Wilder ADX span
-# days), so the label is unchanged, but the recording tail drops from ~35s / 1.4GB
-# to ~2s on a 20-year 1m frame — which is what made big runs hang/OOM at
-# "recording". The 15m labels are broadcast back to 1m so edge_by_regime aligns.
-_REGIME_RESAMPLE_ABOVE = 400_000
-
-
+# Regime tagging shares indicators.regime_labels — one source of truth for the
+# engine's regime gate, the run record's regime tag, and edge attribution (all
+# classify on a 15m resample above 400k bars: same labels, ~47s -> ~2s on 20y 1m).
 def _regime_labels(dtf, cfg):
-    import numpy as np
-    import pandas as pd
-    if len(dtf) <= _REGIME_RESAMPLE_ABOVE:
-        return ind_mod.classify_regime(dtf, cfg)["regime"]
-    s = dtf[["et", "High", "Low", "Close"]].set_index("et")
-    r = pd.DataFrame({"High": s["High"].resample("15min").max(),
-                      "Low": s["Low"].resample("15min").min(),
-                      "Close": s["Close"].resample("15min").last()}).dropna().reset_index()
-    lab = ind_mod.classify_regime(r, cfg)["regime"]
-    pos = np.clip(np.searchsorted(r["et"].to_numpy(), dtf["et"].to_numpy(), side="right") - 1,
-                  0, len(lab) - 1)
-    return lab[pos]
+    return ind_mod.regime_labels(dtf, cfg)
 
 
 def run_one(df, cfg, research: bool, progress=None, ind_progress=None):

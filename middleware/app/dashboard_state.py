@@ -129,7 +129,10 @@ def _phase(account: str) -> str:
     return "Funded" if account.upper().startswith(("PA", "PAAPEX")) else "Eval"
 
 
-_FRAMEWORK_DB = os.environ.get("NOTION_FRAMEWORK_DB", "1ddb61ea444d8168a40f000b8d3d33ea")
+# The DATABASE id, not the data source (collection) id. Notion split the two when databases
+# gained multiple sources; /v1/databases/{data_source_id}/query has 404'd ever since, which
+# is why the Framework map failed to load while Accounts and Account Types kept working.
+_FRAMEWORK_DB = os.environ.get("NOTION_FRAMEWORK_DB", "1ddb61ea444d81cc86cdce9206878aba")
 _STRATS = ["El Tesoro", "El Rey", "El Minero", "El León", "El Toro", "El Matador", "El Dorado", "El Patron"]
 
 

@@ -243,6 +243,13 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
                 except Exception:
                     pass
                 continue
+            if line.startswith("SWEEP_JSON "):
+                try:
+                    with _JOBS_LOCK:
+                        _JOBS[job_id]["sweep"] = json.loads(line[len("SWEEP_JSON "):])
+                except Exception:
+                    pass
+                continue
             log.append(line)
             if "recorded run " in line:
                 try:
@@ -410,6 +417,52 @@ def _start_verify(q) -> tuple[dict, int]:
     return _spawn(cmd, f"verify seed{seed}"), 200
 
 
+def _start_sweep(q) -> tuple[dict, int]:
+    """Phase 3: fine-grained sweep of one parameter over a set of values."""
+    from ..config import PRESETS, TIMEFRAMES
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    tf = (q.get("tf") or ["1m"])[0].strip().lower()
+    if tf not in TIMEFRAMES:
+        return {"error": f"unknown timeframe {tf!r}"}, 400
+    param = (q.get("param") or [""])[0].strip()
+    if not param:
+        return {"error": "pick a parameter to sweep"}, 400
+    values = (q.get("values") or [""])[0].strip()
+    if not values:
+        return {"error": "give comma-separated values (e.g. 40,60,80,100)"}, 400
+    cmd = [sys.executable, "-m", "backtest.sweep", "--data", ds[dataset]["file"],
+           "--tf", tf, "--param", param, "--values", values]
+    spec = (q.get("spec") or [""])[0]
+    if spec.startswith("preset:"):
+        name = spec.split(":", 1)[1]
+        if name not in PRESETS:
+            return {"error": f"unknown preset {name!r}"}, 400
+        cmd += ["--preset", name]
+    else:
+        name = spec.split(":", 1)[1] if spec.startswith("spec:") else spec
+        f = (_specs_dir() / name).resolve()
+        if f.suffix != ".yaml" or f.parent != _specs_dir().resolve() or not f.exists():
+            return {"error": f"unknown strategy {name!r}"}, 400
+        cmd += ["--spec", f"backtest/specs/{f.name}"]
+    if ds[dataset].get("symbol"):
+        cmd += ["--symbol", ds[dataset]["symbol"]]
+    if (q.get("funded") or ["0"])[0] in ("1", "true", "on"):
+        cmd += ["--funded"]
+    since = (q.get("since") or [""])[0].strip()
+    if since:
+        cmd += ["--coarse-since", since]
+    try:
+        hold = int((q.get("holdout") or ["0"])[0])
+        if hold > 0:
+            cmd += ["--holdout-days", str(hold)]
+    except Exception:
+        pass
+    return _spawn(cmd, f"sweep {param}"), 200
+
+
 def _candidates() -> dict:
     root = lab_root()
     files = sorted(root.glob("verified_seed*.json")) or sorted(root.glob("candidates_seed*.json"))
@@ -544,6 +597,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(body, code)
         if u.path == "/api/verify":
             body, code = _start_verify(q)
+            return self._json(body, code)
+        if u.path == "/api/sweep":
+            body, code = _start_sweep(q)
             return self._json(body, code)
         if u.path in ("/api/builder/preview", "/api/builder/save"):
             length = int(self.headers.get("Content-Length", "0"))
@@ -789,6 +845,21 @@ function edgeHtml(edge){
     +`This is the measured truth; the setup score's regime-fit is only a prior.</span>`
     +`<div style="margin-top:5px">${rows}</div></div>`;
 }
+function diagnosisHtml(diag){
+  if(!diag||diag.error)return '';
+  const all=[].concat((diag.trades&&diag.trades.findings)||[],(diag.signals&&diag.signals.findings)||[]);
+  if(!all.length)return '';
+  const col={high:'var(--rose)',medium:'var(--gold)',low:'var(--sub)'};
+  const rank={high:0,medium:1,low:2};
+  all.sort((a,b)=>(rank[a.severity]??3)-(rank[b.severity]??3));
+  const rows=all.map(f=>`<div class=lensrow style="margin-top:6px;display:flex;gap:9px;align-items:flex-start">`
+    +`<span class=tag style="color:${col[f.severity]||'var(--sub)'};border-color:${col[f.severity]||'var(--line)'};min-width:64px;text-align:center">${f.severity}</span>`
+    +`<span style="flex:1">${(f.message||'').replace(/</g,'&lt;')}</span></div>`).join('');
+  return `<div style="margin-top:12px;padding:12px;background:rgba(90,162,255,.06);border:1px solid var(--line);border-radius:4px">`
+    +`<b>Why this run behaved this way</b> <span class=muted>— derived from the trades and the signal flow, no pre-assumption the parameters are right. `
+    +`Sweep the flagged parameter (Test → Sweep) to see the response.</span>`
+    +`<div style="margin-top:6px">${rows}</div></div>`;
+}
 function regimeHtml(reg){
   if(!reg||reg.error||!reg.distribution)return '';
   const d=reg.distribution,keys=Object.keys(d);
@@ -840,6 +911,7 @@ async function showDetail(id){
     ${stackHtml(r.desc,r.regime)}
     ${scoreHtml(r.desc)}
     ${regimeHtml(r.regime)}
+    ${diagnosisHtml(r.diagnosis)}
     ${edgeHtml(r.edge_by_regime)}
     <div style="margin-top:10px"><b>Settings used</b><div style="margin-top:6px">${kvs(r.settings)}</div></div>
     <div style="margin-top:10px"><b>KPIs</b><div style="margin-top:6px">${kvs(r.kpis)}</div></div>
@@ -943,11 +1015,15 @@ let SPECS=[];
 async function loadWizard(){
   try{
     SPECS=(await (await fetch('/api/specs')).json()).specs||[];
-    $('#wSpec').innerHTML=SPECS.map(s=>{const f=(s.desc||{}).family;
+    const specOpts=SPECS.map(s=>{const f=(s.desc||{}).family;
       return `<option value="${s.id}">${s.title||s.name}${f?' · '+f:''}</option>`}).join('');
+    $('#wSpec').innerHTML=specOpts;
+    const swS=$('#swSpec');if(swS)swS.innerHTML=specOpts;
     const ds=(await (await fetch('/api/datasets')).json()).datasets||[];
-    $('#wDs').innerHTML=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')
+    const dsOpts=ds.map(d=>`<option value="${d.name}">${d.name}${d.symbol?' · '+d.symbol:''}</option>`).join('')
       ||'<option value="">no datasets — upload one</option>';
+    $('#wDs').innerHTML=dsOpts;
+    const swD=$('#swDs');if(swD)swD.innerHTML=dsOpts;
     loadLibrary();
   }catch(e){}
 }
@@ -1043,6 +1119,34 @@ $('#wRun').addEventListener('click',()=>{
     '&tf='+encodeURIComponent($('#wTf').value)+'&lens='+encodeURIComponent($('#wLens').value)+
     '&micro='+($('#wMicro').checked?'1':'0');
   postJob('/api/run',qs,'#wLog','#wRun',()=>load());
+});
+// parameter sweep (phase 3)
+function renderSweep(sw){
+  const box=$('#swCurve');if(!sw||!sw.curve){box.style.display='none';return}
+  box.style.display='block';
+  const rows=sw.curve.filter(c=>!c.error);
+  const pfs=rows.map(c=>c.pf||0);const mx=Math.max(0.01,...pfs.map(Math.abs));
+  const best=sw.best?sw.best.value:null;
+  const bar=rows.map(c=>{
+    const cur=(c.value===sw.current), bst=(best!==null&&c.value===best);
+    const w=Math.max(2,Math.round(100*Math.abs(c.pf||0)/mx));
+    const col=(c.pf>=1)?'linear-gradient(90deg,var(--gold2),var(--gold))':'var(--rose)';
+    const fu=c.funded?('<span class=muted style="margin-left:8px">'+(c.funded.breached?'<span style="color:var(--rose)">breach</span>':'<span style="color:var(--gold)">survives</span>')+(c.funded.payouts?(' · '+c.funded.payouts+' payout'):'')+'</span>'):'';
+    return `<div style="display:flex;align-items:center;gap:9px;margin-top:5px">
+      <span style="min-width:70px;text-align:right;font-family:var(--mono);font-size:12px;color:${cur?'var(--gold)':'var(--sand)'}">${c.value}${cur?' ◀':''}${bst?' ★':''}</span>
+      <span style="flex:1;background:var(--deep);border-radius:99px;height:16px;position:relative;overflow:hidden"><span style="display:block;height:100%;width:${w}%;background:${col};border-radius:99px"></span></span>
+      <span style="min-width:210px;font-family:var(--mono);font-size:11px;color:var(--sub)">PF ${(c.pf||0).toFixed(2)} · net $${Math.round(c.net||0).toLocaleString()} · ${c.trades||0}t${fu}</span></div>`;
+  }).join('');
+  box.innerHTML=`<div class=muted style="margin-bottom:4px">${sw.param} response — ◀ current, ★ best PF${sw.funded?' (that survives funded)':''}. `
+    +`${sw.engine_only?'engine-only (fast)':'recomputed indicators per value'}.</div>${bar}`;
+}
+$('#swRun').addEventListener('click',()=>{
+  const ds=$('#swDs').value;if(!ds){$('#swLog').style.display='block';$('#swLog').textContent='Upload a dataset first.';return}
+  $('#swCurve').style.display='none';
+  const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#swSpec').value)+
+    '&tf='+encodeURIComponent($('#swTf').value)+'&param='+encodeURIComponent($('#swParam').value)+
+    '&values='+encodeURIComponent($('#swVals').value)+'&funded='+($('#swFunded').checked?'1':'0');
+  postJob('/api/sweep',qs,'#swLog','#swRun',(j)=>{if(j&&j.sweep)renderSweep(j.sweep);});
 });
 // generator
 function gqs(){return 'dataset='+encodeURIComponent($('#gDs').value)+'&n='+encodeURIComponent($('#gN').value)+
@@ -1247,6 +1351,32 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <button class=go id=wRun>Run</button>
     </div>
     <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Sweep a parameter</b><span class=muted>fine-grained: vary one value, see the response</span></div>
+    <div class=hint>The run's <b>diagnosis</b> (click any run below) names the parameter that's off — stop too wide, FVG band too big. Sweep it here across a range to see where PF/net peak and where the funded account stops breaching. No assumption today's value is right.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
+      <label class=field><span class=fld>Dataset</span><select id=swDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Timeframe</span><input id=swTf value="1m" style="width:70px"></label>
+      <label class=field><span class=fld>Parameter</span><select id=swParam style="min-width:170px">
+        <option value=fixed_stop_ticks>fixed_stop_ticks (stop)</option>
+        <option value=tp_fixed_ticks>tp_fixed_ticks (target)</option>
+        <option value=contract_size>contract_size (size)</option>
+        <option value=gap_min_ticks>gap_min_ticks (FVG min)</option>
+        <option value=gap_max_ticks>gap_max_ticks (FVG max)</option>
+        <option value=cvd_trend_count>cvd_trend_count (CVD streak)</option>
+        <option value=trail_start_ticks>trail_start_ticks (trail)</option>
+        <option value=be_trigger_ticks>be_trigger_ticks (breakeven)</option>
+      </select></label>
+      <label class=field><span class=fld>Values (comma)</span><input id=swVals value="40,60,80,100,120" style="width:170px"></label>
+      <label class=field><span class=fld>Funded</span><span style="padding:8px 0"><input type=checkbox id=swFunded checked> breach/payout</span></label>
+      <button class=go id=swRun>Sweep</button>
+    </div>
+    <div id=swCurve style="display:none;margin-top:14px"></div>
+    <pre id=swLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
   <div class=panel>

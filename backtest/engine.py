@@ -58,6 +58,8 @@ class Result:
     bars: int = 0
     first_time: Optional[pd.Timestamp] = None
     last_time: Optional[pd.Timestamp] = None
+    veto_counts: Optional[dict] = None      # phase-2 signal-veto attribution (diag mode)
+    diagnosis: Optional[dict] = None        # phase-1/2 data-derived explanation of the run
 
 
 def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
@@ -99,11 +101,17 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
 
 class Engine:
     def __init__(self, cfg: Config, df: pd.DataFrame = None, ind: pd.DataFrame = None,
-                 research_mode: bool = False, start_bar: int = 0, arrays: dict = None):
+                 research_mode: bool = False, start_bar: int = 0, arrays: dict = None,
+                 diag: bool = False):
         self.cfg = cfg
         self.research = research_mode
         self.c = cfg.contract
         self.start_bar = start_bar
+        # Opt-in signal-veto attribution (phase 2). Off by default so the mill's
+        # parallel workers keep the zero-overhead hot path.
+        self.diag = diag
+        self.veto_counts = {"primary": 0, "cvd": 0, "vwap": 0, "regime": 0,
+                            "time": 0, "confluence": 0, "passed": 0} if diag else None
 
         a = arrays if arrays is not None else extract(df, ind)
         self.open = a["open"]; self.high = a["high"]; self.low = a["low"]; self.close = a["close"]
@@ -310,6 +318,7 @@ class Engine:
         res.bars = end - self.start_bar
         res.first_time = pd.Timestamp(self.time[self.start_bar])
         res.last_time = pd.Timestamp(self.time[min(end - 1, self.n - 1)])
+        res.veto_counts = self.veto_counts
         return res
 
     # --------------------------------------------------------------- broker
@@ -719,9 +728,14 @@ class Engine:
             return False, False, np.nan, np.nan, np.nan
         for cond in self.cfg.confl_require:
             if not self._confluence_ok(cond, i, d):
+                if self.diag:
+                    self.veto_counts["primary"] += 1
+                    self.veto_counts["confluence"] += 1
                 return False, False, np.nan, np.nan, np.nan
         long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
         short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
+        if self.diag:
+            self._attribute_veto(i, d, can_trade, long0 or short0)
         return long0, short0, entry_ref, stop_up, stop_down
 
     def _signal(self, i: int, can_trade: bool):
@@ -737,8 +751,29 @@ class Engine:
                 continue
             long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
             short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
+            if self.diag:
+                self._attribute_veto(i, d, can_trade, long0 or short0)
             return long0, short0, entry_ref, stop_up, stop_down
         return False, False, np.nan, np.nan, np.nan
+
+    def _attribute_veto(self, i: int, d: int, can_trade: bool, passed: bool):
+        """Phase 2: a primary entry signal fired at bar i — record which base
+        filter(s) killed it, so the diagnostic can say WHERE the signals go."""
+        vc = self.veto_counts
+        vc["primary"] += 1
+        if passed:
+            vc["passed"] += 1
+            return
+        cvd_ok = self.bull_cvd[i] if d == 1 else self.bear_cvd[i]
+        vwap_ok = self.veto_long[i] if d == 1 else self.veto_short[i]
+        if not cvd_ok:
+            vc["cvd"] += 1
+        if not vwap_ok:
+            vc["vwap"] += 1
+        if not self.regime_ok[i]:
+            vc["regime"] += 1
+        if not can_trade:
+            vc["time"] += 1
 
     def _memory(self, i: int, can_trade: bool, long0: bool, short0: bool):
         cfg = self.cfg

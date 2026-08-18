@@ -52,8 +52,19 @@ def _regime_labels(dtf, cfg):
 def run_one(df, cfg, research: bool, progress=None):
     t0 = time.time()
     ind = ind_mod.compute(df, cfg)
-    eng = Engine(cfg, df, ind, research_mode=research)
+    # diag=True on the single-run path (cheap counters; not the parallel mill) so
+    # every run carries its own data-derived explanation (phases 1+2).
+    eng = Engine(cfg, df, ind, research_mode=research, diag=True)
     res = eng.run(progress=progress)
+    try:
+        from .diagnose import diagnose_trades, diagnose_signals
+        from .funded import APEX_DD
+        from .metrics import trades_frame
+        dd = float(APEX_DD.get(int(cfg.initial_capital or 50_000), 2_500))
+        res.diagnosis = {"trades": diagnose_trades(trades_frame(res), cfg, drawdown=dd),
+                         "signals": diagnose_signals(ind, cfg, res.veto_counts)}
+    except Exception as e:
+        res.diagnosis = {"error": repr(e)}
     dt = time.time() - t0
     return res, dt
 
@@ -233,6 +244,8 @@ def main():
                 "data_file": os.path.basename(args.data), "window": _window,
                 "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
+        if res is not None and getattr(res, "diagnosis", None):
+            meta["diagnosis"] = res.diagnosis   # phases 1+2: data-derived "why"
         try:                                   # objective L1 regime tag for this run
             labels = _regime_labels(df_for(tf), cfg)
             meta["regime"] = ind_mod.regime_summary(labels)
@@ -320,7 +333,7 @@ def main():
             print(f"  trading days={s['trading_days']} (qual {s['qualifying_days']})  "
                   f"first payout after {s['days_to_first_payout']} days")
             out[name] = s
-            _record(base_name, cfg, tf, "funded", s, None)
+            _record(base_name, cfg, tf, "funded", s, None, res=res)
             continue
         res, dt = run_one(dtf, cfg, args.research, progress=_prog)
         _fin("regime + recording …")

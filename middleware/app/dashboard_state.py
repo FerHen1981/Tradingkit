@@ -644,6 +644,13 @@ def _sources() -> tuple[list[dict], list[dict]]:
             a["net"] = round(led.balance - start, 2)
             a["commissions_total"] = led.commissions
             a["balance_source"] = "cash_ledger"
+            # keep the survival buffer consistent with the exact balance: the DD floor (stop)
+            # is an absolute level, so buffer = balance − floor; bufpct scales with the buffer.
+            if a.get("floor") is not None:
+                new_buf = round(led.balance - a["floor"], 2)
+                if a.get("bufpct") is not None and a.get("buffer"):
+                    a["bufpct"] = round(a["bufpct"] * new_buf / a["buffer"], 1)
+                a["buffer"] = new_buf
 
     _cache.update(t=now, trades=trades, accounts=accounts)
     return trades, accounts

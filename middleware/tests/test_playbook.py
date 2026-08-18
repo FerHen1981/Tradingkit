@@ -1,5 +1,9 @@
 """Payout Playbook — max-payout route analysis (history × rules, per-cycle)."""
 import datetime as dt
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))   # run this file on its own
 
 from app.playbook import (account_track, base_asset, build_playbook, contract_label,
                           dd_amount, ladder_caps, ladder_rung, parse_size, recommend_setup)
@@ -176,3 +180,47 @@ def test_non_apex_firm_flagged():
     a = {"stage": "Eval", "size": 50_000, "firm": "My Funded Futures", "starting": 50_000, "current": 50_000}
     pb = build_playbook(a, {}, None)
     assert pb["firm_verified"] is False and "⚠" in pb["note"]
+
+
+# --- consistency belongs to the account type, not to every account ------------------------------
+
+def _eval_acct(**kw):
+    a = {"id": "214", "full": "APEX27002500000214", "firm": "Apex Trader Funding", "stage": "Eval",
+         "size": 50_000, "starting": 50_000, "current": 52_000, "dd_rule": "Trailing Equity Peak",
+         "firm_program": "apex_50k_legacy_eval",
+         "payout": {"stage": "Eval", "profit": 2_000, "target": 3_000, "trading_days": 6,
+                    "eligible": False, "days_to_go": 1, "consistency_pct": 40.0}}
+    a.update(kw)
+    return a
+
+
+def test_an_evaluation_carries_no_consistency_rule():
+    """The firm-name fallback handed every account Apex's 30%. On an evaluation there is no such
+    rule, so a 40% day is not 'broken' — and the cockpit must not quote a ceiling that does not
+    exist."""
+    pb = build_playbook(_eval_acct(), _hist(300, 6), "MGC")
+    assert pb["broken"] is False
+    assert pb["consistency_limit"] is None
+    assert "consistency" not in pb["note"]
+
+
+def test_broken_consistency_without_a_day_cap_does_not_crash():
+    """track 'eval' and 'maxed' both leave set_day_cap at None, and the broken-consistency flag
+    formatted it — TypeError, and the whole playbook for that account was dropped."""
+    a = _acct(current=63_000, buffer=2_600, payouts_taken=6, payout_total=13_000,
+              firm_program="apex_50k_legacy_pa",
+              payout={"eligible": True, "trading_days": 9, "days_to_go": 0,
+                      "consistency_pct": 42.0, "cap": 3_000, "total_cap": 13_000,
+                      "above_safety": 10_400})
+    pb = build_playbook(a, _hist(1_200, 9), "MGC")
+    assert pb["phase"] == "maxed" and pb["broken"] is True
+    assert "total wins reach" in pb["note"]        # and it did not raise
+
+
+def test_the_coaching_text_quotes_the_account_types_own_ceiling():
+    a = _acct(current=53_000, buffer=2_600, firm_program="apex_50k_eod_pa",
+              payout={"eligible": False, "trading_days": 6, "days_to_go": 0,
+                      "consistency_pct": 67.0})
+    pb = build_playbook(a, _hist(200, 6), "MGC")
+    assert pb["consistency_limit"] == 0.50
+    assert "30%" not in pb["note"]        # 30 is the legacy number, not this account type's

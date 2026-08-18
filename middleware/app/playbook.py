@@ -93,6 +93,8 @@ def resolve_account_rules(account: dict) -> dict:
     base["safety_net_payouts"] = prog.get("safety_net_payouts")
     if prog.get("consistency") is not None:
         base["consistency"] = prog["consistency"]
+    elif prog.get("stage") == "eval":
+        base["consistency"] = None      # consistency is a funded-account rule; an eval has none
     if prog.get("min_days") is not None:
         base["min_days"] = prog["min_days"]
     if prog.get("trailing_locks_at") is not None:
@@ -287,7 +289,11 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     size_usd = account.get("size")
     firm = account.get("firm")
     rules = resolve_account_rules(account)                  # program-first, single-source
+    # limit doubles as a PACING number (how small to keep a day), so it keeps a default even
+    # where no rule exists. has_cons is the separate question: does this account type actually
+    # carry a consistency rule the firm enforces? An evaluation does not.
     limit = rules["consistency"] or 0.30
+    has_cons = rules.get("consistency") is not None
     min_days = rules["min_days"] or MIN_TRADING_DAYS
     lock_at = rules.get("lock_at", 2_600)
     payouts_taken = int(account.get("payouts_taken") or 0)
@@ -369,13 +375,13 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     elif profit >= target:                                   # enough for the full cap; days/consistency pending
         phase = mname
         route = (f"Full ${cap:,.0f} in reach (P/L ${profit:,.0f} ≥ ${target:,.0f}). {need_days} more small trading day(s) "
-                 f"(keep every day < ${cons_cap:,.0f} = 30% consistency), then withdraw the full ${cap:,.0f}.")
+                 f"(keep every day < ${cons_cap:,.0f} = {100 * limit:.0f}% consistency), then withdraw the full ${cap:,.0f}.")
     elif profit >= safety:                                   # can withdraw now, but building to the full cap
         phase = mname
         rate = daily_rate or (day_trail or cons_cap * 0.3)
         days_needed = max(need_days, math.ceil(to_full / rate) if rate > 0 else 0, 1)
         route = (f"Now withdrawable ${withdrawable_now:,.0f} — but +${to_full:,.0f} pulls the FULL ${cap:,.0f} cap: "
-                 f"milk small days over ~{days_needed} days (never a day > ${cons_cap:,.0f} = 30% consistency). "
+                 f"milk small days over ~{days_needed} days (never a day > ${cons_cap:,.0f} = {100 * limit:.0f}% consistency). "
                  f"Banking now leaves ${leaving:,.0f} on the table.")
         if leaving > 0:
             flags.append(f"cap ${cap:,.0f} — don't bank early and leave ${leaving:,.0f}")
@@ -424,7 +430,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days; the ceiling
     # RISES as you earn. Heal an outlier by growing total wins to best_day / 30%.
     total_win = round(best_day / (consistency_pct / 100)) if (consistency_pct and best_day > 0) else max(profit, 0)
-    broken = bool(consistency_pct is not None and limit and consistency_pct > 100 * limit)
+    broken = bool(has_cons and consistency_pct is not None and limit and consistency_pct > 100 * limit)
     heal_total = round(best_day / limit) if (broken and best_day > 0 and limit) else 0
     heal_deficit = round(max(0, heal_total - total_win)) if broken else 0
 
@@ -447,17 +453,25 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     else:
         set_day_cap = round(min(day_trail or soft_cap, soft_cap))
 
-    if broken:
+    if broken and set_day_cap is not None:
         if quality == "ok":
             quality = "consistency"
         edge_txt = f" ({set_size:g} {inst}, exp ${es['exp_pc']:.0f}/ct × {es['tpd']:g} trades/day)" if es else ""
         tag = "SAFE day-cap" if risk_capped else "day-cap"
         flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% — {tag} ${set_day_cap:,.0f}{edge_txt}; "
-                     f"total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d to clear 30%)")
-    elif consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
+                     f"total wins reach ${heal_total:,.0f} (+${heal_deficit:,.0f} ≈ {days_to_heal}d "
+                     f"to clear {100 * limit:.0f}%)")
+    elif broken:
+        # a maxed account has no day-cap to set, but the ceiling still decides the payout
         if quality == "ok":
             quality = "consistency"
-        flags.append(f"consistency {consistency_pct:.0f}% of wins on one day — keep spreading (the 30% ceiling rises as you earn)")
+        flags.append(f"top day ${best_day:,.0f} = {consistency_pct:.0f}% — total wins reach "
+                     f"${heal_total:,.0f} (+${heal_deficit:,.0f}) before this clears {100 * limit:.0f}%")
+    elif has_cons and consistency_pct is not None and consistency_pct >= 100 * limit * 0.67:
+        if quality == "ok":
+            quality = "consistency"
+        flags.append(f"consistency {consistency_pct:.0f}% of wins on one day — keep spreading "
+                     f"(the {100 * limit:.0f}% ceiling rises as you earn)")
 
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],
@@ -472,7 +486,10 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "day_cap": set_day_cap, "dll": dll, "days_plan": days_plan,
         "exp_pc": es["exp_pc"] if es else None, "loss_pc": es["loss_pc"] if es else None,
         "tpd": es["tpd"] if es else None, "day_net": es["day_net"] if es else None,
-        "day_trail": day_trail, "cons_cap": cons_cap, "consistency_limit": limit,
+        "day_trail": day_trail, "cons_cap": cons_cap,
+        # the ceiling the FIRM enforces — None where the account type has no such rule,
+        # so the cockpit stops quoting Apex's 30% at an evaluation that has none.
+        "consistency_limit": limit if has_cons else None,
         "broken": broken, "heal_total": heal_total or None, "heal_deficit": heal_deficit or None,
         "days_to_heal": days_to_heal, "risk_capped": risk_capped,
         "profit": profit, "trading_days": trading_days, "best_day": round(best_day),

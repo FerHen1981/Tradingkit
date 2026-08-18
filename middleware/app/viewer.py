@@ -803,12 +803,14 @@ function renderPlaybook(rows){
     const ph=PB_PHASE[p.phase]||["var(--muted)",p.phase];
     const phase=`<span class=pill style="background:${ph[0]};color:#04121a">${ph[1]}</span>`;
     const consWarn=p.consistency_pct!=null&&p.consistency_pct>=20;
-    const topWarn=p.best_day&&p.cons_cap&&p.best_day>p.cons_cap;
+    const hasCons=p.consistency_limit!=null;      // no rule on an evaluation — don't quote one
+    const topWarn=hasCons&&p.best_day&&p.cons_cap&&p.best_day>p.cons_cap;
     const st=`<b class="${cls(p.profit||0)}">${p.profit!=null?signed(p.profit):'—'}</b> <span class=calc>P/L · ${p.trading_days}d</span>`
       +(p.buffer!=null?`<br><span style="color:${p.buffer<1000?'var(--crit)':'var(--muted)'}">buf ${money0(p.buffer)}</span>`:'')
       +(p.consistency_pct!=null?` <span style="color:${consWarn?'var(--warn)':'var(--muted)'}">· ${p.consistency_pct}% top day</span>`:'')
       +(p.withdrawable_now!=null?`<br><span class=calc>pull ${money0(p.withdrawable_now)}/${money0(p.cap)}${p.total_cap?' · paid '+money0(p.total_paid)+'/'+money0(p.total_cap):''}</span>`:'')
-      +((p.best_day||p.cons_cap)?`<br><span style="color:${topWarn?'var(--crit)':'var(--muted)'}">top day ${money0(p.best_day)} · ${Math.round((p.consistency_limit||0.3)*100)}% max ${p.cons_cap?money0(p.cons_cap):'—'}</span>`:'');
+      +((p.best_day||p.cons_cap)?`<br><span style="color:${topWarn?'var(--crit)':'var(--muted)'}">top day ${money0(p.best_day)}`
+        +(hasCons?` · ${Math.round(p.consistency_limit*100)}% max ${p.cons_cap?money0(p.cons_cap):'—'}`:'')+`</span>`:'');
     const flag=p.note?`<div style="color:var(--warn);font-size:11px;margin-bottom:3px">⚑ ${p.note}</div>`:'';
     const rcol=(p.quality==='payout'||p.phase==='maxed')?'var(--gold)':'var(--ink)';
     return `<tr>

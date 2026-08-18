@@ -1,12 +1,19 @@
 """One-shot OOS verification — the overfit gate.
 
-Takes the coarse mill's survivors and runs each on BOTH the full in-sample span
-and the held-out out-of-sample window, then reports IS score next to OOS score.
-Only candidates whose edge survives OOS (enough trades, PF above threshold, and
-PF not collapsing vs IS) are real; the rest won the in-sample lottery.
+Takes the coarse mill's survivors and scores each on the held-out out-of-sample
+window, then reports its coarse in-sample PF (the window the mill selected on,
+carried in candidates_seedN.json) next to the fresh OOS PF. Only candidates
+whose edge survives OOS (enough trades, PF above threshold, and PF not
+collapsing vs IS) are real; the rest won the in-sample lottery.
 
     python -m backtest.verify --data <csv> \
         --candidates $LAB_DIR/candidates_seed0.json --tf 5m --holdout-days 365 --lab
+
+By default IS is REUSED from the candidates file (the coarse window the mill
+optimized on) so verify runs only the OOS pass per candidate — roughly half the
+work, and the methodologically correct comparison (coarse-IS vs untouched OOS).
+Pass --recompute-is to re-run the full in-sample span instead (slower; dilutes
+the coarse edge with bars the mill never saw).
 
 This consumes the OOS window ONCE. Re-running tweaked variants against the same
 OOS window is p-hacking — sample a fresh batch instead.
@@ -21,9 +28,10 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 
-# Both verification frames, handed to each worker once via the pool initializer
+# The verification frames, handed to each worker once via the pool initializer
 # (robust across fork/spawn start methods — same pattern as generate.py). Each
-# task then only ships the small Config, not the 20-year frames.
+# task then only ships the small Config, not the 20-year frames. _IS_DF stays
+# None unless --recompute-is is set (default reuses the stored coarse IS).
 _IS_DF = None
 _OOS_DF = None
 
@@ -34,7 +42,13 @@ def _pool_init(is_df, oos_df):
 
 
 def _verify_cfg(cfg):
-    """Worker: run one candidate on BOTH shared frames. Returns (kpis_is, kpis_oos)."""
+    """Worker: score one candidate on the shared OOS frame. Returns kpis_oos."""
+    from .generate import run_cfg
+    return run_cfg(cfg, _OOS_DF)
+
+
+def _verify_cfg_both(cfg):
+    """Worker (--recompute-is): run on BOTH frames. Returns (kpis_is, kpis_oos)."""
     from .generate import run_cfg
     return run_cfg(cfg, _IS_DF), run_cfg(cfg, _OOS_DF)
 
@@ -65,6 +79,9 @@ def main():
     ap.add_argument("--base-asset", default="NQ")
     ap.add_argument("--jobs", type=int, default=0,
                     help="parallel worker processes (0 = all CPU cores). Big speed-up on 1m data.")
+    ap.add_argument("--recompute-is", action="store_true",
+                    help="re-run the full in-sample span instead of reusing the coarse IS "
+                         "carried in the candidates file (slower; default reuses it)")
     ap.add_argument("--lab", action="store_true")
     args = ap.parse_args()
 
@@ -74,12 +91,18 @@ def main():
 
     registry = load_registry()
     cands = json.loads(open(args.candidates).read())
-    print(f"loading {args.data} ... ({len(cands)} candidates)")
+    reuse_is = not args.recompute_is
+    print(f"loading {args.data} ... ({len(cands)} candidates; "
+          f"{'reusing coarse IS' if reuse_is else 'recomputing full IS'})")
     df = data_mod.load(args.data)
     is_df, oos_df, cut = data_mod.holdout_split(df, args.holdout_days)
-    is_tf = is_df if args.tf == "1m" else data_mod.resample_tf(is_df, args.tf)
     oos_tf = oos_df if args.tf == "1m" else data_mod.resample_tf(oos_df, args.tf)
-    isw = {"first": str(is_tf["et"].iloc[0])[:19], "last": str(is_tf["et"].iloc[-1])[:19], "bars_1m": len(is_df)}
+    # IS frame is only built when recomputing; otherwise we reuse the stored
+    # coarse KPIs and skip the (expensive) 19-year resample entirely.
+    is_tf = None
+    if args.recompute_is:
+        is_tf = is_df if args.tf == "1m" else data_mod.resample_tf(is_df, args.tf)
+    isw = {"first": str(is_df["et"].iloc[0])[:19], "last": str(is_df["et"].iloc[-1])[:19], "bars_1m": len(is_df)}
     oosw = {"first": str(oos_tf["et"].iloc[0])[:19], "last": str(oos_tf["et"].iloc[-1])[:19], "bars_1m": len(oos_df)}
     print(f"  IS {isw['first']}->{isw['last']}  |  OOS {oosw['first']}->{oosw['last']}")
 
@@ -89,27 +112,36 @@ def main():
         from .lab.paths import ensure_dirs, lab_root
         ensure_dirs()
 
-    # Pass 1 (cheap, serial): build the cfg for each candidate.
-    prepared, errors = [], 0
+    # Pass 1 (cheap, serial): build the cfg and grab the stored coarse IS KPIs.
+    prepared, errors, missing_is = [], 0, 0
     for c in cands:
         spec = c["spec"]
         try:
             cfg, _ = _cfg_for(spec, registry, args.base_asset)
-            prepared.append((spec, cfg))
+            kis_stored = c.get("kpis_is") or c.get("kpis") or {}
+            if reuse_is and not kis_stored:
+                missing_is += 1
+            prepared.append((spec, cfg, kis_stored))
         except Exception:
             errors += 1
+    if reuse_is and missing_is:
+        print(f"  note: {missing_is} candidate(s) had no stored IS KPIs "
+              f"(their retain ratio will read 0 — regenerate or use --recompute-is)")
 
-    # Pass 2 (expensive): each candidate's IS + OOS passes across worker
-    # processes. Workers get both frames once via the pool initializer.
+    # Pass 2 (the expensive part): score each candidate on OOS across worker
+    # processes. Workers get the OOS frame (and IS frame only if --recompute-is)
+    # once via the pool initializer, so only the small Config ships per task.
     jobs = args.jobs if args.jobs and args.jobs > 0 else (os.cpu_count() or 1)
     t0 = time.time()
-    print(f"  verifying {len(prepared)} candidates on {jobs} core(s) ...")
+    print(f"  verifying {len(prepared)} candidates on {jobs} core(s) "
+          f"({'OOS pass only' if reuse_is else 'IS+OOS passes'}) ...")
 
     def _record(spec, kis, koos):
         v = _verdict(kis, koos, args.min_oos_trades, args.min_oos_pf, args.retain)
         recs.append({"spec": spec, "kpis_is": kis, "kpis_oos": koos, "verdict": v})
         if args.lab:
-            for seg, k, win in (("is", kis, isw), ("oos", koos, oosw)):
+            segs = (("oos", koos, oosw),) if reuse_is else (("is", kis, isw), ("oos", koos, oosw))
+            for seg, k, win in segs:
                 fp = fingerprint({"groups": spec["groups"], "tf": args.tf, "seg": seg, "asset": args.base_asset})
                 rid = make_run_id(args.base_asset, spec["name"], args.tf, "classic", fp)
                 record_run({"run_id": rid, "asset": args.base_asset, "strategy": spec["name"],
@@ -118,31 +150,39 @@ def main():
                             "created_at": datetime.now(timezone.utc).isoformat(), "kpis": k},
                            {"kpis.json": json.dumps(k, default=str)})
 
+    worker = _verify_cfg_both if args.recompute_is else _verify_cfg
+
+    def _unpack(result, kis_stored):
+        # both-mode returns (kis, koos); OOS-only mode returns koos.
+        return result if args.recompute_is else (kis_stored, result)
+
     if jobs <= 1:                       # serial path (debug / single core)
         _pool_init(is_tf, oos_tf)
-        for i, (spec, cfg) in enumerate(prepared, 1):
+        for i, (spec, cfg, kis_stored) in enumerate(prepared, 1):
             try:
-                kis, koos = _verify_cfg(cfg)
+                kis, koos = _unpack(worker(cfg), kis_stored)
             except Exception:
                 errors += 1
                 continue
             _record(spec, kis, koos)
-            if i % 10 == 0:
-                print(f"    {i}/{len(prepared)}  ({time.time()-t0:.0f}s)")
+            if i % 5 == 0:
+                print(f"    {i}/{len(prepared)}  survivors={sum(1 for r in recs if r['verdict']['pass'])}  "
+                      f"({time.time()-t0:.0f}s)", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
                                  initargs=(is_tf, oos_tf)) as ex:
-            futs = {ex.submit(_verify_cfg, cfg): i for i, (spec, cfg) in enumerate(prepared)}
+            futs = {ex.submit(worker, cfg): i for i, (spec, cfg, _k) in enumerate(prepared)}
             for done, fut in enumerate(as_completed(futs), 1):
-                spec, cfg = prepared[futs[fut]]
+                spec, cfg, kis_stored = prepared[futs[fut]]
                 try:
-                    kis, koos = fut.result()
+                    kis, koos = _unpack(fut.result(), kis_stored)
                 except Exception:
                     errors += 1
                     continue
                 _record(spec, kis, koos)
-                if done % 10 == 0:
-                    print(f"    {done}/{len(prepared)}  ({time.time()-t0:.0f}s)")
+                if done % 5 == 0:
+                    print(f"    {done}/{len(prepared)}  survivors={sum(1 for r in recs if r['verdict']['pass'])}  "
+                          f"({time.time()-t0:.0f}s)", flush=True)
 
     if errors:
         print(f"  note: {errors} candidate(s) errored/skipped")

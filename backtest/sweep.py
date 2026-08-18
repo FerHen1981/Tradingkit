@@ -295,24 +295,20 @@ def main():
         base = base.with_(contract=contract(args.symbol))
 
     print(f"loading {args.data} ...")
-    print("PROGRESS 0 100 loading dataset (first load parses the CSV, ~1 min on 20y 1m; "
-          "cached after that)", flush=True)
-    df = data_mod.load(args.data)
     if args.coarse_since:
+        print("PROGRESS 0 100 loading dataset (cached after the first load)", flush=True)
+        df = data_mod.load(args.data)
         df = data_mod.slice_dates(df, since=args.coarse_since)
-    elif args.auto:
-        # Coarse gate, same design as the mill: tune the response curves on the
-        # last 3 years, validate winners on the full history / Verify OOS. Also
-        # what keeps auto-tune inside a small VPS's memory on 1m data — the full
-        # 20y frame needs multi-GB per parallel worker. Override: --coarse-since.
-        from datetime import timedelta
-        since = (df["et"].iloc[-1] - timedelta(days=3 * 365)).date()
-        n0 = len(df)
-        df = data_mod.slice_dates(df, since=str(since))
-        if len(df) < n0:
-            print(f"  AUTO-TUNE coarse window: last 3 years ({since} ->), "
-                  f"{len(df):,} of {n0:,} bars — response curves only; validate the "
-                  f"winner on the full history (Run/Verify). --coarse-since overrides.")
+    else:
+        # Coarse gate, same design as the mill: response curves on the prepared
+        # last-3-years slice (never loads or holds the 20y frame — the smooth
+        # size for a small box), winners validated on the full history via
+        # Run/Verify. --coarse-since overrides with an explicit window.
+        print("PROGRESS 0 100 loading recent-3y slice (prepared; fast)", flush=True)
+        df = data_mod.load_window(args.data, years=3)
+        print(f"  coarse window: last 3 years — {len(df):,} bars "
+              f"({df['et'].iloc[0].date()} -> {df['et'].iloc[-1].date()}); response curves "
+              f"only — validate the winner on the full history (Run/Verify).")
     if args.holdout_days:
         df, _oos, _cut = data_mod.holdout_split(df, args.holdout_days)
     df = df if args.tf == "1m" else data_mod.resample_tf(df, args.tf)

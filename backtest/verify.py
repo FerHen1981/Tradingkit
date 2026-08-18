@@ -95,7 +95,13 @@ def main():
     print(f"loading {args.data} ... ({len(cands)} candidates; "
           f"{'reusing coarse IS' if reuse_is else 'recomputing full IS'})")
     print("PROGRESS 0 100 loading dataset (cached after the first load)", flush=True)
-    df = data_mod.load(args.data)
+    if reuse_is:
+        # only the OOS tail is actually run — load a slice that safely covers the
+        # holdout instead of holding the whole 20y frame in memory.
+        years = max(2, int(args.holdout_days / 365) + 1)
+        df = data_mod.load_window(args.data, years=years)
+    else:
+        df = data_mod.load(args.data)
     is_df, oos_df, cut = data_mod.holdout_split(df, args.holdout_days)
     oos_tf = oos_df if args.tf == "1m" else data_mod.resample_tf(oos_df, args.tf)
     # IS frame is only built when recomputing; otherwise we reuse the stored
@@ -105,7 +111,11 @@ def main():
         is_tf = is_df if args.tf == "1m" else data_mod.resample_tf(is_df, args.tf)
     isw = {"first": str(is_df["et"].iloc[0])[:19], "last": str(is_df["et"].iloc[-1])[:19], "bars_1m": len(is_df)}
     oosw = {"first": str(oos_tf["et"].iloc[0])[:19], "last": str(oos_tf["et"].iloc[-1])[:19], "bars_1m": len(oos_df)}
-    print(f"  IS {isw['first']}->{isw['last']}  |  OOS {oosw['first']}->{oosw['last']}")
+    if reuse_is:
+        print(f"  IS = coarse window from the candidates file (reused)  |  "
+              f"OOS {oosw['first']}->{oosw['last']}")
+    else:
+        print(f"  IS {isw['first']}->{isw['last']}  |  OOS {oosw['first']}->{oosw['last']}")
 
     recs = []
     if args.lab:

@@ -63,6 +63,39 @@ def _write_cache(df: pd.DataFrame, src: str) -> None:
             pass
 
 
+def load_window(csv_path: str, years: int = 3, cache: bool = True) -> pd.DataFrame:
+    """Load only the most recent `years` of a dataset, via a small per-window
+    pickle built ONCE from the full parse. Interactive jobs (backtest iteration,
+    tuning, sweeps) use this so they never hold the 20-year frame in memory —
+    measured on this stack: ~1M 1m bars runs smoothly on a small 2-core box
+    (engine ~15s, ~350MB/worker) where the full 4-5M-bar frame costs 60-90s per
+    pass plus real memory pressure. Full-history stays for explicit validation."""
+    src = str(csv_path)
+    wpkl = f"{src}.recent{years}y.pkl"
+    if cache:
+        try:
+            if os.path.exists(wpkl) and os.path.getmtime(wpkl) >= os.path.getmtime(src):
+                return pd.read_pickle(wpkl)
+        except Exception:
+            pass
+    df = load(src, cache=cache)
+    since = df["et"].iloc[-1] - pd.Timedelta(days=int(years) * 365)
+    out = df[df["et"] >= since].reset_index(drop=True).copy()
+    del df
+    if cache:
+        tmp = wpkl + ".tmp"
+        try:
+            out.to_pickle(tmp)
+            os.replace(tmp, wpkl)
+        except Exception:
+            try:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+            except Exception:
+                pass
+    return out
+
+
 def load(csv_path: str, cache: bool = True) -> pd.DataFrame:
     src = str(csv_path)
     if cache:

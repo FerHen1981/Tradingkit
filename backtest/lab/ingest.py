@@ -73,6 +73,15 @@ def main():
                 src.unlink()
             except OSError:
                 pass
+        # PREPARE up front: build the parse cache and the recent-3y slice now,
+        # so the dataset's first backtest starts in seconds instead of paying a
+        # ~1-minute parse — every later job loads a prepared pickle.
+        print(f"PROGRESS 97 100 preparing fast caches (one-time)", flush=True)
+        try:
+            from .. import data as data_mod
+            data_mod.load_window(canon, years=3)   # builds .cache.pkl + .recent3y.pkl
+        except Exception as e:
+            print(f"  note: cache prepare skipped ({e}) — first run will parse the CSV")
         print(f"  ok  dataset '{name}'  symbol {a.symbol or '?'}  ({rows:,} rows) -> {ddir}")
         return
 

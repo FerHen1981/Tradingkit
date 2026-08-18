@@ -215,10 +215,26 @@ _JOBS: dict[str, dict] = {}
 _JOBS_LOCK = threading.Lock()
 
 
+# One heavy job at a time: every backtest/discover/verify/sweep/ingest saturates
+# both cores and real memory, so two at once just fight each other into what
+# looks like a stall. A second click now WAITS with a visible 'queued' status
+# instead of silently degrading everything.
+_HEAVY = threading.Semaphore(1)
+
+
 def _run_job(job_id: str, cmd: list[str]) -> None:
     def upd(**k):
         with _JOBS_LOCK:
             _JOBS[job_id].update(**k)
+    upd(status="queued")
+    _HEAVY.acquire()
+    try:
+        _run_job_inner(job_id, cmd, upd)
+    finally:
+        _HEAVY.release()
+
+
+def _run_job_inner(job_id: str, cmd: list[str], upd) -> None:
     upd(status="running")
     try:
         # Cap BLAS/OpenMP thread pools in every job: the backtest tools parallelize
@@ -297,7 +313,8 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
         upd(status="error", error=f"Could not start the run: {e}")
 
 
-def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False) -> tuple[dict, int]:
+def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False,
+               window: str = "recent3y") -> tuple[dict, int]:
     from ..config import PRESETS, TIMEFRAMES, micro_twin
     ds = {d["name"]: d for d in _datasets()}
     if dataset not in ds:
@@ -310,7 +327,8 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False)
         return {"error": "lens must be research, funnel or funded"}, 400
 
     cmd = [sys.executable, "-m", "backtest.run", "--data", ds[dataset]["file"],
-           "--tf", ",".join(tfs), "--lab"]
+           "--tf", ",".join(tfs), "--lab",
+           "--window", ("full" if window == "full" else "recent3y")]
     if spec.startswith("preset:"):
         name = spec.split(":", 1)[1]
         if name not in PRESETS:
@@ -615,7 +633,8 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/api/run":
             body, code = _start_job((q.get("dataset") or [""])[0], (q.get("spec") or [""])[0],
                                     (q.get("tf") or ["5m"])[0], (q.get("lens") or ["research"])[0],
-                                    micro=(q.get("micro") or ["0"])[0] in ("1", "true", "on"))
+                                    micro=(q.get("micro") or ["0"])[0] in ("1", "true", "on"),
+                                    window=(q.get("window") or ["recent3y"])[0])
             return self._json(body, code)
         if u.path == "/api/generate":
             body, code = _start_generate(q)
@@ -1143,7 +1162,8 @@ function watchJob(id,logSel,btnSel,onDone){
   const iv=setInterval(async()=>{
     const j=await (await fetch('/api/run/status?job='+id)).json();
     const p=j.progress;
-    if(p&&j.status==='running'){fill.style.width=p.pct+'%';pct.textContent=p.pct+'%';note.textContent=p.note||'';}
+    if(j.status==='queued'){pct.textContent='';note.textContent='queued — waiting for the running job to finish (one heavy job at a time)';}
+    else if(p&&j.status==='running'){fill.style.width=p.pct+'%';pct.textContent=p.pct+'%';note.textContent=p.note||'';}
     else if(j.status==='running'&&!p){pct.textContent='';note.textContent='starting…';}
     log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
     if(j.status==='done'||j.status==='error'){clearInterval(iv);if(btnSel)$(btnSel).disabled=false;
@@ -1172,7 +1192,7 @@ $('#wRun').addEventListener('click',()=>{
   const ds=$('#wDs').value;if(!ds){$('#wLog').style.display='block';$('#wLog').textContent='Upload a dataset first.';return}
   const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#wSpec').value)+
     '&tf='+encodeURIComponent($('#wTf').value)+'&lens='+encodeURIComponent($('#wLens').value)+
-    '&micro='+($('#wMicro').checked?'1':'0');
+    '&micro='+($('#wMicro').checked?'1':'0')+'&window='+encodeURIComponent($('#wWin').value);
   postJob('/api/run',qs,'#wLog','#wRun',()=>load());
 });
 // parameter sweep + auto-tune (phase 3)
@@ -1440,6 +1460,10 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
         <option value=research>Classic — edge</option>
         <option value=funnel>Eval — funnel</option>
         <option value=funded>Funded — payouts</option>
+      </select></label>
+      <label class=field><span class=fld>Window</span><select id=wWin>
+        <option value=recent3y>Recent 3y — fast</option>
+        <option value=full>Full history — validation (minutes)</option>
       </select></label>
       <label class=field><span class=fld>Micro twin</span><span style="padding:8px 0"><input type=checkbox id=wMicro> + MGC/MES…</span></label>
       <button class=go id=wRun>Run</button>

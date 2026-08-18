@@ -95,6 +95,10 @@ def main():
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
     ap.add_argument("--funded", action="store_true", help="funded-account payout overlay (3rd lens): simulate payouts over time")
+    ap.add_argument("--window", choices=["full", "recent3y"], default="full",
+                    help="recent3y = iterate on the prepared last-3-years slice (fast, "
+                         "low memory — the smooth size for a small box); full = the whole "
+                         "history (validation; minutes on 20y 1m)")
     ap.add_argument("--since", help="only use data on/after this date (YYYY-MM-DD)")
     ap.add_argument("--until", help="only use data before this date (YYYY-MM-DD)")
     ap.add_argument("--holdout-days", type=int, default=0,
@@ -112,10 +116,16 @@ def main():
     args = ap.parse_args()
 
     print(f"loading {args.data} ...")
-    _emit_progress(0, 100, "loading dataset (first load parses the CSV, ~1 min on 20y 1m; "
-                           "cached after that)")
-    df = data_mod.load(args.data)
-    print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    if args.window == "recent3y":
+        _emit_progress(0, 100, "loading recent-3y slice (prepared; fast)")
+        df = data_mod.load_window(args.data, years=3)
+        print(f"  window=recent3y: {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}  "
+              f"(iteration slice — validate the final pick on --window full)")
+    else:
+        _emit_progress(0, 100, "loading FULL history (validation run — first load parses the "
+                               "CSV, ~1 min on 20y 1m; cached after that)")
+        df = data_mod.load(args.data)
+        print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
     # Date window / in-sample vs out-of-sample split (the generator searches on
     # IS and verifies once on the OOS holdout).
@@ -225,13 +235,15 @@ def main():
         # basename made runs on different datasets fingerprint-collide and
         # silently overwrite each other's records.
         fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens, "segment": _segment,
-                          "unit_mode": cfg.unit_mode, "data": data_mod.dataset_id(args.data)})
+                          "unit_mode": cfg.unit_mode, "data": data_mod.dataset_id(args.data),
+                          "window": args.window})
         rid = make_run_id(asset, base_name, tf, lens, fp)
         meta = {"run_id": rid, "asset": asset, "strategy": base_name, "timeframe": tf,
                 "lens": lens, "segment": _segment, "holdout_days": args.holdout_days or 0,
                 "source": source, "kind": kind,
                 "data_file": os.path.basename(args.data),
                 "dataset": data_mod.dataset_id(args.data), "window": _window,
+                "data_window": args.window,
                 "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
         if res is not None and getattr(res, "diagnosis", None):

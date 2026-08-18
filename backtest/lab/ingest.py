@@ -46,7 +46,35 @@ def main():
     ap.add_argument("--dir", help="ingest every *.csv in this folder")
     ap.add_argument("--symbol", default="", help="force this symbol for all files (else use --auto)")
     ap.add_argument("--auto", action="store_true", help="infer the symbol from each filename's first token")
+    ap.add_argument("--raw", help="job mode (browser upload): normalize+catalog this ONE raw file "
+                                 "into its dataset dir, with PROGRESS lines for the Lab UI")
+    ap.add_argument("--name", default="", help="dataset folder name (with --raw; default: raw's parent dir)")
+    ap.add_argument("--delete-raw", action="store_true",
+                    help="remove the raw file after a successful normalize (saves ~its size on disk)")
     a = ap.parse_args()
+
+    if a.raw:
+        # Job mode for the browser upload: the HTTP request only streams the file
+        # to disk and returns; THIS runs in the background with live progress, so
+        # a 1GB export can't hit reverse-proxy/browser timeouts mid-normalize.
+        src = Path(a.raw)
+        name = a.name or src.parent.name
+        ddir = datasets_dir() / name
+        ddir.mkdir(parents=True, exist_ok=True)
+        canon = ddir / "canonical.csv"
+
+        def prog(done, total):
+            print(f"PROGRESS {done} {max(total, 1)} normalizing {name} "
+                  f"({done/1e6:.0f}/{total/1e6:.0f} MB)", flush=True)
+        _, rows = to_canonical(src, canon, progress=prog)
+        write_catalog(canon, symbol=a.symbol)
+        if a.delete_raw:
+            try:
+                src.unlink()
+            except OSError:
+                pass
+        print(f"  ok  dataset '{name}'  symbol {a.symbol or '?'}  ({rows:,} rows) -> {ddir}")
+        return
 
     files = [Path(f) for f in a.files]
     if a.dir:

@@ -23,9 +23,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .datasets import write_catalog
 from .insights import build_journey
-from .normalize import to_canonical
 from .paths import datasets_dir, ensure_dirs, lab_root, results_dir
 from .runs import load_index
 
@@ -666,24 +664,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "empty body"}, 400)
         # stream body -> disk (chunked; big-file friendly)
         remaining, wrote = length, 0
-        with open(raw, "wb") as f:
-            while remaining > 0:
-                chunk = self.rfile.read(min(1 << 20, remaining))
-                if not chunk:
-                    break
-                f.write(chunk)
-                remaining -= len(chunk)
-                wrote += len(chunk)
         try:
-            canon = ddir / "canonical.csv"
-            _, rows = to_canonical(raw, canon)
-            mpath = write_catalog(canon, symbol=symbol)
-            manifest = json.loads(Path(mpath).read_text())
-        except Exception as e:
-            return self._json({"error": f"normalize/catalog failed: {e}",
-                               "bytes": wrote}, 422)
-        return self._json({"ok": True, "dataset": safe, "rows": rows,
-                           "bytes": wrote, "canonical": str(canon), "manifest": manifest})
+            with open(raw, "wb") as f:
+                while remaining > 0:
+                    chunk = self.rfile.read(min(1 << 20, remaining))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    remaining -= len(chunk)
+                    wrote += len(chunk)
+        except OSError as e:
+            return self._json({"error": f"could not store the upload (disk?): {e}",
+                               "bytes": wrote}, 507)
+        if wrote < length:
+            return self._json({"error": f"upload truncated: got {wrote:,} of {length:,} "
+                                        "bytes — connection dropped mid-transfer",
+                               "bytes": wrote}, 400)
+        # Normalize + catalog in a BACKGROUND job (with live progress), not inside
+        # this request: a 1GB export takes minutes to normalize, and a synchronous
+        # response here is exactly what reverse-proxy/browser timeouts kill —
+        # which looked like "the upload failed" even though the bytes arrived.
+        job = _spawn([sys.executable, "-m", "backtest.lab.ingest", "--raw", str(raw),
+                      "--name", safe, "--symbol", symbol, "--delete-raw"],
+                     f"ingest {safe}")
+        return self._json({"ok": True, "dataset": safe, "bytes": wrote, "job": job["job"]})
 
 
 def main():
@@ -1027,15 +1031,39 @@ document.querySelectorAll('#tbl th').forEach(th=>th.addEventListener('click',()=
 $('#drop').addEventListener('click',()=>$('#file').click());
 $('#file').addEventListener('change',e=>{const f=e.target.files[0];if(f){$('#drop').textContent=f.name+' ('+(f.size/1e6).toFixed(1)+' MB)';
   if(!$('#dsname').value)$('#dsname').value=f.name.replace(/\.[^.]+$/,'')}});
-$('#upbtn').addEventListener('click',async()=>{
+$('#upbtn').addEventListener('click',()=>{
   const f=$('#file').files[0];if(!f){$('#msg').textContent='Choose a file first.';return}
   const name=encodeURIComponent($('#dsname').value||'dataset'),sym=encodeURIComponent($('#dssym').value||'');
-  $('#msg').textContent='Uploading '+(f.size/1e6).toFixed(1)+' MB…';
-  try{const r=await fetch('/api/upload?name='+name+'&symbol='+sym,{method:'POST',body:f});
-    const j=await r.json();
-    if(j.ok){$('#msg').innerHTML='<span class=pos>✓ '+j.dataset+': '+j.rows.toLocaleString()+' rows, cataloged.</span>';load();}
-    else{$('#msg').innerHTML='<span class=neg>'+(j.error||'failed')+'</span>';}
-  }catch(e){$('#msg').innerHTML='<span class=neg>'+e+'</span>';}
+  const log=$('#upLog');log.style.display='block';log.textContent='';
+  const bar=_barFor(log);bar.style.display='block';
+  const fill=bar.querySelector('.jbar-fill'),pct=bar.querySelector('.jbar-pct'),note=bar.querySelector('.jbar-note');
+  const btn=$('#upbtn');btn.disabled=true;$('#msg').textContent='';
+  // phase 1: the upload itself, with REAL transfer progress (XHR — fetch has none)
+  const xhr=new XMLHttpRequest();
+  xhr.open('POST','/api/upload?name='+name+'&symbol='+sym);
+  xhr.upload.onprogress=e=>{if(e.lengthComputable){
+    const p=Math.round(100*e.loaded/e.total);
+    fill.style.width=p+'%';pct.textContent=p+'%';
+    note.textContent='uploading '+(e.loaded/1e6).toFixed(0)+'/'+(e.total/1e6).toFixed(0)+' MB';}};
+  xhr.onerror=()=>{btn.disabled=false;bar.style.display='none';
+    $('#msg').innerHTML='<span class=neg>Upload failed at the network level — if this file is large, '
+      +'the reverse proxy in front of the lab may cap the request body (nginx default is 1MB: raise '
+      +'client_max_body_size). Fallback: scp the file to the VPS and run backtest.lab.ingest.</span>';};
+  xhr.onload=()=>{
+    let j={};try{j=JSON.parse(xhr.responseText)}catch(e){}
+    if(xhr.status===413){btn.disabled=false;bar.style.display='none';
+      $('#msg').innerHTML='<span class=neg>The proxy rejected the file as too large (HTTP 413). Raise '
+        +'client_max_body_size in its config, or scp + backtest.lab.ingest.</span>';return}
+    if(!j.ok){btn.disabled=false;bar.style.display='none';
+      $('#msg').innerHTML='<span class=neg>'+((j.error||('upload failed (HTTP '+xhr.status+')')).replace(/</g,'&lt;'))+'</span>';return}
+    // phase 2: normalize+catalog runs as a background job — same bar, live progress
+    $('#msg').textContent='Upload complete ('+(j.bytes/1e6).toFixed(0)+' MB) — normalizing…';
+    watchJob(j.job,'#upLog','#upbtn',(jj)=>{
+      if(jj.status==='done'){$('#msg').innerHTML='<span class=pos>✓ '+j.dataset+' normalized & cataloged.</span>';load();loadWizard();}
+      else{$('#msg').innerHTML='<span class=neg>normalize failed — see the log above.</span>';}
+    });
+  };
+  xhr.send(f);
 });
 // wizard
 let SPECS=[];
@@ -1342,6 +1370,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <label class=field><span class=fld>CSV file</span><label id=drop>Click to choose a .csv export<input id=file type=file accept=.csv class=hidden></label></label>
       <button class=go id=upbtn>Upload</button>
     </div><div id=msg class=muted style="margin-top:8px"></div>
+    <pre id=upLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 </div>
 

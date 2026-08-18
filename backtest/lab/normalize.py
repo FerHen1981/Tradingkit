@@ -44,12 +44,32 @@ def _first_index(idx: dict[str, int], names: list[str]):
     return None
 
 
+class _Counting:
+    """Line iterator that tracks how many characters passed through — cheap,
+    accurate-enough progress for a multi-GB ASCII CSV without touching tell()."""
+    def __init__(self, f):
+        self.f, self.chars = f, 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = next(self.f)
+        self.chars += len(line)
+        return line
+
+
 def to_canonical(src: str | Path, dst: str | Path,
-                 datetime_col: str = _DT, tz_col: str = _TZ) -> tuple[str, int]:
-    """Rewrite `src` into the canonical schema at `dst`. Returns (dst, rows)."""
+                 datetime_col: str = _DT, tz_col: str = _TZ,
+                 progress=None) -> tuple[str, int]:
+    """Rewrite `src` into the canonical schema at `dst`. Returns (dst, rows).
+    `progress(chars_done, total_bytes)` is called every ~200k rows so a 1GB
+    export shows movement instead of minutes of silence."""
     src, dst = Path(src), Path(dst)
+    total = src.stat().st_size
     with open(src, newline="", encoding="utf-8-sig") as fin:
-        r = csv.reader(fin)
+        counted = _Counting(fin)
+        r = csv.reader(counted)
         header = next(r)
         idx: dict[str, int] = {}
         for i, name in enumerate(header):
@@ -89,6 +109,10 @@ def to_canonical(src: str | Path, dst: str | Path,
                     out.append(_num(row, opt_i[canon]))
                 w.writerow(out)
                 n += 1
+                if progress and n % 200_000 == 0:
+                    progress(counted.chars, total)
+    if progress:
+        progress(total, total)
     return str(dst), n
 
 

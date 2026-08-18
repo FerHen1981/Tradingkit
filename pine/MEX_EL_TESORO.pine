@@ -40,13 +40,18 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.8.2: default Max Stop Distance 100->130 (research). The filter and the actual stop are now
+//         deliberately decoupled: wide 130t gate admits more setups, tight 100t fixed stop keeps
+//         the loss economics. Fixed Qty default stays 8 — but note an 8ct/100t run breaches the
+//         $2500 trailing DD in backtest (max intrabar DD ~$4.1k); it only shows a profit because
+//         PA backtest mode marks breaches instead of closing. Size is a per-account decision.
 // v7.8.1: MEX Policy presets renamed to the registry's per-size firm keys (PA013/PA018 are
 //         Legacy, PA016 EOD) — they named pre-rename keys, so every firm lookup fell back to
 //         defaults: 0 required trading days and a 50% ceiling on a 30% account.
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.8.1-MGC-PA"
+var string currentVersion = "v7.8.2-MGC-PA"
 strategy("MΞX ΞL TΞSORO · MGC · FUNDED · " + currentVersion, shorttitle="TΞSORO MGC·PA", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -131,7 +136,7 @@ stopMode  = input.string("Fixed (legacy)", "Stop Mode", options=["Swing structur
 pivotK     = input.int(3, "Pivot Strength (bars links/rechts)", minval=1, maxval=10, group=GROUP_ENTRY,
      tooltip="A pivot is only confirmed k bars after the extreme; the script uses confirmed pivots exclusively (no repainting).", display=display.none)
 swingBufSize = input.float(2, "Stop Buffer beyond swing (units)", minval=0, group=GROUP_ENTRY, tooltip="Buffer in units beyond the swing/gap level for the stop.", display=display.none)
-maxStopSize  = input.float(100, "Max Stop Distance (units) — else no trade", minval=1, group=GROUP_ENTRY, tooltip="Signals with a wider stop than this are skipped entirely.", display=display.none)
+maxStopSize  = input.float(130, "Max Stop Distance (units) — else no trade", minval=1, group=GROUP_ENTRY, tooltip="Signals with a wider stop than this are skipped entirely. Filter only: the actual stop is set by Stop Mode (Fixed legacy = the Fixed Stop below), so a WIDE filter with a TIGHT fixed stop admits more setups while keeping the tight-stop loss economics.", display=display.none)
 slSizeLegacy = input.float(100, "Fixed Stop (units, legacy mode)", minval=0.01, group=GROUP_ENTRY, tooltip="Static stop distance, only used in Fixed stop mode.", display=display.none)
 
 // === TRADE MANAGEMENT ========================================================

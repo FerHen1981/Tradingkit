@@ -22,7 +22,7 @@
         "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "propfirmmatch.com; velotrade/quantcrawler 2026", "as_of": "2026-07", "verified": false,
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); propfirmmatch 2026", "as_of": "2026-08", "verified": true,
         "notes": "One-step eval -> PA. Apex 4.0 (Mar 2026): no overnight, payout cap on the PA."}
     },
     {
@@ -44,7 +44,7 @@
         "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "propfirmmatch.com; velotrade/quantcrawler 2026", "as_of": "2026-07", "verified": false,
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); propfirmmatch 2026", "as_of": "2026-08", "verified": true,
         "notes": "EOD trailing = intraday dips that recover don't count. Milder than intraday."}
     },
     {
@@ -59,7 +59,7 @@
         "drawdown_type": "eod_trailing", "drawdown_basis": "balance",
         "trailing_locks_at": {"value": 2600, "unit": "usd"}
       },
-      "trading_rules": {"min_trading_days": 1, "max_trading_days": null,
+      "trading_rules": {"min_trading_days": 5, "max_trading_days": null,
         "consistency": {"type": "max_day_pct_of_total", "value": 50},
         "overnight_allowed": false, "weekend_allowed": false, "news_allowed": true,
         "max_position": {"value": 10, "unit": "contracts"}, "scaling_plan": null},
@@ -68,8 +68,8 @@
         "payout_ladder": [1500, 1500, 2000, 2500, 2500, 3000], "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "Apex rulebook; propfirmmatch 2026", "as_of": "2026-07", "verified": false,
-        "notes": "6-step payout ladder, 50% consistency, min payout $500."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "6-step payout ladder, 50% consistency, 5 min trading days, min payout $500."}
     },
     {
       "key": "apex_50k_legacy_pa",
@@ -92,8 +92,8 @@
         "payout_ladder": [1500, 1500, 2000, 2500, 2500, 3000], "safety_net_payouts": 3, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "LifeOS Account Types (owner-maintained); Apex legacy rulebook", "as_of": "2026-08", "verified": false,
-        "notes": "Legacy PA: 30% consistency, 8 min trading days, safety-net after 3 payouts. Ported from LifeOS Account Types — VERIFY."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex legacy rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "Legacy PA: 30% consistency, 8 min trading days, safety-net after 3 payouts."}
     },
     {
       "key": "apex_50k_intraday_pa",
@@ -116,8 +116,8 @@
         "payout_ladder": [1500, 1500, 2000, 2500, 2500, 3000], "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "LifeOS Account Types (owner-maintained); Apex rulebook", "as_of": "2026-08", "verified": false,
-        "notes": "Intraday-trailing PA: 50% consistency, 5 min days. Ported from LifeOS Account Types — VERIFY."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "Intraday-trailing PA: 50% consistency, 5 min days."}
     },
     {
       "key": "apex_50k_legacy_eval",
@@ -138,8 +138,8 @@
         "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "LifeOS Account Types (owner-maintained); Apex legacy rulebook", "as_of": "2026-08", "verified": false,
-        "notes": "Legacy eval: $3k target, intraday trailing $2.5k, 7 min days. Converts to apex_50k_legacy_pa. Ported from LifeOS Account Types — VERIFY."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex legacy rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "Legacy eval: $3k target, intraday trailing $2.5k, 7 min days. Converts to apex_50k_legacy_pa."}
     },
     {
       "key": "apex_25k_legacy_eval",
@@ -160,8 +160,8 @@
         "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "LifeOS Account Types (owner-maintained); Apex legacy rulebook", "as_of": "2026-08", "verified": false,
-        "notes": "Legacy 25k eval: $1.5k target, intraday trailing $1.5k, 4 contracts, 7 min days. Ported from LifeOS Account Types — VERIFY."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex legacy rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "Legacy 25k eval: $1.5k target, intraday trailing $1.5k, 4 contracts, 7 min days."}
     },
     {
       "key": "apex_250k_legacy_eval",
@@ -182,8 +182,8 @@
         "min_payout": null, "payout_cap": null, "payout_ladder": null, "in_eval_profit_share": null},
       "execution": {"platforms": ["Rithmic", "Tradovate", "Quantower", "NinjaTrader"], "data_feed": "CME",
         "sizing_unit": "contracts", "default_symbol": "NQ", "symbol_map": {}},
-      "meta": {"source": "LifeOS Account Types (owner-maintained); Apex legacy rulebook", "as_of": "2026-08", "verified": false,
-        "notes": "Legacy 250k eval: $15k target, intraday trailing $6.5k, 27 contracts, 7 min days. Ported from LifeOS Account Types — VERIFY."}
+      "meta": {"source": "LifeOS Account Types (owner-confirmed); Apex legacy rulebook", "as_of": "2026-08", "verified": true,
+        "notes": "Legacy 250k eval: $15k target, intraday trailing $6.5k, 27 contracts, 7 min days."}
     },
     {
       "key": "topstep_50k_eval",

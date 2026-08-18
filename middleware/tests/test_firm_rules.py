@@ -30,7 +30,7 @@ def test_rules_dict_from_registry():
     assert r["drawdown"] == 2500 and r["trailing_locks_at"] == 2600
     assert r["max_position"] == 10 and r["min_payout"] == 500
     assert r["payout_ladder"] == [1500, 1500, 2000, 2500, 2500, 3000]
-    assert r["drawdown_type"] == "eod_trailing" and r["verified"] is False
+    assert r["drawdown_type"] == "eod_trailing" and r["verified"] is True   # owner-confirmed
     r2 = firm_rules.rules("apex_50k_intraday_pa")
     assert r2["consistency"] == 0.50 and r2["min_days"] == 5        # intraday: 50% / 5 days
     assert firm_rules.rules("nope") is None

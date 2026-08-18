@@ -39,6 +39,13 @@ def build_payload(sig: Signal, account: dict) -> dict:
         "sl": 0,
         "dollar_sl": sig.dollar_sl,
         "percentage_sl": 0,
+        # trailing / break-even — mirror the Pine f_pmtJSON so PMT trails the Tradovate stop
+        # server-side exactly as it did before the fan-out moved through the middleware.
+        "trail": sig.trail,
+        "trail_stop": sig.trail_stop,
+        "trail_trigger": sig.trail_trigger,
+        "trail_freq": sig.trail_freq,
+        "breakeven": sig.breakeven,
         "update_tp": False,
         "update_sl": False,
         "token": token,

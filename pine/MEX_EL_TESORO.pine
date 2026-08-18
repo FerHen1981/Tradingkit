@@ -1099,7 +1099,7 @@ f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
             alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
     if useMiddleware
         string _mwEv = _action == "close" ? "EXIT" : "ENTRY"
-        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
+        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"trail\":" + (f_trailOn(_slD) ? "1" : "0") + ",\"trail_stop\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trBufEff) : 0) + ",\"trail_trigger\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trStartEff) : 0) + ",\"trail_freq\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0) + ",\"breakeven\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beTrigEff)) : "0") + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","

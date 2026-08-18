@@ -26,6 +26,29 @@ def _emit_progress(done: int, total: int, note: str = "") -> None:
     print(f"PROGRESS {done} {total} {note}", flush=True)
 
 
+# Above this many bars, classify the regime tag on a 15-minute resample instead
+# of every 1m bar. Regime is a higher-timeframe concept (MA200 + Wilder ADX span
+# days), so the label is unchanged, but the recording tail drops from ~35s / 1.4GB
+# to ~2s on a 20-year 1m frame — which is what made big runs hang/OOM at
+# "recording". The 15m labels are broadcast back to 1m so edge_by_regime aligns.
+_REGIME_RESAMPLE_ABOVE = 400_000
+
+
+def _regime_labels(dtf, cfg):
+    import numpy as np
+    import pandas as pd
+    if len(dtf) <= _REGIME_RESAMPLE_ABOVE:
+        return ind_mod.classify_regime(dtf, cfg)["regime"]
+    s = dtf[["et", "High", "Low", "Close"]].set_index("et")
+    r = pd.DataFrame({"High": s["High"].resample("15min").max(),
+                      "Low": s["Low"].resample("15min").min(),
+                      "Close": s["Close"].resample("15min").last()}).dropna().reset_index()
+    lab = ind_mod.classify_regime(r, cfg)["regime"]
+    pos = np.clip(np.searchsorted(r["et"].to_numpy(), dtf["et"].to_numpy(), side="right") - 1,
+                  0, len(lab) - 1)
+    return lab[pos]
+
+
 def run_one(df, cfg, research: bool, progress=None):
     t0 = time.time()
     ind = ind_mod.compute(df, cfg)
@@ -211,11 +234,11 @@ def main():
                 "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
         try:                                   # objective L1 regime tag for this run
-            reg = ind_mod.classify_regime(df_for(tf), cfg)
-            meta["regime"] = ind_mod.regime_summary(reg["regime"])
+            labels = _regime_labels(df_for(tf), cfg)
+            meta["regime"] = ind_mod.regime_summary(labels)
             if res is not None:                # unbiased discovery: realized edge per regime
                 from .metrics import edge_by_regime
-                meta["edge_by_regime"] = edge_by_regime(res, reg["regime"])
+                meta["edge_by_regime"] = edge_by_regime(res, labels)
         except Exception as e:
             meta["regime"] = {"error": str(e)}
         try:                                   # sharpen the setup score with the run's regime

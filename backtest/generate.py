@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 from . import data as data_mod
@@ -44,6 +46,16 @@ def run_cfg(cfg, df_tf):
     return kpis(Engine(cfg, df_tf, ind, research_mode=True).run())
 
 
+# The coarse in-sample frame, shared with worker processes via fork inheritance
+# (set in main() BEFORE the pool starts) — so it is never pickled per task.
+_G_DF = None
+
+
+def _screen_cfg(cfg):
+    """Worker: run one candidate on the shared coarse frame. Returns its KPIs."""
+    return run_cfg(cfg, _G_DF)
+
+
 def run_classic(spec, registry, df_tf, asset):
     """Run one candidate spec through the classic lens on a prepared tf frame."""
     cfg, _ = _cfg_for(spec, registry, asset)
@@ -59,9 +71,14 @@ def main():
     ap.add_argument("--coarse-since", help="limit the coarse screen to data on/after this date (speed)")
     ap.add_argument("--min-trades", type=int, default=100)
     ap.add_argument("--min-pf", type=float, default=1.1)
+    ap.add_argument("--jobs", type=int, default=0,
+                    help="parallel worker processes for the screen (0 = all CPU cores). "
+                         "Big speed-up on 1m data.")
     ap.add_argument("--price-action-only", action="store_true")
     ap.add_argument("--max-groups", type=int, default=5)
-    ap.add_argument("--base-preset", default="EL_TORO", help="engine mechanics to inherit (TP/entry/sizing)")
+    ap.add_argument("--base-preset", default="",
+                    help="pin engine mechanics (TP/stop/sizing) to this preset; empty = "
+                         "SAMPLE neutral mechanics per candidate (discovered, not assumed)")
     ap.add_argument("--base-asset", default="NQ")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--top", type=int, default=50, help="how many survivors to record")
@@ -95,7 +112,7 @@ def main():
         kw = {"setup_class": setup_class} if setup_class else {}
         batch = compose_batch(args.n, registry, seed=args.seed, base_asset=args.base_asset,
                               timeframe=args.tf, price_action_only=args.price_action_only,
-                              base_preset=args.base_preset, regimes=regimes, **kw)
+                              base_preset=(args.base_preset or None), regimes=regimes, **kw)
         classes = {}
         for s in batch:
             classes[s.get("setup_class", "?")] = classes.get(s.get("setup_class", "?"), 0) + 1
@@ -117,28 +134,49 @@ def main():
     print(f"  sampled {len(batch)} candidates; screening (min trades {args.min_trades}, "
           f"PF {args.min_pf}) ...")
 
-    survivors, errors, dups, seen, t0 = [], 0, 0, set(), time.time()
-    for i, spec in enumerate(batch, 1):
+    # Pass 1 (cheap, serial): build cfgs and collapse inert-only duplicates.
+    uniq, seen, dups, errors = [], set(), 0, 0
+    for spec in batch:
         try:
-            cfg, unmapped = _cfg_for(spec, registry, args.base_asset)
+            cfg, _ = _cfg_for(spec, registry, args.base_asset)
             sig = effective_signature(cfg)
-            if sig in seen:            # same *effective* strategy (inert-only difference) — skip
+            if sig in seen:
                 dups += 1
                 continue
             seen.add(sig)
-            k = run_cfg(cfg, df_tf)
+            uniq.append((spec, cfg))
         except Exception:
             errors += 1
-            continue
-        if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
-            ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
-            sc = score_strategy(describe_config(cfg), regime=spec.get("target_regime"),
-                                setup_class=spec.get("setup_class"))
-            survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
-        if i % 25 == 0:
-            print(f"    {i}/{len(batch)}  survivors={len(survivors)}  distinct={len(seen)}  "
-                  f"dups={dups}  errors={errors}  ({time.time()-t0:.0f}s)")
 
+    # Pass 2 (the expensive part): run each unique candidate through the engine,
+    # spread across worker processes. df_tf is shared via fork (module global),
+    # so only the small Config is sent per task.
+    global _G_DF
+    _G_DF = df_tf
+    jobs = args.jobs if args.jobs and args.jobs > 0 else (os.cpu_count() or 1)
+    survivors, t0 = [], time.time()
+    print(f"  screening {len(uniq)} distinct candidates on {jobs} core(s) "
+          f"({dups} inert dups collapsed) ...")
+    with ProcessPoolExecutor(max_workers=jobs) as ex:
+        futs = {ex.submit(_screen_cfg, cfg): i for i, (spec, cfg) in enumerate(uniq)}
+        for done, fut in enumerate(as_completed(futs), 1):
+            i = futs[fut]
+            spec, cfg = uniq[i]
+            try:
+                k = fut.result()
+            except Exception:
+                errors += 1
+                continue
+            if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
+                ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
+                sc = score_strategy(describe_config(cfg), regime=spec.get("target_regime"),
+                                    setup_class=spec.get("setup_class"))
+                survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
+            if done % 25 == 0:
+                print(f"    {done}/{len(uniq)}  survivors={len(survivors)}  "
+                      f"errors={errors}  ({time.time()-t0:.0f}s)")
+
+    seen = uniq   # for the DONE line's distinct-count
     survivors.sort(key=lambda s: s["kpis"].get("profit_factor", 0), reverse=True)
     print(f"\n  DONE: {len(survivors)} survivors of {len(seen)} DISTINCT effective configs "
           f"({len(batch)} sampled, {dups} inert dups collapsed, {errors} errored, {time.time()-t0:.0f}s)")
@@ -147,9 +185,10 @@ def main():
         g = (s.get("score") or {}).get("grade", "?")
         sc = (s.get("score") or {}).get("score", 0)
         setup = s["spec"].get("setup_class", "")
+        mech = s["spec"].get("base_preset", "")
         print(f"    PF {k['profit_factor']:.2f}  win {k.get('win_rate_pct', 0)}%  "
               f"trades {k['trades']}  net ${k['net_profit']:,.0f}  "
-              f"[{g} {sc} · {setup}]  {list(s['spec']['groups'])}")
+              f"[{g} {sc} · {setup} · {mech}]  {list(s['spec']['groups'])}")
 
     if args.lab:
         from .lab.runs import fingerprint, make_run_id, record_run

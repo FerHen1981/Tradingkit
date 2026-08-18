@@ -183,8 +183,12 @@ def compose_strategy(registry: dict, rng: random.Random, *, base_asset: str = "N
     Picks a setup-class (optionally biased by a `regime` hint via the §6 matrix),
     then exactly one primary entry generator for that class, then optional
     coherent filters — enforcing the redundancy guard: at most one group per
-    information-category. Always adds a protective swing stop (L10). Returns a
-    spec dict (validated by the caller) tagged with its setup_class/target_regime."""
+    information-category. Always adds a protective swing stop (L10).
+
+    The stop/target MECHANICS are also DISCOVERED, not assumed: when `base_preset`
+    is not pinned, one of the neutral MECHANICS_PRESETS is sampled per candidate,
+    so the coarse test reveals which mechanics fits — never derived from the asset.
+    Returns a spec dict (validated by the caller) tagged with its setup_class."""
     groups_reg = _all_groups(registry)
     info_used: set[str] = set()
     groups: dict[str, dict] = {}
@@ -249,8 +253,12 @@ def compose_strategy(registry: dict, rng: random.Random, *, base_asset: str = "N
         spec["target_regime"] = regime
     if timeframe:
         spec["timeframe"] = timeframe
+    # Mechanics: pinned if given, else SAMPLED (a discovered dimension, not assumed).
     if base_preset:
         spec["base_preset"] = base_preset
+    else:
+        from .config import MECHANICS_PRESETS
+        spec["base_preset"] = rng.choice(MECHANICS_PRESETS)
     return _repair(spec)
 
 
@@ -329,7 +337,8 @@ def compose_batch(n: int, registry: dict | None = None, seed: int = 0, *,
             validate_spec(spec, registry)
         except SpecError:
             continue
-        key = json.dumps({"g": spec["groups"], "s": spec.get("setup_class")}, sort_keys=True)
+        key = json.dumps({"g": spec["groups"], "s": spec.get("setup_class"),
+                          "m": spec.get("base_preset")}, sort_keys=True)
         if key in seen:
             continue
         seen.add(key)

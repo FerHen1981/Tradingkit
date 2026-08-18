@@ -135,6 +135,8 @@ def _specs() -> list[dict]:
     try:
         from ..config import PRESETS
         for n, c in PRESETS.items():
+            if n.startswith("MECH_"):
+                continue                      # neutral discovery mechanics, not strategies
             row = {"kind": "preset", "id": f"preset:{n}", "name": f"{n} (preset)", "title": n}
             try:
                 row["desc"] = describe_config(c)
@@ -285,17 +287,6 @@ def _spawn(cmd: list[str], label: str) -> dict:
     return {"job": job_id}
 
 
-# Risk/exit mechanics template auto-matched to a dataset's asset (the discovered
-# candidates inherit stop/target/sizing from it — not a user choice). ES/GC use
-# their ported fleet mechanics (fixed stop, EOD); everything else falls back to
-# the NQ base. The eval variant is the discovery template.
-_ASSET_MECHANICS = {"NQ": "EL_TORO", "ES": "EL_LEON", "GC": "EL_MINERO"}
-
-
-def _mechanics_for(symbol: str) -> str:
-    return _ASSET_MECHANICS.get((symbol or "").upper(), "EL_TORO")
-
-
 def _start_generate(q) -> tuple[dict, int]:
     from ..config import TIMEFRAMES
     ds = {d["name"]: d for d in _datasets()}
@@ -319,11 +310,12 @@ def _start_generate(q) -> tuple[dict, int]:
             return str(dflt)
 
     symbol = ds[dataset].get("symbol") or "NQ"
-    preset = _mechanics_for(symbol)     # risk/exit template auto-matched to the asset
+    # No --base-preset: the mill SAMPLES neutral mechanics per candidate, so the
+    # stop/target is a discovered outcome, never assumed from the asset.
     cmd = [sys.executable, "-m", "backtest.generate", "--data", ds[dataset]["file"],
            "--n", _int("n", 100), "--tf", tf, "--holdout-days", _int("holdout", 365),
            "--min-trades", _int("min_trades", 100), "--min-pf", _flt("min_pf", 1.1),
-           "--max-groups", _int("max_groups", 5), "--base-preset", preset,
+           "--max-groups", _int("max_groups", 5),
            "--base-asset", symbol, "--seed", _int("seed", 0), "--top", _int("top", 50), "--lab"]
     since = (q.get("since") or [""])[0].strip()
     if since:
@@ -1099,7 +1091,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Discover strategies</b><span class=muted>seed a thesis — the machine finds the rest</span></div>
-    <div class=hint>You set the <b>thesis</b> (and optionally a regime to focus on); the search <b>discovers</b> the entry, filters and params — screens them in-sample, then Verify OOS. Filters are an <b>outcome</b> of the test, never picked up front. Leave the thesis on "Any" for unbiased broad discovery. The risk/exit <b>mechanics auto-match the dataset's asset</b> (NQ→Toro · ES→Leon · GC→Minero — fixed stop/EOD where the fleet uses it), so there is nothing to pick. Results appear in Test → Candidates. Tip: for the 20-year sets, set a "Coarse since" date under + advanced to keep the screen fast.</div>
+    <div class=hint>You set the <b>thesis</b> (and optionally a regime to focus on); the search <b>discovers</b> the entry, filters, params <b>and the stop/target mechanics</b> — nothing is assumed up front, not even per asset. It screens candidates in-sample, then Verify OOS. Filters and mechanics are an <b>outcome</b> of the test. Leave the thesis on "Any" for unbiased broad discovery. Results appear in Test → Candidates. Tip: use 5m or 15m (not 1m) and set a "Coarse since" date under + advanced to keep the 20-year screen fast.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Dataset</span><select id=gDs style="min-width:150px"></select></label>
       <label class=field><span class=fld>Thesis</span><select id=gThesis title="constrain the search to one setup-class, or Any for broad discovery">

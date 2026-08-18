@@ -380,6 +380,24 @@ EL_REY    = EL_DORADO.with_(name="EL_REY",    contract=contract("ES"), **_FLEET_
 EL_MINERO = EL_TORO.with_(name="EL_MINERO",   contract=contract("GC"), **_FLEET_ESGC)   # GC · Eval
 EL_TESORO = EL_DORADO.with_(name="EL_TESORO", contract=contract("GC"), **_FLEET_ESGC)   # GC · Funded
 
+# --- Neutral DISCOVERY mechanics — no asset, no account phase --------------
+# The coarse mill SAMPLES one of these per candidate so the stop/target/manage
+# mechanics are a DISCOVERED outcome, never assumed per instrument. R-multiple
+# variants scale across assets; one fixed-stop variant. Research phase = no
+# account halts during the edge screen. base_asset supplies the contract.
+_MECH = dict(name="_", phase="Research", dd_model="Intraday",
+             use_recov_trail=False, use_breakeven=False)
+MECH_SWING_R2   = Config(**{**_MECH, "name": "MECH_SWING_R2"},   stop_swing=True,
+                         tp_mode="R-multiple", r_multiple=2.0, use_trail=False)
+MECH_SWING_R25T = Config(**{**_MECH, "name": "MECH_SWING_R25T"}, stop_swing=True,
+                         tp_mode="R-multiple", r_multiple=2.5, use_trail=True)
+MECH_SWING_R3   = Config(**{**_MECH, "name": "MECH_SWING_R3"},   stop_swing=True,
+                         tp_mode="R-multiple", r_multiple=3.0, use_trail=False)
+MECH_FIXED_R2   = Config(**{**_MECH, "name": "MECH_FIXED_R2"},   stop_swing=False,
+                         fixed_stop_ticks=80.0, max_stop_ticks=120.0,
+                         tp_mode="R-multiple", r_multiple=2.0, use_trail=False)
+MECHANICS_PRESETS = ["MECH_SWING_R2", "MECH_SWING_R25T", "MECH_SWING_R3", "MECH_FIXED_R2"]
+
 # Walk-forward-validated El Toro tweak (see docs/optimization.md): restrict
 # entries to the US regular session (09:00-15:59 ET). Pass-rate 29.8->32.7% IS
 # and 27.7->38.3% OOS. Optionally loosen delta streak to 2 (OOS 46.8%, more
@@ -426,4 +444,8 @@ PRESETS = {
     "EL_REY": EL_REY,
     "EL_MINERO": EL_MINERO,
     "EL_TESORO": EL_TESORO,
+    "MECH_SWING_R2": MECH_SWING_R2,
+    "MECH_SWING_R25T": MECH_SWING_R25T,
+    "MECH_SWING_R3": MECH_SWING_R3,
+    "MECH_FIXED_R2": MECH_FIXED_R2,
 }

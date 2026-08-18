@@ -280,6 +280,13 @@ van de gerealiseerde OOS-edge. Concreet ingebouwd:
 - **Generatie is default ongebiast** — `compose_batch` zonder `regimes=` sampelt
   uniform over de setup-classes. De §6-matrix-weging is **opt-in** (`--regimes`),
   puur voor *targeted search* als je al een hypothese hébt.
+- **Niets wordt vooraf aangenomen — óók de mechanics niet.** Niet de filters
+  (die zijn een uitkomst van de screen), niet de entry (de zoektocht kiest 'm
+  binnen de these), en niet de stop/target-mechanics: de mill sampelt per
+  kandidaat één van de **neutrale `MECH_*`-templates** (swing/fixed × R-multiple),
+  géén asset-afgeleide keuze. De winnende kandidaat *onthúlt* welke mechanics
+  werkt. De mill draait parallel over de CPU-cores (`--jobs`) zodat dit ook op
+  1m-data haalbaar is.
 - **De rechter is realized PF** — de mill selecteert/sorteert op OOS-PF, nooit op
   de prior-score. De score kleurt en rangschikt alleen.
 - **Regime wordt een uitkomst, geen input** — `metrics.edge_by_regime` tagt élke

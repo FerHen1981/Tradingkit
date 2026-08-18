@@ -314,6 +314,17 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     return trades
 
 
+def _parse_ledger_date(s: str) -> "dt.date | None":
+    """Cash_History 'Date' → a date. Handles ISO (2026-08-18) and US (08/18/2026)."""
+    s = (s or "").strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+        try:
+            return dt.datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _load_cash_ledgers(cash_dir: str, skip: list[str]) -> dict:
     """Per-account exact ledger from Tradovate Cash_History exports — THE source of truth for
     balance + real commissions (no reconstruction). Each export is cumulative from account open,
@@ -644,6 +655,13 @@ def _sources() -> tuple[list[dict], list[dict]]:
             a["net"] = round(led.balance - start, 2)
             a["commissions_total"] = led.commissions
             a["balance_source"] = "cash_ledger"
+            # exact per-day realized P&L (the consistency / profit-day rules run on this) and
+            # exact payouts (count = rung taken, Σ = total paid) — all from the same ledger.
+            a["daily_realized"] = {d: v for d, v in
+                                   ((_parse_ledger_date(k), v) for k, v in led.daily.items()) if d}
+            if led.n_payouts:
+                a["payouts_taken"] = led.n_payouts
+                a["payout_total"] = round(-led.payouts, 2)         # payout deltas are negative (money out)
             # keep the survival buffer consistent with the exact balance: the DD floor (stop)
             # is an absolute level, so buffer = balance − floor; bufpct scales with the buffer.
             if a.get("floor") is not None:
@@ -692,8 +710,10 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         daily[t["acct"]][t["close"]] = round(daily[t["acct"]][t["close"]] + t["net"], 2)
     for a in accounts:
         prog = firm_rules.rules(a.get("firm_program"))     # single-source rules → L5 matches L10
+        # the exact per-day realized from the Cash_History ledger wins; else the trade-log daily
+        day_pnl = a.get("daily_realized") or dict(daily.get(a["full"], {}))
         p = _eval_payout(a.get("size"), a.get("starting"), a.get("current"),
-                         a["stage"], dict(daily.get(a["full"], {})), int(a.get("payouts_taken") or 0),
+                         a["stage"], day_pnl, int(a.get("payouts_taken") or 0),
                          program=prog)
         a["payout"] = dataclasses.asdict(p) if p else None
     _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
@@ -727,7 +747,8 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         da = dom_asset.get(a["full"]) or {}
         instrument = max(da, key=da.get) if da else None      # the real instrument (MGC/MES…)
         try:
-            a["playbook"] = build_playbook(a, dict(daily.get(a["full"], {})), instrument, edge_stats, _pp)
+            day_pnl = a.get("daily_realized") or dict(daily.get(a["full"], {}))
+            a["playbook"] = build_playbook(a, day_pnl, instrument, edge_stats, _pp)
         except Exception as exc:                       # never let the playbook break the dashboard
             log.warning("playbook failed for %s: %r", a.get("full"), exc)
             a["playbook"] = None

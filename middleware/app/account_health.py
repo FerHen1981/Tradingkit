@@ -154,6 +154,22 @@ async def run_once() -> dict:
     now = dt.datetime.now(dt.timezone.utc).isoformat()
     throttle = float(os.environ.get("NOTION_THROTTLE_S", "0.34"))
     updated = skipped = failed = 0
+    # exact balance from the Tradovate Cash_History ledger where exported (same source the
+    # dashboard uses) → buffers are exact at the source, not reconstructed. Empty = no-op.
+    try:
+        from .cash_ledger import parse_cash_history
+        import glob
+        _cash_dir = os.environ.get("CASH_DIR", os.environ.get("EXPORTS_DIR", "/root/exports"))
+        _ledgers: dict = {}
+        for _p in sorted(glob.glob(os.path.join(_cash_dir, "*Cash_History*.csv"))):
+            try:
+                for _ac, _led in parse_cash_history(_p).items():
+                    if _ac not in _ledgers or _led.n_events > _ledgers[_ac].n_events:
+                        _ledgers[_ac] = _led
+            except Exception:
+                pass
+    except Exception:
+        _ledgers = {}
     async with httpx.AsyncClient(timeout=20.0) as client:
         cursor = None
         while True:
@@ -169,10 +185,12 @@ async def run_once() -> dict:
                     continue
                 acct = _title(props.get("Account ID"))
                 stage = "funded" if acct.upper().startswith(("PA", "PAAPEX")) else "eval"
+                _led = _ledgers.get(acct)
+                _current = _led.balance if (_led and _led.balance) else _num(props.get("Current Balance"))
                 h = compute(
                     size=_num(props.get("Account Size")),
                     starting=_num(props.get("Starting Balance")),
-                    current=_num(props.get("Current Balance")),
+                    current=_current,
                     peak_stored=_num(props.get("Peak Balance $")),
                     rule=_sel(props.get("Drawdown Rule")),
                     prop_firm=_sel(props.get("Prop Firm")),

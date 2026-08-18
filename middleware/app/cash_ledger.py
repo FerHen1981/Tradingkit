@@ -34,12 +34,24 @@ def _money(s: str) -> float:
     return -v if neg else v
 
 
+def _is_funding(t: str) -> bool:
+    return "fund transaction" in t.lower()
+
+
+def _is_payout(t: str) -> bool:
+    return any(w in t.lower() for w in ("payout", "withdraw"))
+
+
 @dataclass
 class AccountLedger:
     account: str
     balance: float = 0.0
     n_events: int = 0
+    n_payouts: int = 0                                             # count of payout/withdrawal events
     by_type: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    # net realized per calendar date (Trade Paired + Commission + fees; NOT funding/payouts) —
+    # the exact daily P&L the consistency / profit-day rules run on, straight from the broker ledger.
+    daily_realized: dict[str, float] = field(default_factory=lambda: defaultdict(float))
 
     @property
     def commissions(self) -> float:
@@ -51,13 +63,16 @@ class AccountLedger:
 
     @property
     def funding(self) -> float:
-        return round(self.by_type.get("Fund Transaction", 0.0), 2)
+        return round(sum(v for k, v in self.by_type.items() if _is_funding(k)), 2)
 
     @property
     def payouts(self) -> float:
         # any withdrawal/payout-styled type (negative delta = money out)
-        return round(sum(v for k, v in self.by_type.items()
-                         if any(w in k.lower() for w in ("payout", "withdraw"))), 2)
+        return round(sum(v for k, v in self.by_type.items() if _is_payout(k)), 2)
+
+    @property
+    def daily(self) -> dict[str, float]:
+        return {d: round(v, 2) for d, v in self.daily_realized.items()}
 
 
 def parse_cash_history(path: str) -> dict[str, AccountLedger]:
@@ -69,7 +84,15 @@ def parse_cash_history(path: str) -> dict[str, AccountLedger]:
             if not acct:
                 continue
             led = out.setdefault(acct, AccountLedger(account=acct))
-            led.by_type[(row.get("Cash Change Type") or "").strip()] += _money(row.get("Delta"))
+            typ = (row.get("Cash Change Type") or "").strip()
+            delta = _money(row.get("Delta"))
+            led.by_type[typ] += delta
+            if _is_payout(typ):
+                led.n_payouts += 1
+            elif not _is_funding(typ):                # trading deltas (Trade Paired, Commission, fees)
+                date = (row.get("Date") or "").strip()
+                if date:
+                    led.daily_realized[date] += delta
             amt = _money(row.get("Amount"))
             if amt:
                 led.balance = amt          # rows are chronological → last wins

@@ -71,3 +71,21 @@ def test_load_cash_ledgers_latest_snapshot_wins(tmp_path):
     assert _load_cash_ledgers(str(tmp_path), skip=["013"]) == {}
     # no files → empty (overlay is a no-op)
     assert _load_cash_ledgers(str(tmp_path / "nope"), skip=[]) == {}
+
+
+def test_daily_realized_and_payout_count():
+    """Per-day net (Trade Paired + Commission, NOT funding/payouts) and payout count/sum."""
+    path = _write([
+        'PAAPEX2700250000013,1,x,2026-07-16,"50,000.00","50,000.00", Fund Transaction,USD,',
+        'PAAPEX2700250000013,2,x,2026-08-17,"200.00","50,200.00", Trade Paired,USD,MGCZ6',
+        'PAAPEX2700250000013,3,x,2026-08-17,-3.10,"50,196.90", Commission,USD,MGCZ6',
+        'PAAPEX2700250000013,4,x,2026-08-18,"400.00","50,596.90", Trade Paired,USD,MGCZ6',
+        'PAAPEX2700250000013,5,x,2026-08-20,"-2,000.00","48,596.90", Payout,USD,',
+    ])
+    L = parse_cash_history(path)
+    os.unlink(path)
+    led = L["PAAPEX2700250000013"]
+    assert led.daily["2026-08-17"] == 196.90    # 200 - 3.10 (funding excluded)
+    assert led.daily["2026-08-18"] == 400.00
+    assert "2026-07-16" not in led.daily        # funding is not a trading day
+    assert led.n_payouts == 1 and led.payouts == -2000.0

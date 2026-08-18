@@ -1,14 +1,17 @@
 """Fine-grained parameter sweep — phase 3 of diagnose/instrument/sweep.
 
 Vary ONE parameter across a range, run the whole strategy at each value, and
-return the response curve (PF / net / trades / win% / maxDD, and funded breach if
-asked). This is how "is the stop too wide / the FVG band too big" stops being a
-guess: you see where the current value sits on the curve and where the response
-peaks. The diagnostic (backtest.diagnose) tells you WHICH parameter to sweep;
-this measures the response, no pre-assumption that today's value is right.
+return the response curve. Every value is measured on BOTH raw edge (PF / net /
+trades / win% / maxDD) and funded-account survival — there is deliberately no
+goal flag: suitability (funded · eval-only · nothing) is an OUTCOME of the test.
+This is how "is the stop too wide / the FVG band too big" stops being a guess:
+you see where the current value sits on the curve and where the response peaks.
+The diagnostic (backtest.diagnose) tells you WHICH parameter to sweep; --auto
+lets it also derive the ranges from the measured distributions.
 
+    python -m backtest.sweep --data <csv> --preset EL_TESORO --symbol GC --tf 1m --auto
     python -m backtest.sweep --data <csv> --preset EL_TESORO --symbol GC --tf 1m \
-        --param fixed_stop_ticks --values 20,30,40,50,60,80,100 --funded
+        --param fixed_stop_ticks --values 20,30,40,50,60,80,100
 
 Engine-only parameters (stop/TP/sizing) reuse one indicator computation across
 all values; parameters that change the signal itself (FVG band, CVD streak,
@@ -46,21 +49,22 @@ def _pool_init(df, ind):
     _DF, _IND = df, ind
 
 
-def _run_value(payload):
-    """Worker: run the strategy at one parameter value. payload=(cfg, funded)."""
-    cfg, funded = payload
+def _run_value(cfg):
+    """Worker: run the strategy at one parameter value. ALWAYS measures both the
+    raw edge (classic KPIs) and the funded-account overlay — suitability is an
+    OUTCOME of the test, never a goal chosen up front. The overlay is a post-hoc
+    simulation over the daily P&L, so measuring it costs nothing."""
     ind = _IND if _IND is not None else ind_mod.compute(_DF, cfg)
     res = Engine(cfg, _DF, ind, research_mode=True).run()
     k = kpis(res)
     row = {"trades": k.get("trades", 0), "net": k.get("net_profit", 0.0),
            "pf": k.get("profit_factor", 0.0), "win_pct": k.get("win_rate_pct", 0.0),
            "max_dd": k.get("max_drawdown", 0.0)}
-    if funded:
-        from .funded import daily_from_trades, simulate_funded, summarize
-        s = summarize(simulate_funded(daily_from_trades(res.trades),
-                                      account_size=cfg.initial_capital or 50_000))
-        row["funded"] = {"breached": s["breached"], "payouts": s["payouts"],
-                         "withdrawn": s["withdrawable"], "trading_days": s["trading_days"]}
+    from .funded import daily_from_trades, simulate_funded, summarize
+    s = summarize(simulate_funded(daily_from_trades(res.trades),
+                                  account_size=cfg.initial_capital or 50_000))
+    row["funded"] = {"breached": s["breached"], "payouts": s["payouts"],
+                     "withdrawn": s["withdrawable"], "trading_days": s["trading_days"]}
     return row
 
 
@@ -75,11 +79,15 @@ def _coerce(sample, raw: str):
     return raw
 
 
-def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
+def sweep_param(df, base_cfg, param: str, values: list,
                 jobs: int = 0, shared_ind=None) -> dict:
     """Run base_cfg across `values` of `param`. Returns {param, current, curve,
-    best, engine_only}. curve rows carry the value + its KPIs. `shared_ind` lets a
-    caller (auto-tune) reuse one indicator computation across engine-only sweeps."""
+    best, best_funded, engine_only}. `best` is purely the strongest raw edge (PF);
+    `best_funded` is the strongest value that ALSO survives the funded overlay —
+    reported side by side so the outcome says what the strategy is suited for
+    (funded / eval-only / nothing) without a goal biasing the pick. `shared_ind`
+    lets a caller (auto-tune) reuse one indicator computation across engine-only
+    sweeps."""
     if not hasattr(base_cfg, param):
         raise ValueError(f"unknown parameter {param!r}")
     current = getattr(base_cfg, param)
@@ -93,7 +101,7 @@ def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
     elif not engine_only:
         shared_ind = None       # signal params must recompute indicators per value
 
-    cfgs = [(base_cfg.with_(**{param: v}), funded) for v in values]
+    cfgs = [base_cfg.with_(**{param: v}) for v in values]
     jobs = jobs if jobs and jobs > 0 else (os.cpu_count() or 1)
     rows = [None] * len(values)
     if jobs <= 1:
@@ -116,21 +124,24 @@ def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
 
     curve = [{"value": v, **(r or {})} for v, r in zip(values, rows)]
     valid = [c for c in curve if not c.get("error") and (c.get("trades") or 0) > 0]
-    # "best" by PF among values that also survive funded (if funded requested)
-    def _key(c):
-        if funded and c.get("funded", {}).get("breached", True):
-            return (-1, c.get("pf") or 0)          # breached: rank below survivors
-        return (0, c.get("pf") or 0)
-    best = max(valid, key=_key) if valid else None
+    # two UNBIASED readings, side by side: strongest raw edge, and strongest value
+    # that also survives the funded account. Neither influences the other — the
+    # outcome (not a chosen goal) says what the strategy is suited for.
+    best = max(valid, key=lambda c: c.get("pf") or 0) if valid else None
+    survivors = [c for c in valid if not c.get("funded", {}).get("breached", True)]
+    best_funded = max(survivors, key=lambda c: c.get("pf") or 0) if survivors else None
     return {"param": param, "current": current, "engine_only": engine_only,
-            "funded": funded, "curve": curve, "best": best}
+            "curve": curve, "best": best, "best_funded": best_funded}
 
 
-def autotune(df, base_cfg, funded: bool = False, jobs: int = 0, max_levers: int = 4) -> dict:
-    """Data-driven tuning — NO manual parameter or range. Run the strategy once,
-    let the diagnosis (from the data) name which parameters are off and derive the
-    candidate range for each from the measured distributions, then sweep those.
-    Returns {diagnosis, tuned:[{code, message, param, current, curve, best}]}."""
+def autotune(df, base_cfg, jobs: int = 0, max_levers: int = 4) -> dict:
+    """Data-driven tuning — NO manual parameter, range, or goal. Run the strategy
+    once, let the diagnosis (from the data) name which parameters are off and
+    derive the candidate range for each from the measured distributions, then
+    sweep those. Every value is measured on BOTH raw edge and funded survival;
+    the outcome — not a chosen lens — says what the strategy is suited for.
+    Returns {diagnosis, tuned:[{code, message, param, current, curve, best,
+    best_funded}]}."""
     from .diagnose import diagnose_trades, diagnose_signals
     from .metrics import trades_frame
     from .funded import APEX_DD
@@ -165,13 +176,13 @@ def autotune(df, base_cfg, funded: bool = False, jobs: int = 0, max_levers: int 
         param, values = lv["param"], lv["values"]
         si = ind if param in ENGINE_ONLY else None
         try:
-            out = sweep_param(df, base_cfg, param, values, funded=funded, jobs=jobs, shared_ind=si)
+            out = sweep_param(df, base_cfg, param, values, jobs=jobs, shared_ind=si)
         except Exception as e:
             tuned.append({"code": f["code"], "message": f["message"], "param": param, "error": repr(e)})
             continue
         tuned.append({"code": f["code"], "message": f["message"], "param": param,
                       "current": out["current"], "curve": out["curve"], "best": out["best"],
-                      "engine_only": out["engine_only"]})
+                      "best_funded": out["best_funded"], "engine_only": out["engine_only"]})
         print(f"PROGRESS {12 + int(34*(j+1)/max(len(levers),1))} 46 auto-tune · {param} done", flush=True)
     return {"diagnosis": {"trades": dtrades, "signals": dsignals}, "tuned": tuned}
 
@@ -189,6 +200,21 @@ def _fmt_row(c, current) -> str:
             f"maxDD ${c.get('max_dd', 0):>8,.0f}{fu}{mark}")
 
 
+def _print_verdict(t: dict) -> None:
+    """The two unbiased readings, side by side — the outcome labels suitability."""
+    b, bf = t.get("best"), t.get("best_funded")
+    if b:
+        print(f"    -> strongest raw edge at {t['param']}={b['value']} "
+              f"(PF {b.get('pf', 0):.2f}, net ${b.get('net', 0):,.0f})")
+    if bf:
+        same = b and bf["value"] == b["value"]
+        print(f"    -> strongest that SURVIVES a funded account: {t['param']}={bf['value']} "
+              f"(PF {bf.get('pf', 0):.2f}, {bf.get('funded', {}).get('payouts', 0)} payout(s))"
+              + ("  [= same value: funded-suitable]" if same else ""))
+    elif b:
+        print("    -> NO value survives the funded account: edge (if any) is eval-only here.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Fine-grained single-parameter sweep.")
     ap.add_argument("--data", required=True)
@@ -201,7 +227,8 @@ def main():
                          "the range from the measured distributions — no --param/--values needed")
     ap.add_argument("--param", help="Config field to sweep (e.g. fixed_stop_ticks); omit with --auto")
     ap.add_argument("--values", help="comma-separated values (e.g. 20,40,60,80,100); omit with --auto")
-    ap.add_argument("--funded", action="store_true", help="also report funded breach/payout per value")
+    # NOTE: no --funded goal flag. Every value is always measured on BOTH raw edge
+    # and funded survival; suitability is an outcome of the test, never an input.
     ap.add_argument("--holdout-days", type=int, default=0, help="hold out the last N days (run in-sample)")
     ap.add_argument("--coarse-since", help="limit to data on/after this date (speed)")
     ap.add_argument("--jobs", type=int, default=0, help="worker processes (0 = all cores)")
@@ -231,18 +258,14 @@ def main():
     if args.auto:
         print("  AUTO-TUNE: the data picks the parameters and ranges (no manual input).")
         t0 = time.time()
-        out = autotune(df, base, funded=args.funded, jobs=args.jobs)
+        out = autotune(df, base, jobs=args.jobs)
         for t in out["tuned"]:
             if t.get("error"):
                 print(f"\n  {t['param']}: ERROR {t['error']}");  continue
             print(f"\n  {t['param']} (flagged: {t['code']}) — current {t['current']}:")
             for c in t["curve"]:
                 print(_fmt_row(c, t["current"]))
-            b = t.get("best")
-            if b:
-                print(f"    -> data suggests {t['param']}={b['value']} (PF {b.get('pf',0):.2f}, "
-                      f"net ${b.get('net',0):,.0f}"
-                      + ("" if not args.funded else (", survives funded" if not b.get("funded",{}).get("breached",True) else ", still breaches")) + ")")
+            _print_verdict(t)
         print(f"\n  auto-tune done ({time.time()-t0:.0f}s)")
         print("AUTOTUNE_JSON " + json.dumps(out, default=str), flush=True)
         return
@@ -253,15 +276,11 @@ def main():
     print(f"  sweeping {args.param} over {values}  (current={getattr(base, args.param)}, "
           f"{'engine-only, shared indicators' if args.param in ENGINE_ONLY else 'recompute indicators per value'})")
     t0 = time.time()
-    out = sweep_param(df, base, args.param, values, funded=args.funded, jobs=args.jobs)
+    out = sweep_param(df, base, args.param, values, jobs=args.jobs)
     print(f"\n  {args.param} response ({time.time()-t0:.0f}s):")
     for c in out["curve"]:
         print(_fmt_row(c, out["current"]))
-    if out["best"]:
-        b = out["best"]
-        print(f"\n  best PF at {args.param}={b['value']}: PF {b.get('pf', 0):.2f}, "
-              f"net ${b.get('net', 0):,.0f}, {b.get('trades', 0)} trades"
-              + ("  (survives funded)" if args.funded and not b.get("funded", {}).get("breached", True) else ""))
+    _print_verdict(out)
     # machine-readable result for the Lab UI to render as a response curve.
     print("SWEEP_JSON " + json.dumps(out, default=str), flush=True)
 

@@ -467,8 +467,8 @@ def _start_sweep(q) -> tuple[dict, int]:
         cmd += ["--spec", f"backtest/specs/{f.name}"]
     if ds[dataset].get("symbol"):
         cmd += ["--symbol", ds[dataset]["symbol"]]
-    if (q.get("funded") or ["0"])[0] in ("1", "true", "on"):
-        cmd += ["--funded"]
+    # no funded flag: the sweep always measures raw edge AND funded survival —
+    # suitability is an outcome of the test, never a goal chosen up front.
     since = (q.get("since") or [""])[0].strip()
     if since:
         cmd += ["--coarse-since", since]
@@ -1139,25 +1139,39 @@ $('#wRun').addEventListener('click',()=>{
   postJob('/api/run',qs,'#wLog','#wRun',()=>load());
 });
 // parameter sweep + auto-tune (phase 3)
-function curveBars(curve,current,best){
+function curveBars(curve,current,best,bestFunded){
   const rows=(curve||[]).filter(c=>!c.error);
   const mx=Math.max(0.01,...rows.map(c=>Math.abs(c.pf||0)));
   return rows.map(c=>{
     const cur=(c.value===current), bst=(best!==null&&best!==undefined&&c.value===best);
+    const bfu=(bestFunded!==null&&bestFunded!==undefined&&c.value===bestFunded);
     const w=Math.max(2,Math.round(100*Math.abs(c.pf||0)/mx));
     const col=(c.pf>=1)?'linear-gradient(90deg,var(--gold2),var(--gold))':'var(--rose)';
     const fu=c.funded?('<span class=muted style="margin-left:8px">'+(c.funded.breached?'<span style="color:var(--rose)">breach</span>':'<span style="color:var(--gold)">survives</span>')+(c.funded.payouts?(' · '+c.funded.payouts+' payout'):'')+'</span>'):'';
     return `<div style="display:flex;align-items:center;gap:9px;margin-top:5px">
-      <span style="min-width:70px;text-align:right;font-family:var(--mono);font-size:12px;color:${cur?'var(--gold)':'var(--sand)'}">${c.value}${cur?' ◀':''}${bst?' ★':''}</span>
+      <span style="min-width:84px;text-align:right;font-family:var(--mono);font-size:12px;color:${cur?'var(--gold)':'var(--sand)'}">${c.value}${cur?' ◀':''}${bst?' ★':''}${bfu?' ◆':''}</span>
       <span style="flex:1;background:var(--deep);border-radius:99px;height:16px;position:relative;overflow:hidden"><span style="display:block;height:100%;width:${w}%;background:${col};border-radius:99px"></span></span>
       <span style="min-width:210px;font-family:var(--mono);font-size:11px;color:var(--sub)">PF ${(c.pf||0).toFixed(2)} · net $${Math.round(c.net||0).toLocaleString()} · ${c.trades||0}t${fu}</span></div>`;
   }).join('');
 }
+function verdictHtml(t){
+  const b=t.best,bf=t.best_funded;
+  let out='';
+  if(b)out+=`<div style="margin-top:6px;font-family:var(--mono);font-size:12px">→ strongest raw edge: <b style="color:var(--gold)">${t.param} = ${b.value}</b> <span class=muted>(PF ${(b.pf||0).toFixed(2)}, net $${Math.round(b.net||0).toLocaleString()}) — current ${t.current}</span></div>`;
+  if(bf){const same=b&&bf.value===b.value;
+    out+=`<div style="font-family:var(--mono);font-size:12px">→ strongest that <b>survives funded</b>: <b style="color:var(--gold)">${t.param} = ${bf.value}</b> <span class=muted>(PF ${(bf.pf||0).toFixed(2)}, ${(bf.funded||{}).payouts||0} payout(s))${same?' — same value: <b>funded-suitable</b>':''}</span></div>`;
+  }else if(b){
+    out+=`<div style="font-family:var(--mono);font-size:12px;color:var(--rose)">→ no value survives a funded account — the edge (if any) is eval-only here.</div>`;
+  }
+  return out;
+}
 function renderSweep(sw){
   const box=$('#swCurve');if(!sw||!sw.curve){box.style.display='none';return}
   box.style.display='block';
-  box.innerHTML=`<div class=muted style="margin-bottom:4px">${sw.param} response — ◀ current, ★ best PF${sw.funded?' (that survives funded)':''}. `
-    +`${sw.engine_only?'engine-only (fast)':'recomputed indicators per value'}.</div>${curveBars(sw.curve,sw.current,sw.best?sw.best.value:null)}`;
+  box.innerHTML=`<div class=muted style="margin-bottom:4px">${sw.param} response — ◀ current, ★ best raw edge, ◆ best that survives funded. `
+    +`${sw.engine_only?'engine-only (fast)':'recomputed indicators per value'}.</div>`
+    +curveBars(sw.curve,sw.current,sw.best?sw.best.value:null,sw.best_funded?sw.best_funded.value:null)
+    +verdictHtml(sw);
 }
 function renderAutotune(at){
   const box=$('#swTune');if(!at||!at.tuned){box.style.display='none';return}
@@ -1165,20 +1179,17 @@ function renderAutotune(at){
   if(!at.tuned.length){box.innerHTML='<div class=muted>The data flagged nothing to tune — no parameter is clearly off on this run.</div>';return}
   const blocks=at.tuned.map(t=>{
     if(t.error)return `<div style="margin-top:12px"><b style="color:var(--rose)">${t.param}</b> — ${t.error}</div>`;
-    const b=t.best;
-    const rec=b?`<div style="margin-top:6px;font-family:var(--mono);font-size:12px">→ data suggests <b style="color:var(--gold)">${t.param} = ${b.value}</b> `
-      +`<span class=muted>(PF ${(b.pf||0).toFixed(2)}, net $${Math.round(b.net||0).toLocaleString()}${b.funded?(b.funded.breached?', still breaches':', survives funded'):''}) — current ${t.current}</span></div>`:'';
     return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
       <div style="font-size:12.5px"><b style="color:var(--gold)">${t.param}</b> <span class=muted>— ${(t.message||'').replace(/</g,'&lt;')}</span></div>
-      <div style="margin-top:6px">${curveBars(t.curve,t.current,b?b.value:null)}</div>${rec}</div>`;
+      <div style="margin-top:6px">${curveBars(t.curve,t.current,t.best?t.best.value:null,t.best_funded?t.best_funded.value:null)}</div>${verdictHtml(t)}</div>`;
   }).join('');
-  box.innerHTML=`<div class=muted>The data flagged ${at.tuned.length} parameter(s) and swept each over a range it derived from the measured distribution. ◀ current · ★ best.</div>${blocks}`;
+  box.innerHTML=`<div class=muted>The data flagged ${at.tuned.length} parameter(s) and swept each over a range it derived from the measured distribution. ◀ current · ★ best raw edge · ◆ best that survives funded. The outcome labels suitability — funded, eval-only, or nothing.</div>${blocks}`;
 }
 $('#swAuto').addEventListener('click',()=>{
   const ds=$('#swDs').value;if(!ds){$('#swLog').style.display='block';$('#swLog').textContent='Upload a dataset first.';return}
   $('#swTune').style.display='none';
   const qs='auto=1&dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#swSpec').value)+
-    '&tf='+encodeURIComponent($('#swTf').value)+'&funded='+($('#swFunded').checked?'1':'0');
+    '&tf='+encodeURIComponent($('#swTf').value);
   postJob('/api/sweep',qs,'#swLog','#swAuto',(j)=>{if(j&&j.autotune)renderAutotune(j.autotune);});
 });
 $('#swRun').addEventListener('click',()=>{
@@ -1186,7 +1197,7 @@ $('#swRun').addEventListener('click',()=>{
   $('#swCurve').style.display='none';
   const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#swSpec').value)+
     '&tf='+encodeURIComponent($('#swTf').value)+'&param='+encodeURIComponent($('#swParam').value)+
-    '&values='+encodeURIComponent($('#swVals').value)+'&funded='+($('#swFunded').checked?'1':'0');
+    '&values='+encodeURIComponent($('#swVals').value);
   postJob('/api/sweep',qs,'#swLog','#swRun',(j)=>{if(j&&j.sweep)renderSweep(j.sweep);});
 });
 // generator
@@ -1397,12 +1408,11 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
-    <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. You pick nothing — the data speaks. One caveat: on a 2-core box run this OR a backtest, not both at once.</div>
+    <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. Every value is measured on <b>both</b> raw edge and funded survival — the outcome tells you what the strategy is suited for (funded · eval-only · nothing); you choose no goal up front. On a 2-core box run this OR a backtest, not both at once.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
       <label class=field><span class=fld>Dataset</span><select id=swDs style="min-width:150px"></select></label>
       <label class=field><span class=fld>Timeframe</span><input id=swTf value="1m" style="width:70px"></label>
-      <label class=field><span class=fld>Funded</span><span style="padding:8px 0"><input type=checkbox id=swFunded checked> breach/payout</span></label>
       <button class=go id=swAuto>Auto-tune</button>
     </div>
     <div id=swTune style="display:none;margin-top:14px"></div>

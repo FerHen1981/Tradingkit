@@ -226,9 +226,23 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
         p = subprocess.Popen(cmd, cwd=str(_repo_root()), env=dict(os.environ),
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True, bufsize=1)
-        log, run_ids = [], []
+        log, run_ids, progress = [], [], None
         for line in p.stdout:
             line = line.rstrip()
+            if line.startswith("PROGRESS "):
+                # machine-readable: "PROGRESS <done> <total> <note...>" — parsed
+                # into a % bar, kept OUT of the human log.
+                try:
+                    _, done_s, total_s, *rest = line.split(" ", 3)
+                    done_n, total_n = int(done_s), int(total_s)
+                    pct = round(100 * done_n / total_n) if total_n else 0
+                    progress = {"done": done_n, "total": total_n, "pct": pct,
+                                "note": (rest[0] if rest else "")}
+                    with _JOBS_LOCK:
+                        _JOBS[job_id]["progress"] = progress
+                except Exception:
+                    pass
+                continue
             log.append(line)
             if "recorded run " in line:
                 try:
@@ -617,6 +631,11 @@ tr:hover td{background:rgba(14,42,94,.5)}
 .foot{color:var(--dim);font-family:var(--mono);font-size:11px;margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
 #drop{border:1px dashed var(--line);border-radius:3px;padding:14px;text-align:center;color:var(--sub);flex:1;min-width:220px;cursor:pointer}
 .hidden{display:none}#msg{font-size:12px}
+.jbar{display:none;margin:12px 0 0}
+.jbar-track{height:8px;background:var(--deep);border:1px solid var(--line);border-radius:99px;overflow:hidden}
+.jbar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--gold2),var(--gold));border-radius:99px;transition:width .5s ease}
+.jbar-cap{font-family:var(--mono);font-size:11px;color:var(--sub);margin-top:6px;letter-spacing:.03em}
+.jbar-cap .jbar-pct{color:var(--gold);font-weight:700}
 .lens{border:1px solid var(--line);border-radius:4px;padding:14px 16px;margin-top:10px;background:rgba(8,29,70,.32)}
 .lens h3{margin:0 0 2px;font-family:var(--display);font-weight:600;font-size:15px;color:var(--gold);letter-spacing:-.01em}
 .lens .q{color:var(--sub);font-size:12px;margin-bottom:8px}
@@ -938,12 +957,30 @@ function loadLibrary(){
     sel&&sel.focus();
   }));
 }
+function _barFor(log){
+  // a progress bar + caption injected right above the job's log <pre>
+  let bar=log.previousElementSibling;
+  if(!bar||!bar.classList||!bar.classList.contains('jbar')){
+    bar=document.createElement('div');bar.className='jbar';
+    bar.innerHTML='<div class=jbar-track><div class=jbar-fill></div></div>'+
+      '<div class=jbar-cap><span class=jbar-pct></span> <span class=jbar-note></span></div>';
+    log.parentNode.insertBefore(bar,log);
+  }
+  return bar;
+}
 function watchJob(id,logSel,btnSel,onDone){
   const log=$(logSel);log.style.display='block';
+  const bar=_barFor(log);bar.style.display='block';
+  const fill=bar.querySelector('.jbar-fill'),pct=bar.querySelector('.jbar-pct'),note=bar.querySelector('.jbar-note');
   const iv=setInterval(async()=>{
     const j=await (await fetch('/api/run/status?job='+id)).json();
+    const p=j.progress;
+    if(p&&j.status==='running'){fill.style.width=p.pct+'%';pct.textContent=p.pct+'%';note.textContent=p.note||'';}
+    else if(j.status==='running'&&!p){pct.textContent='';note.textContent='starting…';}
     log.textContent=(j.log||[]).join('\n')||j.status||'…';log.scrollTop=log.scrollHeight;
     if(j.status==='done'||j.status==='error'){clearInterval(iv);if(btnSel)$(btnSel).disabled=false;
+      fill.style.width='100%';pct.textContent=j.status==='done'?'100%':'';note.textContent=j.status;
+      if(j.status!=='running')setTimeout(()=>{bar.style.display='none'},1200);
       log.textContent+='\n\n['+j.status+(j.rc!==undefined?' rc='+j.rc:'')+
         (j.run_ids&&j.run_ids.length?' · '+j.run_ids.length+' run(s)':'')+']';
       if(onDone)onDone(j);}

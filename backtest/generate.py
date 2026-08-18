@@ -169,6 +169,7 @@ def main():
                                 setup_class=spec.get("setup_class"))
             survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
 
+    ntot = len(uniq)
     if jobs <= 1:                       # serial path (debug / single core)
         _pool_init(df_tf)
         for done, (spec, cfg) in enumerate(uniq, 1):
@@ -177,6 +178,8 @@ def main():
             except Exception as e:
                 errors += 1
                 first_err = first_err or repr(e)
+            print(f"PROGRESS {done} {ntot} screening · survivors={len(survivors)} "
+                  f"errors={errors}", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
                                  initargs=(df_tf,)) as ex:
@@ -188,8 +191,10 @@ def main():
                 except Exception as e:
                     errors += 1
                     first_err = first_err or repr(e)
+                print(f"PROGRESS {done} {ntot} screening · survivors={len(survivors)} "
+                      f"errors={errors}", flush=True)
                 if done % 25 == 0:
-                    print(f"    {done}/{len(uniq)}  survivors={len(survivors)}  "
+                    print(f"    {done}/{ntot}  survivors={len(survivors)}  "
                           f"errors={errors}  ({time.time()-t0:.0f}s)")
 
     if errors:

@@ -156,6 +156,7 @@ def main():
         # both-mode returns (kis, koos); OOS-only mode returns koos.
         return result if args.recompute_is else (kis_stored, result)
 
+    ntot = len(prepared)
     if jobs <= 1:                       # serial path (debug / single core)
         _pool_init(is_tf, oos_tf)
         for i, (spec, cfg, kis_stored) in enumerate(prepared, 1):
@@ -165,9 +166,10 @@ def main():
                 errors += 1
                 continue
             _record(spec, kis, koos)
+            npass = sum(1 for r in recs if r['verdict']['pass'])
+            print(f"PROGRESS {i} {ntot} verify OOS · survivors={npass}", flush=True)
             if i % 5 == 0:
-                print(f"    {i}/{len(prepared)}  survivors={sum(1 for r in recs if r['verdict']['pass'])}  "
-                      f"({time.time()-t0:.0f}s)", flush=True)
+                print(f"    {i}/{ntot}  survivors={npass}  ({time.time()-t0:.0f}s)", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
                                  initargs=(is_tf, oos_tf)) as ex:
@@ -180,9 +182,10 @@ def main():
                     errors += 1
                     continue
                 _record(spec, kis, koos)
+                npass = sum(1 for r in recs if r['verdict']['pass'])
+                print(f"PROGRESS {done} {ntot} verify OOS · survivors={npass}", flush=True)
                 if done % 5 == 0:
-                    print(f"    {done}/{len(prepared)}  survivors={sum(1 for r in recs if r['verdict']['pass'])}  "
-                          f"({time.time()-t0:.0f}s)", flush=True)
+                    print(f"    {done}/{ntot}  survivors={npass}  ({time.time()-t0:.0f}s)", flush=True)
 
     if errors:
         print(f"  note: {errors} candidate(s) errored/skipped")

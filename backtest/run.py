@@ -20,11 +20,17 @@ from .funnel import run_funnel, summarize
 from .metrics import kpis, trades_frame
 
 
-def run_one(df, cfg, research: bool):
+def _emit_progress(done: int, total: int, note: str = "") -> None:
+    """Machine-readable progress line the Lab job-runner parses into a % bar.
+    Harmless noise on a plain terminal."""
+    print(f"PROGRESS {done} {total} {note}", flush=True)
+
+
+def run_one(df, cfg, research: bool, progress=None):
     t0 = time.time()
     ind = ind_mod.compute(df, cfg)
     eng = Engine(cfg, df, ind, research_mode=research)
-    res = eng.run()
+    res = eng.run(progress=progress)
     dt = time.time() - t0
     return res, dt
 
@@ -227,7 +233,17 @@ def main():
         print(f"  recorded run {rid} -> {d}")
 
     out = {}
-    for name, base_name, cfg, tf in expanded:
+    njobs = len(expanded)
+    for jidx, (name, base_name, cfg, tf) in enumerate(expanded):
+        # Per-job progress mapped onto an overall 0..(njobs*100) scale so the UI
+        # bar advances smoothly across a multi-job run (e.g. GC then MGC twin).
+        _sym = cfg.contract.symbol
+        _lbl = f"{name} {_sym}@{tf}" + (f" · job {jidx+1}/{njobs}" if njobs > 1 else "")
+        def _prog(done, total, _jidx=jidx, _lbl=_lbl):
+            frac = (done / total) if total else 0.0
+            _emit_progress(_jidx * 100 + int(frac * 100), njobs * 100,
+                           f"{_lbl} · bar {done:,}/{total:,}")
+        _emit_progress(jidx * 100, njobs * 100, f"{_lbl} · starting")
         dtf = df_for(tf)
         if args.firm:
             from .firms import program, to_overlay
@@ -261,7 +277,7 @@ def main():
         if args.funded:
             from .funded import daily_from_trades, simulate_funded, summarize as fsum
             t0 = time.time()
-            res, _ = run_one(dtf, cfg, research=True)   # no halts; overlay applied post-hoc
+            res, _ = run_one(dtf, cfg, research=True, progress=_prog)   # no halts; overlay applied post-hoc
             fr = simulate_funded(daily_from_trades(res.trades),
                                  account_size=cfg.initial_capital or 50_000)
             s = fsum(fr)
@@ -274,7 +290,7 @@ def main():
             out[name] = s
             _record(base_name, cfg, tf, "funded", s, None)
             continue
-        res, dt = run_one(dtf, cfg, args.research)
+        res, dt = run_one(dtf, cfg, args.research, progress=_prog)
         _print_report(name, res, args.research, dt)
         out[name] = kpis(res)
         lens = "classic" if args.research else "native"

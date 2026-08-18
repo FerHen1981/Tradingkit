@@ -280,12 +280,18 @@ class Engine:
         return (cur >= s and cur < e) if e > s else (cur >= s or cur < e)
 
     # ------------------------------------------------------------------ run
-    def run(self, end_bar: Optional[int] = None) -> Result:
+    def run(self, end_bar: Optional[int] = None, progress=None) -> Result:
         end = self.n if end_bar is None else min(end_bar, self.n)
+        # Optional progress callback (single-run UI only). Workers pass nothing,
+        # so the hot loop keeps its zero-overhead path. ~50 ticks over the span.
+        total = end - self.start_bar
+        step = max(1, total // 50) if progress else 0
         for i in range(self.start_bar, end):
             self._cur_i = i
             self._broker(i)
             self._strategy(i)
+            if step and (i - self.start_bar) % step == 0:
+                progress(i - self.start_bar, total)
             if self.acct_halted and self.pos == 0 and self.pend_dir == 0:
                 # Eval account is done; stop simulating further bars.
                 break

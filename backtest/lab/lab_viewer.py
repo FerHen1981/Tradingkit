@@ -1408,7 +1408,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
-    <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. Every value is measured on <b>both</b> raw edge and funded survival — the outcome tells you what the strategy is suited for (funded · eval-only · nothing); you choose no goal up front. On a 2-core box run this OR a backtest, not both at once.</div>
+    <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. Every value is measured on <b>both</b> raw edge and funded survival — the outcome tells you what the strategy is suited for (funded · eval-only · nothing); you choose no goal up front. Tunes on the <b>last 3 years</b> (coarse gate, same design as the mill) — validate the winner on the full history with Run/Verify. On a 2-core box run this OR a backtest, not both at once.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
       <label class=field><span class=fld>Dataset</span><select id=swDs style="min-width:150px"></select></label>

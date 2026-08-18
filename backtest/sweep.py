@@ -42,11 +42,15 @@ ENGINE_ONLY = {
 
 _DF = None
 _IND = None      # shared indicators (engine-only sweeps); None => recompute per value
+_ARR = None      # pre-extracted engine arrays, shared read-only via fork COW —
+                 # measured: without this, each worker rebuilt ~1-2GB of arrays
+                 # over a 20y 1m frame (8.7GB total RSS with 2 workers = swap/OOM
+                 # on the VPS). One parent copy, inherited copy-on-write, fixes it.
 
 
-def _pool_init(df, ind):
-    global _DF, _IND
-    _DF, _IND = df, ind
+def _pool_init(df, ind, arrays=None):
+    global _DF, _IND, _ARR
+    _DF, _IND, _ARR = df, ind, arrays
 
 
 def _run_value(cfg):
@@ -54,8 +58,11 @@ def _run_value(cfg):
     raw edge (classic KPIs) and the funded-account overlay — suitability is an
     OUTCOME of the test, never a goal chosen up front. The overlay is a post-hoc
     simulation over the daily P&L, so measuring it costs nothing."""
-    ind = _IND if _IND is not None else ind_mod.compute(_DF, cfg)
-    res = Engine(cfg, _DF, ind, research_mode=True).run()
+    if _ARR is not None:                       # engine-only sweep: shared arrays
+        res = Engine(cfg, arrays=_ARR, research_mode=True).run()
+    else:
+        ind = _IND if _IND is not None else ind_mod.compute(_DF, cfg)
+        res = Engine(cfg, _DF, ind, research_mode=True).run()
     k = kpis(res)
     row = {"trades": k.get("trades", 0), "net": k.get("net_profit", 0.0),
            "pf": k.get("profit_factor", 0.0), "win_pct": k.get("win_rate_pct", 0.0),
@@ -80,37 +87,52 @@ def _coerce(sample, raw: str):
 
 
 def sweep_param(df, base_cfg, param: str, values: list,
-                jobs: int = 0, shared_ind=None) -> dict:
+                jobs: int = 0, shared_ind=None, shared_arrays=None, prog=None) -> dict:
     """Run base_cfg across `values` of `param`. Returns {param, current, curve,
     best, best_funded, engine_only}. `best` is purely the strongest raw edge (PF);
     `best_funded` is the strongest value that ALSO survives the funded overlay —
     reported side by side so the outcome says what the strategy is suited for
-    (funded / eval-only / nothing) without a goal biasing the pick. `shared_ind`
-    lets a caller (auto-tune) reuse one indicator computation across engine-only
-    sweeps."""
+    (funded / eval-only / nothing) without a goal biasing the pick. `shared_ind` /
+    `shared_arrays` let a caller (auto-tune) reuse one indicator computation and
+    one array extraction across engine-only sweeps; `prog(done, total)` overrides
+    the per-value progress line."""
     if not hasattr(base_cfg, param):
         raise ValueError(f"unknown parameter {param!r}")
     current = getattr(base_cfg, param)
     engine_only = param in ENGINE_ONLY
-    if engine_only and shared_ind is None:
-        # the shared indicator build (~35s on 20y 1m) is otherwise silent — emit a
-        # note so the UI caption moves before the per-value bar starts.
-        def _ind_prog(k, tot):
-            print(f"PROGRESS 0 {max(len(values), 1)} computing shared indicators {k}/{tot}", flush=True)
-        shared_ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
-    elif not engine_only:
+    if engine_only:
+        if shared_ind is None and shared_arrays is None:
+            # the shared indicator build (~35s on 20y 1m) is otherwise silent — a
+            # note keeps the UI caption moving before the per-value bar starts.
+            def _ind_prog(k, tot):
+                print(f"PROGRESS 0 {max(len(values), 1)} computing shared indicators {k}/{tot}", flush=True)
+            shared_ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
+        if shared_arrays is None:
+            # extract the engine arrays ONCE in the parent; workers inherit them
+            # copy-on-write (fork), instead of each rebuilding ~1-2GB from the
+            # frames — measured 8.7GB total RSS on 20y 1m without this.
+            from .engine import extract
+            shared_arrays = extract(df, shared_ind)
+        init_args = (None, None, shared_arrays)
+    else:
         shared_ind = None       # signal params must recompute indicators per value
+        init_args = (df, None, None)
+    if prog is None:
+        def prog(done, total, _p=param):
+            print(f"PROGRESS {done} {total} sweep {_p}", flush=True)
 
     cfgs = [base_cfg.with_(**{param: v}) for v in values]
     jobs = jobs if jobs and jobs > 0 else (os.cpu_count() or 1)
     rows = [None] * len(values)
     if jobs <= 1:
-        _pool_init(df, shared_ind)
+        _pool_init(*init_args)
         for i, payload in enumerate(cfgs):
             rows[i] = _run_value(payload)
+            prog(i + 1, len(values))
+        _pool_init(None, None, None)    # release module refs after a serial sweep
     else:
         with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
-                                 initargs=(df, shared_ind)) as ex:
+                                 initargs=init_args) as ex:
             futs = {ex.submit(_run_value, payload): i for i, payload in enumerate(cfgs)}
             done = 0
             for fut in as_completed(futs):
@@ -120,7 +142,7 @@ def sweep_param(df, base_cfg, param: str, values: list,
                 except Exception as e:
                     rows[i] = {"error": repr(e)}
                 done += 1
-                print(f"PROGRESS {done} {len(values)} sweep {param}", flush=True)
+                prog(done, len(values))
 
     curve = [{"value": v, **(r or {})} for v, r in zip(values, rows)]
     valid = [c for c in curve if not c.get("error") and (c.get("trades") or 0) > 0]
@@ -170,20 +192,33 @@ def autotune(df, base_cfg, jobs: int = 0, max_levers: int = 4) -> dict:
     levers = levers[:max_levers]
     print(f"PROGRESS 12 46 auto-tune · sweeping {len(levers)} data-flagged parameter(s)", flush=True)
 
-    tuned = []
+    # the engine arrays are extracted ONCE here and shared (fork copy-on-write)
+    # across every engine-only lever's workers — without this each worker rebuilt
+    # ~1-2GB of arrays (measured 8.7GB total RSS on 20y 1m = swap/OOM on the VPS).
+    shared_arrays, tuned, L = None, [], max(len(levers), 1)
     for j, f in enumerate(levers):
         lv = f["lever"]
         param, values = lv["param"], lv["values"]
-        si = ind if param in ENGINE_ONLY else None
+        engine_only = param in ENGINE_ONLY
+        if engine_only and shared_arrays is None:
+            from .engine import extract
+            shared_arrays = extract(df, ind)
+
+        def _prog(done, total, _j=j, _p=param):
+            frac = (done / total) if total else 1.0
+            print(f"PROGRESS {12 + int(34 * (_j + frac) / L)} 46 auto-tune · "
+                  f"{_p} {done}/{total}", flush=True)
         try:
-            out = sweep_param(df, base_cfg, param, values, jobs=jobs, shared_ind=si)
+            out = sweep_param(df, base_cfg, param, values, jobs=jobs,
+                              shared_ind=(ind if engine_only else None),
+                              shared_arrays=(shared_arrays if engine_only else None),
+                              prog=_prog)
         except Exception as e:
             tuned.append({"code": f["code"], "message": f["message"], "param": param, "error": repr(e)})
             continue
         tuned.append({"code": f["code"], "message": f["message"], "param": param,
                       "current": out["current"], "curve": out["curve"], "best": out["best"],
                       "best_funded": out["best_funded"], "engine_only": out["engine_only"]})
-        print(f"PROGRESS {12 + int(34*(j+1)/max(len(levers),1))} 46 auto-tune · {param} done", flush=True)
     return {"diagnosis": {"trades": dtrades, "signals": dsignals}, "tuned": tuned}
 
 
@@ -250,6 +285,19 @@ def main():
     df = data_mod.load(args.data)
     if args.coarse_since:
         df = data_mod.slice_dates(df, since=args.coarse_since)
+    elif args.auto:
+        # Coarse gate, same design as the mill: tune the response curves on the
+        # last 3 years, validate winners on the full history / Verify OOS. Also
+        # what keeps auto-tune inside a small VPS's memory on 1m data — the full
+        # 20y frame needs multi-GB per parallel worker. Override: --coarse-since.
+        from datetime import timedelta
+        since = (df["et"].iloc[-1] - timedelta(days=3 * 365)).date()
+        n0 = len(df)
+        df = data_mod.slice_dates(df, since=str(since))
+        if len(df) < n0:
+            print(f"  AUTO-TUNE coarse window: last 3 years ({since} ->), "
+                  f"{len(df):,} of {n0:,} bars — response curves only; validate the "
+                  f"winner on the full history (Run/Verify). --coarse-since overrides.")
     if args.holdout_days:
         df, _oos, _cut = data_mod.holdout_split(df, args.holdout_days)
     df = df if args.tf == "1m" else data_mod.resample_tf(df, args.tf)

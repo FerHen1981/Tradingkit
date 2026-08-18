@@ -250,6 +250,13 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
                 except Exception:
                     pass
                 continue
+            if line.startswith("AUTOTUNE_JSON "):
+                try:
+                    with _JOBS_LOCK:
+                        _JOBS[job_id]["autotune"] = json.loads(line[len("AUTOTUNE_JSON "):])
+                except Exception:
+                    pass
+                continue
             log.append(line)
             if "recorded run " in line:
                 try:
@@ -427,14 +434,18 @@ def _start_sweep(q) -> tuple[dict, int]:
     tf = (q.get("tf") or ["1m"])[0].strip().lower()
     if tf not in TIMEFRAMES:
         return {"error": f"unknown timeframe {tf!r}"}, 400
-    param = (q.get("param") or [""])[0].strip()
-    if not param:
-        return {"error": "pick a parameter to sweep"}, 400
-    values = (q.get("values") or [""])[0].strip()
-    if not values:
-        return {"error": "give comma-separated values (e.g. 40,60,80,100)"}, 400
-    cmd = [sys.executable, "-m", "backtest.sweep", "--data", ds[dataset]["file"],
-           "--tf", tf, "--param", param, "--values", values]
+    auto = (q.get("auto") or ["0"])[0] in ("1", "true", "on")
+    cmd = [sys.executable, "-m", "backtest.sweep", "--data", ds[dataset]["file"], "--tf", tf]
+    if auto:
+        cmd += ["--auto"]
+    else:
+        param = (q.get("param") or [""])[0].strip()
+        if not param:
+            return {"error": "pick a parameter to sweep"}, 400
+        values = (q.get("values") or [""])[0].strip()
+        if not values:
+            return {"error": "give comma-separated values (e.g. 40,60,80,100)"}, 400
+        cmd += ["--param", param, "--values", values]
     spec = (q.get("spec") or [""])[0]
     if spec.startswith("preset:"):
         name = spec.split(":", 1)[1]
@@ -460,7 +471,7 @@ def _start_sweep(q) -> tuple[dict, int]:
             cmd += ["--holdout-days", str(hold)]
     except Exception:
         pass
-    return _spawn(cmd, f"sweep {param}"), 200
+    return _spawn(cmd, "auto-tune" if auto else f"sweep {(q.get('param') or [''])[0]}"), 200
 
 
 def _candidates() -> dict:
@@ -1120,15 +1131,12 @@ $('#wRun').addEventListener('click',()=>{
     '&micro='+($('#wMicro').checked?'1':'0');
   postJob('/api/run',qs,'#wLog','#wRun',()=>load());
 });
-// parameter sweep (phase 3)
-function renderSweep(sw){
-  const box=$('#swCurve');if(!sw||!sw.curve){box.style.display='none';return}
-  box.style.display='block';
-  const rows=sw.curve.filter(c=>!c.error);
-  const pfs=rows.map(c=>c.pf||0);const mx=Math.max(0.01,...pfs.map(Math.abs));
-  const best=sw.best?sw.best.value:null;
-  const bar=rows.map(c=>{
-    const cur=(c.value===sw.current), bst=(best!==null&&c.value===best);
+// parameter sweep + auto-tune (phase 3)
+function curveBars(curve,current,best){
+  const rows=(curve||[]).filter(c=>!c.error);
+  const mx=Math.max(0.01,...rows.map(c=>Math.abs(c.pf||0)));
+  return rows.map(c=>{
+    const cur=(c.value===current), bst=(best!==null&&best!==undefined&&c.value===best);
     const w=Math.max(2,Math.round(100*Math.abs(c.pf||0)/mx));
     const col=(c.pf>=1)?'linear-gradient(90deg,var(--gold2),var(--gold))':'var(--rose)';
     const fu=c.funded?('<span class=muted style="margin-left:8px">'+(c.funded.breached?'<span style="color:var(--rose)">breach</span>':'<span style="color:var(--gold)">survives</span>')+(c.funded.payouts?(' · '+c.funded.payouts+' payout'):'')+'</span>'):'';
@@ -1137,9 +1145,35 @@ function renderSweep(sw){
       <span style="flex:1;background:var(--deep);border-radius:99px;height:16px;position:relative;overflow:hidden"><span style="display:block;height:100%;width:${w}%;background:${col};border-radius:99px"></span></span>
       <span style="min-width:210px;font-family:var(--mono);font-size:11px;color:var(--sub)">PF ${(c.pf||0).toFixed(2)} · net $${Math.round(c.net||0).toLocaleString()} · ${c.trades||0}t${fu}</span></div>`;
   }).join('');
-  box.innerHTML=`<div class=muted style="margin-bottom:4px">${sw.param} response — ◀ current, ★ best PF${sw.funded?' (that survives funded)':''}. `
-    +`${sw.engine_only?'engine-only (fast)':'recomputed indicators per value'}.</div>${bar}`;
 }
+function renderSweep(sw){
+  const box=$('#swCurve');if(!sw||!sw.curve){box.style.display='none';return}
+  box.style.display='block';
+  box.innerHTML=`<div class=muted style="margin-bottom:4px">${sw.param} response — ◀ current, ★ best PF${sw.funded?' (that survives funded)':''}. `
+    +`${sw.engine_only?'engine-only (fast)':'recomputed indicators per value'}.</div>${curveBars(sw.curve,sw.current,sw.best?sw.best.value:null)}`;
+}
+function renderAutotune(at){
+  const box=$('#swTune');if(!at||!at.tuned){box.style.display='none';return}
+  box.style.display='block';
+  if(!at.tuned.length){box.innerHTML='<div class=muted>The data flagged nothing to tune — no parameter is clearly off on this run.</div>';return}
+  const blocks=at.tuned.map(t=>{
+    if(t.error)return `<div style="margin-top:12px"><b style="color:var(--rose)">${t.param}</b> — ${t.error}</div>`;
+    const b=t.best;
+    const rec=b?`<div style="margin-top:6px;font-family:var(--mono);font-size:12px">→ data suggests <b style="color:var(--gold)">${t.param} = ${b.value}</b> `
+      +`<span class=muted>(PF ${(b.pf||0).toFixed(2)}, net $${Math.round(b.net||0).toLocaleString()}${b.funded?(b.funded.breached?', still breaches':', survives funded'):''}) — current ${t.current}</span></div>`:'';
+    return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+      <div style="font-size:12.5px"><b style="color:var(--gold)">${t.param}</b> <span class=muted>— ${(t.message||'').replace(/</g,'&lt;')}</span></div>
+      <div style="margin-top:6px">${curveBars(t.curve,t.current,b?b.value:null)}</div>${rec}</div>`;
+  }).join('');
+  box.innerHTML=`<div class=muted>The data flagged ${at.tuned.length} parameter(s) and swept each over a range it derived from the measured distribution. ◀ current · ★ best.</div>${blocks}`;
+}
+$('#swAuto').addEventListener('click',()=>{
+  const ds=$('#swDs').value;if(!ds){$('#swLog').style.display='block';$('#swLog').textContent='Upload a dataset first.';return}
+  $('#swTune').style.display='none';
+  const qs='auto=1&dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#swSpec').value)+
+    '&tf='+encodeURIComponent($('#swTf').value)+'&funded='+($('#swFunded').checked?'1':'0');
+  postJob('/api/sweep',qs,'#swLog','#swAuto',(j)=>{if(j&&j.autotune)renderAutotune(j.autotune);});
+});
 $('#swRun').addEventListener('click',()=>{
   const ds=$('#swDs').value;if(!ds){$('#swLog').style.display='block';$('#swLog').textContent='Upload a dataset first.';return}
   $('#swCurve').style.display='none';
@@ -1355,27 +1389,33 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Sweep a parameter</b><span class=muted>fine-grained: vary one value, see the response</span></div>
-    <div class=hint>The run's <b>diagnosis</b> (click any run below) names the parameter that's off — stop too wide, FVG band too big. Sweep it here across a range to see where PF/net peak and where the funded account stops breaching. No assumption today's value is right.</div>
+      <b class=sub>Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
+    <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. You pick nothing — the data speaks. One caveat: on a 2-core box run this OR a backtest, not both at once.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
       <label class=field><span class=fld>Dataset</span><select id=swDs style="min-width:150px"></select></label>
       <label class=field><span class=fld>Timeframe</span><input id=swTf value="1m" style="width:70px"></label>
-      <label class=field><span class=fld>Parameter</span><select id=swParam style="min-width:170px">
-        <option value=fixed_stop_ticks>fixed_stop_ticks (stop)</option>
-        <option value=tp_fixed_ticks>tp_fixed_ticks (target)</option>
-        <option value=contract_size>contract_size (size)</option>
-        <option value=gap_min_ticks>gap_min_ticks (FVG min)</option>
-        <option value=gap_max_ticks>gap_max_ticks (FVG max)</option>
-        <option value=cvd_trend_count>cvd_trend_count (CVD streak)</option>
-        <option value=trail_start_ticks>trail_start_ticks (trail)</option>
-        <option value=be_trigger_ticks>be_trigger_ticks (breakeven)</option>
-      </select></label>
-      <label class=field><span class=fld>Values (comma)</span><input id=swVals value="40,60,80,100,120" style="width:170px"></label>
       <label class=field><span class=fld>Funded</span><span style="padding:8px 0"><input type=checkbox id=swFunded checked> breach/payout</span></label>
-      <button class=go id=swRun>Sweep</button>
+      <button class=go id=swAuto>Auto-tune</button>
     </div>
-    <div id=swCurve style="display:none;margin-top:14px"></div>
+    <div id=swTune style="display:none;margin-top:14px"></div>
+    <details style="margin-top:12px"><summary class=muted style="cursor:pointer">Advanced — sweep one parameter manually</summary>
+      <div class=up style="margin-top:10px">
+        <label class=field><span class=fld>Parameter</span><select id=swParam style="min-width:170px">
+          <option value=fixed_stop_ticks>fixed_stop_ticks (stop)</option>
+          <option value=tp_fixed_ticks>tp_fixed_ticks (target)</option>
+          <option value=contract_size>contract_size (size)</option>
+          <option value=gap_min_ticks>gap_min_ticks (FVG min)</option>
+          <option value=gap_max_ticks>gap_max_ticks (FVG max)</option>
+          <option value=cvd_trend_count>cvd_trend_count (CVD streak)</option>
+          <option value=trail_start_ticks>trail_start_ticks (trail)</option>
+          <option value=be_trigger_ticks>be_trigger_ticks (breakeven)</option>
+        </select></label>
+        <label class=field><span class=fld>Values (comma)</span><input id=swVals value="40,60,80,100,120" style="width:170px"></label>
+        <button class=go id=swRun>Sweep</button>
+      </div>
+      <div id=swCurve style="display:none;margin-top:14px"></div>
+    </details>
     <pre id=swLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 

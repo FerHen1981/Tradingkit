@@ -21,8 +21,28 @@ def _pct(x) -> float:
     return round(100 * float(x), 1)
 
 
-def _finding(code: str, severity: str, message: str, **evidence) -> dict:
-    return {"code": code, "severity": severity, "message": message, "evidence": evidence}
+def _finding(code: str, severity: str, message: str, lever: dict | None = None, **evidence) -> dict:
+    f = {"code": code, "severity": severity, "message": message, "evidence": evidence}
+    if lever:
+        f["lever"] = lever          # {param, values} — data-derived, drives auto-tune
+    return f
+
+
+def _levels(anchors, current, step: float = 5.0, mn: float = None) -> list:
+    """Build a deduped, sorted candidate list from data-derived anchors (rounded
+    to `step`), always including the current value for reference. This is how the
+    sweep range comes from the DATA, not from the user."""
+    vals = set()
+    for a in anchors:
+        if a and a > 0:
+            v = round(a / step) * step
+            if mn is not None:
+                v = max(v, mn)
+            if v > 0:
+                vals.add(round(v, 2))
+    if current and current > 0:
+        vals.add(round(float(current), 2))
+    return sorted(vals)
 
 
 def diagnose_trades(df: pd.DataFrame, cfg, drawdown: float = 2_500.0) -> dict:
@@ -78,18 +98,25 @@ def diagnose_trades(df: pd.DataFrame, cfg, drawdown: float = 2_500.0) -> dict:
             ratio = stop_ticks / p90
             stop_block["stop_over_p90"] = round(ratio, 2)
             if ratio >= 1.8:
+                lever = {"param": "fixed_stop_ticks",
+                         "values": _levels([p50 * 0.8, p50, (p50 + p90) / 2, p90, p90 * 1.3],
+                                           stop_ticks, step=5)}
                 findings.append(_finding(
                     "stop-too-wide", "high",
                     f"Stop is {stop_ticks:.0f} ticks but 90% of WINNERS never drew more than "
                     f"{p90:.0f} ticks against you ({ratio:.1f}x). Each loss is oversized for the "
                     "room your winners actually use — tightening the stop cuts loss size with "
                     "little effect on win rate.",
+                    lever=lever,
                     stop_ticks=stop_ticks, winner_mae_p90=round(p90, 1), ratio=round(ratio, 2)))
             elif stop_ticks <= p50 and p50 > 0:
+                lever = {"param": "fixed_stop_ticks",
+                         "values": _levels([stop_ticks, p50, (p50 + p90) / 2, p90], stop_ticks, step=5)}
                 findings.append(_finding(
                     "stop-too-tight", "high",
                     f"Stop is {stop_ticks:.0f} ticks, below the {p50:.0f}-tick adverse move HALF "
                     "your winners showed — you are likely stopping out trades that would have won.",
+                    lever=lever,
                     stop_ticks=stop_ticks, winner_mae_p50=round(p50, 1)))
 
     # ---- target vs favorable excursion -----------------------------------
@@ -103,17 +130,24 @@ def diagnose_trades(df: pd.DataFrame, cfg, drawdown: float = 2_500.0) -> dict:
         target_block = {"tp_ticks": tp_ticks, "reach_rate_pct": _pct(reach),
                         "mfe_p50": round(p50_mfe, 1), "mfe_p75": round(p75_mfe, 1)}
         if tp_ticks > 0 and reach <= 0.20:
+            lever = {"param": "tp_fixed_ticks",
+                     "values": _levels([p50_mfe, (p50_mfe + p75_mfe) / 2, p75_mfe, p75_mfe * 1.3],
+                                       tp_ticks, step=5)}
             findings.append(_finding(
                 "target-too-far", "high",
                 f"Target is {tp_ticks:.0f} ticks but only {_pct(reach)}% of trades ever reached it "
                 f"(median favorable move {p50_mfe:.0f} ticks). The target is set beyond where price "
                 "usually goes — most trades resolve short of it.",
+                lever=lever,
                 tp_ticks=tp_ticks, reach_rate_pct=_pct(reach), mfe_p50=round(p50_mfe, 1)))
         elif tp_ticks > 0 and p75_mfe >= 1.8 * tp_ticks:
+            lever = {"param": "tp_fixed_ticks",
+                     "values": _levels([tp_ticks, tp_ticks * 1.3, p75_mfe, p75_mfe * 1.3], tp_ticks, step=5)}
             findings.append(_finding(
                 "target-too-close", "medium",
                 f"Target is {tp_ticks:.0f} ticks but 25% of trades ran past {p75_mfe:.0f} ticks — "
                 "you may be capping winners well short of the move that was available.",
+                lever=lever,
                 tp_ticks=tp_ticks, mfe_p75=round(p75_mfe, 1)))
 
     # ---- give-back: peak (MFE) vs the move actually realized on winners ---
@@ -148,11 +182,15 @@ def diagnose_trades(df: pd.DataFrame, cfg, drawdown: float = 2_500.0) -> dict:
                 "worst_pct_of_buffer": _pct(abs(worst) / drawdown) if drawdown else None,
                 "avg_pct_of_buffer": _pct(abs(avg_loss) / drawdown) if drawdown else None}
         if drawdown and abs(worst) >= 0.5 * drawdown:
+            cur_size = float(getattr(cfg, "contract_size", 1) or 1)
+            lever = {"param": "contract_size",
+                     "values": sorted({1.0, cur_size, max(1.0, round(cur_size / 2))})} if cur_size > 1 else None
             findings.append(_finding(
                 "loss-vs-drawdown", "high",
                 f"A single worst loss is ${abs(worst):,.0f} — {_pct(abs(worst)/drawdown)}% of the "
                 f"${drawdown:,.0f} trailing drawdown. The position is too large for the account: "
                 "a normal losing streak breaches before any edge compounds.",
+                lever=lever,
                 worst_loss=round(worst, 2), drawdown=drawdown))
 
     sev_rank = {"high": 0, "medium": 1, "low": 2}
@@ -195,12 +233,17 @@ def diagnose_signals(ind: pd.DataFrame, cfg, veto_counts: dict | None = None) ->
                    "size_p90": round(float(np.percentile(real, 90)), 1)}
             if inside <= 0.15:
                 dom = "smaller" if too_small >= too_big else "larger"
+                p50s, p90s = fvg["size_p50"], fvg["size_p90"]
+                # data-derived: test gap_min around the actual FVG-size distribution
+                lever = {"param": "gap_min_ticks",
+                         "values": _levels([1, p50s * 0.5, p50s, p90s * 0.5, p90s], lo, step=1, mn=1)}
                 findings.append(_finding(
                     "fvg-band-mismatch", "high",
                     f"The FVG-size band {lo:.0f}-{hi:.0f} ticks accepts only {_pct(inside)}% of the "
-                    f"FVGs in this data (median FVG is {fvg['size_p50']:.0f} ticks) — {_pct(max(too_small, too_big))}% "
+                    f"FVGs in this data (median FVG is {p50s:.0f} ticks) — {_pct(max(too_small, too_big))}% "
                     f"are {dom} than the band. The gap filter barely matches this instrument/timeframe.",
-                    band=[lo, hi], inside_pct=_pct(inside), size_p50=fvg["size_p50"]))
+                    lever=lever,
+                    band=[lo, hi], inside_pct=_pct(inside), size_p50=p50s))
 
     # ---- CVD streak restrictiveness --------------------------------------
     cvd = None

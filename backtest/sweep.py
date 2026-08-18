@@ -76,21 +76,22 @@ def _coerce(sample, raw: str):
 
 
 def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
-                jobs: int = 0) -> dict:
+                jobs: int = 0, shared_ind=None) -> dict:
     """Run base_cfg across `values` of `param`. Returns {param, current, curve,
-    best, engine_only}. curve rows carry the value + its KPIs."""
+    best, engine_only}. curve rows carry the value + its KPIs. `shared_ind` lets a
+    caller (auto-tune) reuse one indicator computation across engine-only sweeps."""
     if not hasattr(base_cfg, param):
         raise ValueError(f"unknown parameter {param!r}")
     current = getattr(base_cfg, param)
     engine_only = param in ENGINE_ONLY
-    if engine_only:
+    if engine_only and shared_ind is None:
         # the shared indicator build (~35s on 20y 1m) is otherwise silent — emit a
         # note so the UI caption moves before the per-value bar starts.
         def _ind_prog(k, tot):
             print(f"PROGRESS 0 {max(len(values), 1)} computing shared indicators {k}/{tot}", flush=True)
         shared_ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
-    else:
-        shared_ind = None
+    elif not engine_only:
+        shared_ind = None       # signal params must recompute indicators per value
 
     cfgs = [(base_cfg.with_(**{param: v}), funded) for v in values]
     jobs = jobs if jobs and jobs > 0 else (os.cpu_count() or 1)
@@ -125,6 +126,56 @@ def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
             "funded": funded, "curve": curve, "best": best}
 
 
+def autotune(df, base_cfg, funded: bool = False, jobs: int = 0, max_levers: int = 4) -> dict:
+    """Data-driven tuning — NO manual parameter or range. Run the strategy once,
+    let the diagnosis (from the data) name which parameters are off and derive the
+    candidate range for each from the measured distributions, then sweep those.
+    Returns {diagnosis, tuned:[{code, message, param, current, curve, best}]}."""
+    from .diagnose import diagnose_trades, diagnose_signals
+    from .metrics import trades_frame
+    from .funded import APEX_DD
+
+    def _ind_prog(k, tot):
+        print(f"PROGRESS {k} {tot+40} auto-tune · computing indicators", flush=True)
+    ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
+    print("PROGRESS 8 46 auto-tune · running base strategy", flush=True)
+    res = Engine(base_cfg, df, ind, research_mode=True, diag=True).run()
+    dd = float(APEX_DD.get(int(base_cfg.initial_capital or 50_000), 2_500))
+    dtrades = diagnose_trades(trades_frame(res), base_cfg, drawdown=dd)
+    dsignals = diagnose_signals(ind, base_cfg, res.veto_counts)
+
+    # collect the data-derived levers, one per parameter, highest severity first
+    sev = {"high": 0, "medium": 1, "low": 2}
+    flagged = sorted([f for f in (dtrades["findings"] + dsignals["findings"])
+                      if f.get("lever") and f["lever"].get("values")],
+                     key=lambda f: sev.get(f["severity"], 3))
+    seen, levers = set(), []
+    for f in flagged:
+        p = f["lever"]["param"]
+        if p in seen or not hasattr(base_cfg, p):
+            continue
+        seen.add(p)
+        levers.append(f)
+    levers = levers[:max_levers]
+    print(f"PROGRESS 12 46 auto-tune · sweeping {len(levers)} data-flagged parameter(s)", flush=True)
+
+    tuned = []
+    for j, f in enumerate(levers):
+        lv = f["lever"]
+        param, values = lv["param"], lv["values"]
+        si = ind if param in ENGINE_ONLY else None
+        try:
+            out = sweep_param(df, base_cfg, param, values, funded=funded, jobs=jobs, shared_ind=si)
+        except Exception as e:
+            tuned.append({"code": f["code"], "message": f["message"], "param": param, "error": repr(e)})
+            continue
+        tuned.append({"code": f["code"], "message": f["message"], "param": param,
+                      "current": out["current"], "curve": out["curve"], "best": out["best"],
+                      "engine_only": out["engine_only"]})
+        print(f"PROGRESS {12 + int(34*(j+1)/max(len(levers),1))} 46 auto-tune · {param} done", flush=True)
+    return {"diagnosis": {"trades": dtrades, "signals": dsignals}, "tuned": tuned}
+
+
 def _fmt_row(c, current) -> str:
     mark = " <= current" if c["value"] == current else ""
     fu = ""
@@ -145,8 +196,11 @@ def main():
     ap.add_argument("--spec", help="or a spec YAML")
     ap.add_argument("--symbol", help="contract override (GC, MGC, ES, ...)")
     ap.add_argument("--tf", default="1m")
-    ap.add_argument("--param", required=True, help="Config field to sweep (e.g. fixed_stop_ticks)")
-    ap.add_argument("--values", required=True, help="comma-separated values (e.g. 20,40,60,80,100)")
+    ap.add_argument("--auto", action="store_true",
+                    help="DATA-DRIVEN: let the diagnosis pick which parameters are off and derive "
+                         "the range from the measured distributions — no --param/--values needed")
+    ap.add_argument("--param", help="Config field to sweep (e.g. fixed_stop_ticks); omit with --auto")
+    ap.add_argument("--values", help="comma-separated values (e.g. 20,40,60,80,100); omit with --auto")
     ap.add_argument("--funded", action="store_true", help="also report funded breach/payout per value")
     ap.add_argument("--holdout-days", type=int, default=0, help="hold out the last N days (run in-sample)")
     ap.add_argument("--coarse-since", help="limit to data on/after this date (speed)")
@@ -172,6 +226,27 @@ def main():
     df = df if args.tf == "1m" else data_mod.resample_tf(df, args.tf)
     print(f"  {len(df):,} {args.tf} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
+    if args.auto:
+        print("  AUTO-TUNE: the data picks the parameters and ranges (no manual input).")
+        t0 = time.time()
+        out = autotune(df, base, funded=args.funded, jobs=args.jobs)
+        for t in out["tuned"]:
+            if t.get("error"):
+                print(f"\n  {t['param']}: ERROR {t['error']}");  continue
+            print(f"\n  {t['param']} (flagged: {t['code']}) — current {t['current']}:")
+            for c in t["curve"]:
+                print(_fmt_row(c, t["current"]))
+            b = t.get("best")
+            if b:
+                print(f"    -> data suggests {t['param']}={b['value']} (PF {b.get('pf',0):.2f}, "
+                      f"net ${b.get('net',0):,.0f}"
+                      + ("" if not args.funded else (", survives funded" if not b.get("funded",{}).get("breached",True) else ", still breaches")) + ")")
+        print(f"\n  auto-tune done ({time.time()-t0:.0f}s)")
+        print("AUTOTUNE_JSON " + json.dumps(out, default=str), flush=True)
+        return
+
+    if not args.param or not args.values:
+        ap.error("provide --param and --values, or use --auto")
     values = [_coerce(getattr(base, args.param), v) for v in args.values.split(",") if v.strip()]
     print(f"  sweeping {args.param} over {values}  (current={getattr(base, args.param)}, "
           f"{'engine-only, shared indicators' if args.param in ENGINE_ONLY else 'recompute indicators per value'})")

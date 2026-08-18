@@ -243,6 +243,11 @@ def main():
             frac = (done / total) if total else 0.0
             _emit_progress(_jidx * 100 + int(frac * 100), njobs * 100,
                            f"{_lbl} · bar {done:,}/{total:,}")
+        def _fin(msg, _jidx=jidx, _lbl=_lbl):
+            # the bar-loop is done; keep the bar alive through the (silent, heavy)
+            # tail — overlay + regime classification + recording — so it never
+            # looks frozen at 99%.
+            _emit_progress(_jidx * 100 + 99, njobs * 100, f"{_lbl} · {msg}")
         _emit_progress(jidx * 100, njobs * 100, f"{_lbl} · starting")
         dtf = df_for(tf)
         if args.firm:
@@ -264,9 +269,11 @@ def main():
         if args.funnel:
             ind = ind_mod.compute(dtf, cfg)
             t0 = time.time()
+            _fin("walk-forward funnel …")
             outs = run_funnel(cfg, dtf, ind, step_sessions=args.funnel_step,
                               horizon_sessions=args.funnel_horizon)
             s = summarize(outs)
+            _fin("recording …")
             print(f"\n{'='*70}\n{name}  [EVAL FUNNEL]  ({time.time()-t0:.1f}s)")
             print(f"  fresh eval every {args.funnel_step} sessions, {args.funnel_horizon}-session horizon")
             print(f"  starts={s['starts']}  PASS={s['pass']} ({s['pass_rate_pct']}%)  "
@@ -278,9 +285,11 @@ def main():
             from .funded import daily_from_trades, simulate_funded, summarize as fsum
             t0 = time.time()
             res, _ = run_one(dtf, cfg, research=True, progress=_prog)   # no halts; overlay applied post-hoc
+            _fin("funded overlay …")
             fr = simulate_funded(daily_from_trades(res.trades),
                                  account_size=cfg.initial_capital or 50_000)
             s = fsum(fr)
+            _fin("recording …")
             print(f"\n{'='*70}\n{name}  [FUNDED OVERLAY]  ({time.time()-t0:.1f}s)")
             print(f"  payouts={s['payouts']}  withdrawn=${s['withdrawable']:,.0f}  "
                   f"~${s['per_month']:,.0f}/mo over {s['months']} mo  "
@@ -291,6 +300,7 @@ def main():
             _record(base_name, cfg, tf, "funded", s, None)
             continue
         res, dt = run_one(dtf, cfg, args.research, progress=_prog)
+        _fin("regime + recording …")
         _print_report(name, res, args.research, dt)
         out[name] = kpis(res)
         lens = "classic" if args.research else "native"

@@ -314,6 +314,27 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
     return trades
 
 
+def _load_cash_ledgers(cash_dir: str, skip: list[str]) -> dict:
+    """Per-account exact ledger from Tradovate Cash_History exports — THE source of truth for
+    balance + real commissions (no reconstruction). Each export is cumulative from account open,
+    so for an account the snapshot with the most events is the most complete; that one wins
+    (avoids double-counting across overlapping exports). Empty when no Cash_History files exist,
+    so the overlay is a no-op until the exports land."""
+    from .cash_ledger import parse_cash_history
+    best: dict = {}
+    for path in sorted(glob.glob(os.path.join(cash_dir, "*Cash_History*.csv"))):
+        try:
+            for acct, led in parse_cash_history(path).items():
+                if any(s in acct for s in skip):
+                    continue
+                cur = best.get(acct)
+                if cur is None or led.n_events > cur.n_events:
+                    best[acct] = led
+        except Exception as exc:
+            log.warning("cash ledger parse failed %s: %r", path, exc)
+    return best
+
+
 def _pearson(x: list[float], y: list[float]) -> "float | None":
     """Pearson correlation, or None when it's undefined (n<2 or a flat series)."""
     n = len(x)
@@ -609,6 +630,20 @@ def _sources() -> tuple[list[dict], list[dict]]:
             accounts = _load_accounts(token)
         except Exception as exc:
             log.warning("dashboard: accounts load failed: %r", exc)
+
+    # Cash_History overlay: where a Tradovate ledger exists it IS the truth — exact balance
+    # (= broker CASH AMOUNT) and real commissions. Overrides the Notion rollup for those
+    # accounts; Notion stays the fallback where no ledger has been exported yet.
+    cash_dir = os.environ.get("CASH_DIR", exports)
+    ledgers = _load_cash_ledgers(cash_dir, skip)
+    for a in accounts:
+        led = ledgers.get(a.get("full", ""))
+        if led and led.balance:
+            start = a.get("starting") or led.funding or 0.0
+            a["current"] = led.balance
+            a["net"] = round(led.balance - start, 2)
+            a["commissions_total"] = led.commissions
+            a["balance_source"] = "cash_ledger"
 
     _cache.update(t=now, trades=trades, accounts=accounts)
     return trades, accounts

@@ -705,7 +705,7 @@ function renderFleet(){
 function renderAccts(rows){
   $("#acctTable tbody").innerHTML=rows.map(a=>{const h=H(a.health),p=a.bufpct==null?0:Math.max(0,Math.min(100,a.bufpct));
     return `<tr><td class=acct>${a.id} <span class=firmdot>· ${a.firm}</span></td><td>${a.stage}</td>
-      <td class=num>${money(a.current)}</td>
+      <td class=num>${money(a.current)}${a.balance_source==='cash_ledger'?' <span class=seed title="exact — Tradovate Cash_History ledger">✓</span>':''}</td>
       <td class=num>${a.floor==null?'<span class=calc>—</span>':money(a.floor)+" "+(a.seed?'<span class=seed>◆</span>':'<span class=calc>○</span>')}</td>
       <td class=num style="color:${a.buffer==null?'var(--dim)':(a.buffer<0?'var(--crit)':'var(--ink)')}">${a.buffer==null?"—":money(a.buffer)}</td>
       <td class=num><div class=bufcell>${a.bufpct==null?"—":a.bufpct.toFixed(1)+"%"}<span class=bufbar><i style="width:${p}%;background:${h.c}"></i></span></div></td>

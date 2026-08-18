@@ -46,3 +46,28 @@ def test_payout_detected():
     L = parse_cash_history(path)
     os.unlink(path)
     assert L["PAAPEX2700250000013"].payouts == -2000.0
+
+
+def test_load_cash_ledgers_latest_snapshot_wins(tmp_path):
+    """Two overlapping Cash_History exports for one account → the more complete (more events)
+    snapshot wins, so overlapping exports never double-count."""
+    from app.dashboard_state import _load_cash_ledgers
+    hdr = "Account,Transaction ID,Timestamp,Date,Delta,Amount,Cash Change Type,Currency,Contract\n"
+    older = tmp_path / "20260810_PAAPEX2700250000013_Cash_History.csv"
+    older.write_text(hdr +
+                     'PAAPEX2700250000013,1,x,2026-07-16,"50,000.00","50,000.00", Fund Transaction,USD,\n'
+                     'PAAPEX2700250000013,2,x,2026-08-04,"1,000.00","51,000.00", Trade Paired,USD,MGCZ6\n')
+    newer = tmp_path / "20260818_PAAPEX2700250000013_Cash_History.csv"
+    newer.write_text(hdr +
+                     'PAAPEX2700250000013,1,x,2026-07-16,"50,000.00","50,000.00", Fund Transaction,USD,\n'
+                     'PAAPEX2700250000013,2,x,2026-08-04,"1,000.00","51,000.00", Trade Paired,USD,MGCZ6\n'
+                     'PAAPEX2700250000013,3,x,2026-08-18,-3.10,"50,996.90", Commission,USD,MGCZ6\n'
+                     'PAAPEX2700250000013,4,x,2026-08-18,"4,871.48","55,868.38", Trade Paired,USD,MGCZ6\n')
+    led = _load_cash_ledgers(str(tmp_path), skip=[])
+    assert set(led) == {"PAAPEX2700250000013"}
+    assert led["PAAPEX2700250000013"].balance == 55868.38     # newer (4 events) wins over older (2)
+    assert led["PAAPEX2700250000013"].commissions == 3.10
+    # skip filter drops the account entirely
+    assert _load_cash_ledgers(str(tmp_path), skip=["013"]) == {}
+    # no files → empty (overlay is a no-op)
+    assert _load_cash_ledgers(str(tmp_path / "nope"), skip=[]) == {}

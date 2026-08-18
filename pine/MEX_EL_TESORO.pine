@@ -40,6 +40,11 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.9.0: ASSET PROFILE — one engine, per-instrument geometry. FVG band, stop and TP resolve
+//         from the symbol (Auto) or a forced GC/ES/NQ, so the same script trades correctly on
+//         any asset instead of MGC-shaped numbers everywhere. GC seeded to the live tuning:
+//         Auto on MGC is unchanged. Precedence Policy > Asset profile > Manual. Session/CVD/
+//         event filters are the next profile layer.
 // v7.8.2: default Max Stop Distance 100->130 (research). The filter and the actual stop are now
 //         deliberately decoupled: wide 130t gate admits more setups, tight 100t fixed stop keeps
 //         the loss economics. Fixed Qty default stays 8 — but note an 8ct/100t run breaches the
@@ -51,8 +56,8 @@
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.8.2-MGC-PA"
-strategy("MΞX ΞL TΞSORO · MGC · FUNDED · " + currentVersion, shorttitle="TΞSORO MGC·PA", overlay=true,
+var string currentVersion = "v7.9.0"
+strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
      calc_on_every_tick=false,
@@ -486,6 +491,47 @@ useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
 gapMinSize   = input.float(9,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
 gapMaxSize   = input.float(18, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+
+// === ASSET PROFILE — one engine, per-instrument geometry ====================================
+// Distances are in TICKS, and a tick is not the same money on every future: 100t is $100/ct on
+// MGC, $1,250/ct on ES. So the SAME numbers are the wrong trade on another asset. This block
+// resolves the tick-denominated tuning (FVG band, stop, TP) from the instrument. "Auto" reads
+// syminfo; GC is seeded to THIS script's live values, so Auto on MGC is byte-for-byte today's
+// behaviour. Precedence stays Policy > Asset profile > Manual: the MEX Policy ternaries below
+// still win where a preset is active. Session, CVD and event filters are NOT here yet — they are
+// the next profile layer; this step covers the geometry that silently misfires across assets.
+assetProfile = input.string("Auto (from symbol)", "Asset profile",
+     options=["Auto (from symbol)", "GC · Gold", "ES · S&P", "NQ · Nasdaq", "Manual (inputs above)"],
+     group=GROUP_FVG, tooltip="Auto = resolve from the chart symbol. GC/ES/NQ = force that instrument's geometry. Manual = use the FVG/stop/TP inputs above verbatim (research & backtests). GC is seeded to this script's current live tuning.")
+// [ok, gapMin, gapMax, stopMode, slLegacy, maxStop, tpMode, rMult, tpFixed]
+f_assetProfile(string _root) =>
+    if _root == "GC" or _root == "MGC"
+        [true, 9.0, 18.0, "Fixed (legacy)", 100.0, 130.0, "R-multiple", 2.5, 122.0]
+    else if _root == "ES" or _root == "MES"
+        [true, 9.0, 15.0, "Fixed (legacy)", 100.0, 100.0, "R-multiple", 1.5, 122.0]
+    else if _root == "NQ" or _root == "MNQ"
+        [true, 9.0, 12.0, "Swing structure", 28.0, 72.0, "R-multiple", 2.5, 122.0]
+    else
+        [false, gapMinSize, gapMaxSize, stopMode, slSizeLegacy, maxStopSize, tpMode, rMultIn, tpSize]
+string apMode = assetProfile
+string apRoot = apMode == "Auto (from symbol)" ? polRoot :
+     apMode == "GC · Gold" ? "GC" : apMode == "ES · S&P" ? "ES" : apMode == "NQ · Nasdaq" ? "NQ" : ""
+bool apManual = apMode == "Manual (inputs above)"
+[apOK, _apGapMin, _apGapMax, _apStopMode, _apSlLeg, _apMaxStop, _apTpMode, _apRMult, _apTpFixed] = f_assetProfile(apRoot)
+bool apActive = not apManual and apOK
+// Effective tuning: profile when it resolved, else the manual inputs. Policy still overrides these
+// downstream via its own polOn ternaries.
+float  gapMinEff   = apActive ? _apGapMin   : gapMinSize
+float  gapMaxEff   = apActive ? _apGapMax   : gapMaxSize
+string stopModeEff = apActive ? _apStopMode : stopMode
+float  slLegEff    = apActive ? _apSlLeg    : slSizeLegacy
+float  maxStopEff  = apActive ? _apMaxStop  : maxStopSize
+float  rMultEff    = apActive ? _apRMult    : rMultIn
+float  tpFixedEff  = apActive ? _apTpFixed  : tpSize
+string apLabel = apActive ? (apRoot + " profile") : apManual ? "Manual" : ("no profile · " + (apRoot == "" ? "?" : apRoot) + " · manual")
+if apActive
+    tpModeEff := _apTpMode
+    tpSizeEff := _apTpFixed
 confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 
@@ -801,7 +847,7 @@ if bar_index >= 2
     fvgBottom := fvgDirection > 0 ? high[2] : fvgDirection < 0 ? high : na
 fvgSizePrice = not na(fvgTop) ? math.abs(fvgTop - fvgBottom) : na
 fvgMid = not na(fvgTop) ? (fvgTop + fvgBottom) / 2.0 : na
-fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(gapMinSize) and fvgSizePrice <= f_distPrice(gapMaxSize) and fvgSizePrice > 0)
+fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(gapMinEff) and fvgSizePrice <= f_distPrice(gapMaxEff) and fvgSizePrice > 0)
 bullCandle = fvgDirection == 1 and fvgPasses
 bearCandle = fvgDirection == -1 and fvgPasses
 
@@ -1156,11 +1202,11 @@ bool isLimitMode = entryMode == "Limit @ 50% FVG"
 float sigEntryPx = isLimitMode ? sigGapMid : close
 float sigStopPx = na
 if longSignal
-    sigStopPx := stopMode == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slSizeLegacy)
+    sigStopPx := stopModeEff == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slLegEff)
 if shortSignal
-    sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slSizeLegacy)
+    sigStopPx := stopModeEff == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slLegEff)
 float sigStopDist = math.abs(sigEntryPx - sigStopPx)
-bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopSize))
+bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopEff))
 float sigQty = f_calcQty(sigStopDist)
 bool qtyOk = sigQty >= (allowFractionalQty ? 1e-4 : 1.0)
 
@@ -1180,7 +1226,7 @@ float sigTpPx = na
 if longSignal or shortSignal
     int _d = longSignal ? 1 : -1
     sigTpPx := tpModeEff == "Swing structure" ? (_d == 1 ? lastPivHigh : lastPivLow) :
-         tpModeEff == "R-multiple" ? sigEntryPx + _d * rMultIn * sigStopDist :
+         tpModeEff == "R-multiple" ? sigEntryPx + _d * rMultEff * sigStopDist :
          sigEntryPx + _d * f_tpFixDist(sigQtyEff)
 bool tpValid = not na(sigTpPx) and (longSignal ? sigTpPx > sigEntryPx + syminfo.mintick : sigTpPx < sigEntryPx - syminfo.mintick)
 
@@ -1232,7 +1278,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=0" + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=off" + ";deriskPA=off" + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";asset=" + apLabel + ";fvg=" + str.tostring(gapMinEff, "#") + "-" + str.tostring(gapMaxEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopModeEff + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopEff, "#") + ";tp=" + tpModeEff + (tpModeEff == "Fixed (units)" ? "(" + str.tostring(tpSizeEff, "#") + ")" : "") + ";R=" + str.tostring(rMultEff, "#.#") + ";goalTp=0" + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=off" + ";deriskPA=off" + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1424,7 +1470,7 @@ if newLong or newShort
     curStop  := pendStop
     float _riskFill = math.abs(entryAvg - pendStop)
     curLimit := tpModeEff == "Swing structure" ? t_tpPx :
-         tpModeEff == "R-multiple" ? (newLong ? entryAvg + rMultIn * _riskFill : entryAvg - rMultIn * _riskFill) :
+         tpModeEff == "R-multiple" ? (newLong ? entryAvg + rMultEff * _riskFill : entryAvg - rMultEff * _riskFill) :
          (newLong ? entryAvg + t_tpD : entryAvg - t_tpD)
     if newLong
         strategy.exit("XL", from_entry="Long", stop=curStop, limit=curLimit, alert_message=f_orderMsg("EXIT", 1, entryAvg, curStop, curLimit, math.abs(posSize)))
@@ -1720,8 +1766,8 @@ if showDashboard and barstate.islast
         table.cell(dash, 1, 0, jrnlAcct, text_color=color.new(C_SAND, 55), bgcolor=color.new(C_DEEP, 6), text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 1, "Regime", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 1, phase, text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
-        table.cell(dash, 0, 2, "FVG band", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, 2, str.tostring(gapMinSize, "#") + "–" + str.tostring(gapMaxSize, "#"), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
+        table.cell(dash, 0, 2, "FVG · " + apLabel, text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, 2, str.tostring(gapMinEff, "#") + "–" + str.tostring(gapMaxEff, "#"), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 3, "CVD streak", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 3, useCVDFilter ? str.tostring(cvdTrendCount) : "uit", text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 4, "VWAP", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)

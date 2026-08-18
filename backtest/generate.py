@@ -46,9 +46,14 @@ def run_cfg(cfg, df_tf):
     return kpis(Engine(cfg, df_tf, ind, research_mode=True).run())
 
 
-# The coarse in-sample frame, shared with worker processes via fork inheritance
-# (set in main() BEFORE the pool starts) — so it is never pickled per task.
+# The coarse in-sample frame, handed to each worker once via the pool
+# initializer (robust across fork/spawn start methods — not fork-inheritance).
 _G_DF = None
+
+
+def _pool_init(df):
+    global _G_DF
+    _G_DF = df
 
 
 def _screen_cfg(cfg):
@@ -149,33 +154,46 @@ def main():
             errors += 1
 
     # Pass 2 (the expensive part): run each unique candidate through the engine,
-    # spread across worker processes. df_tf is shared via fork (module global),
-    # so only the small Config is sent per task.
-    global _G_DF
-    _G_DF = df_tf
+    # spread across worker processes. Each worker gets the coarse frame once via
+    # the pool initializer (robust across fork/spawn), so only the small Config
+    # is sent per task.
     jobs = args.jobs if args.jobs and args.jobs > 0 else (os.cpu_count() or 1)
-    survivors, t0 = [], time.time()
+    survivors, t0, first_err = [], time.time(), None
     print(f"  screening {len(uniq)} distinct candidates on {jobs} core(s) "
           f"({dups} inert dups collapsed) ...")
-    with ProcessPoolExecutor(max_workers=jobs) as ex:
-        futs = {ex.submit(_screen_cfg, cfg): i for i, (spec, cfg) in enumerate(uniq)}
-        for done, fut in enumerate(as_completed(futs), 1):
-            i = futs[fut]
-            spec, cfg = uniq[i]
-            try:
-                k = fut.result()
-            except Exception:
-                errors += 1
-                continue
-            if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
-                ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
-                sc = score_strategy(describe_config(cfg), regime=spec.get("target_regime"),
-                                    setup_class=spec.get("setup_class"))
-                survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
-            if done % 25 == 0:
-                print(f"    {done}/{len(uniq)}  survivors={len(survivors)}  "
-                      f"errors={errors}  ({time.time()-t0:.0f}s)")
 
+    def _consume(k, spec, cfg):
+        if (k.get("trades") or 0) >= args.min_trades and (k.get("profit_factor") or 0) >= args.min_pf:
+            ignored = [g for g in spec["groups"] if g not in WIRED_GROUPS]
+            sc = score_strategy(describe_config(cfg), regime=spec.get("target_regime"),
+                                setup_class=spec.get("setup_class"))
+            survivors.append({"spec": spec, "kpis": k, "ignored": ignored, "score": sc})
+
+    if jobs <= 1:                       # serial path (debug / single core)
+        _pool_init(df_tf)
+        for done, (spec, cfg) in enumerate(uniq, 1):
+            try:
+                _consume(_screen_cfg(cfg), spec, cfg)
+            except Exception as e:
+                errors += 1
+                first_err = first_err or repr(e)
+    else:
+        with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
+                                 initargs=(df_tf,)) as ex:
+            futs = {ex.submit(_screen_cfg, cfg): i for i, (spec, cfg) in enumerate(uniq)}
+            for done, fut in enumerate(as_completed(futs), 1):
+                spec, cfg = uniq[futs[fut]]
+                try:
+                    _consume(fut.result(), spec, cfg)
+                except Exception as e:
+                    errors += 1
+                    first_err = first_err or repr(e)
+                if done % 25 == 0:
+                    print(f"    {done}/{len(uniq)}  survivors={len(survivors)}  "
+                          f"errors={errors}  ({time.time()-t0:.0f}s)")
+
+    if errors:
+        print(f"  note: {errors} candidate(s) errored; first: {first_err}")
     seen = uniq   # for the DONE line's distinct-count
     survivors.sort(key=lambda s: s["kpis"].get("profit_factor", 0), reverse=True)
     print(f"\n  DONE: {len(survivors)} survivors of {len(seen)} DISTINCT effective configs "

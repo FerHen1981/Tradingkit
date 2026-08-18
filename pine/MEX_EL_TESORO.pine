@@ -40,10 +40,13 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.8.1: MEX Policy presets renamed to the registry's per-size firm keys (PA013/PA018 are
+//         Legacy, PA016 EOD) — they named pre-rename keys, so every firm lookup fell back to
+//         defaults: 0 required trading days and a 50% ceiling on a 30% account.
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.8.0-MGC-PA"
+var string currentVersion = "v7.8.1-MGC-PA"
 strategy("MΞX ΞL TΞSORO · MGC · FUNDED · " + currentVersion, shorttitle="TΞSORO MGC·PA", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -400,10 +403,10 @@ f_firmDays(string _p) =>
 string polPreset = input.string("PA013 · MGC q3 · cap $750", "MEX preset (Fleet Matrix v1.1)", options=["PA013 · MGC q3 · cap $750", "PA016 · MGC q3 · cap $700", "PA019 · MGC q3 · cap $650", "PA018 · RUNNER MGC q5 · cap $1500", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Kies het account, niet de losse waarden. Met een preset actief NEEMT DEZE OVER: Fixed Qty, Max Stop Distance, de harde dagcap, Account Phase en het Firm program — en de Day-trail wordt uitgezet. Die knoppen verderop doen dan niets meer; het dashboard toont onderaan welke bron stuurt. Manual = alle inputs gelden weer, voor research en backtests.")
 f_pol(string _p) =>
     switch _p
-        "PA013 · MGC q3 · cap $750" => ["MGC", 3.0, 130.0, 750.0, "Apex PA", true, "apex_intraday_pa"]
-        "PA016 · MGC q3 · cap $700" => ["MGC", 3.0, 130.0, 700.0, "Apex PA", true, "apex_intraday_pa"]
-        "PA019 · MGC q3 · cap $650" => ["MGC", 3.0, 130.0, 650.0, "Apex PA", true, "apex_intraday_pa"]
-        "PA018 · RUNNER MGC q5 · cap $1500" => ["MGC", 5.0, 130.0, 1500.0, "Apex PA", true, "apex_intraday_pa"]
+        "PA013 · MGC q3 · cap $750" => ["MGC", 3.0, 130.0, 750.0, "Apex PA", true, "apex_50k_legacy_pa"]
+        "PA016 · MGC q3 · cap $700" => ["MGC", 3.0, 130.0, 700.0, "Apex PA", true, "apex_50k_eod_pa"]
+        "PA019 · MGC q3 · cap $650" => ["MGC", 3.0, 130.0, 650.0, "Apex PA", true, "apex_50k_intraday_pa"]
+        "PA018 · RUNNER MGC q5 · cap $1500" => ["MGC", 5.0, 130.0, 1500.0, "Apex PA", true, "apex_50k_legacy_pa"]
         => ["ANY", 0.0, 0.0, na, "", false, ""]   // Manual: the dropdown in group 1 decides
 [polFam, polQty, polMaxStopT, polCapUSD, polPhase, polLive, polFirmKey] = f_pol(polPreset)
 bool polOn = polPreset != "Manual (inputs hieronder)"
@@ -1721,8 +1724,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 0, 5, "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 5, _gateOpen ? "OPEN" : "CLOSED", text_color=_gateOpen ? C_GOLD : negTxt, text_size=txtSize, text_halign=text.align_right)
         string _srcTxt = polOn ? polPreset : "Manual"
-        string _srcVal = polOn ?
-             "q" + str.tostring(polQty, "#") + " · stop " + str.tostring(polMaxStopT, "#") + "t · cap $" + str.tostring(polCapUSD, "#") :
+        string _srcVal = polOn ? firmKeyEff :
              "q" + str.tostring(contractSize, "#") + " · stop " + str.tostring(maxStopSize, "#") + "t · " + dayExitMode
         table.cell(dash, 0, 7, "Sturing", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 7, _srcTxt + " · " + _srcVal, text_color=polOn ? C_GOLD : txtColor, text_size=txtSize, text_halign=text.align_right)
@@ -1765,7 +1767,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 2, 6, "",
              text_color=txtColor, text_size=txtSize)
         table.cell(dash, 0, 7, "GATE", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-        table.cell(dash, 1, 7, gateLongOpen and gateShortOpen ? "🟡 BOTH open" : gateLongOpen ? "🟢 LONG open" : gateShortOpen ? "🔴 SHORT open" : "⚪ Closed", text_color=txtColor, text_size=txtSize)
+        table.cell(dash, 1, 7, gateLongOpen and gateShortOpen ? "🟡 LONG+SHORT allowed" : gateLongOpen ? "🟢 LONG allowed" : gateShortOpen ? "🔴 SHORT allowed" : "⚪ none allowed", text_color=txtColor, text_size=txtSize)
         table.cell(dash, 2, 7, str.length(persistBlk) > 0 ? "⛔ " + str.substring(persistBlk, 0, str.length(persistBlk) - 2) : "No blockers", text_color=str.length(persistBlk) > 0 ? vNegTxt : txtColor, text_size=txtSize)
         table.cell(dash, 3, 7, "Last blocked: " + lastBlockedInfo, text_color=txtColor, text_size=txtSize)
         table.cell(dash, 3, 6, not evalTrack ? "Eval —" :
@@ -1811,7 +1813,7 @@ if showDashboard and barstate.islast
         string cReg = "Regime —\n" + cEvalLn
         table.cell(dash, 0, 5, "REG/EVAL", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
         table.cell(dash, 1, 5, cReg, text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
-        string cGate = (gateLongOpen and gateShortOpen ? "🟡 BOTH open" : gateLongOpen ? "🟢 LONG open" : gateShortOpen ? "🔴 SHORT open" : "⚪ Closed") +
+        string cGate = (gateLongOpen and gateShortOpen ? "🟡 LONG+SHORT allowed" : gateLongOpen ? "🟢 LONG allowed" : gateShortOpen ? "🔴 SHORT allowed" : "⚪ none allowed") +
              "\n" + (str.length(persistBlk) > 0 ? "⛔ " + str.substring(persistBlk, 0, str.length(persistBlk) - 2) : "No blockers") +
              "\nLast: " + lastBlockedInfo
         table.cell(dash, 0, 6, "GATE", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)

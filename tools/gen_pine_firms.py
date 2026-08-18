@@ -18,6 +18,7 @@ The generated library exports:
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -153,6 +154,16 @@ def patch_strategies(progs):
         lines[a:end + 1] = body
         open(path, "w", encoding="utf-8").write("\n".join(lines))
         print(f"  patched {name}  default={default}")
+        # A firm key that matches no branch does not fail — the lookups silently return their
+        # defaults, which on f_firmDays is 0/0: the payout day gate opens for free. That is how
+        # a MEX Policy preset naming a pre-rename key went unnoticed on a live chart. Catch it.
+        known = {p.key for p in keep}
+        used = set(re.findall(r'true,\s*"([a-z0-9_]+)"\]', "\n".join(lines)))
+        orphans = sorted(used - known)
+        if orphans:
+            raise SystemExit(f"{name}: MEX Policy preset names a firm key that is not in the "
+                             f"registry: {', '.join(orphans)} — the rules would fall back to "
+                             f"defaults. Fix the f_pol table or data/propfirms.json.")
     return len(keep)
 
 

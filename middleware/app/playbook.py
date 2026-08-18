@@ -70,6 +70,42 @@ def resolve_firm(firm: str | None) -> dict:
     return FIRM_RULES.get((firm or "").strip(), _ASSUMED_RULES)
 
 
+def resolve_account_rules(account: dict) -> dict:
+    """The account's rules, program-first. Start from the firm-name fallback, then
+    overlay the exact firm-program from data/propfirms.json (THE single source of
+    truth) resolved via the Notion 'Account Type → Firm Program' key. Only fields
+    the program actually specifies override the fallback; the rest keep the default."""
+    base = dict(resolve_firm(account.get("firm")))
+    try:
+        from . import firm_rules
+        prog = firm_rules.rules_for_account(account)
+    except Exception:
+        prog = None
+    if not prog:
+        return base
+    base["program"] = prog["key"]
+    base["program_name"] = prog.get("display_name")
+    base["drawdown_type"] = prog.get("drawdown_type")
+    base["max_position"] = prog.get("max_position")
+    base["program_drawdown"] = prog.get("drawdown")
+    base["program_target"] = prog.get("profit_target")
+    base["max_daily_loss"] = prog.get("max_daily_loss")
+    base["safety_net_payouts"] = prog.get("safety_net_payouts")
+    if prog.get("consistency") is not None:
+        base["consistency"] = prog["consistency"]
+    if prog.get("min_days") is not None:
+        base["min_days"] = prog["min_days"]
+    if prog.get("trailing_locks_at") is not None:
+        base["lock_at"] = prog["trailing_locks_at"]
+    if prog.get("min_payout") is not None:
+        base["min_payout"] = prog["min_payout"]
+    if prog.get("payout_ladder"):
+        base["ladder"] = prog["payout_ladder"]
+    base["verified"] = bool(prog.get("verified"))
+    base["note"] = "" if prog.get("verified") else f"program {prog['key']} unverified — VERIFY"
+    return base
+
+
 def base_asset(sym: str | None) -> str | None:
     """Normalise a traded symbol to its base future: MGC1!/MGC→GC, MES→ES, ES→ES."""
     if not sym:
@@ -135,12 +171,17 @@ def contract_label(size: float, instrument: str | None) -> str:
 
 
 def account_track(account: dict) -> str:
-    """trailing (Apex-style 7 funded) · static (legacy 250k/300k, EOD firms) · eval."""
-    if account.get("stage") != "Funded":
+    """trailing (Apex/MFFU-style, DD follows equity) · static (fixed max-loss: FTMO /
+    legacy 250k) · eval. Prefers the firm-program drawdown_type when known; else falls
+    back to stage + size + the Drawdown Rule text."""
+    if account.get("stage") not in ("Funded", "funded", "instant"):
         return "eval"
+    ddt = (account.get("drawdown_type") or "").lower()
+    if ddt:                                              # program is authoritative
+        return "static" if ddt == "static" else "trailing"
     size = account.get("size") or 0
     dd = (account.get("dd_rule") or "").upper()
-    if size >= 250_000 or "EOD" in dd or "STATIC" in dd:
+    if size >= 250_000 or "STATIC" in dd:
         return "static"
     return "trailing"
 
@@ -232,16 +273,16 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     """Per-account ROUTE to payout: read the account's own history against its firm rules and
     decide the best next move. Not a preset lookup — a grounded, decisive plan."""
     p = params or PlaybookParams()
-    funded = account.get("stage") == "Funded"
     size_usd = account.get("size")
     firm = account.get("firm")
-    rules = resolve_firm(firm)
+    rules = resolve_account_rules(account)                  # program-first, single-source
     limit = rules["consistency"] or 0.30
-    min_days = rules["min_days"]
+    min_days = rules["min_days"] or MIN_TRADING_DAYS
     lock_at = rules.get("lock_at", 2_600)
     payouts_taken = int(account.get("payouts_taken") or 0)
     cur_instrument = (instrument or "").upper() or None
-    track = account_track(account)
+    track = account_track({**account, "drawdown_type": rules.get("drawdown_type")})
+    funded = track != "eval"                                # trailing/static = a live funded account
     rec = recommend_setup(account, track, cur_instrument, edge_stats)
     inst = rec["instrument"]
 
@@ -266,7 +307,7 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     total_cap = round(pay["total_cap"]) if pay.get("total_cap") else sum(_caps)
     total_paid = round(account.get("payout_total") or 0)
     safety_bal = pay.get("safety_net_balance")
-    dd = dd_amount(account, size_usd)
+    dd = rules.get("program_drawdown") or dd_amount(account, size_usd)
     safety = round(safety_bal - starting) if (safety_bal is not None and starting is not None) else round(dd + 100)
     above_safety = round(pay.get("above_safety")) if pay.get("above_safety") is not None \
         else round(max(0.0, profit - safety))
@@ -277,7 +318,10 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     if funded:
         target, target_label = float(safety + cap), f"rung {payouts_taken + 1} · ${cap:,.0f}"   # profit for FULL cap
     else:
-        target, target_label = float(rules["eval_target"].get(int(size_usd or 0), 3_000)), "pass target"
+        et = rules.get("program_target")
+        if et is None:
+            et = rules["eval_target"].get(int(size_usd or 0), 3_000)
+        target, target_label = float(et), "pass target"
     to_full = round(max(0.0, target - profit))
     leaving = round(max(0.0, cap - withdrawable_now))
     # TWO distinct daily numbers, deliberately kept apart:
@@ -361,6 +405,9 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     # eval is a pass-hunter: keep the AGGRESSIVE doctrine size (5c), never the conservative
     # risk-optimal edge size. Funded milking/survival uses the edge size.
     set_size = float(contracts) if track == "eval" else (es["size"] if es else float(contracts))
+    max_pos = rules.get("max_position")                    # program's contract ceiling (from the registry)
+    if max_pos and set_size > max_pos:
+        set_size = float(max_pos)
     soft_cap = round(cons_cap * p.cons_margin)
 
     # consistency is a RATIO that averages out: best day ≤ 30% of TOTAL WINNING days; the ceiling
@@ -403,7 +450,9 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
 
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],
-        "target": round(target), "target_label": target_label, "route": route,
+        "program": rules.get("program"), "program_name": rules.get("program_name"),
+        "drawdown_type": rules.get("drawdown_type"), "max_position": rules.get("max_position"),
+        "min_days": min_days, "target": round(target), "target_label": target_label, "route": route,
         "cur_instrument": cur_instrument, "rec_instrument": inst, "rec_base": rec.get("base"),
         "rec_strategy": rec["strategy"], "rec_why": rec["why"],
         "switch": not rec["keep"] and cur_instrument is not None, "off_edge": bool(rec.get("off_edge")),

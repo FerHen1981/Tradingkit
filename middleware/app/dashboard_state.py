@@ -175,8 +175,37 @@ def _framework_strategies(client, token: str) -> dict:
     return fmap
 
 
+_ACCOUNT_TYPES_DB = os.environ.get("NOTION_ACCOUNT_TYPES_DB", "1ddb61ea444d8145b343e90568cc4d07")
+
+
+def _account_types(client, token: str) -> dict:
+    """Map every Account Type page → its {firm_program family, stage} from the LifeOS
+    'Account Types' registry (the per-program rule keys that index data/propfirms.json)."""
+    tmap: dict = {}
+    cursor = None
+    while True:
+        body = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        r = client.post(f"{_API}/databases/{_ACCOUNT_TYPES_DB}/query", headers=_headers(token), json=body)
+        r.raise_for_status()
+        data = r.json()
+        for page in data.get("results", []):
+            props = page.get("properties", {})
+            fp = _sel(props.get("Firm Program"))
+            stg = _sel(props.get("Stage"))
+            if fp or stg:
+                tmap[page["id"]] = {"firm_program": fp, "stage": stg}
+        if not data.get("has_more"):
+            break
+        cursor = data.get("next_cursor")
+    return tmap
+
+
 def _load_accounts(token: str) -> list[dict]:
     import httpx
+
+    from . import firm_rules
     out: list[dict] = []
     with httpx.Client(timeout=15.0) as client:
         try:
@@ -184,6 +213,11 @@ def _load_accounts(token: str) -> list[dict]:
         except Exception as exc:
             log.warning("framework map load failed: %r", exc)
             fmap = {}
+        try:
+            tmap = _account_types(client, token)             # Account Type page → firm-program + stage
+        except Exception as exc:
+            log.warning("account-types map load failed: %r", exc)
+            tmap = {}
         cursor = None
         while True:
             body = {"page_size": 100}
@@ -204,13 +238,23 @@ def _load_accounts(token: str) -> list[dict]:
                 buffer = _num(p.get("DD Buffer $"))
                 seed = _num(p.get("DD Floor $"))
                 health = _sel(p.get("Health")) or "—"
+                size_val = _num(p.get("Account Size"))
+                # Account Type relation → the firm-program family + stage (the single-source rules
+                # in data/propfirms.json). Stage from the type wins; else the account-name prefix.
+                at = next((tmap[i] for i in _rel_ids(p.get("Account Type")) if i in tmap), None)
+                at_family = at["firm_program"] if at else None
+                at_stage = at["stage"] if at else None                # "funded" / "eval" / "instant"
+                firm_program = firm_rules.resolve_key(at_family, size_val) if at_family else None
+                stage = (("Funded" if at_stage in ("funded", "instant") else "Eval")
+                         if at_stage else _phase(full))
                 out.append({
                     "id": full[-3:] or full, "full": full,
                     "firm": (_sel(p.get("Prop Firm")) or "—"),
-                    "stage": _phase(full),
+                    "stage": stage,
+                    "firm_program": firm_program, "firm_program_family": at_family,
                     "current": round(current, 2),
                     "starting": round(starting, 2),
-                    "size": _num(p.get("Account Size")),
+                    "size": size_val,
                     "buffer": None if buffer is None else round(buffer, 2),
                     "floor": None if buffer is None else round(current - buffer, 2),
                     "bufpct": _num(p.get("DD Buffer %")),
@@ -596,13 +640,16 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
 
     # payout & rules: from each account's ALL-TIME daily realized P&L (window-independent)
     import dataclasses
+    from . import firm_rules
     from .payout_rules import evaluate as _eval_payout
     daily: dict = defaultdict(lambda: defaultdict(float))
     for t in trades:
         daily[t["acct"]][t["close"]] = round(daily[t["acct"]][t["close"]] + t["net"], 2)
     for a in accounts:
+        prog = firm_rules.rules(a.get("firm_program"))     # single-source rules → L5 matches L10
         p = _eval_payout(a.get("size"), a.get("starting"), a.get("current"),
-                         a["stage"], dict(daily.get(a["full"], {})), int(a.get("payouts_taken") or 0))
+                         a["stage"], dict(daily.get(a["full"], {})), int(a.get("payouts_taken") or 0),
+                         program=prog)
         a["payout"] = dataclasses.asdict(p) if p else None
     _funded_p = [a["payout"] for a in accounts if a.get("payout") and a["payout"]["stage"] == "Funded"]
 

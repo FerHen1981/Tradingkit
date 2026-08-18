@@ -66,12 +66,22 @@ class Payout:
     rules: list = field(default_factory=list)
 
 
-def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int = 0) -> Payout | None:
+def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int = 0,
+             program: dict | None = None) -> Payout | None:
     """daily_pnl: {date: realized_net} for this account. stage: 'Funded' | 'Eval'.
-    payouts_taken: rungs already banked → selects the ladder cap on the withdrawable."""
+    payouts_taken: rungs already banked → selects the ladder cap on the withdrawable.
+    program: the account's firm-program rules (from data/propfirms.json, THE single source
+    of truth) — supplies min_days / consistency / drawdown / target / ladder per program;
+    each field falls back to the Apex-50k default when the program doesn't set it."""
     if size is None or starting is None or current is None:
         return None
     size = int(size)
+    prog = program or {}
+    min_days = int(prog.get("min_days") or MIN_TRADING_DAYS)
+    cons_limit = prog["consistency"] if prog.get("consistency") is not None else CONSISTENCY_LIMIT
+    dd_amt = prog.get("drawdown") or APEX_DD.get(size, 0)
+    safety = (dd_amt + 100) if dd_amt else SAFETY_NET.get(size, 0)
+    caps = prog.get("payout_ladder") or ladder_caps(size)
     profit = round(current - starting, 2)
     funded = str(stage).lower().startswith("fund")
     days = [d for d, v in daily_pnl.items() if v >= MIN_DAY_PROFIT]
@@ -83,38 +93,37 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
 
     rules: list[Rule] = []
     if not funded:
-        target = APEX_TARGET.get(size)
+        target = prog["profit_target"] if prog.get("profit_target") is not None else APEX_TARGET.get(size)
         passed = target is not None and profit >= target
         rules.append(Rule("Profit target", None if target is None else passed,
                            f"${profit:,.0f} / ${target:,.0f}" if target else f"${profit:,.0f}"))
-        rules.append(Rule("Not breached", current > starting - APEX_DD.get(size, 0),
-                          "above the floor" if current > starting - APEX_DD.get(size, 0) else "breached"))
+        rules.append(Rule("Not breached", current > starting - dd_amt,
+                          "above the floor" if current > starting - dd_amt else "breached"))
         return Payout("Eval", profit, target, trading_days,
                       None if consistency is None else round(100 * consistency, 1),
                       None, 0.0, passed, rules=rules)   # eval = not a PA → never withdrawable
 
     # funded payout checklist
-    safety = SAFETY_NET.get(size, 0)
     safety_bal = starting + safety
     above_safety = round(max(0.0, current - safety_bal), 2)     # the potential (gated by rules)
-    days_to_go = max(0, MIN_TRADING_DAYS - trading_days)
+    days_to_go = max(0, min_days - trading_days)
     safety_gap = round(max(0.0, safety_bal - current), 2)
-    meets_days = trading_days >= MIN_TRADING_DAYS
-    meets_cons = consistency is None or consistency <= CONSISTENCY_LIMIT
+    meets_days = trading_days >= min_days
+    meets_cons = consistency is None or consistency <= cons_limit
     meets_safety = current >= safety_bal
+    cons_txt = f"{cons_limit * 100:.0f}%"
 
     rules.append(Rule("Trading days", meets_days,
-                      f"{trading_days}/{MIN_TRADING_DAYS} met"
-                      if meets_days else f"{days_to_go} more to go ({trading_days}/{MIN_TRADING_DAYS})"))
+                      f"{trading_days}/{min_days} met"
+                      if meets_days else f"{days_to_go} more to go ({trading_days}/{min_days})"))
     rules.append(Rule("Consistency", meets_cons,
                       "n/a" if consistency is None else
-                      (f"best day {100*consistency:.0f}% (under 30%)" if meets_cons
-                       else f"best day {100*consistency:.0f}% — spread more (max 30%)")))
+                      (f"best day {100*consistency:.0f}% (under {cons_txt})" if meets_cons
+                       else f"best day {100*consistency:.0f}% — spread more (max {cons_txt})")))
     rules.append(Rule("Safety net", meets_safety,
                       f"balance ${current:,.0f} above ${safety_bal:,.0f}"
                       if meets_safety else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}"))
     # ladder: you can only withdraw up to the current rung's cap per payout.
-    caps = ladder_caps(size)
     rung = max(0, min(int(payouts_taken or 0), len(caps) - 1))
     cap = float(caps[rung])
     # PA account AND every rule met → withdrawable (capped at the rung); otherwise no pay day (0).

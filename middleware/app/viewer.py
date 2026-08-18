@@ -580,7 +580,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=playbook hidden>
     <h2 class=sec>Payout Playbook</h2>
-    <p class=sec-note>Each account's route to the MAXIMUM payout this step, read from its OWN history against the firm rules. Withdrawable = min(profit − safety-net, rung cap); to pull the full cap you need profit = safety + cap, spread over 8 days (reset each cycle) so consistency (best day ≤ 30% of total) allows it. Funded runs only the edge on the real instrument (MGC · El Tesoro / MES · El Rey; NQ eval-only): <b style="color:var(--warn)">survival</b> 1 ct below the safety-net → <b style="color:var(--ok)">milking</b> 2 ct building to the full cap → <b style="color:var(--gold)">payout</b> pull the full cap, carry the excess, reset to the next rung; legacy <b style="color:var(--aqua)">compound</b>. The Route says what still has to happen and warns when banking early leaves money on the table. <span class=calc>Apex 50k: safety $2,600 · ladder $1.5k→$3k · total $13k — verify. Rung = "Payouts (0-6)".</span></p>
+    <p class=sec-note>Each account's route to the MAXIMUM payout this step, read from its OWN history against the firm rules. Withdrawable = min(profit − safety-net, rung cap); to pull the full cap you need profit = safety + cap, spread over the program's min trading days (reset each cycle) so its consistency ceiling (best day ≤ the program %) allows it. Funded runs only the edge on the real instrument (MGC · El Tesoro / MES · El Rey; NQ eval-only): <b style="color:var(--warn)">survival</b> 1 ct below the safety-net → <b style="color:var(--ok)">milking</b> 2 ct building to the full cap → <b style="color:var(--gold)">payout</b> pull the full cap, carry the excess, reset to the next rung; legacy <b style="color:var(--aqua)">compound</b>. The Route says what still has to happen and warns when banking early leaves money on the table. <span class=calc>Rules per account come from its <b>Account Type → Firm Program</b> in <b>data/propfirms.json</b> (the single source of truth: consistency, min-days, drawdown, target, ladder, max size). ⚠ = unverified program. Rung = "Payouts (0-6)".</span></p>
     <div class=tablewrap><table id=pbTable style="min-width:1040px"><thead><tr>
       <th data-k=id data-t=s>Account</th><th>Run</th><th data-k=playbook.phase data-t=s>Phase</th>
       <th style="text-align:left" data-k=playbook.profit data-t=n>Where it stands</th>
@@ -808,11 +808,11 @@ function renderPlaybook(rows){
       +(p.buffer!=null?`<br><span style="color:${p.buffer<1000?'var(--crit)':'var(--muted)'}">buf ${money0(p.buffer)}</span>`:'')
       +(p.consistency_pct!=null?` <span style="color:${consWarn?'var(--warn)':'var(--muted)'}">· ${p.consistency_pct}% top day</span>`:'')
       +(p.withdrawable_now!=null?`<br><span class=calc>pull ${money0(p.withdrawable_now)}/${money0(p.cap)}${p.total_cap?' · paid '+money0(p.total_paid)+'/'+money0(p.total_cap):''}</span>`:'')
-      +((p.best_day||p.cons_cap)?`<br><span style="color:${topWarn?'var(--crit)':'var(--muted)'}">top day ${money0(p.best_day)} · 30% max ${p.cons_cap?money0(p.cons_cap):'—'}</span>`:'');
+      +((p.best_day||p.cons_cap)?`<br><span style="color:${topWarn?'var(--crit)':'var(--muted)'}">top day ${money0(p.best_day)} · ${Math.round((p.consistency_limit||0.3)*100)}% max ${p.cons_cap?money0(p.cons_cap):'—'}</span>`:'');
     const flag=p.note?`<div style="color:var(--warn);font-size:11px;margin-bottom:3px">⚑ ${p.note}</div>`:'';
     const rcol=(p.quality==='payout'||p.phase==='maxed')?'var(--gold)':'var(--ink)';
     return `<tr>
-      <td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span></td>
+      <td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span>${p.program?`<br><span class=calc title="rules from data/propfirms.json — the single source of truth${p.firm_verified===false?' (unverified — VERIFY)':''}">${p.program}${p.firm_verified===false?' ⚠':''}</span>`:'<br><span class=calc style="color:var(--warn)">no Account Type set</span>'}</td>
       <td style="text-align:left">${run}</td>
       <td>${phase}</td>
       <td style="text-align:left;font-size:12px;font-family:var(--mono)">${st}</td>

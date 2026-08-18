@@ -19,9 +19,19 @@ regime knobs) recompute indicators per value. Values run across worker processes
 """
 from __future__ import annotations
 
+import os
+
+# Cap BLAS/OpenMP thread pools BEFORE numpy/pandas load (also set by the Lab
+# job-runner). We parallelize with worker processes, so BLAS threads only
+# oversubscribe the cores — and BLAS pools are fork-unsafe: forking a worker
+# pool after heavy numpy work can inherit a locked mutex and deadlock the
+# children (auto-tune parking at a lever boundary).
+for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
+
 import argparse
 import json
-import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -200,6 +210,11 @@ def autotune(df, base_cfg, jobs: int = 0, max_levers: int = 4) -> dict:
         lv = f["lever"]
         param, values = lv["param"], lv["values"]
         engine_only = param in ENGINE_ONLY
+        # announce the lever BEFORE any pool/compute work, so the UI caption
+        # changes immediately — a stall after this line points at the workers,
+        # a caption that never changes points at the parent.
+        print(f"PROGRESS {12 + int(34 * j / L)} 46 auto-tune · starting {param} "
+              f"sweep ({len(values)} values)", flush=True)
         if engine_only and shared_arrays is None:
             from .engine import extract
             shared_arrays = extract(df, ind)

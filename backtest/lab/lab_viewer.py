@@ -223,7 +223,16 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
             _JOBS[job_id].update(**k)
     upd(status="running")
     try:
-        p = subprocess.Popen(cmd, cwd=str(_repo_root()), env=dict(os.environ),
+        # Cap BLAS/OpenMP thread pools in every job: the backtest tools parallelize
+        # with worker PROCESSES, so BLAS threads only oversubscribe the 2 cores —
+        # and BLAS thread pools are fork-unsafe: a pool created AFTER heavy numpy
+        # work can inherit a locked mutex and deadlock its children (seen as
+        # auto-tune parking at a lever boundary on the VPS but not elsewhere).
+        job_env = dict(os.environ)
+        for v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+                  "NUMEXPR_NUM_THREADS"):
+            job_env.setdefault(v, "1")
+        p = subprocess.Popen(cmd, cwd=str(_repo_root()), env=job_env,
                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True, bufsize=1)
         log, run_ids, progress = [], [], None

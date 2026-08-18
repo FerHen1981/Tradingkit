@@ -244,8 +244,8 @@ def _run_job(job_id: str, cmd: list[str]) -> None:
         upd(status="error", error=str(e))
 
 
-def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
-    from ..config import PRESETS, TIMEFRAMES
+def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False) -> tuple[dict, int]:
+    from ..config import PRESETS, TIMEFRAMES, micro_twin
     ds = {d["name"]: d for d in _datasets()}
     if dataset not in ds:
         return {"error": f"unknown dataset {dataset!r}"}, 400
@@ -271,11 +271,23 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str) -> tuple[dict, int]:
         cmd += ["--spec", f"backtest/specs/{f.name}"]
     cmd += {"research": ["--research"], "funnel": ["--funnel"], "funded": ["--funded"]}[lens]
 
+    # Optional micro-twin comparison: run the full contract AND its micro (GC+MGC,
+    # ES+MES, …) side by side — same price data, different contract size — so both
+    # land in Runs next to each other. Chained in one job so the log shows both.
+    sym = ds[dataset].get("symbol") or ""
+    twin = micro_twin(sym) if (micro and sym) else None
+    if twin:
+        import shlex
+        pair = [cmd + ["--symbol", sym], cmd + ["--symbol", twin]]
+        run_cmd = ["sh", "-c", " ; ".join(" ".join(shlex.quote(x) for x in c) for c in pair)]
+        label = " ".join(cmd[2:]) + f"  [{sym}+{twin}]"
+    else:
+        run_cmd, label = cmd, " ".join(cmd[2:])
+
     job_id = uuid.uuid4().hex[:12]
     with _JOBS_LOCK:
-        _JOBS[job_id] = {"status": "queued", "log": [], "run_ids": [],
-                         "cmd": " ".join(cmd[2:])}
-    threading.Thread(target=_run_job, args=(job_id, cmd), daemon=True).start()
+        _JOBS[job_id] = {"status": "queued", "log": [], "run_ids": [], "cmd": label}
+    threading.Thread(target=_run_job, args=(job_id, run_cmd), daemon=True).start()
     return {"job": job_id}, 200
 
 
@@ -485,7 +497,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._upload(q)
         if u.path == "/api/run":
             body, code = _start_job((q.get("dataset") or [""])[0], (q.get("spec") or [""])[0],
-                                    (q.get("tf") or ["5m"])[0], (q.get("lens") or ["research"])[0])
+                                    (q.get("tf") or ["5m"])[0], (q.get("lens") or ["research"])[0],
+                                    micro=(q.get("micro") or ["0"])[0] in ("1", "true", "on"))
             return self._json(body, code)
         if u.path == "/api/generate":
             body, code = _start_generate(q)
@@ -946,7 +959,8 @@ async function postJob(url,qs,logSel,btnSel,onDone){
 $('#wRun').addEventListener('click',()=>{
   const ds=$('#wDs').value;if(!ds){$('#wLog').style.display='block';$('#wLog').textContent='Upload a dataset first.';return}
   const qs='dataset='+encodeURIComponent(ds)+'&spec='+encodeURIComponent($('#wSpec').value)+
-    '&tf='+encodeURIComponent($('#wTf').value)+'&lens='+encodeURIComponent($('#wLens').value);
+    '&tf='+encodeURIComponent($('#wTf').value)+'&lens='+encodeURIComponent($('#wLens').value)+
+    '&micro='+($('#wMicro').checked?'1':'0');
   postJob('/api/run',qs,'#wLog','#wRun',()=>load());
 });
 // generator
@@ -1148,6 +1162,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
         <option value=funnel>Eval — funnel</option>
         <option value=funded>Funded — payouts</option>
       </select></label>
+      <label class=field><span class=fld>Micro twin</span><span style="padding:8px 0"><input type=checkbox id=wMicro> + MGC/MES…</span></label>
       <button class=go id=wRun>Run</button>
     </div>
     <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>

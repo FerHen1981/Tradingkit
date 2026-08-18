@@ -574,7 +574,8 @@ class Engine:
         acct_floor = 100.0 if acct_locked else self.acct_hwm - cfg.acct_trail_dd
         self.dd_room = acct_pnl - acct_floor          # runway before a trailing breach
 
-        consistency_ok = self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0
+        consistency_ok = cfg.consistency_pct <= 0 or (                      # <= 0 = no such rule
+            self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0)
         eff_nr = min(self.pa_payouts_this_cycle + 1, 6)
         cap = ladder_cap(eff_nr)
         withdrawable = acct_realized - (cfg.acct_trail_dd + 100)

@@ -4,129 +4,489 @@
   "title": "Prop-firm program registry",
   "description": "Single source of truth for prop-firm account rules. Consumed by the Python backtester, an auto-generated Pine library, and (later) the alert middleware. One record per firm x program x account-size. VERIFY every record against the firm; rules change frequently.",
   "type": "object",
-  "required": ["version", "programs"],
+  "required": [
+    "version",
+    "programs"
+  ],
   "properties": {
-    "version": {"type": "string", "description": "Registry version, bump on any change."},
-    "updated": {"type": "string", "description": "ISO date of last edit."},
-    "value_unit_note": {"type": "string"},
+    "version": {
+      "type": "string",
+      "description": "Registry version, bump on any change."
+    },
+    "updated": {
+      "type": "string",
+      "description": "ISO date of last edit."
+    },
+    "value_unit_note": {
+      "type": "string"
+    },
     "programs": {
       "type": "array",
-      "items": {"$ref": "#/$defs/program"}
+      "items": {
+        "$ref": "#/$defs/program"
+      }
     }
   },
   "$defs": {
     "amount": {
       "description": "A rule value with its unit. Firms express rules in $ or %; keep both possible.",
       "type": "object",
-      "required": ["value", "unit"],
+      "required": [
+        "value",
+        "unit"
+      ],
       "properties": {
-        "value": {"type": "number"},
-        "unit": {"type": "string", "enum": ["usd", "pct"]}
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "usd",
+            "pct"
+          ]
+        }
       },
       "additionalProperties": false
     },
     "program": {
       "type": "object",
-      "required": ["key", "firm", "asset_class", "stage", "account", "targets_limits", "execution", "meta"],
+      "required": [
+        "key",
+        "firm",
+        "asset_class",
+        "stage",
+        "account",
+        "targets_limits",
+        "execution",
+        "meta"
+      ],
       "additionalProperties": false,
       "properties": {
-        "key": {"type": "string", "pattern": "^[a-z0-9_]+$", "description": "Unique id, e.g. apex_50k_eod_eval."},
-        "firm": {"type": "string"},
-        "display_name": {"type": "string"},
-        "status": {"type": "string", "enum": ["active", "paused", "shutdown"], "default": "active"},
-        "asset_class": {"type": "string", "enum": ["futures", "forex", "cfd", "crypto", "indices", "metals", "stocks"]},
-        "stage": {"type": "string", "enum": ["eval", "funded", "instant"]},
-        "eval_steps": {"type": ["integer", "null"], "description": "1, 2, or null for instant/funded."},
-
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Unique id, e.g. apex_50k_eod_eval."
+        },
+        "firm": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "paused",
+            "shutdown"
+          ],
+          "default": "active"
+        },
+        "asset_class": {
+          "type": "string",
+          "enum": [
+            "futures",
+            "forex",
+            "cfd",
+            "crypto",
+            "indices",
+            "metals",
+            "stocks"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "eval",
+            "funded",
+            "instant"
+          ]
+        },
+        "eval_steps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "1, 2, or null for instant/funded."
+        },
         "account": {
           "type": "object",
-          "required": ["size", "currency"],
+          "required": [
+            "size",
+            "currency"
+          ],
           "additionalProperties": false,
           "properties": {
-            "size": {"type": "number"},
-            "currency": {"type": "string", "default": "USD"},
-            "fee": {"type": ["number", "null"]},
-            "fee_refundable": {"type": ["boolean", "null"]},
-            "reset_fee": {"type": ["number", "null"]}
+            "size": {
+              "type": "number"
+            },
+            "currency": {
+              "type": "string",
+              "default": "USD"
+            },
+            "fee": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "fee_refundable": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "reset_fee": {
+              "type": [
+                "number",
+                "null"
+              ]
+            }
           }
         },
-
         "targets_limits": {
           "type": "object",
-          "required": ["drawdown_type", "max_overall_loss"],
+          "required": [
+            "drawdown_type",
+            "max_overall_loss"
+          ],
           "additionalProperties": false,
           "properties": {
-            "profit_target": {"oneOf": [{"$ref": "#/$defs/amount"}, {"type": "null"}]},
-            "profit_target_step2": {"oneOf": [{"$ref": "#/$defs/amount"}, {"type": "null"}]},
-            "max_daily_loss": {"oneOf": [{"$ref": "#/$defs/amount"}, {"type": "null"}]},
-            "max_overall_loss": {"$ref": "#/$defs/amount"},
-            "drawdown_type": {"type": "string", "enum": ["static", "eod_trailing", "intraday_trailing", "scaling"]},
-            "drawdown_basis": {"type": "string", "enum": ["balance", "equity"], "default": "balance"},
-            "trailing_locks_at": {"oneOf": [{"$ref": "#/$defs/amount"}, {"type": "null"}], "description": "Profit at which the trail stops (e.g. start balance). null = never / n.a."}
+            "profit_target": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/amount"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "profit_target_step2": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/amount"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "max_daily_loss": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/amount"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "max_overall_loss": {
+              "$ref": "#/$defs/amount"
+            },
+            "drawdown_type": {
+              "type": "string",
+              "enum": [
+                "static",
+                "eod_trailing",
+                "intraday_trailing",
+                "scaling"
+              ]
+            },
+            "drawdown_basis": {
+              "type": "string",
+              "enum": [
+                "balance",
+                "equity"
+              ],
+              "default": "balance"
+            },
+            "trailing_locks_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/amount"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Profit at which the trail stops (e.g. start balance). null = never / n.a."
+            }
           }
         },
-
         "trading_rules": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "min_trading_days": {"type": ["integer", "null"]},
-            "max_trading_days": {"type": ["integer", "null"]},
-            "consistency": {
-              "oneOf": [
-                {"type": "null"},
-                {"type": "object", "required": ["type", "value"], "properties": {
-                  "type": {"type": "string", "enum": ["max_day_pct_of_total", "min_days_pct", "other"]},
-                  "value": {"type": "number"}
-                }, "additionalProperties": false}
+            "min_trading_days": {
+              "type": [
+                "integer",
+                "null"
               ]
             },
-            "overnight_allowed": {"type": ["boolean", "null"]},
-            "weekend_allowed": {"type": ["boolean", "null"]},
-            "news_allowed": {"type": ["boolean", "null"]},
-            "max_position": {"oneOf": [{"type": "object", "properties": {"value": {"type": "number"}, "unit": {"type": "string", "enum": ["contracts", "lots"]}}}, {"type": "null"}]},
-            "scaling_plan": {"type": ["string", "null"]}
+            "max_trading_days": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "consistency": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "value"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "max_day_pct_of_total",
+                        "min_days_pct",
+                        "other"
+                      ]
+                    },
+                    "value": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "overnight_allowed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "weekend_allowed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "news_allowed": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "max_position": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    },
+                    "unit": {
+                      "type": "string",
+                      "enum": [
+                        "contracts",
+                        "lots"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "scaling_plan": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "min_profitable_days": {
+              "description": "The SECOND day counter. A firm counts days with fills and days that cleared a profit bar separately: Apex legacy wants 8 traded AND 5 at $50+. Scoring the strict one twice puts every payout further away than the firm does.",
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "days"
+                  ],
+                  "properties": {
+                    "days": {
+                      "type": "integer"
+                    },
+                    "min_each": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "$ref": "#/$defs/amount"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
           }
         },
-
         "funded": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "profit_split": {"type": ["number", "null"], "description": "0..1 (e.g. 0.9)."},
-            "split_scaling": {"type": ["string", "null"]},
-            "payout_cadence": {"type": ["string", "null"], "enum": ["on_demand", "weekly", "biweekly", "monthly", "ladder", null]},
-            "first_payout_wait_days": {"type": ["integer", "null"]},
-            "min_payout": {"type": ["number", "null"]},
-            "payout_cap": {"type": ["number", "null"]},
-            "payout_ladder": {"type": ["array", "null"], "items": {"type": "number"}, "description": "e.g. [1500,1500,2000,2500,2500,3000]"},
-            "in_eval_profit_share": {"type": ["number", "null"], "description": "e.g. 0.15 (FundedNext pays 15% of eval profit)."}
+            "profit_split": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "0..1 (e.g. 0.9)."
+            },
+            "split_scaling": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "payout_cadence": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "on_demand",
+                "weekly",
+                "biweekly",
+                "monthly",
+                "ladder",
+                null
+              ]
+            },
+            "first_payout_wait_days": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "min_payout": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "payout_cap": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "payout_ladder": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "number"
+              },
+              "description": "e.g. [1500,1500,2000,2500,2500,3000]"
+            },
+            "in_eval_profit_share": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "e.g. 0.15 (FundedNext pays 15% of eval profit)."
+            },
+            "safety_net_payouts": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "How many approved payouts the safety net applies to. Apex legacy: the first three; from the fourth the minimum balance no longer holds. null = for the life of the account."
+            }
           }
         },
-
         "execution": {
           "type": "object",
-          "required": ["sizing_unit"],
+          "required": [
+            "sizing_unit"
+          ],
           "additionalProperties": false,
           "properties": {
-            "platforms": {"type": "array", "items": {"type": "string"}},
-            "data_feed": {"type": ["string", "null"]},
-            "sizing_unit": {"type": "string", "enum": ["contracts", "lots", "pct_risk"]},
-            "default_symbol": {"type": ["string", "null"]},
-            "symbol_map": {"type": "object", "description": "canonical -> firm/broker symbol", "additionalProperties": {"type": "string"}}
+            "platforms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "data_feed": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "sizing_unit": {
+              "type": "string",
+              "enum": [
+                "contracts",
+                "lots",
+                "pct_risk"
+              ]
+            },
+            "default_symbol": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "symbol_map": {
+              "type": "object",
+              "description": "canonical -> firm/broker symbol",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
           }
         },
-
         "meta": {
           "type": "object",
-          "required": ["source", "as_of"],
+          "required": [
+            "source",
+            "as_of"
+          ],
           "additionalProperties": false,
           "properties": {
-            "source": {"type": "string"},
-            "as_of": {"type": "string"},
-            "verified": {"type": ["boolean", "null"], "description": "true once a human confirmed against the firm."},
-            "notes": {"type": "string"}
+            "source": {
+              "type": "string"
+            },
+            "as_of": {
+              "type": "string"
+            },
+            "verified": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "true once a human confirmed against the firm."
+            },
+            "notes": {
+              "type": "string"
+            }
           }
+        },
+        "converts_to": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The program key an account moves to when it passes. An evaluation is not a destination: what its holder buys is the funded rule set on the other side, so the ceiling that will apply is knowable before the pass."
         }
       }
     }

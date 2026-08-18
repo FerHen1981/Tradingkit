@@ -80,6 +80,7 @@ def rules(key: str | None) -> dict | None:
     fu = rec.get("funded") or {}
     cons = tr.get("consistency")
     mp = tr.get("max_position")
+    mpd = tr.get("min_profitable_days") or {}
     return {
         "key": rec["key"], "firm": rec.get("firm"), "display_name": rec.get("display_name"),
         "stage": rec.get("stage"), "size": size, "drawdown_type": tl.get("drawdown_type"),
@@ -87,12 +88,17 @@ def rules(key: str | None) -> dict | None:
         "max_daily_loss": _amt_usd(tl.get("max_daily_loss"), size),
         "drawdown": _amt_usd(tl.get("max_overall_loss"), size),
         "trailing_locks_at": _amt_usd(tl.get("trailing_locks_at"), size),
+        # TWO day counters, and they are not the same number: min_days counts days with FILLS,
+        # profit_days counts days that cleared profit_day_min. Apex legacy: 8 and 5 x $50.
         "min_days": tr.get("min_trading_days"),
+        "profit_days": mpd.get("days") or 0,
+        "profit_day_min": _amt_usd(mpd.get("min_each"), size),
         "consistency": (cons["value"] / 100.0 if cons and cons.get("value") else None),
         "max_position": (mp["value"] if mp else None),
         "payout_ladder": fu.get("payout_ladder"),
         "min_payout": fu.get("min_payout"),
         "safety_net_payouts": fu.get("safety_net_payouts"),
+        "converts_to": rec.get("converts_to"),
         "verified": bool((rec.get("meta") or {}).get("verified")),
         "notes": (rec.get("meta") or {}).get("notes", ""),
     }

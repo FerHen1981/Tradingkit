@@ -20,9 +20,12 @@ import datetime as dt
 from dataclasses import dataclass, field
 
 # ---- Apex config (verify against current Apex terms) ---------------------------------
-APEX_TARGET = {25_000: 1_500, 50_000: 3_000, 75_000: 4_250, 100_000: 6_000,
-               150_000: 9_000, 250_000: 15_000, 300_000: 20_000}
-APEX_DD = {25_000: 1_500, 50_000: 2_500, 100_000: 3_000, 150_000: 5_000,
+# Fallbacks only — a program from data/propfirms.json wins. APEX_DD had no 75K entry at all, so
+# a 75K account fell through to a zero floor and a zero safety net; the 75K and 300K targets were
+# off against Apex's own table (4,500 and 18,000).
+APEX_TARGET = {25_000: 1_500, 50_000: 3_000, 75_000: 4_500, 100_000: 6_000,
+               150_000: 9_000, 250_000: 15_000, 300_000: 18_000}
+APEX_DD = {25_000: 1_500, 50_000: 2_500, 75_000: 2_750, 100_000: 3_000, 150_000: 5_000,
            250_000: 6_500, 300_000: 7_500}
 SAFETY_NET = {sz: dd + 100 for sz, dd in APEX_DD.items()}   # min profit to leave in on payout
 
@@ -58,7 +61,11 @@ class Payout:
     withdrawable: float          # only > 0 when it's a PA account AND every rule is met (capped at the rung)
     eligible: bool
     above_safety: float = 0.0    # $ above the safety net (the total room, before the rung cap)
-    days_to_go: int = 0          # trading days still needed
+    days_to_go: int = 0          # days still needed — the worse of the two counters
+    profit_days: int = 0         # days that cleared the profit bar ($50+ on Apex)
+    profit_days_to_go: int = 0   # profitable days still needed
+    cap_unlimited: bool = False  # past the last rung, the firm caps no further
+    ruleset: str = ""            # which account type these rules came from
     safety_gap: float = 0.0      # $ still needed to reach the safety-net balance
     cap: float = 0.0             # max withdrawal THIS payout (ladder rung)
     total_cap: float = 0.0       # total the ladder pays over all rungs
@@ -78,14 +85,19 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
     size = int(size)
     prog = program or {}
     min_days = int(prog.get("min_days") or MIN_TRADING_DAYS)
+    # A firm runs TWO day counters and they are not the same number: days with FILLS, and days
+    # that cleared a profit bar. Apex legacy wants 8 traded AND 5 at $50+; demanding 8 days that
+    # each cleared $50 is stricter than the firm and puts every payout further away than it is.
+    min_profit_days = int(prog.get("profit_days") or 0)
+    day_bar = prog.get("profit_day_min") or MIN_DAY_PROFIT
     cons_limit = prog["consistency"] if prog.get("consistency") is not None else CONSISTENCY_LIMIT
     dd_amt = prog.get("drawdown") or APEX_DD.get(size, 0)
     safety = (dd_amt + 100) if dd_amt else SAFETY_NET.get(size, 0)
     caps = prog.get("payout_ladder") or ladder_caps(size)
     profit = round(current - starting, 2)
     funded = str(stage).lower().startswith("fund")
-    days = [d for d, v in daily_pnl.items() if v >= MIN_DAY_PROFIT]
-    trading_days = len(days)
+    trading_days = len(daily_pnl)                                    # days with fills
+    profit_days = sum(1 for v in daily_pnl.values() if v >= day_bar)  # days over the bar
     wins = [v for v in daily_pnl.values() if v > 0]
     best_day = max(wins) if wins else 0.0
     total_win = sum(wins)
@@ -101,36 +113,58 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
                           "above the floor" if current > starting - dd_amt else "breached"))
         return Payout("Eval", profit, target, trading_days,
                       None if consistency is None else round(100 * consistency, 1),
-                      None, 0.0, passed, rules=rules)   # eval = not a PA → never withdrawable
+                      None, 0.0, passed, rules=rules,   # eval = not a PA → never withdrawable
+                      profit_days=profit_days, ruleset=str(prog.get("key") or ""))
 
-    # funded payout checklist
+    # funded payout checklist. Apex legacy applies the safety net to the first N approved payouts
+    # only — from the fourth the minimum balance no longer holds. null = for the life of the account.
+    rung_taken = max(0, int(payouts_taken or 0))
+    net_payouts = prog.get("safety_net_payouts")
+    net_applies = net_payouts is None or rung_taken < int(net_payouts)
+    safety = safety if net_applies else 0.0
     safety_bal = starting + safety
     above_safety = round(max(0.0, current - safety_bal), 2)     # the potential (gated by rules)
-    days_to_go = max(0, min_days - trading_days)
+    fill_to_go = max(0, min_days - trading_days)
+    prof_to_go = max(0, min_profit_days - profit_days)
+    days_to_go = max(fill_to_go, prof_to_go)
     safety_gap = round(max(0.0, safety_bal - current), 2)
-    meets_days = trading_days >= min_days
+    meets_days = fill_to_go == 0 and prof_to_go == 0
     meets_cons = consistency is None or consistency <= cons_limit
     meets_safety = current >= safety_bal
     cons_txt = f"{cons_limit * 100:.0f}%"
 
+    _both = [f"{trading_days}/{min_days} traded"]
+    if min_profit_days:
+        _both.append(f"{profit_days}/{min_profit_days} at ${day_bar:,.0f}+")
+    _behind = "trading days" if fill_to_go >= prof_to_go else f"${day_bar:,.0f}+ days"
     rules.append(Rule("Trading days", meets_days,
-                      f"{trading_days}/{min_days} met"
-                      if meets_days else f"{days_to_go} more to go ({trading_days}/{min_days})"))
+                      " · ".join(_both) + (" — met" if meets_days
+                                           else f" — {days_to_go} more {_behind} to go")))
     rules.append(Rule("Consistency", meets_cons,
                       "n/a" if consistency is None else
                       (f"best day {100*consistency:.0f}% (under {cons_txt})" if meets_cons
                        else f"best day {100*consistency:.0f}% — spread more (max {cons_txt})")))
     rules.append(Rule("Safety net", meets_safety,
-                      f"balance ${current:,.0f} above ${safety_bal:,.0f}"
-                      if meets_safety else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}"))
-    # ladder: you can only withdraw up to the current rung's cap per payout.
-    rung = max(0, min(int(payouts_taken or 0), len(caps) - 1))
-    cap = float(caps[rung])
+                      (f"balance ${current:,.0f} above ${safety_bal:,.0f}" if meets_safety
+                       else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}") if net_applies
+                      else f"no longer applies after {net_payouts} payouts"))
+    # Ladder: capped per rung, and past the last rung the firm caps no further — Apex legacy pays
+    # without a maximum from the sixth payout, as long as the minimum balance stays in.
+    cap_unlimited = rung_taken >= len(caps)
+    rung = max(0, min(rung_taken, len(caps) - 1))
+    cap = float(above_safety) if cap_unlimited else float(caps[rung])
     # PA account AND every rule met → withdrawable (capped at the rung); otherwise no pay day (0).
     eligible = meets_days and meets_cons and meets_safety and above_safety > 0
     withdrawable = round(min(above_safety, cap), 2) if eligible else 0.0
+    floor = prog.get("min_payout")
+    if floor and 0 < withdrawable < float(floor):
+        rules.append(Rule("Minimum payout", False,
+                          f"${withdrawable:,.0f} — under the ${float(floor):,.0f} minimum"))
+        eligible, withdrawable = False, 0.0
     return Payout("Funded", profit, None, trading_days,
                   None if consistency is None else round(100 * consistency, 1),
                   round(safety_bal, 2), withdrawable, eligible, above_safety=above_safety,
                   days_to_go=days_to_go, safety_gap=safety_gap,
-                  cap=cap, total_cap=float(sum(caps)), rung=rung, rules=rules)
+                  cap=cap, total_cap=float(sum(caps)), rung=rung, rules=rules,
+                  profit_days=profit_days, profit_days_to_go=prof_to_go,
+                  cap_unlimited=cap_unlimited, ruleset=str(prog.get("key") or ""))

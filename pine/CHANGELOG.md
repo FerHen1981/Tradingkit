@@ -1,5 +1,294 @@
 # MEX Pine scripts — optimisation changelog
 
+## v7.7.3-MGC-PA — the dashboard says which layer is steering
+
+With a Fleet Matrix preset active, eight controls in the panel stop doing anything and nothing on
+screen says so. That is what "the Fleet gets in the way" means: you change a number and the chart
+ignores you.
+
+What a preset takes over, in full:
+
+| Setting | Replaced by |
+|---|---|
+| Fixed Qty | `polQty` |
+| Max Stop Distance | `polMaxStopT` |
+| Day-cap hard target | `polCapUSD` |
+| Day-trail | **switched off entirely** |
+| Account Phase | `polPhase` |
+| Firm program | `polFirmKey` |
+| Instrument | guarded against the preset's own contract |
+| Trading at all | blocked while the preset is parked |
+
+The Minimal dashboard gains a **Sturing** row on the bottom line, in gold when a preset governs and
+in normal text on Manual:
+
+```
+Sturing    PA013 · MGC q3 · cap $750 · q3 · stop 130t · cap $750
+Sturing    Manual · q8 · stop 100t · Day-trail (keep peak)
+```
+
+The preset tooltip now lists what it takes over instead of describing it as "pins some values".
+
+Reading the chart of 18 August: it was running on **Manual** — 6 contracts entered where PA013 would
+have given 3, and an exit labelled `Day-trail`, which a preset makes impossible. The 6 is `Fixed Qty`
+8 trimmed to 6 by the MAE guard, which is exactly the $300 risk shown on the trade label.
+
+## v7.7.2-MGC-PA — the instrument guard now matches the contract, not the family
+
+Symptom: the script compiled, drew its signals and painted the gate background, and took **zero
+trades**. The chart was `GC1!` — the full 100-ounce gold contract — while every preset is sized for
+`MGC`, the 10-ounce micro.
+
+The MAE guard was right to refuse. With a 100-tick stop:
+
+| | GC1! ($100/point) | MGC1! ($10/point) |
+|---|---|---|
+| Risk per contract | **$1,000** | $100 |
+| MAE allowance | $675 | $675 |
+| `maeQtyMax` | **0** — blocked | 6 |
+| Risk at q3 | $3,000 | $300 |
+
+One full contract already breaches the Apex 30% negative-P&L rule, so not a single signal could pass.
+The engine behaved correctly; nothing was broken.
+
+**What was wrong is that it happened silently.** `polInstrOK` compared *families*: a `GC` preset
+accepted both `GC` and `MGC`. But a preset pins a quantity, and quantity only means something
+against one contract spec — the same q3 is $300 of risk on the micro and $3,000 on the full size.
+The guard now matches the exact root, the presets carry `MGC` instead of `GC`, and the warning label
+says which contract the preset expects and which one the chart is showing.
+
+Running the same preset on the wrong contract is now refused loudly instead of dying quietly in the
+MAE guard.
+
+## v7.7.1-MGC-PA — compile fix: generated branch chain opened with `else if`
+
+`f_firmLadder` came out as:
+
+```
+    float[] _l = array.from(...)
+    else if _p == "apex_50k_eod_pa"
+```
+
+Only three of the twelve programs carry a payout ladder — the Apex PA variants — but the generator
+chose `if` versus `else if` from the **loop index** instead of from how many branches it had
+actually written. The first nine programs emitted nothing, so the first real branch inherited
+`else if` and Pine rejected it with `Syntax error at input "new line"`.
+
+Both `f_firmMinPayout` and `f_firmLadder` now count emitted branches. Verified across all eight
+scripts: every generated chain opens with `if` and continues with `else if`, and that check is now
+part of the static pass so this class of error cannot come back silently.
+
+## v7.7-MGC-PA — TESORO: one account choice, and the last fixed values
+
+**156 → 85 inputs** since the live v7.3.
+
+### The MEX preset now names the firm program
+
+There were two layers describing the same account and they knew nothing about each other: the Fleet
+Matrix preset in group 0 set quantity, max stop, day cap and phase, while a separate *Use firm
+preset* checkbox in group 1 gated a dropdown that did nothing until you ticked it. That dropdown
+read as missing, which is fair — an inert control is an absent control.
+
+`f_pol()` now returns the firm program alongside the rest, so **PA013 also means
+`apex_intraday_pa`**. The checkbox is gone; the dropdown applies only when the preset is set to
+Manual. One choice covers the account.
+
+What the firm program drives is deliberately narrow — **only rules that are the firm's own**:
+consistency percentage, minimum payout and the payout ladder. Drawdown model, trailing drawdown and
+daily loss stay manual, because this account genuinely deviates: it runs a **$473 daily loss limit**
+against the program's $1,000. Auto-filling those would have quietly overwritten a live risk setting.
+
+Picking `apex_legacy_pa` now actually changes something: consistency drops from 50% to 30%, which is
+the Apex rule for accounts bought before March 2026.
+
+### Ladder and minimum payout from the registry
+
+`f_ladderCap` hardcoded `[1500, 1500, 2000, 2500, 2500, 3000]`. Both now come from
+`data/propfirms.json` through the generator.
+
+> A bug surfaced while wiring this and is worth recording: the generator picked the **first** row of
+> a program's size table, and since Apex now carries seven sizes starting at 25K, every payout cap
+> came out **halved** — 750 instead of 1500. It now matches the tier to the program's own account
+> size. Caught by reading the generated output rather than trusting it.
+
+### Remaining fixed values
+
+Twenty inputs become constants at the value they already carried: the MAE percentages, payout
+buffer, last-payout anchor, the distance unit and ATR length, fractional-qty, the delta timeframe
+and borrow symbol, the seven custom event toggles, start balance, journal account name and bot name.
+`evalTrailEod` now follows the drawdown model instead of being its own switch.
+
+## v7.6-MGC-PA — TESORO: strategy properties pinned in code
+
+Three backtest properties are now set in the `strategy()` call instead of being left to whatever the
+chart happens to carry:
+
+- **`use_bar_magnifier=true`** — it was never set, so it defaulted off. The version history is
+  explicit that the magnifier is required for exits, and that running on realtime ticks without it
+  produced a −$12,770 artefact. The exit engine now reads intrabar detail rather than inferring it
+  from the one-minute close.
+- **`calc_on_order_fills=true`** — made explicit. This reproduces the run that produced the clean
+  v7.3 ↔ v7.5 comparison.
+- **`calc_on_every_tick=false`** — unchanged, but worth naming: this is "on realtime" and it stays
+  off.
+
+Why it matters beyond tidiness: the day cap fires on `riskDayPeak`, which counts open profit. How
+often the strategy recalculates therefore decides *when* the cap trips. In the two exports of 17
+August that single difference moved one exit from 22:34 to 22:36, changed its result by $20 and let
+one extra trade through. Pinning the properties in code makes a fresh chart load deterministic.
+
+## v7.5-MGC-PA — TESORO: the live v7.3 with the repo's four cleanups on top
+
+The live MGC script was developed outside the repository, so the repo's v6.9.x line for TESORO was
+never what ran on the chart. v7.3 is now the base, and the four repo steps are re-applied to it.
+**156 → 108 inputs, 1,829 → 1,694 lines.**
+
+Everything v7.3 brought is untouched: the fourteen brand-palette tokens, the eighteen glyphs with
+their `useEmoji` switch, the Fleet Matrix policy layer with its four account presets and the
+instrument-family guard, all three dashboard layouts with Minimal as default, and the MGC tuning
+(0.67 cash commission, slippage 1, `max_bars_back` 500, `import TradingView/ta/8`).
+
+Re-applied on top:
+
+1. **Retired features removed** — the same 36 flags and their inert paths, −131 lines. All 32
+   anchors matched v7.3 unchanged, so this transferred one-to-one.
+2. **Firm registry generated in** — the inline `f_firmRules` goes from 8 stale presets to 12 from
+   `data/propfirms.json`, and the default moves from `apex_50k_eod_eval` to `apex_50k_eod_pa`,
+   which is what this script actually is.
+3. **Display layer collapsed** — fifteen inputs to two, with the fixed colours taken from the brand
+   palette (`#5AA2FF`, `#E0796E`, `#F2EBDA`), not the old green/red. The tokens themselves are
+   declared further down the file, so the literals are used here.
+4. **Time gate to session strings** — 36 fields to two. The default is
+   `0000-1700,1800-2400:23456`, because v7.3 has hour 17 switched off. That hour sits inside the
+   16:55–18:00 flat window anyway, so it is belt and braces — but the comma range keeps the intent
+   explicit rather than relying on the flat window staying where it is.
+
+**Check in the editor:** whether `input.session` accepts the comma form in its widget. If it does
+not, the fallback is `0000-2400:23456`, which behaves identically as long as the flat window covers
+17:00–18:00.
+
+The other seven scripts stay on v6.9.5 until their own live versions arrive. The fleet is split, on
+purpose and visibly.
+
+## v6.9.5 — Input rework, step 2: the time gate
+
+Thirty-six fields become two session strings. **140 → 106** on the funded scripts, **128 → 94** on
+the eval scripts.
+
+Out: seven weekday toggles, **twenty-four hourly toggles**, the Force Flat Window switch and its
+four hour/minute fields. In:
+
+- **Trading window (days + hours)** — `0000-2400:23456`. Hours before the colon, days after, where
+  1 is Sunday and 7 is Saturday. Comma-separated ranges work, so `0000-0600,1200-1800:23456` still
+  expresses a split day; the hourly toggles were only ever used to carve one out.
+- **Force-flat window** — `1655-1800:1234567`. Empty switches it off, which is what the old
+  `useAutoFlat` toggle did.
+
+The gate now reads `not na(time(timeframe.period, tradingSession, activeTz))` instead of a weekday
+function plus a 24-slot array lookup. `f_isTradingDay()`, `hourEnabled`, `f_inRangeMOD` and
+`f_toMOD` are gone with them; `tradeDOW` and `f_minuteOfDay()` stay for the Monday-open filter,
+which is day-specific and does not belong in a session string.
+
+**Defaults reproduce the fleet's live configuration exactly** — Mon-Fri, all twenty-four hours
+enabled, flat from 16:55 to 18:00. Checked against the strategy-tester export of 17 August: every
+weekday toggle and all four visible hour blocks were on, so nothing expressible is lost.
+
+**The one thing that is lost:** a chart that had individual hours switched off will not carry that
+over. Nothing in the fleet did.
+
+## v6.9.4 — Input rework, step 1: the display layer
+
+Fifteen inputs out of the settings panel, no drawing code touched. **154 → 140** on the funded
+scripts, **142 → 128** on the eval scripts.
+
+> Correction: this entry first said 134 → 120. The counter behind it matched one declaration per
+> line, and the twenty-four hourly toggles sit several to a line, so it under-counted by twenty.
+
+The eight separate visibility toggles (signals, SL/TP levels, pending limit, unfilled-limit boxes,
+exit labels, trade info, trade zones, gate background) collapse into one **Chart visuals** switch,
+and the FVG boxes plus their tested-recolor into **FVG boxes**. Both default on, as all ten did.
+
+Gone as inputs, now fixed at the value they always carried: gate background transparency (90), the
+FVG box limit (40), and the bull / bear / tested fill colors.
+
+Also removed: `notifyRegime`, an input with nothing left to fire it since the regime engine went in
+v6.9.2, and the `notifyDerisk` alias, which lost its only reader in the same release.
+
+**How it is done matters for the risk.** The old names survive as plain assignments driven by the
+two new switches, so every `plot`, `box`, `label` and `table` call below reads exactly what it read
+before. One axis changed — the settings panel — and the rendering code is untouched. The
+indentation histogram is byte-identical to v6.9.3.
+
+**One consequence to know about:** if a chart had any of the removed toggles switched off, that
+saved value is gone and the layer now follows the master switch. Removing an input always does
+that; there were ten of them and they were all on.
+
+Kept on purpose: `drawLast` (the memory guard), `showDashboard`, `dashPos`, `visTheme`, `txtSize`
+and `dashLayout` — that last one because the fleet actually runs the Minimal layout, not only Wide.
+
+## v6.9.3 — Firm registry reaches the scripts
+
+`tools/gen_pine_firms.py` claimed to keep "the Python backtester and the Pine scripts" in sync, but
+it only wrote `pine/lib/PropFirms.pine` — and the strategies never import that library, because a
+Pine library must be published on TradingView first. Each script carried its own inline
+`f_firmRules()` instead, frozen at **8 presets** while the registry had grown to **18**.
+
+The generator now also rewrites two regions in every strategy file: the **Firm program** dropdown
+and the inline `f_firmRules()` body. Running it is idempotent.
+
+**What changes in the scripts.** The dropdown goes from 8 to **12 presets** — every futures program
+with a trailing drawdown, which is what a futures strategy can actually be run against. New:
+`apex_legacy_pa`, `apex_intraday_pa`, `mffu_starter_50k`, `mffu_builder_50k`. All eight existing
+keys stay, so a saved chart setting keeps resolving.
+
+**Corrections that finally reach Pine.** The registry values fixed earlier today were stranded in
+the JSON: Apex's 75K drawdown (2,750, previously absent), the 75K target (4,500, was 4,250) and the
+300K target (18,000, was 20,000).
+
+**Per-script defaults.** All eight opened on `apex_50k_eod_eval`, including the four funded scripts
+and the two intraday ones — switch the preset on and it rewrote a funded account's rules to an
+eval account's. Each script now opens on the program matching its own phase and drawdown model:
+TESORO/REY/PATRON → `apex_50k_eod_pa`, DORADO → `apex_intraday_pa`, MINERO/LEON/MATADOR →
+`apex_50k_eod_eval`, TORO → `apex_50k_intraday_eval`.
+
+Inert until `Use firm preset` is switched on — it defaults off, and no trading logic changed.
+Statically verified per file: 12 branches in the generated function, the default present in its own
+option list, brackets balanced, no tabs, no new indentation deviations.
+
+## v6.9.2 — Retired-feature cleanup
+
+Removes the v6.8 leftovers. The inputs were taken out back then, but the constants and the engine
+paths behind them stayed in every script — 36 flags pinned to a constant and roughly 137 lines per
+file that could never execute.
+
+Gone from all 8 scripts: the **OR-breakout** session tracker, the **PA context filters**
+(relative volume, BBWP, RTH-open block), the **regime indicator** (efficiency-ratio classifier plus
+its Discord notifications), the **derisk ladder** (both the eval and the PA variant), the
+**goal-TP** clamp in `f_tpFixDist`, the **PA-threshold** notification, the DD guards
+(`guardEval`/`guardPA`), `gateOpenOnRiskOff`, `startNeedRegime`, `exitPreset` and the retired
+`GROUP_DAY` constant. **1,096 lines removed across the fleet**, exactly 137 per file.
+
+**No behaviour change.** Every removed path was gated on a constant that was already `false`, and
+the two constants that were `true` (`gateOpenOnRiskOff`, `orOneSetup`) were folded into the
+expressions that read them. Three things were deliberately preserved:
+
+- `useRegime` and `regimeFav` stay, because `f_journal()` writes a regime column — removing them
+  would change the CSV schema the journal pipeline and Notion consume.
+- The `|CFG|` alert payload is byte-identical: `goalTp`, `derisk` and `deriskPA` now emit the fixed
+  `0` / `off` / `off` that the dynamic expressions always produced.
+- The dashboard still renders `Regime —` in the same cells; only the dead branches are gone.
+
+`notifyRegime` and `notifyDerisk` remain as inputs with nothing left to trigger them. Removing an
+input changes the settings panel and the saved chart settings, so that belongs with the v7 input
+rework, not here.
+
+**Verified statically, not compiled.** This environment cannot compile Pine. Checked per file: no
+reference to any of the 69 removed names survives, the required symbols are all still present,
+brackets balance, no tabs, no new indentation deviations against the previous version, and the
+pairwise differences between the eight scripts are unchanged (TESORO 10, PATRON 26, DORADO 30,
+LEON 108, MINERO 110, MATADOR 124, TORO 146 changed lines versus REY — identical to v6.9.1).
+**Paste one script into the editor and confirm it compiles before this goes on a chart.**
+
 ## v6.9.1 — "→ Middleware" route (fan-out seam)
 
 All 8 scripts gain a `→ Middleware (fan-out)` alert route in group *9 · EXECUTION*.

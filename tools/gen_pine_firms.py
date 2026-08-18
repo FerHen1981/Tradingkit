@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Auto-generate the Pine `PropFirms` library from data/propfirms.json.
 
-Single source of truth: edit data/propfirms.json, re-run this, and both the
-Python backtester and the Pine scripts stay in sync. Emits pine/lib/PropFirms.pine.
+Single source of truth: edit data/propfirms.json, re-run this, and the Python
+backtester, the Pine library and the eight strategy files all stay in sync.
+
+Emits pine/lib/PropFirms.pine, and rewrites two generated regions inside every
+strategy file: the "Firm program" dropdown and the inline f_firmRules() body.
+The strategies carry an inline copy rather than importing the library, because a
+Pine library has to be published on TradingView before a script can import it.
 
     python3 tools/gen_pine_firms.py
 
@@ -20,6 +25,135 @@ sys.path.insert(0, REPO)
 from backtest import firms  # noqa: E402
 
 OUT = os.path.join(REPO, "pine", "lib", "PropFirms.pine")
+PINE = os.path.join(REPO, "pine")
+
+# Each strategy opens on the firm program that matches its own phase and drawdown model.
+# Before this was generated, all eight defaulted to apex_50k_eod_eval -- including the four
+# funded scripts and the two intraday ones, so switching the preset on rewrote their account
+# rules to an eval account's.
+STRATEGY_DEFAULT = {
+    "MEX_EL_TESORO.pine":  "apex_50k_eod_pa",        # GC funded, EOD
+    "MEX_EL_REY.pine":     "apex_50k_eod_pa",        # ES funded, EOD
+    "MEX_EL_PATRON.pine":  "apex_50k_eod_pa",        # NQ funded, EOD
+    "MEX_EL_DORADO.pine":  "apex_intraday_pa",       # NQ funded, intraday
+    "MEX_EL_MINERO.pine":  "apex_50k_eod_eval",      # GC eval, EOD
+    "MEX_EL_LEON.pine":    "apex_50k_eod_eval",      # ES eval, EOD
+    "MEX_EL_MATADOR.pine": "apex_50k_eod_eval",      # NQ eval, EOD
+    "MEX_EL_TORO.pine":    "apex_50k_intraday_eval", # NQ eval, intraday
+}
+
+
+def tradeable(p):
+    """Programs a futures strategy can actually be run against: futures, trailing drawdown.
+    Static-drawdown and forex programs stay in the library but out of the strategy dropdown."""
+    return p.asset_class == "futures" and p.drawdown_type in ("eod_trailing", "intraday_trailing")
+
+
+_RAW = None
+
+
+def p_raw(key):
+    """The raw registry record for a program key (the Program dataclass drops these fields)."""
+    global _RAW
+    if _RAW is None:
+        import json as _j
+        with open(os.path.join(REPO, "data", "propfirms.json"), encoding="utf-8") as fh:
+            _RAW = {r["key"]: r for r in _j.load(fh)["programs"]}
+    return _RAW.get(key, {})
+
+
+def patch_strategies(progs):
+    """Rewrite the two generated regions in each strategy file."""
+    keep = [p for p in progs if tradeable(p)]
+    opts = ", ".join(f'"{p.key}"' for p in keep)
+    body = ["f_firmRules(string _p) =>",
+            '    string _dd = "Intraday"',
+            "    float _ml = 2500.0",
+            "    float _g = 3000.0",
+            "    float _dll = 1000.0",
+            "    float _cons = 50.0"]
+    for i, p in enumerate(keep):
+        ov = firms.to_overlay(p)
+        body += [f'    {"if" if i == 0 else "else if"} _p == "{p.key}"',
+                 f'        _dd := "{ov.get("dd_model", "Intraday")}"',
+                 f'        _ml := {float(ov.get("acct_trail_dd", 0) or 0)}',
+                 f'        _g := {float(ov.get("acct_goal", 0) or 0)}',
+                 f'        _dll := {float(ov.get("acct_dll", 0) or 0)}',
+                 f'        _cons := {float(ov.get("consistency_pct", 0) or 0)}']
+    body.append("    [_dd, _ml, _g, _dll, _cons]")
+    # minimum payout per program -- a pure firm rule, never a per-account choice
+    body += ["f_firmMinPayout(string _p) =>", "    float _mp = 500.0"]
+    emitted = 0
+    for p in keep:
+        mp = None
+        tiers = p_raw(p.key).get("sizes") or []
+        pick = next((t for t in tiers if int(t.get("size", 0)) == int(p.account_size)), None) \
+            or next((t for t in tiers if t.get("min_payout")), None)
+        if pick and pick.get("min_payout"):
+            mp = float(pick["min_payout"]["value"])
+        if mp is None:
+            mp = float((p_raw(p.key).get("funded") or {}).get("min_payout") or 500.0)
+        body += ['    %s _p == "%s"' % ("if" if emitted == 0 else "else if", p.key),
+                 "        _mp := %s" % mp]
+        emitted += 1
+    body.append("    _mp")
+    # payout ladder per program: the cap on payout number _n (1-based)
+    body += ["f_firmLadder(string _p, int _n) =>", "    float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)"]
+    emitted = 0
+    for p in keep:
+        lad = None
+        # Pick the tier that matches the program's own account size -- Apex now carries seven
+        # sizes and the first one is the 25K, whose ladder is half the 50K's. Taking the first
+        # row silently halved every payout cap.
+        tiers = p_raw(p.key).get("sizes") or []
+        pick = next((t for t in tiers if int(t.get("size", 0)) == int(p.account_size)), None) \
+            or next((t for t in tiers if t.get("payout_ladder")), None)
+        if pick and pick.get("payout_ladder"):
+            lad = [float(x) for x in pick["payout_ladder"]]
+        if lad is None:
+            lad = [float(x) for x in ((p_raw(p.key).get("funded") or {}).get("payout_ladder") or [])]
+        if lad:
+            # Count branches actually written, not loop position: the eval programs carry no
+            # ladder, so keying off the loop index opened the chain with "else if".
+            body += ['    %s _p == "%s"' % ("if" if emitted == 0 else "else if", p.key),
+                     "        _l := array.from(%s)" % ", ".join(str(x) for x in lad)]
+            emitted += 1
+    body.append("    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))")
+    # day counters per program: a firm runs TWO of them and they are not the same number.
+    # _md = days with FILLS, _pd = days that cleared _qd in profit. Apex legacy: 8 and 5x$50.
+    body += ["f_firmDays(string _p) =>", "    int _md = 0", "    int _pd = 0", "    float _qd = 50.0"]
+    emitted = 0
+    for p in keep:
+        tr = p_raw(p.key).get("trading_rules") or {}
+        mpd = tr.get("min_profitable_days") or {}
+        qd = (mpd.get("min_each") or {}).get("value")
+        if qd is None:
+            tiers = p_raw(p.key).get("sizes") or []
+            pick = next((t for t in tiers if int(t.get("size", 0)) == int(p.account_size)), None) or {}
+            qd = (pick.get("qualifying_day_min") or {}).get("value")
+        body += ['    %s _p == "%s"' % ("if" if emitted == 0 else "else if", p.key),
+                 "        _md := %d" % int(tr.get("min_trading_days") or 0),
+                 "        _pd := %d" % int(mpd.get("days") or 0),
+                 "        _qd := %s" % float(qd if qd is not None else 50.0)]
+        emitted += 1
+    body.append("    [_md, _pd, _qd]")
+    body.append("// <<< GENERATED — do not edit above by hand; run tools/gen_pine_firms.py")
+
+    for name, default in sorted(STRATEGY_DEFAULT.items()):
+        path = os.path.join(PINE, name)
+        lines = open(path, encoding="utf-8").read().split("\n")
+        i = next(k for k, l in enumerate(lines) if l.startswith("firmPreset    = input.string("))
+        tip = lines[i].split("tooltip=", 1)[1]
+        lines[i] = (f'firmPreset    = input.string("{default}", "Firm program", options=[{opts}], '
+                    f'group=GROUP_PHASE, tooltip={tip}')
+        a = next(k for k, l in enumerate(lines) if l.startswith("f_firmRules(string _p) =>"))
+        end = next((k for k in range(a, len(lines)) if lines[k].startswith("// <<< GENERATED")), None)
+        if end is None:   # first run on a file that still has the hand-written block
+            end = next(k for k in range(a, len(lines)) if lines[k].strip() == "[_dd, _ml, _g, _dll, _cons]")
+        lines[a:end + 1] = body
+        open(path, "w", encoding="utf-8").write("\n".join(lines))
+        print(f"  patched {name}  default={default}")
+    return len(keep)
 
 
 def main():
@@ -66,6 +200,8 @@ def main():
     with open(OUT, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"wrote {OUT}  ({len(progs)} presets)")
+    n = patch_strategies(progs)
+    print(f"patched 8 strategy files ({n} presets in the dropdown)")
 
 
 if __name__ == "__main__":

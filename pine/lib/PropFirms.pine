@@ -17,21 +17,21 @@ export rules(string preset) =>
         maxLoss := 6500.0
         goal := 15000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 250000.0
     else if preset == "apex_25k_legacy_eval"
         ddType := "Intraday"
         maxLoss := 1500.0
         goal := 1500.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 25000.0
     else if preset == "apex_50k_eod_eval"
         ddType := "EOD"
         maxLoss := 2500.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_eod_pa"
         ddType := "EOD"
@@ -45,7 +45,7 @@ export rules(string preset) =>
         maxLoss := 2500.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_intraday_pa"
         ddType := "Intraday"
@@ -59,7 +59,7 @@ export rules(string preset) =>
         maxLoss := 2500.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_legacy_pa"
         ddType := "EOD"
@@ -108,14 +108,14 @@ export rules(string preset) =>
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "takeprofittrader_50k_eval"
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "the5ers_hypergrowth_5k"
         ddType := "Static"
@@ -129,7 +129,7 @@ export rules(string preset) =>
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "tradeify_advanced_25k_instant"
         ddType := "EOD"

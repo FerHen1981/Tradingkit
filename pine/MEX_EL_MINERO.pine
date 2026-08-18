@@ -40,7 +40,13 @@
 // v6.8.11: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-var string currentVersion = "v6.9.1"
+// v6.9.5: input rework step 2 — 36 weekday/hour/flat-window fields become 2 session strings.
+// v6.9.4: input rework step 1 — 15 display inputs collapsed to 2; no drawing code changed.
+// v6.9.3: firm registry now generated into the scripts — 12 presets, correct default per script.
+// v6.9.2: retired-feature cleanup — 36 permanently-disabled flags and their inert engine paths
+//         removed (OR-breakout, PA context filters, regime indicator, derisk ladder, goal-TP,
+//         PA threshold). No behaviour change: every removed path was gated on a false constant.
+var string currentVersion = "v6.9.5"
 strategy("MΞX ΞL MINΞRO · GC Eval EOD · " + currentVersion, shorttitle="ΞL MINΞRO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -57,7 +63,6 @@ import TradingView/ta/8
 var string GROUP_UNIT  = "2 · TRADE — Position sizing"
 var string GROUP_ENTRY = "3 · TRADE — Entry & stop"
 var string GROUP_RISK  = "4 · TRADE — Take-profit & exits"
-var string GROUP_DAY   = "L4x · retired"
 var string GROUP_PHASE = "1 · ACCOUNT — Phase, drawdown & guard"
 var string GROUP_BIAS  = "7 · SIGNAL — VWAP / bias"
 var string GROUP_CVD   = "6 · SIGNAL — Volume delta"
@@ -74,44 +79,9 @@ var string AUTO_PRESET = "GC · Eval"
 // === TIMEZONE / DAY ==========================================================
 var string GROUP_ACCT = "0 · ACCOUNT — Firm & routing"
 
-// === v6.8: retired features — hard-disabled (inputs removed; engine paths inert) =========
-bool   usePaFilters   = false
-bool   useRelVolFilter= false
-bool   useBbwpFilter  = false
-bool   blockRthOpen   = false
-float  relVolMax      = 1.2
-float  bbwpMax        = 0.5
-int    relVolLen      = 30
-int    bbwpStdLen     = 20
-int    bbwpLook       = 250
-int    rthOpenLo      = 570
-int    rthOpenHi      = 600
-bool   useOrBreakout  = false
-bool   orOneSetup     = true
-int    orStartMin     = 570
-int    orEndMin       = 630
-string orBreakoutUnit = "Points"
-float  orBreakoutT    = 10.0
+// === v6.8: retired features — removed. One name survives: f_journal() writes a regime column,
+// permanently false since the regime engine was retired. Removing it would change the CSV schema.
 bool   useRegime      = false
-int    regimeErLen    = 30
-int    regimeMinHold  = 15
-float  regimeErThr    = 0.25
-float  regimeErHyst   = 0.05
-bool   gateOpenOnRiskOff = true
-bool   startNeedRegime   = false
-float  evalPaThresh   = 0.0
-bool   guardEval      = false
-bool   guardPA        = false
-bool   useGoalTp      = false
-bool   useDerisk      = false
-bool   useDeriskPA    = false
-float  deriskLvl1     = 67.0
-float  deriskLvl2     = 90.0
-float  deriskPaLvl    = 75.0
-int    deriskQty1     = 3
-int    deriskQty2     = 1
-int    deriskPaQty    = 1
-string exitPreset     = "Custom"
 
 accountID = input.string("", "PMT/Tradovate Account ID", group=GROUP_ACCT,
      tooltip="PMT/Tradovate account ID. Declared first on purpose: it is the FIRST value in the alert name/prefill, so every alert in the TradingView sidebar starts with the account it belongs to. Also feeds the automatic journal account name (first 2 letters + last 3 digits).")
@@ -239,19 +209,31 @@ lastPayoutTime= timestamp("2024-01-01T00:00:00")
 // Futures (trailing-DD) firms only. Forex/static firms run via the Python
 // backtester until the static-DD Pine engine is added. Manual inputs stay as override.
 useFirmPreset = input.bool(false, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_eod_eval", "Firm program", options=["apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+firmPreset    = input.string("apex_50k_eod_eval", "Firm program", options=["apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
     float _g = 3000.0
     float _dll = 1000.0
     float _cons = 50.0
-    if _p == "apex_50k_eod_eval"
+    if _p == "apex_250k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 6500.0
+        _g := 15000.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_25k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 1500.0
+        _g := 1500.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_50k_eod_eval"
         _dd := "EOD"
         _ml := 2500.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "apex_50k_eod_pa"
         _dd := "EOD"
         _ml := 2500.0
@@ -263,7 +245,25 @@ f_firmRules(string _p) =>
         _ml := 2500.0
         _g := 3000.0
         _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_50k_intraday_pa"
+        _dd := "Intraday"
+        _ml := 2500.0
+        _g := 3000.0
+        _dll := 1000.0
         _cons := 50.0
+    else if _p == "apex_50k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 2500.0
+        _g := 3000.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_50k_legacy_pa"
+        _dd := "EOD"
+        _ml := 2500.0
+        _g := 3000.0
+        _dll := 1000.0
+        _cons := 30.0
     else if _p == "daytraders_s2f_25k_instant"
         _dd := "EOD"
         _ml := 1000.0
@@ -275,19 +275,19 @@ f_firmRules(string _p) =>
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "takeprofittrader_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "topstep_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "tradeify_advanced_25k_instant"
         _dd := "EOD"
         _ml := 1500.0
@@ -295,6 +295,102 @@ f_firmRules(string _p) =>
         _dll := 1000.0
         _cons := 50.0
     [_dd, _ml, _g, _dll, _cons]
+f_firmMinPayout(string _p) =>
+    float _mp = 500.0
+    if _p == "apex_250k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_25k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_eod_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_eod_pa"
+        _mp := 500.0
+    else if _p == "apex_50k_intraday_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_intraday_pa"
+        _mp := 500.0
+    else if _p == "apex_50k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_legacy_pa"
+        _mp := 500.0
+    else if _p == "daytraders_s2f_25k_instant"
+        _mp := 500.0
+    else if _p == "mffu_50k_eval"
+        _mp := 500.0
+    else if _p == "takeprofittrader_50k_eval"
+        _mp := 500.0
+    else if _p == "topstep_50k_eval"
+        _mp := 500.0
+    else if _p == "tradeify_advanced_25k_instant"
+        _mp := 500.0
+    _mp
+f_firmLadder(string _p, int _n) =>
+    float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    if _p == "apex_50k_eod_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    else if _p == "apex_50k_intraday_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    else if _p == "apex_50k_legacy_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
+f_firmDays(string _p) =>
+    int _md = 0
+    int _pd = 0
+    float _qd = 50.0
+    if _p == "apex_250k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_25k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_eod_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_eod_pa"
+        _md := 5
+        _pd := 5
+        _qd := 50.0
+    else if _p == "apex_50k_intraday_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_intraday_pa"
+        _md := 5
+        _pd := 5
+        _qd := 50.0
+    else if _p == "apex_50k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_legacy_pa"
+        _md := 8
+        _pd := 5
+        _qd := 50.0
+    else if _p == "daytraders_s2f_25k_instant"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "mffu_50k_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "takeprofittrader_50k_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "topstep_50k_eval"
+        _md := 2
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeify_advanced_25k_instant"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    [_md, _pd, _qd]
+// <<< GENERATED — do not edit above by hand; run tools/gen_pine_firms.py
 if useFirmPreset
     [pfDD, pfMax, pfGoal, pfDLL, pfCons] = f_firmRules(firmPreset)
     ddModel := pfDD
@@ -310,7 +406,7 @@ var bool   posRecovOn = false
 var string exitReasonNext = ""
 var string pmtBlockReason = ""
 bool isPA   = accountPhase == "Apex PA"
-useDDGuard = (isPA and guardPA) or (isEval and guardEval)
+bool useDDGuard = false
 bool phaseOn = isEval or isPA
 var bool  acctHalted = false
 var string acctHaltReason = ""
@@ -356,25 +452,13 @@ confirmBarsIn = input.int(2, "Confirmation window (bars)", minval=0, maxval=20, 
 
 
 int confirmBars = confirmBarsIn
-// === TIME GATE (alleen Manual; in-sample modes verwijderd) ===================
-tradeSunday    = input.bool(false, "Sun", inline="wd", group=GROUP_TIME, display=display.none)
-tradeMonday    = input.bool(true,  "Mon", inline="wd", group=GROUP_TIME, display=display.none)
-tradeTuesday   = input.bool(true,  "Tue", inline="wd", group=GROUP_TIME, display=display.none)
-tradeWednesday = input.bool(true,  "Wed", inline="wd", group=GROUP_TIME, display=display.none)
-tradeThursday  = input.bool(true,  "Thu", inline="wd", group=GROUP_TIME, display=display.none)
-tradeFriday    = input.bool(true,  "Fri", inline="wd", group=GROUP_TIME, display=display.none)
-tradeSaturday  = input.bool(false, "Sat (crypto)", inline="wd", group=GROUP_TIME, tooltip="Weekday toggles for the time gate. The Monday 00:00-02:00 filter below is separate and day-specific.", display=display.none)
-timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_TIME), timeHour01 = input.bool(true, "01", inline="h0", group=GROUP_TIME), timeHour02 = input.bool(true, "02", inline="h0", group=GROUP_TIME), timeHour03 = input.bool(true, "03", inline="h0", group=GROUP_TIME), timeHour04 = input.bool(true, "04", inline="h0", group=GROUP_TIME), timeHour05 = input.bool(true, "05", inline="h0", group=GROUP_TIME, tooltip="00.", display=display.none)
-timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_TIME), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_TIME), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_TIME), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_TIME), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_TIME), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_TIME, tooltip="06.", display=display.none)
-timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
-timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_TIME), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_TIME), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_TIME), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_TIME), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_TIME, tooltip="18.", display=display.none)
-useAutoFlat = input.bool(true, "Force Flat Window", inline="flat", group=GROUP_TIME, display=display.none)
+// === TIME GATE (session strings; the 31 weekday/hour toggles went in v6.9.5) ==
+tradingSession = input.session("0000-2400:23456", "Trading window (days + hours)", group=GROUP_TIME,
+     tooltip="When new entries are allowed, written as one session string: hours, then days after the colon. 1 = Sunday … 7 = Saturday, so 23456 is Mon-Fri. Several ranges are allowed, e.g. 0000-0600,1200-1800:23456. This replaces the seven weekday toggles and the twenty-four hourly toggles.")
+flatWindow     = input.session("1655-1800:1234567", "Force-flat window", group=GROUP_TIME,
+     tooltip="Open positions are closed and no new entries are taken inside this window. Leave it empty to switch the force-flat off. This replaces the Force Flat Window toggle and its four hour/minute fields.")
 skipMonEarly = input.bool(true, "Skip Monday open (no entries Mon 00:00–02:00 ET)", group=GROUP_TIME,
      tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
-flatHour    = input.int(16, "From", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
-flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, display=display.none)
-resumeHour  = input.int(18, "Until", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
-resumeMinute= input.int(0, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, tooltip="Trading resume minute.", display=display.none)
 
 // === ROLL / OPEX / NEWS FACTORY (event-regime filters) ======================
 // Validated on 3y OOS: for the mean-reversion engine the losses concentrate in the
@@ -397,25 +481,28 @@ rgBlockFOMC    = input.bool(false, "Custom · block FOMC days",               gr
 rgBlockNFP     = input.bool(false, "Custom · block NFP days",                group=GROUP_EVT, tooltip="Skip Non-Farm-Payroll Fridays. Usually a tailwind for index strats — leave off.")
 
 // === VISUALISATION ===========================================================
-showSignals     = input.bool(true, "Show Signals", inline="v1", group=GROUP_VIS, display=display.none)
-showTradeLevels = input.bool(true, "Show SL/TP Levels", inline="v1", group=GROUP_VIS, display=display.none)
-showPending     = input.bool(true, "Show Pending Limit", inline="v1", group=GROUP_VIS, tooltip="Plot the resting limit and planned stop while an order is pending.", display=display.none)
-showExpired     = input.bool(true, "Mark Unfilled Limits (box)", inline="v1b", group=GROUP_VIS, display=display.none)
-showExitLabels  = input.bool(true, "Show Exit Labels (PnL)", inline="v1b", group=GROUP_VIS, tooltip="Plain-text realized PnL at each exit.", display=display.none)
-showTradeLabels = input.bool(true, "Trade info next to zone", inline="v2", group=GROUP_VIS, display=display.none)
-showTradeZones  = input.bool(true, "Trade zones (SL/TP fill)", inline="v2", group=GROUP_VIS, display=display.none)
-showGateBg      = input.bool(true, "Gate background", inline="v2", group=GROUP_VIS,
-     tooltip="Colors the chart background softly when the FULL strategy gate is open: teal = long side tradable, red = short side, amber = both sides open. Includes ALL live conditions: time gate (incl. Monday filter), flat window, day halt, account status, CVD, VWAP veto, bias and sweep filter. A stronger amber flash marks bars where a valid signal fired but was blocked by a non-strategy rule (MAE guard, halts).", display=display.none)
-gateBgTransp    = input.int(90, "Gate bg transp.", minval=70, maxval=98, group=GROUP_VIS,
-     tooltip="Transparency of the gate background (70 = strong, 98 = barely visible). Hue follows the theme dropdown. The blocked-signal flash renders ~8 steps stronger than this value.", display=display.none)
-showFvgBoxes    = input.bool(true, "Show FVG Boxes", inline="v2", group=GROUP_VIS, display=display.none)
-markTested      = input.bool(true, "Mark Tested FVGs", inline="v2", group=GROUP_VIS, tooltip="Recolor an FVG box once price has tested it.", display=display.none)
-maxBoxes        = input.int(40, "Max FVG Boxes", minval=1, maxval=200, group=GROUP_VIS, tooltip="Maximum number of FVG boxes kept on the chart.", display=display.none)
+showVisuals     = input.bool(true, "Chart visuals", inline="v1", group=GROUP_VIS,
+     tooltip="Signals, SL/TP levels, the resting limit, unfilled-limit boxes, exit labels, trade info, trade zones and the gate background. One switch: the eight separate toggles were removed in v6.9.4 — they were only ever used together.")
+showFvgBoxes    = input.bool(true, "FVG boxes", inline="v1", group=GROUP_VIS,
+     tooltip="Draw the fair-value gaps, and recolor a box once price has tested it.")
 drawLast        = input.int(2000, "Visuals: draw only on last N bars (0 = all)", minval=0, group=GROUP_VIS, tooltip="MEMORY FIX: boxes/labels/zones are only drawn on the most recent N bars. Purely cosmetic — strategy results are identical. Prevents 'Memory limit exceeded' on entire-history backtests. Set 0 to draw on all bars (may exceed the memory limit on long histories).", display=display.none)
 bool inDrawWin  = drawLast <= 0 or (last_bar_index - bar_index) <= drawLast
-bullColor       = input.color(color.new(color.green, 85), "Bull", inline="v3", group=GROUP_VIS)
-bearColor       = input.color(color.new(color.red, 85), "Bear", inline="v3", group=GROUP_VIS)
-testedColor     = input.color(color.new(color.gray, 88), "Tested", inline="v3", group=GROUP_VIS, tooltip="Fill color for tested FVG boxes.")
+// Fixed since v6.9.4 — these were inputs that never moved off their default. The names stay so
+// the drawing code below is untouched; only the settings panel changed.
+bool  showSignals     = showVisuals
+bool  showTradeLevels = showVisuals
+bool  showPending     = showVisuals
+bool  showExpired     = showVisuals
+bool  showExitLabels  = showVisuals
+bool  showTradeLabels = showVisuals
+bool  showTradeZones  = showVisuals
+bool  showGateBg      = showVisuals
+bool  markTested      = showFvgBoxes
+int   gateBgTransp    = 90
+int   maxBoxes        = 40
+color bullColor       = color.new(color.green, 85)
+color bearColor       = color.new(color.red, 85)
+color testedColor     = color.new(color.gray, 88)
 
 // === DASHBOARD ===============================================================
 showDashboard = input.bool(true, "Show Dashboard", inline="d1", group=GROUP_DASH, display=display.none)
@@ -470,11 +557,9 @@ avatarURL  = ""
 titleURL  = ""
 roleID  = ""
 notifyRiskOff = useDiscord
-notifyRegime  = input.bool(false, "Notify: regime-shift", group=GROUP_ALRT, tooltip="Discord message on a regime flip (informational only).", display=display.none)
 notifyEval = useDiscord
 notifyFills = useDiscord
 notifyStart = useDiscord
-notifyDerisk = useDiscord
 notifyBlocked = input.bool(true, "Alert: signal blocked by non-strategy rule", group=GROUP_ALRT,
      tooltip="Fires a TradingView alert (and Discord, if enabled) when a setup satisfies ALL strategy rules (FVG + CVD + bias + VWAP veto + sweep) but is blocked by an operational rule: MAE guard, DD guard, day halt, account halt, time gate or flat window. Being in a position or having a pending order does NOT trigger this alert — that is normal system behaviour.", display=display.none)
 
@@ -532,69 +617,15 @@ bool execInstance = usePMT or useRithmic or usePineConnector or useMiddleware
 // ============================================================================
 // === TIME GATE ==============================================================
 // ============================================================================
-hourEnabled = array.from(timeHour00,timeHour01,timeHour02,timeHour03,timeHour04,timeHour05,timeHour06,timeHour07,timeHour08,timeHour09,timeHour10,timeHour11,timeHour12,timeHour13,timeHour14,timeHour15,timeHour16,timeHour17,timeHour18,timeHour19,timeHour20,timeHour21,timeHour22,timeHour23)
-f_toMOD(_h,_m) => _h*60+_m
-f_inRangeMOD(_sh,_sm,_eh,_em) =>
-    _cur = f_minuteOfDay()
-    _s = f_toMOD(_sh,_sm)
-    _e = f_toMOD(_eh,_em)
-    _e > _s ? (_cur >= _s and _cur < _e) : (_cur >= _s or _cur < _e)
 tradeDOW = dayofweek(time, activeTz)
-f_isTradingDay() =>
-    (tradeDOW == dayofweek.sunday and tradeSunday) or (tradeDOW == dayofweek.monday and tradeMonday) or
-     (tradeDOW == dayofweek.tuesday and tradeTuesday) or (tradeDOW == dayofweek.wednesday and tradeWednesday) or
-     (tradeDOW == dayofweek.thursday and tradeThursday) or (tradeDOW == dayofweek.friday and tradeFriday) or
-     (tradeDOW == dayofweek.saturday and tradeSaturday)
 monEarlyBlock = skipMonEarly and tradeDOW == dayofweek.monday and f_minuteOfDay() < 120
-timeGatePassRaw = f_isTradingDay() and array.get(hourEnabled, f_getHour()) and not monEarlyBlock
+bool inTradingSession = not na(time(timeframe.period, tradingSession, activeTz))
+timeGatePassRaw = inTradingSession and not monEarlyBlock
 
-// === MEX OR-BREAKOUT — tracking (per sessie, repaint-vrij) ===================
-var float orHi = na
-var float orLo = na
-var bool  orDone = false
-var bool  orBrokeLong = false
-var bool  orBrokeShort = false
-if isNewTradingDay
-    orHi := na
-    orLo := na
-    orDone := false
-    orBrokeLong := false
-    orBrokeShort := false
-int _modNow = f_minuteOfDay()
-bool _inOR = _modNow >= orStartMin and _modNow < orEndMin
-if _inOR
-    orHi := na(orHi) ? high : math.max(orHi, high)
-    orLo := na(orLo) ? low  : math.min(orLo, low)
-if _modNow >= orEndMin and not orDone and not na(orHi)
-    orDone := true
-float _brkDist = orBreakoutUnit == "Points" ? orBreakoutT : orBreakoutT * syminfo.mintick
-if orDone and barstate.isconfirmed
-    if not orBrokeLong and not na(orHi) and close >= orHi + _brkDist
-        orBrokeLong := true
-    if not orBrokeShort and not na(orLo) and close <= orLo - _brkDist
-        orBrokeShort := true
-var bool orUsedLong = false
-var bool orUsedShort = false
-if isNewTradingDay
-    orUsedLong := false
-    orUsedShort := false
-bool orGateLong  = not useOrBreakout or (orBrokeLong  and not (orOneSetup and orUsedLong))
-bool orGateShort = not useOrBreakout or (orBrokeShort and not (orOneSetup and orUsedShort))
 
-// === PA CONTEXT FILTERS — berekening (ex-ante, geen repaint) =================
-bool paFiltersActive = usePaFilters and not useOrBreakout
-float _volMa   = ta.sma(volume, relVolLen)
-float relVol   = not na(_volMa) and _volMa > 0 ? volume / _volMa : na
-bool relVolOK  = not (paFiltersActive and useRelVolFilter) or na(relVol) or relVol <= relVolMax
-float _bbStd   = ta.stdev(close, bbwpStdLen)
-float bbwpVal  = ta.percentrank(_bbStd, bbwpLook) / 100.0
-bool bbwpOK    = not (paFiltersActive and useBbwpFilter) or na(bbwpVal) or bbwpVal <= bbwpMax
-int  _mod      = f_minuteOfDay()
-bool rthOpenBlock = paFiltersActive and blockRthOpen and _mod >= rthOpenLo and _mod < rthOpenHi
-bool paFiltersOK  = relVolOK and bbwpOK and not rthOpenBlock
 
-timeGatePass = timeGatePassRaw and paFiltersOK
-inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
+timeGatePass = timeGatePassRaw
+inFlatWindow = flatWindow != "" and not na(time(timeframe.period, flatWindow, activeTz))
 
 // ============================================================================
 // === ROLL / OPEX / NEWS FACTORY — preset resolver + calendar gate ============
@@ -847,7 +878,7 @@ if phaseOn
 bool  acctLocked = phaseOn and acctHwm >= acctTrailDD + 100
 float acctFloor  = not phaseOn ? na : acctLocked ? 100.0 : acctHwm - acctTrailDD
 float ddRoom     = phaseOn ? acctPnL - acctFloor : na
-bool  consistencyOK = profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0
+bool  consistencyOK = consistencyPct <= 0 or (profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0)    // <= 0 = no consistency rule (evals)
 f_ladderCap(_n) =>
     _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
 int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
@@ -915,10 +946,9 @@ var bool acctStartArmed = false
 var bool startNotified = false
 if not acctStartArmed
     bool _dateOK = not tradeFromStart or time >= evalStartTime
-    bool _regOK  = not startNeedRegime or not useRegime or regimeFav
-    if _dateOK and _regOK
+    if _dateOK
         acctStartArmed := true
-bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
+bool preStartBlock = tradeFromStart and not acctStartArmed
 canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
 
 // ============================================================================
@@ -939,8 +969,8 @@ f_calcQty(_slDistPrice) =>
 isFlat = strategy.position_size == 0 and strategy.opentrades == 0
 var bool posRiskOff = false
 
-bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and barstate.isconfirmed
-bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and barstate.isconfirmed
+bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and barstate.isconfirmed
+bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and barstate.isconfirmed
 
 // === v6.1: FVG CONFIRMATION MEMORY ==========================================
 var array<int>   memBar = array.new<int>()
@@ -977,7 +1007,7 @@ if confirmBars > 0 and barstate.isconfirmed
                 array.remove(memMid, _p)
                 array.remove(memTop, _p)
                 array.remove(memBot, _p)
-    bool gateMemOK = (isFlat or (gateOpenOnRiskOff and posRiskOff)) and canTrade
+    bool gateMemOK = (isFlat or posRiskOff) and canTrade
     if not (long0 or short0) and gateMemOK and array.size(memBar) > 0
         int _n = array.size(memBar)
         for _j = 0 to _n - 1
@@ -985,8 +1015,8 @@ if confirmBars > 0 and barstate.isconfirmed
             int _age = bar_index - array.get(memBar, _k)
             if _age >= 1 and _age <= confirmBars
                 int _d = array.get(memDir, _k)
-                bool _ok = _d == 1 ? (bullCvdPass and canLong and vetoLongOK and sweepLongOK and orGateLong) :
-                     (bearCvdPass and canShort and vetoShortOK and sweepShortOK and orGateShort)
+                bool _ok = _d == 1 ? (bullCvdPass and canLong and vetoLongOK and sweepLongOK) :
+                     (bearCvdPass and canShort and vetoShortOK and sweepShortOK)
                 if _ok
                     memSigDir := _d
                     memSigMid := array.get(memMid, _k)
@@ -999,7 +1029,7 @@ if confirmBars > 0 and barstate.isconfirmed
                     array.remove(memTop, _k)
                     array.remove(memBot, _k)
                     break
-    bool consumed0 = (long0 or short0) and (isFlat or (gateOpenOnRiskOff and posRiskOff))
+    bool consumed0 = (long0 or short0) and (isFlat or posRiskOff)
     if fvgDirection != 0 and fvgPasses and not consumed0
         array.push(memBar, bar_index)
         array.push(memDir, fvgDirection)
@@ -1035,18 +1065,11 @@ float maeQtyMax = maeActive and sigStopDist > 0 ? math.floor(maeAllowUSD / (sigS
 bool maeGuardOK = not maeActive or maeQtyMax >= 1
 float _lwProg = evalTrack and evalStarted and evalProfitTgt > 0 and not na(evalBal) ? (evalBal - evalStartBal) / evalProfitTgt : 0.0
 float _prog = isEval and acctGoal > 0 ? acctRealized / acctGoal : _lwProg
-bool deriskOn = useDerisk and (isEval or (evalTrack and evalStarted))
-float deriskQtyMax = deriskOn ? (_prog >= deriskLvl2 / 100 ? deriskQty2 : _prog >= deriskLvl1 / 100 ? deriskQty1 : 1e9) : 1e9
-float _paNet = acctTrailDD + 100
-float _progPa = isPA and _paNet > 0 ? acctRealized / _paNet : 0.0
-float deriskPaMax = useDeriskPA and isPA and acctRealized < _paNet and _progPa >= deriskPaLvl / 100 ? deriskPaQty : 1e9
-float sigQtyCap = math.min(math.min(maeActive ? math.max(maeQtyMax, 0) : 1e9, deriskQtyMax), deriskPaMax)
+float sigQtyCap = maeActive ? math.max(maeQtyMax, 0) : 1e9
 float sigQtyEff = math.min(sigQty, sigQtyCap)
 
 f_tpFixDist(_q) =>
     float _d = f_distPrice(tpSizeEff)
-    if useGoalTp and isEval and not acctHalted and acctRealized < acctGoal and _q > 0
-        _d := math.min(_d, (acctGoal - acctRealized) / (_q * syminfo.pointvalue) + 3 * syminfo.mintick)
     math.max(_d, 4 * syminfo.mintick)
 
 float sigTpPx = na
@@ -1084,7 +1107,7 @@ f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
             alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
     if useMiddleware
         string _mwEv = _action == "close" ? "EXIT" : "ENTRY"
-        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"trail\":" + (f_trailOn(_slD) ? "1" : "0") + ",\"trail_stop\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trBufEff) : 0) + ",\"trail_trigger\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trStartEff) : 0) + ",\"trail_freq\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0) + ",\"breakeven\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beTrigEff)) : "0") + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
+        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","
@@ -1105,7 +1128,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=0" + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=off" + ";deriskPA=off" + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1125,16 +1148,6 @@ if payoutReady and not payoutDiscordSent
 if not payoutReady
     payoutDiscordSent := false
 
-var int deriskNotifState = 0
-int _dState = deriskOn ? (_prog >= deriskLvl2 / 100 ? 2 : _prog >= deriskLvl1 / 100 ? 1 : 0) : 0
-if notifyDerisk and _dState > deriskNotifState
-    f_sendDiscord("🪜 " + syminfo.ticker + " DERISK L" + str.tostring(_dState), jrnlAcct + " | progress " + str.tostring(_prog * 100, "#") + "% of goal — size capped to " + str.tostring(_dState == 2 ? deriskQty2 : deriskQty1, "#") + " contract(s).")
-deriskNotifState := _dState
-var int paNotifState = 0
-int _pState = useDeriskPA and isPA and acctRealized < _paNet and _progPa >= deriskPaLvl / 100 ? 1 : 0
-if notifyDerisk and _pState > paNotifState
-    f_sendDiscord("🪜 " + syminfo.ticker + " PA DERISK", jrnlAcct + " | " + str.tostring(_progPa * 100, "#") + "% of safety net — size capped to " + str.tostring(deriskPaQty, "#") + " contract(s) until lock.")
-paNotifState := _pState
 
 f_orderMsg(string _event, int _dir, float _entry, float _sl, float _tp, float _qty) =>
     not alertMsgAuto ? "" : _event + "," + (_dir == 1 ? "LONG" : "SHORT") + "," + jrnlAcct + "," + syminfo.ticker + "," + str.tostring(_entry, format.mintick) + "," + str.tostring(_sl, format.mintick) + "," + str.tostring(_tp, format.mintick) + "," + str.tostring(_qty, "#.##") + (alertIncludeCfg ? "|CFG|" + cfgStr : "")
@@ -1178,7 +1191,7 @@ var float t_tpD = na
 var float t_tpPx = na
 var float t_qty = na
 
-gateOK = isFlat or (gateOpenOnRiskOff and posRiskOff)
+gateOK = isFlat or posRiskOff
 
 // === v6.0: BLOCKERS ENGINE ==================================================
 bool rawLong  = (bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
@@ -1231,11 +1244,6 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
     t_tpPx := sigTpPx
     t_qty := sigQtyEff
     pendDir := longSignal ? 1 : -1
-    if useOrBreakout and orOneSetup
-        if longSignal
-            orUsedLong := true
-        else
-            orUsedShort := true
     pendBar := bar_index
     if notifyStart and not startNotified
         startNotified := true
@@ -1476,34 +1484,6 @@ if acctHalted and not acctCloseSent
         alert(f_msgHead() + " | 🏁 " + acctHaltReason + " | acct PnL $" + str.tostring(acctRealized, "#"), alert.freq_once_per_bar)
 
 // ============================================================================
-// === v5: REGIME INDICATOR ===================================================
-// ============================================================================
-var bool regimeInit = false
-float erNet  = math.abs(close - close[regimeErLen])
-float erPath = math.sum(math.abs(close - close[1]), regimeErLen)
-float erVal  = erPath > 0 ? erNet / erPath : 0.0
-float regThrUp = regimeErThr + regimeErHyst
-float regThrDn = regimeErThr - regimeErHyst
-bool  regimeWant = regimeFav ? (erVal > regThrDn) : (erVal > regThrUp)
-var int regimeWantCnt = 0
-if useRegime and barstate.isconfirmed
-    if not regimeInit
-        regimeFav := erVal > regimeErThr
-        regimeInit := true
-    else if regimeWant != regimeFav
-        regimeWantCnt := regimeWantCnt + 1
-        if regimeWantCnt >= regimeMinHold
-            regimeFav := regimeWant
-            regimeWantCnt := 0
-            if notifyRegime
-                if regimeFav
-                    f_sendDiscord("🟢📈 " + syminfo.ticker + " REGIME → FAVORABLE", "ER " + str.tostring(erVal, "#.00") + " > " + str.tostring(regThrUp, "#.00") + ". Trending — historically friendlier conditions. ⚠️ indication, not a guarantee.")
-                else
-                    f_sendDiscord("🔴📉 " + syminfo.ticker + " REGIME → UNFAVORABLE", "ER " + str.tostring(erVal, "#.00") + " ≤ " + str.tostring(regThrDn, "#.00") + ". Chop — be conservative with new accounts. ⚠️ indication, not a guarantee.")
-    else
-        regimeWantCnt := 0
-
-// ============================================================================
 // === v5: EVAL / PA TRACKING =================================================
 // ============================================================================
 var float evalPeak      = na
@@ -1511,7 +1491,6 @@ var float evalEodPeak   = na
 var float evalFloor     = na
 var bool  evalPassed    = false
 var bool  evalFailed    = false
-var bool  paReached     = false
 
 bool evalAtStart = evalTrack and not evalStarted and time >= evalStartTime
 if evalAtStart
@@ -1567,10 +1546,6 @@ if evalTrack and evalStarted and not evalPassed and not evalFailed
         attemptFirstLoss := false
         if notifyEval
             f_sendDiscord("💀 " + syminfo.ticker + " FAILED", "Trailing drawdown hit. Balance $" + str.tostring(evalBal, "#") + " ≤ floor $" + str.tostring(evalFloor, "#") + ". Account blown. 🪦")
-    if not paReached and evalPaThresh > 0 and evalGain >= evalPaThresh
-        paReached := true
-        if notifyEval
-            f_sendDiscord("💰✨ " + syminfo.ticker + " PA THRESHOLD", "Payout threshold reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalPaThresh, "#") + " (balance $" + str.tostring(evalBal, "#") + "). 🤑")
 
 
 pmtBlock := evalTrack and evalPassed
@@ -1664,9 +1639,8 @@ if showDashboard and barstate.islast
                  text_color=payoutReady ? color.lime : (payoutEligible and useWaitForCap ? color.orange : txtColor), text_size=txtSize)
 
         table.cell(dash, 0, 6, "REGIME / EVAL", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-        table.cell(dash, 1, 6, not useRegime ? "Regime —" : regimeFav ? "🟢 FAVORABLE" : "🔴 UNFAVORABLE",
-             text_color=not useRegime ? txtColor : regimeFav ? color.lime : color.red, text_size=txtSize)
-        table.cell(dash, 2, 6, useRegime ? "ER " + str.tostring(erVal, "#.00") : "",
+        table.cell(dash, 1, 6, "Regime —", text_color=txtColor, text_size=txtSize)
+        table.cell(dash, 2, 6, "",
              text_color=txtColor, text_size=txtSize)
         table.cell(dash, 0, 7, "GATE", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
         table.cell(dash, 1, 7, gateLongOpen and gateShortOpen ? "🟡 BOTH open" : gateLongOpen ? "🟢 LONG open" : gateShortOpen ? "🔴 SHORT open" : "⚪ Closed", text_color=txtColor, text_size=txtSize)
@@ -1712,10 +1686,9 @@ if showDashboard and barstate.islast
              not evalStarted ? "⏳ start " + str.tostring(dayofmonth(evalStartTime, activeTz)) + "-" + str.tostring(month(evalStartTime, activeTz)) :
              evalPassed ? "🏆 PASSED" : evalFailed ? "💀 FAILED" :
              "→T $" + str.tostring(distTarget, "#") + " · →F $" + str.tostring(distFail, "#")
-        string cReg = (not useRegime ? "Regime —" : (regimeFav ? "🟢 FAVORABLE" : "🔴 UNFAVORABLE") + " · ER " + str.tostring(erVal, "#.00")) +
-             "\n" + cEvalLn
+        string cReg = "Regime —\n" + cEvalLn
         table.cell(dash, 0, 5, "REG/EVAL", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-        table.cell(dash, 1, 5, cReg, text_color=not useRegime ? txtColor : regimeFav ? color.lime : color.red, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, 5, cReg, text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
         string cGate = (gateLongOpen and gateShortOpen ? "🟡 BOTH open" : gateLongOpen ? "🟢 LONG open" : gateShortOpen ? "🔴 SHORT open" : "⚪ Closed") +
              "\n" + (str.length(persistBlk) > 0 ? "⛔ " + str.substring(persistBlk, 0, str.length(persistBlk) - 2) : "No blockers") +
              "\nLast: " + lastBlockedInfo

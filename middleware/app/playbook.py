@@ -129,7 +129,11 @@ def ladder_rung(size: float | None, payouts_taken: int, ladder: list | None = No
 
 def dd_amount(account: dict, size: float | None) -> float:
     """The account's drawdown $ — drives the safety net. From DD Amount $, else the EOD/Static
-    number in the Drawdown Rule ('EOD ($2000)' → 2000), else the Apex default for its size."""
+    number in the Drawdown Rule ('EOD ($2000)' → 2000), else the account's OWN firm program,
+    else the Apex default for its size.
+
+    The program step matters off Apex: DayTraders Static 25k caps at $750, and falling straight
+    through to the Apex 25k default of $1,500 hands that account twice the room it has."""
     from .payout_rules import APEX_DD
     a = account.get("dd_amount")
     if a:
@@ -137,6 +141,13 @@ def dd_amount(account: dict, size: float | None) -> float:
     m = re.search(r"\$?\s*(\d{3,6})", account.get("dd_rule") or "")
     if m:
         return float(m.group(1))
+    try:
+        from . import firm_rules
+        prog = firm_rules.rules_for_account(account) or {}
+        if prog.get("drawdown"):
+            return float(prog["drawdown"])
+    except Exception:                       # never let the registry break the playbook
+        pass
     return float(APEX_DD.get(int(size or 0), 2_500))
 
 

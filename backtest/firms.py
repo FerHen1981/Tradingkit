@@ -224,5 +224,7 @@ def to_overlay(p: Program) -> dict:
         "acct_trail_dd": p.drawdown,
         "acct_goal": p.profit_target if p.profit_target else 3_000.0,
         "acct_dll": p.max_daily_loss if p.max_daily_loss else 1_000.0,
-        "consistency_pct": p.consistency_pct if p.consistency_pct else 50.0,
+        # 0 = no rule. Consistency is a funded-account rule: an evaluation has none, so
+        # defaulting it to 50 puts a ceiling on the overlay that the firm never set.
+        "consistency_pct": p.consistency_pct or (0.0 if p.stage == "eval" else 50.0),
     }

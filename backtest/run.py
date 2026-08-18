@@ -128,6 +128,8 @@ def main():
     args = ap.parse_args()
 
     print(f"loading {args.data} ...")
+    _emit_progress(0, 100, "loading dataset (first load parses the CSV, ~1 min on 20y 1m; "
+                           "cached after that)")
     df = data_mod.load(args.data)
     print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
@@ -235,13 +237,17 @@ def main():
         else:
             fp_src, source = {"preset": base_name}, f"preset:{base_name}"
             kind = "preset"
+        # dataset_id, NOT basename: every Lab dataset's file is "canonical.csv", so
+        # basename made runs on different datasets fingerprint-collide and
+        # silently overwrite each other's records.
         fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens, "segment": _segment,
-                          "unit_mode": cfg.unit_mode, "data": os.path.basename(args.data)})
+                          "unit_mode": cfg.unit_mode, "data": data_mod.dataset_id(args.data)})
         rid = make_run_id(asset, base_name, tf, lens, fp)
         meta = {"run_id": rid, "asset": asset, "strategy": base_name, "timeframe": tf,
                 "lens": lens, "segment": _segment, "holdout_days": args.holdout_days or 0,
                 "source": source, "kind": kind,
-                "data_file": os.path.basename(args.data), "window": _window,
+                "data_file": os.path.basename(args.data),
+                "dataset": data_mod.dataset_id(args.data), "window": _window,
                 "settings": _settings(cfg), "desc": describe_config(cfg),
                 "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
         if res is not None and getattr(res, "diagnosis", None):
@@ -330,7 +336,10 @@ def main():
             _fin("funded overlay …")
             fr = simulate_funded(daily_from_trades(res.trades),
                                  account_size=cfg.initial_capital or 50_000)
-            s = fsum(fr)
+            # merge the underlying trade KPIs into the record (key sets are
+            # disjoint) so a funded run still shows trades/PF/net in the Runs
+            # table instead of empty columns.
+            s = {**kpis(res), **fsum(fr)}
             _fin("recording …")
             print(f"\n{'='*70}\n{name}  [FUNDED OVERLAY]  ({time.time()-t0:.1f}s)")
             print(f"  payouts={s['payouts']}  withdrawn=${s['withdrawable']:,.0f}  "

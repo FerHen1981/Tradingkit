@@ -16,14 +16,64 @@ and derive:
 """
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 
 
 REQUIRED = ["DateTime", "Open", "High", "Low", "Close", "Volume", "Delta"]
 
 
-def load(csv_path: str) -> pd.DataFrame:
-    df = pd.read_csv(csv_path)
+def dataset_id(path) -> str:
+    """Stable dataset identity for run fingerprints. Every Lab dataset stores its
+    file as datasets/<name>/canonical.csv, so the FILE name alone collides across
+    datasets (a GC run and a 6B run would fingerprint identically and overwrite
+    each other) — use the parent directory name for those."""
+    p = os.path.abspath(str(path))
+    b = os.path.basename(p)
+    if b.lower() in ("canonical.csv", "data.csv"):
+        return os.path.basename(os.path.dirname(p)) or b
+    return b
+
+
+def _cache_path(src: str) -> str:
+    return src + ".cache.pkl"
+
+
+def _write_cache(df: pd.DataFrame, src: str) -> None:
+    """Best-effort parse cache. Measured on a 4.3M-row 1m CSV: parsing costs ~50s
+    (17s read_csv + 32s strict %z to_datetime) on EVERY job; the pickle loads in a
+    few seconds. Only written when the disk keeps comfortable headroom (cache is
+    roughly the CSV's size), atomically via rename; any failure just means no
+    cache — never a failed load."""
+    pkl = _cache_path(src)
+    tmp = pkl + ".tmp"
+    try:
+        st = os.statvfs(os.path.dirname(os.path.abspath(src)) or ".")
+        free = st.f_bavail * st.f_frsize
+        if free < 2 * os.path.getsize(src):
+            return
+        df.to_pickle(tmp)
+        os.replace(tmp, pkl)
+    except Exception:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+
+
+def load(csv_path: str, cache: bool = True) -> pd.DataFrame:
+    src = str(csv_path)
+    if cache:
+        pkl = _cache_path(src)
+        try:
+            if os.path.exists(pkl) and os.path.getmtime(pkl) >= os.path.getmtime(src):
+                return pd.read_pickle(pkl)
+        except Exception:
+            pass                      # unreadable cache -> reparse the CSV below
+
+    df = pd.read_csv(src)
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
         raise ValueError(f"CSV missing required columns: {missing}")
@@ -41,7 +91,10 @@ def load(csv_path: str) -> pd.DataFrame:
 
     df = df.copy()
     df["et"] = et
-    return _derive(df)
+    df = _derive(df)
+    if cache:
+        _write_cache(df, src)
+    return df
 
 
 def _derive(df: pd.DataFrame) -> pd.DataFrame:

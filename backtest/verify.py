@@ -94,6 +94,7 @@ def main():
     reuse_is = not args.recompute_is
     print(f"loading {args.data} ... ({len(cands)} candidates; "
           f"{'reusing coarse IS' if reuse_is else 'recomputing full IS'})")
+    print("PROGRESS 0 100 loading dataset (cached after the first load)", flush=True)
     df = data_mod.load(args.data)
     is_df, oos_df, cut = data_mod.holdout_split(df, args.holdout_days)
     oos_tf = oos_df if args.tf == "1m" else data_mod.resample_tf(oos_df, args.tf)
@@ -142,7 +143,8 @@ def main():
         if args.lab:
             segs = (("oos", koos, oosw),) if reuse_is else (("is", kis, isw), ("oos", koos, oosw))
             for seg, k, win in segs:
-                fp = fingerprint({"groups": spec["groups"], "tf": args.tf, "seg": seg, "asset": args.base_asset})
+                fp = fingerprint({"groups": spec["groups"], "tf": args.tf, "seg": seg,
+                                  "asset": args.base_asset, "data": data_mod.dataset_id(args.data)})
                 rid = make_run_id(args.base_asset, spec["name"], args.tf, "classic", fp)
                 record_run({"run_id": rid, "asset": args.base_asset, "strategy": spec["name"],
                             "timeframe": args.tf, "lens": "classic", "segment": seg, "kind": "generated",

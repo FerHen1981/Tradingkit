@@ -317,18 +317,25 @@ def _start_job(dataset: str, spec: str, tf: str, lens: str, micro: bool = False)
         cmd += ["--spec", f"backtest/specs/{f.name}"]
     cmd += {"research": ["--research"], "funnel": ["--funnel"], "funded": ["--funded"]}[lens]
 
+    # The DATASET decides the contract: always pass its symbol, so a preset ported
+    # from another instrument (EL_TESORO carries a GC contract) can never silently
+    # simulate the wrong contract on this data — that mislabels the run AND makes
+    # the results meaningless (GC ticks on 6B prices = zero trades).
+    sym = ds[dataset].get("symbol") or ""
+    if sym:
+        cmd += ["--symbol", sym]
+
     # Optional micro-twin comparison: run the full contract AND its micro (GC+MGC,
     # ES+MES, …) side by side — same price data, different contract size — so both
     # land in Runs next to each other. Two SEPARATE processes (memory freed between
     # them, so the big 1m frame doesn't OOM), but each sub-run's exit code is
     # captured: a killed/failed first contract echoes SUBRUN-FAIL and the whole job
     # exits non-zero, so the UI shows an error instead of a silent "done".
-    sym = ds[dataset].get("symbol") or ""
     twin = micro_twin(sym) if (micro and sym) else None
     if twin:
         import shlex
-        a = " ".join(shlex.quote(x) for x in cmd + ["--symbol", sym])
-        b = " ".join(shlex.quote(x) for x in cmd + ["--symbol", twin])
+        a = " ".join(shlex.quote(x) for x in cmd)
+        b = " ".join(shlex.quote(x) for x in cmd[:-1] + [twin])   # same cmd, twin symbol
         script = (f'{a}; e1=$?; [ $e1 -ne 0 ] && echo "SUBRUN-FAIL {sym} rc=$e1"; '
                   f'{b}; e2=$?; [ $e2 -ne 0 ] && echo "SUBRUN-FAIL {twin} rc=$e2"; '
                   f'[ $e1 -ne 0 -o $e2 -ne 0 ] && exit 1 || exit 0')

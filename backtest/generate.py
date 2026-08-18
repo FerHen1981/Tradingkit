@@ -102,6 +102,7 @@ def main():
 
     registry = load_registry()
     print(f"loading {args.data} ...")
+    print("PROGRESS 0 100 loading dataset (cached after the first load)", flush=True)
     df = data_mod.load(args.data)
     if args.coarse_since:
         df = data_mod.slice_dates(df, since=args.coarse_since)
@@ -219,7 +220,8 @@ def main():
         ensure_dirs()
         for s in survivors[:args.top]:
             spec, k = s["spec"], s["kpis"]
-            fp = fingerprint({"groups": spec["groups"], "tf": args.tf, "seg": "is", "asset": args.base_asset})
+            fp = fingerprint({"groups": spec["groups"], "tf": args.tf, "seg": "is",
+                              "asset": args.base_asset, "data": data_mod.dataset_id(args.data)})
             rid = make_run_id(args.base_asset, spec["name"], args.tf, "classic", fp)
             record_run({"run_id": rid, "asset": args.base_asset, "strategy": spec["name"],
                         "timeframe": args.tf, "lens": "classic", "segment": "is", "kind": "generated",

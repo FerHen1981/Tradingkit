@@ -218,6 +218,8 @@ def main():
         base = base.with_(contract=contract(args.symbol))
 
     print(f"loading {args.data} ...")
+    print("PROGRESS 0 100 loading dataset (first load parses the CSV, ~1 min on 20y 1m; "
+          "cached after that)", flush=True)
     df = data_mod.load(args.data)
     if args.coarse_since:
         df = data_mod.slice_dates(df, since=args.coarse_since)

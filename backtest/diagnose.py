@@ -72,10 +72,19 @@ def diagnose_trades(df: pd.DataFrame, cfg, drawdown: float = 2_500.0) -> dict:
     tp_share = float(reasons.get("TP", 0.0))
     eod_share = float(reasons.get("EOD", 0.0))
     if stop_share >= 0.55:
+        # for R-multiple targets the tunable lever is the R itself; the candidate
+        # domain is the full standard R grid (the same domain the neutral MECH_*
+        # mechanics presets sample from), plus the current value.
+        lever = None
+        if "R-multiple" in str(getattr(cfg, "tp_mode", "")):
+            cur_r = float(getattr(cfg, "r_multiple", 2.0) or 2.0)
+            lever = {"param": "r_multiple",
+                     "values": sorted({1.0, 1.5, 2.0, 2.5, 3.0, round(cur_r, 2)})}
         findings.append(_finding(
             "stop-dominated", "high",
             f"{_pct(stop_share)}% of trades exit on a stop and only {_pct(tp_share)}% on target — "
             "the target is rarely reached before the stop or the day-exit fires.",
+            lever=lever,
             stop_share=_pct(stop_share), tp_share=_pct(tp_share)))
     if eod_share >= 0.35:
         findings.append(_finding(
@@ -254,10 +263,13 @@ def diagnose_signals(ind: pd.DataFrame, cfg, veto_counts: dict | None = None) ->
         cvd = {"streak_count": int(getattr(cfg, "cvd_trend_count", 0)),
                "bars_pass_pct": _pct(pass_rate)}
         if getattr(cfg, "use_cvd_filter", False) and pass_rate <= 0.10:
+            cur = int(getattr(cfg, "cvd_trend_count", 4) or 4)
             findings.append(_finding(
                 "cvd-too-strict", "medium",
                 f"The CVD filter (streak {cvd['streak_count']}) leaves only {_pct(pass_rate)}% of bars "
                 "tradeable — it may be gating most of the signal flow.",
+                lever={"param": "cvd_trend_count",
+                       "values": sorted({1, 2, 3, cur})},   # full discrete neighborhood
                 bars_pass_pct=_pct(pass_rate)))
 
     # ---- VWAP veto restrictiveness ---------------------------------------
@@ -283,11 +295,20 @@ def diagnose_signals(ind: pd.DataFrame, cfg, veto_counts: dict | None = None) ->
                     key=lambda kv: veto_counts.get(kv[0], 0))
         wc = veto_counts.get(worst[0], 0)
         if wc and wc / p >= 0.5:
+            # the dominant killer IS the lever: test whether that filter earns its
+            # keep on this data (CVD -> streak neighborhood; VWAP -> with/without).
+            lever = None
+            if worst[0] == "cvd":
+                cur = int(getattr(cfg, "cvd_trend_count", 4) or 4)
+                lever = {"param": "cvd_trend_count", "values": sorted({1, 2, 3, cur})}
+            elif worst[0] == "vwap":
+                lever = {"param": "use_vwap_veto", "values": [False, True]}
             findings.append(_finding(
                 "signals-killed", "high",
                 f"Of {p:,} primary entry signals, only {vetoes['passed_pct']}% survive the filters — "
                 f"the {worst[1]} alone kills {_pct(wc/p)}%. Most of the strategy's raw signals never "
                 "become trades.",
+                lever=lever,
                 primary=p, passed_pct=vetoes["passed_pct"], top_filter=worst[1]))
 
     sev_rank = {"high": 0, "medium": 1, "low": 2}

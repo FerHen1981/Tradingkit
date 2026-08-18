@@ -322,6 +322,16 @@ def main():
         print("  AUTO-TUNE: the data picks the parameters and ranges (no manual input).")
         t0 = time.time()
         out = autotune(df, base, jobs=args.jobs)
+        if not out["tuned"]:
+            # no sweepable lever — still show WHY the run behaved as it did, so
+            # 'nothing to tune' is never a bare shrug. If the edge itself is
+            # absent, tuning can't create one: that's the discovery funnel's job.
+            d = out.get("diagnosis") or {}
+            fs = (d.get("trades", {}).get("findings", []) +
+                  d.get("signals", {}).get("findings", []))
+            print("\n  no sweepable parameter flagged. What the data DID find:")
+            for f in fs or [{"severity": "-", "message": "no findings — mechanics look consistent with this data; the (lack of) edge is the signal itself."}]:
+                print(f"    [{f['severity']}] {f['message']}")
         for t in out["tuned"]:
             if t.get("error"):
                 print(f"\n  {t['param']}: ERROR {t['error']}");  continue

@@ -1213,7 +1213,11 @@ function renderSweep(sw){
 function renderAutotune(at){
   const box=$('#swTune');if(!at||!at.tuned){box.style.display='none';return}
   box.style.display='block';
-  if(!at.tuned.length){box.innerHTML='<div class=muted>The data flagged nothing to tune — no parameter is clearly off on this run.</div>';return}
+  if(!at.tuned.length){
+    box.innerHTML='<div class=muted>No sweepable parameter flagged — below is what the data <b>did</b> find. '
+      +'If the edge itself is absent, tuning cannot create one: that is the job of the discovery funnel (2 · Create).</div>'
+      +(diagnosisHtml(at.diagnosis)||'<div class=muted style="margin-top:8px">No findings at all — the mechanics look consistent with this data; the (lack of) edge is the signal itself.</div>');
+    return}
   const blocks=at.tuned.map(t=>{
     if(t.error)return `<div style="margin-top:12px"><b style="color:var(--rose)">${t.param}</b> — ${t.error}</div>`;
     return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">

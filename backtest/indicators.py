@@ -333,7 +333,14 @@ def _session_vwap(hlc3: np.ndarray, vol: np.ndarray, new_session: np.ndarray) ->
     return out
 
 
-def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
+    # optional progress ticks so the pre-engine indicator build (≈35s on a 20y 1m
+    # frame) shows movement instead of a silent "starting". 6 milestones over the
+    # expensive early blocks. Off by default (parallel mill passes nothing).
+    _STEPS = 6
+    def _tick(k):
+        if progress:
+            progress(k, _STEPS)
     d = df
     high = d["High"].to_numpy(dtype=float)
     low = d["Low"].to_numpy(dtype=float)
@@ -393,14 +400,17 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     out["fvg_bot"] = fvg_bot
     out["fvg_mid"] = fvg_mid
     out["fvg_pass"] = fvg_pass
+    _tick(1)
 
     # --- Swing pivots (confirmed) ---------------------------------------------
     out["piv_low"] = _pivot_confirmed(low, cfg.pivot_k, "low")
     out["piv_high"] = _pivot_confirmed(high, cfg.pivot_k, "high")
+    _tick(2)
 
     # --- Session VWAP ----------------------------------------------------------
     hlc3 = (high + low + close) / 3.0
     out["vwap"] = _session_vwap(hlc3, vol, new_session)
+    _tick(3)
 
     # --- Volume-delta direction + streak --------------------------------------
     bull_run = _run_length_positive(delta)
@@ -417,6 +427,7 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         bear_cvd = np.ones(n, dtype=bool)
     out["bull_cvd"] = bull_cvd
     out["bear_cvd"] = bear_cvd
+    _tick(4)
 
     # --- ATR (computed above; reused for the ATR unit mode) -------------------
     out["atr"] = atr
@@ -430,6 +441,7 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         out["regime_ok"] = np.array([lab in allowed for lab in labels], dtype=bool)
     else:
         out["regime_ok"] = np.ones(n, dtype=bool)
+    _tick(5)
 
     # --- VWAP veto -------------------------------------------------------------
     if cfg.use_vwap_veto:
@@ -592,4 +604,5 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     else:
         out["bb_dir"] = np.zeros(n, dtype=np.int64)
 
+    _tick(6)
     return out

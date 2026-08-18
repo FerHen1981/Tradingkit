@@ -83,7 +83,14 @@ def sweep_param(df, base_cfg, param: str, values: list, funded: bool = False,
         raise ValueError(f"unknown parameter {param!r}")
     current = getattr(base_cfg, param)
     engine_only = param in ENGINE_ONLY
-    shared_ind = ind_mod.compute(df, base_cfg) if engine_only else None
+    if engine_only:
+        # the shared indicator build (~35s on 20y 1m) is otherwise silent — emit a
+        # note so the UI caption moves before the per-value bar starts.
+        def _ind_prog(k, tot):
+            print(f"PROGRESS 0 {max(len(values), 1)} computing shared indicators {k}/{tot}", flush=True)
+        shared_ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
+    else:
+        shared_ind = None
 
     cfgs = [(base_cfg.with_(**{param: v}), funded) for v in values]
     jobs = jobs if jobs and jobs > 0 else (os.cpu_count() or 1)

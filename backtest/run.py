@@ -49,9 +49,9 @@ def _regime_labels(dtf, cfg):
     return lab[pos]
 
 
-def run_one(df, cfg, research: bool, progress=None):
+def run_one(df, cfg, research: bool, progress=None, ind_progress=None):
     t0 = time.time()
-    ind = ind_mod.compute(df, cfg)
+    ind = ind_mod.compute(df, cfg, progress=ind_progress)
     # diag=True on the single-run path (cheap counters; not the parallel mill) so
     # every run carries its own data-derived explanation (phases 1+2).
     eng = Engine(cfg, df, ind, research_mode=research, diag=True)
@@ -275,16 +275,22 @@ def main():
         # bar advances smoothly across a multi-job run (e.g. GC then MGC twin).
         _sym = cfg.contract.symbol
         _lbl = f"{name} {_sym}@{tf}" + (f" · job {jidx+1}/{njobs}" if njobs > 1 else "")
+        # within one job's 0..100 slice: indicators 0-12%, engine bar-loop 12-98%,
+        # finalizing 99% — so the ~35s indicator build shows movement too.
+        def _prog_ind(done, total, _jidx=jidx, _lbl=_lbl):
+            frac = (done / total) if total else 0.0
+            _emit_progress(_jidx * 100 + int(frac * 12), njobs * 100,
+                           f"{_lbl} · computing indicators {done}/{total}")
         def _prog(done, total, _jidx=jidx, _lbl=_lbl):
             frac = (done / total) if total else 0.0
-            _emit_progress(_jidx * 100 + int(frac * 100), njobs * 100,
+            _emit_progress(_jidx * 100 + 12 + int(frac * 86), njobs * 100,
                            f"{_lbl} · bar {done:,}/{total:,}")
         def _fin(msg, _jidx=jidx, _lbl=_lbl):
             # the bar-loop is done; keep the bar alive through the (silent, heavy)
             # tail — overlay + regime classification + recording — so it never
             # looks frozen at 99%.
             _emit_progress(_jidx * 100 + 99, njobs * 100, f"{_lbl} · {msg}")
-        _emit_progress(jidx * 100, njobs * 100, f"{_lbl} · starting")
+        _emit_progress(jidx * 100, njobs * 100, f"{_lbl} · computing indicators …")
         dtf = df_for(tf)
         if args.firm:
             from .firms import program, to_overlay
@@ -320,7 +326,7 @@ def main():
         if args.funded:
             from .funded import daily_from_trades, simulate_funded, summarize as fsum
             t0 = time.time()
-            res, _ = run_one(dtf, cfg, research=True, progress=_prog)   # no halts; overlay applied post-hoc
+            res, _ = run_one(dtf, cfg, research=True, progress=_prog, ind_progress=_prog_ind)   # no halts; overlay applied post-hoc
             _fin("funded overlay …")
             fr = simulate_funded(daily_from_trades(res.trades),
                                  account_size=cfg.initial_capital or 50_000)
@@ -335,7 +341,7 @@ def main():
             out[name] = s
             _record(base_name, cfg, tf, "funded", s, None, res=res)
             continue
-        res, dt = run_one(dtf, cfg, args.research, progress=_prog)
+        res, dt = run_one(dtf, cfg, args.research, progress=_prog, ind_progress=_prog_ind)
         _fin("regime + recording …")
         _print_report(name, res, args.research, dt)
         out[name] = kpis(res)

@@ -15,6 +15,7 @@ Env:
   VIEWER_PASSWORD   owner login password (required to enable auth; unset = open, dev only)
   VIEWER_SECRET     secret for signing the session cookie (default derived from password)
   ROUTED_DIR        routed-log dir (default /root/intent-store)
+  EXPORTS_DIR       Fills CSV upload target (default /root/exports)
   VIEWER_PORT       listen port (default 8080)
   ROUTED_DAYS       how many routed files back to read (default 2)
 """
@@ -38,6 +39,7 @@ from .dashboard_state import command_state
 log = logging.getLogger("mex.viewer")
 
 _ROUTED_DIR = os.environ.get("ROUTED_DIR", os.environ.get("INTENT_DIR", "/root/intent-store"))
+_EXPORTS_DIR = os.environ.get("EXPORTS_DIR", "/root/exports")
 _DAYS = int(os.environ.get("ROUTED_DAYS", "2"))
 _PASSWORD = os.environ.get("VIEWER_PASSWORD", "")
 _SECRET = (os.environ.get("VIEWER_SECRET") or _PASSWORD or "mex-dev-secret").encode()
@@ -267,6 +269,10 @@ class Handler(BaseHTTPRequestHandler):
                 log.warning("widget build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/upload":
+            if not _authed(self.headers):
+                return self._send(200, LOGIN_HTML.encode(), "text/html; charset=utf-8")
+            return self._send(200, UPLOAD_HTML.encode(), "text/html; charset=utf-8")
         if path == "/favicon.svg":
             return self._send(200, _FAVICON_SVG, "image/svg+xml",
                               {"Cache-Control": "public, max-age=86400"})
@@ -284,7 +290,69 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(303, b"", "text/plain", {"Location": "/", "Set-Cookie": cookie})
             return self._send(200, LOGIN_HTML.replace("<!--ERR-->",
                               '<p class="err">Incorrect password</p>').encode(), "text/html; charset=utf-8")
+        if path == "/api/upload-fills":
+            return self._handle_upload()
         return self._send(404, b"not found", "text/plain")
+
+    def _handle_upload(self):
+        """Accept one or more Fills CSV uploads and save to EXPORTS_DIR."""
+        if not _authed(self.headers):
+            return self._send(401, b'{"error":"auth"}', "application/json")
+        ctype = self.headers.get("Content-Type", "")
+        if "multipart/form-data" not in ctype:
+            return self._send(400, b'{"error":"multipart/form-data required"}', "application/json")
+        # Parse boundary from Content-Type
+        boundary = None
+        for part in ctype.split(";"):
+            part = part.strip()
+            if part.startswith("boundary="):
+                boundary = part[len("boundary="):].strip('"')
+        if not boundary:
+            return self._send(400, b'{"error":"missing boundary"}', "application/json")
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        if length > 50 * 1024 * 1024:  # 50 MB cap
+            return self._send(413, b'{"error":"too large (50 MB max)"}', "application/json")
+        body = self.rfile.read(length)
+        sep = f"--{boundary}".encode()
+        parts = body.split(sep)
+        os.makedirs(_EXPORTS_DIR, exist_ok=True)
+        saved = []
+        for part in parts:
+            if b"Content-Disposition" not in part:
+                continue
+            # Split headers from file content (blank line separates)
+            hdr_end = part.find(b"\r\n\r\n")
+            if hdr_end < 0:
+                continue
+            headers_raw = part[:hdr_end].decode(errors="replace")
+            file_data = part[hdr_end + 4:]
+            # Strip trailing \r\n before next boundary
+            if file_data.endswith(b"\r\n"):
+                file_data = file_data[:-2]
+            # Extract filename from Content-Disposition
+            fname = None
+            for line in headers_raw.split("\r\n"):
+                if "filename=" in line:
+                    for token in line.split(";"):
+                        token = token.strip()
+                        if token.startswith("filename="):
+                            fname = token[len("filename="):].strip('"').strip("'")
+            if not fname or not fname.lower().endswith(".csv"):
+                continue
+            # Sanitise: keep only the basename, reject path traversal
+            fname = os.path.basename(fname)
+            if not fname:
+                continue
+            dest = os.path.join(_EXPORTS_DIR, fname)
+            with open(dest, "wb") as f:
+                f.write(file_data)
+            saved.append(fname)
+            log.info("fills upload: saved %s (%d bytes)", fname, len(file_data))
+        if not saved:
+            return self._send(400, json.dumps({"error": "no CSV files found in upload"}).encode(),
+                              "application/json")
+        return self._send(200, json.dumps({"saved": saved, "dir": _EXPORTS_DIR}).encode(),
+                          "application/json")
 
 
 def serve() -> None:
@@ -356,6 +424,68 @@ font-weight:700;font-size:1rem;cursor:pointer;font-family:'JetBrains Mono',monos
 <button>Sign in</button>
 <div class=brand>Pips &amp; Palm Trees Holding</div>
 </form></html>""")
+
+UPLOAD_HTML = ("""<!doctype html><html lang=en><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>MEX — Fills Upload</title>""" + _FONTS + """
+<style>
+:root{color-scheme:dark}body{margin:0;min-height:100vh;display:grid;place-items:center;
+background:#030F28;color:#F2EBDA;font:16px/1.6 'Instrument Sans',system-ui,sans-serif;
+background-image:radial-gradient(1000px 560px at 82% -8%,rgba(232,181,79,.18),transparent 60%),radial-gradient(820px 620px at 2% 42%,rgba(90,162,255,.14),transparent 62%)}
+.card{background:rgba(14,42,94,.42);padding:2rem;border-radius:4px;border:1px solid rgba(242,235,218,.17);width:min(92vw,480px)}
+.lg{display:flex;align-items:center;gap:9px;margin-bottom:1rem}
+.lg .wm{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.03em;font-size:18px}
+.lg .wm em{font-style:normal;font-weight:400;letter-spacing:.10em;margin-left:.35em;color:rgba(242,235,218,.6)}
+h1{font-size:1rem;margin:0 0 .15rem;font-family:'Bricolage Grotesque',sans-serif;font-weight:600}
+.sub{color:rgba(242,235,218,.6);font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;margin-bottom:1rem}
+.drop{border:2px dashed rgba(242,235,218,.25);border-radius:4px;padding:2.5rem 1rem;text-align:center;
+cursor:pointer;transition:border-color .2s,background .2s}
+.drop.over{border-color:#E8B54F;background:rgba(232,181,79,.08)}
+.drop p{margin:.3rem 0;color:rgba(242,235,218,.6);font-size:.9rem}
+.drop .icon{font-size:2rem;margin-bottom:.5rem}
+input[type=file]{display:none}
+.status{margin-top:1rem;font-family:'JetBrains Mono',monospace;font-size:.82rem}
+.status .ok{color:#6BCB77}.status .err{color:#E0796E}
+.status .file{color:rgba(242,235,218,.8);margin:.15rem 0}
+a.back{display:inline-block;margin-top:1.2rem;color:#E8B54F;text-decoration:none;font-size:.85rem;font-family:'JetBrains Mono',monospace}
+a.back:hover{text-decoration:underline}
+</style>
+<div class=card>
+<div class=lg>""" + _MARK + """<span class=wm>MEX<em>TRADERS</em></span></div>
+<h1>Fills Upload</h1><div class=sub>Tradovate CSV → Reconciliation</div>
+<div class=drop id=drop onclick="fi.click()">
+  <div class=icon>📂</div>
+  <p><strong>Sleep Fills-CSV's hierheen</strong></p>
+  <p>of klik om bestanden te kiezen</p>
+</div>
+<input type=file id=fi multiple accept=".csv">
+<div class=status id=status></div>
+<a class=back href="/">← Command Center</a>
+</div>
+<script>
+const drop=document.getElementById('drop'),fi=document.getElementById('fi'),st=document.getElementById('status');
+function upload(files){
+  if(!files.length)return;
+  const fd=new FormData();
+  let n=0;
+  for(const f of files){if(f.name.toLowerCase().endsWith('.csv')){fd.append('file'+n,f,f.name);n++}}
+  if(!n){st.innerHTML='<div class="err">Geen CSV-bestanden gevonden</div>';return}
+  st.innerHTML='<div>Uploading '+n+' bestand'+(n>1?'en':'')+'...</div>';
+  fetch('/api/upload-fills',{method:'POST',body:fd})
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.error){st.innerHTML='<div class="err">'+d.error+'</div>';return}
+      let h='<div class="ok">✓ '+d.saved.length+' bestand'+(d.saved.length>1?'en':'')+' opgeslagen</div>';
+      d.saved.forEach(f=>{h+='<div class="file">  '+f+'</div>'});
+      st.innerHTML=h;
+    })
+    .catch(e=>{st.innerHTML='<div class="err">Upload mislukt: '+e+'</div>'});
+}
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');upload(e.dataTransfer.files)});
+fi.addEventListener('change',()=>upload(fi.files));
+</script></html>""")
 
 DASH_HTML = r"""<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1">

@@ -386,3 +386,6 @@ Zie SM-02.
 **Niet doen tot Ferry beslist:** `notices.py` schrappen. Het is vrijwel zeker dode code,
 maar het schrappen van andermans werk is geen unilaterale actie — precies de regel die
 jij zelf correct hebt toegepast door niet te mergen.
+
+- **Bewijs bij D-35 — de stille faalmodus is geverifieerd in de broncode** (Middleware App, 19-08). `dotnet-receiver/Program.cs:236`: `if (code < 400) return $"sent {code}";` — de receiver leest de **response-body van PMT nooit**. PMT antwoordt met **HTTP 200 óók wanneer het de order weigert**; de reden staat alleen in de body (`alert_status`). Elke weigering wordt dus als `sent 200` in `routed_*.jsonl` gezet. Onafhankelijk bevestigd uit Ferry's PMT-export: **137 geweigerde signalen** (`Access is denied` 128×, `valid ip not found in pool` 9×, IPv6-adres `2a01:4f8:c012:f9d3::1`) die in TradingView allemaal als *Webhook successfully delivered* stonden. **Gevolg:** het routed-log en het journaal kunnen executie niet bevestigen — een order die nooit geplaatst is, ziet er identiek uit aan een geslaagde. De IPv4-fix alleen dicht dit niet; er moet ook op de body worden gecontroleerd. _(niet geclaimd — D-06 ligt bij Legacy, geen .NET SDK in deze omgeving)_
+

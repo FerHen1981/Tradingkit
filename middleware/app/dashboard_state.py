@@ -26,6 +26,7 @@ import time
 from collections import defaultdict
 
 from .fills_pairing import parse_fills_csv, pair_fills
+from .fills_pairing import session_date as _session_date
 
 log = logging.getLogger("mex.dashboard")
 
@@ -308,8 +309,10 @@ def _load_trades(exports: str, skip: list[str]) -> list[dict]:
         move = (t.exit_price - t.entry_price) if t.direction == "BUY" else (t.entry_price - t.exit_price)
         ticks = round(move / t.tick_size) if t.tick_size else 0
         et = t.exit_ts.astimezone(_ET)
+        # bucket on the TRADING SESSION, not the calendar day: the broker's own _tradeDate
+        # (18:00 ET roll). hour/dow stay wall-clock — those describe when you traded.
         trades.append({"acct": t.account, "sym": p[0], "strat": p[3], "net": net, "ticks": ticks,
-                       "close": et.date(), "hour": et.hour, "dow": et.weekday(),
+                       "close": t.session_date or et.date(), "hour": et.hour, "dow": et.weekday(),
                        "comm": round(t.commissions, 2), "mfe": None, "mae": None})
     return trades
 
@@ -461,7 +464,9 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
         if any(s in t.account for s in skip):
             continue
         et = t.exit_ts.astimezone(_ET)
-        close = et.date()
+        # the routed-log carries no broker session label, so derive it (18:00 ET roll) — same
+        # bucket the Fills path gets from _tradeDate, so the two sources line up on one day.
+        close = _session_date(t.exit_ts)
         if after is not None and close <= after:
             continue                                 # already covered by the Fills export
         product = _sym_root(t.symbol)

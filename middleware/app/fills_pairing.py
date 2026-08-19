@@ -16,6 +16,9 @@ import csv
 import datetime as dt
 from collections import deque
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
+
+_ET = ZoneInfo("America/New_York")
 
 # Product root -> $ per full price point (per contract). From the middleware's instrument
 # table; extend as needed. Used for gross P&L = price_move * qty * point_value.
@@ -39,6 +42,7 @@ class Fill:
     product: str             # e.g. MGC
     tick_size: float
     commission: float
+    trade_date: "dt.date | None" = None   # the broker's OWN session label (_tradeDate)
 
     @property
     def is_buy(self) -> bool:
@@ -61,6 +65,32 @@ class CompletedTrade:
     tick_size: float
     gross_pnl: float
     commissions: float
+    session_date: "dt.date | None" = None   # trading session the trade CLOSED in (see SESSION_ROLL_ET)
+
+
+# The CME day rolls at 18:00 ET: the session that opens Sunday 18:00 is Monday's. 17:00-18:00 ET
+# is the maintenance break, so nothing trades across the boundary and the exact minute is moot.
+# Tradovate labels every fill with that session itself (_tradeDate) — we prefer the broker's label
+# and only derive it for sources that have none (the routed-log). Bucketing on the CALENDAR day
+# instead puts every trade after 18:00 ET on the wrong day, which silently breaks the firm's
+# trading-day count, the profit-day count and the consistency ratio.
+SESSION_ROLL_ET = 18
+
+
+def session_date(ts: dt.datetime) -> dt.date:
+    """The trading-session date a timestamp belongs to (18:00 ET rolls into the next session)."""
+    et = ts.astimezone(_ET)
+    return et.date() + dt.timedelta(days=1) if et.hour >= SESSION_ROLL_ET else et.date()
+
+
+def _parse_date(s: str) -> "dt.date | None":
+    s = (s or "").strip()[:10]
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y"):
+        try:
+            return dt.datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
 
 
 def _parse_ts(s: str) -> dt.datetime:
@@ -85,6 +115,7 @@ def parse_fills_csv(path: str) -> list[Fill]:
                     product=(r.get("Product") or "").strip(),
                     tick_size=float(r.get("_tickSize") or 0) or 0.0,
                     commission=float(r.get("commission") or 0) or 0.0,
+                    trade_date=_parse_date(r.get("_tradeDate") or r.get("Trade Date") or ""),
                 ))
             except (KeyError, ValueError):
                 continue
@@ -105,6 +136,7 @@ def _emit(entry: Fill, exit_: Fill, qty: int, long: bool) -> CompletedTrade:
         entry_price=entry.price, exit_price=exit_.price, entry_ts=entry.ts, exit_ts=exit_.ts,
         contract=entry.contract, product=entry.product, tick_size=entry.tick_size,
         gross_pnl=gross, commissions=comm,
+        session_date=exit_.trade_date or session_date(exit_.ts),
     )
 
 

@@ -113,6 +113,32 @@ Beoordeel elke nieuwe commit op: raakt het live executie · raakt het een gedeel
 raakt het andermans map · dupliceert het bestaand werk · maakt het documentatie onjuist.
 Werk daarna het bord bij en zet het watermerk op de nieuwe tips.
 
+### Sluit elke ronde af met de LifeOS-sync
+
+Het bord en LifeOS zijn twee lijsten met verschillende lezers: chats werken op het bord,
+Ferry kijkt in LifeOS. Ze lopen uit elkaar zodra je dat niet actief bijhoudt — dat is één
+keer gebeurd binnen een dag. Daarom hoort bij elke ronde:
+
+1. Elk bord-item heeft een LifeOS-taak met **hetzelfde D-nummer in de titel**
+   (`🛠️ D-xx · <eigenaar> — <titel>`). Nieuw item op het bord → nieuwe taak.
+2. Wat op het bord `done` is, staat in LifeOS op `Done` + afgevinkt, met in `Outcome`
+   het bewijs of het besluit dat het sloot.
+3. Geen taak blijft op `Inbox` staan: die status betekent ongetrieerd, en na een ronde
+   is niets meer ongetrieerd.
+4. Het watermerk hieronder bijwerken.
+
+Statusvertaling — het bord is leidend, LifeOS volgt:
+
+| Bord | LifeOS |
+|---|---|
+| `todo` | `Next` (of `Someday` als het echt kan wachten) |
+| `wip` | `Next` |
+| `blocked` | `Waiting`, met de blocker in `Outcome` |
+| `review` / `done` | `Done` + afgevinkt |
+
+Prioriteitsvertaling: het bord kent P0, LifeOS niet — een P0 wordt `P1` met `P0 ·` vooraan
+in de omschrijving.
+
 **Bekende beperking:** een sessie in een container merkt een push niet uit zichzelf op —
 er is geen kanaal dat mij wakker maakt. Het watermerk vangt dat op: hoe lang het ook
 stilstaat, de eerstvolgende ronde ziet precies wat er tussentijds gebeurde. Wat het niet

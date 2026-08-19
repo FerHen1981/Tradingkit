@@ -77,14 +77,15 @@ def test_window_start_boundaries():
 
 
 def test_aggregate_window_filters_by_close():
-    today = dt.datetime.now(ds._ET).date()
-    old = today - dt.timedelta(days=90)
+    from app.fills_pairing import session_date
+    session_today = session_date(dt.datetime.now(dt.timezone.utc))  # CME session date (18:00 ET roll)
+    old = session_today - dt.timedelta(days=90)
     trades = [
-        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": today},
+        {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 100.0, "ticks": 10, "close": session_today},
         {"acct": "PAAPEX2700250000018", "sym": "GC", "net": 50.0, "ticks": 5, "close": old},
     ]
     assert ds._aggregate(trades, "all")["totals"]["net"] == 150.0
-    assert ds._aggregate(trades, "day")["totals"]["net"] == 100.0     # only today's
+    assert ds._aggregate(trades, "day")["totals"]["net"] == 100.0     # only current session's
     assert ds._aggregate(trades, "rolling")["totals"]["net"] == 100.0  # 90d ago excluded
 
 
@@ -111,14 +112,21 @@ def test_command_state_assembles_without_token():
         os.environ.update(old)
 
 
-def test_day_window_uses_last_trading_day():
-    base = dt.date(2026, 8, 3)
+def test_day_window_uses_current_session():
+    """After 18:00 ET the session rolls — 'day' is the CURRENT session, not the last one with
+    trades.  If no trades exist for the current session, the totals are zero."""
+    from app.fills_pairing import session_date
+    session_today = session_date(dt.datetime.now(dt.timezone.utc))
+    yesterday = session_today - dt.timedelta(days=1)
     trades = [
-        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 80.0, "ticks": 0, "close": base},
-        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 10.0, "ticks": 0, "close": base - dt.timedelta(days=1)},
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 80.0, "ticks": 0, "close": session_today},
+        {"acct": "PAAPEX2700250000018", "sym": "MGC", "net": 10.0, "ticks": 0, "close": yesterday},
     ]
-    # "day" is the most recent day WITH trades (base), not today's calendar date
+    # only the current session's trades
     assert ds._aggregate(trades, "day")["totals"]["net"] == 80.0
+    # if only old trades exist, day = 0 (not the "last day with trades")
+    old_only = [t for t in trades if t["close"] != session_today]
+    assert ds._aggregate(old_only, "day")["totals"]["net"] == 0
 
 
 def test_seed_property_mapping():

@@ -485,12 +485,12 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
 
 
 def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
-    today = dt.datetime.now(_ET).date()
+    today = _session_date(dt.datetime.now(dt.timezone.utc))   # CME session date (18:00 ET roll)
     start = _window_start(window, today)
     if window == "day":
-        # the LAST trading day that actually has trades (not necessarily today)
-        last = max((t["close"] for t in trades), default=today)
-        rows = [t for t in trades if t["close"] == last]
+        # Current session day only. After the 18:00 ET roll, "today" is the next calendar day
+        # and this correctly returns an empty set until the new session's first trade.
+        rows = [t for t in trades if t["close"] == today]
     elif start is not None:
         rows = [t for t in trades if t["close"] >= start]
     else:

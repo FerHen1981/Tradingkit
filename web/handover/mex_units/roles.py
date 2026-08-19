@@ -1,4 +1,4 @@
-"""Aggregation, and the role boundary.
+"""Aggregatie en de rolgrens.
 
 The security property this module exists to guarantee:
 
@@ -8,8 +8,13 @@ The security property this module exists to guarantee:
 That is enforced structurally. Each role has its own builder function that
 constructs its payload from scratch. Nothing filters a "full" dict down, because
 a filter silently leaks every field somebody adds later and forgets to list.
-`tests/test_roles.py` walks the serialised viewer and public payloads and fails
-on any key or value that looks monetary.
+`tests/test_roles.py` loopt de geserialiseerde viewer- en publieke payloads na
+en faalt op elke sleutel of waarde die naar geld ruikt.
+
+Deze module is bewust vrij van datatoegang: hij krijgt trades als gewone dicts
+binnen en weet niet waar ze vandaan komen. De gezaghebbende bronnen zijn
+`cash_ledger.py` voor balansen en `fills_pairing.py` voor trades
+(werkafspraken §3); die koppeling hoort in `middleware/`, niet hier.
 """
 from __future__ import annotations
 
@@ -340,3 +345,29 @@ def _phase_counts(f: Fleet) -> dict[str, int]:
         phase = "funded" if name.upper().startswith("PA") else "evaluatie"
         counts[phase] += 1
     return dict(counts)
+
+
+# ---------------------------------------------------------------------------
+# Publicatiepoort
+# ---------------------------------------------------------------------------
+
+#: Sleutelnamen die op geld duiden. De publieke momentopname is het enige
+#: artefact dat het pand verlaat, dus die krijgt een expliciete controle
+#: bovenop de builder — een tweede slot op dezelfde deur.
+FORBIDDEN_KEY_PARTS = (
+    "usd", "dollar", "money", "balance", "cash", "pnl_usd", "equity_usd",
+    "eur", "bedrag", "saldo",
+)
+
+
+def assert_no_currency(payload: object, path: str = "$") -> None:
+    """Werp ValueError zodra er een geldveld in de publieke payload staat."""
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            lowered = key.lower()
+            if any(part in lowered for part in FORBIDDEN_KEY_PARTS):
+                raise ValueError(f"geldveld {path}.{key} mag niet gepubliceerd worden")
+            assert_no_currency(value, f"{path}.{key}")
+    elif isinstance(payload, list):
+        for i, item in enumerate(payload):
+            assert_no_currency(item, f"{path}[{i}]")

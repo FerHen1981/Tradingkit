@@ -4,8 +4,7 @@
 De fonts staan één keer in packages/brand/src/fonts. Ze kunnen daar niet blijven
 staan: Vite laat relatieve url()'s in CSS uit een workspace-pakket ongemoeid en
 kopieert de bestanden niet mee, waardoor ze op de gebouwde site 404 geven. Ze
-horen dus in public/ van elke site, waar ze ongewijzigd worden overgenomen — en
-in de eigen static-map van het portal, dat los deployt.
+horen dus in public/ van elke site, waar ze ongewijzigd worden overgenomen.
 
     python3 web/scripts/sync_fonts.py          # kopieer
     python3 web/scripts/sync_fonts.py --check   # faal als iets ontbreekt of afwijkt
@@ -24,7 +23,6 @@ SOURCE = ROOT / "packages/brand/src/fonts"
 TARGETS = [
     ROOT / "sites/mex/public/fonts",
     ROOT / "sites/ppt/public/fonts",
-    ROOT / "portal/app/static/fonts",
 ]
 
 

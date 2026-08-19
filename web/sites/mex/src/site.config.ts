@@ -30,7 +30,7 @@ export const site = {
     { label: "Over ons", href: "/over" },
   ],
 
-  /** The portal lives on its own subdomain and its own server. */
+  /** De live cockpit (mex-viewer) draait op een eigen subdomein en eigen server. */
   cta: { label: "Inloggen", href: "https://app.mex-traders.com" },
 
   footer: {
@@ -49,7 +49,7 @@ export const site = {
         items: [
           { label: "Methodiek", href: "/methodiek" },
           { label: "Resultaten", href: "/resultaten" },
-          { label: "Portal", href: "https://app.mex-traders.com" },
+          { label: "Dashboard", href: "https://app.mex-traders.com" },
         ],
       },
       {

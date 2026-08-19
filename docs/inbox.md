@@ -55,6 +55,51 @@ de engine en stuurt het bevroren bestand voor de compile-test.
 
 ---
 
+### 4. Viewer-rol (units-only) voor `viewer.py` + productie van public-stats.json
+**Web → Middleware App** · 2026-08-19 · status: OPEN
+
+De Web-chat heeft een besloten dashboard gebouwd voordat duidelijk was dat
+`mex-viewer` al draait. Dat was een duplicaat op **dezelfde host én poort**
+(`app.mex-traders.com` → `127.0.0.1:8080`). De service is geschrapt; alleen het
+deel dat `viewer.py` nog niet heeft, is blijven staan als module.
+
+**Wat er klaarligt:** `web/handover/mex_units/` — omrekening naar ticks, pips en
+R, plus een rolgrens waarbij een `viewer` een payload krijgt waarin geen
+bedrag voorkomt. Niet verborgen of op nul, maar afwezig: elke rol bouwt zijn
+eigen payload in plaats van dat er één volledig antwoord wordt afgeknipt.
+17 tests, die de viewer-payload op veldnaam én op waarde nalopen. Geen
+datatoegang in de module; hij krijgt gewone dicts binnen.
+
+Specs komen uit `backtest/config.py CONTRACTS` (§3) — de module houdt bewust
+geen eigen kopie en faalt hard als die import niet lukt.
+
+**Verzoek 1 — de viewer-rol.** Neem de module over in `middleware/app/` en hang
+er in `viewer.py` een derde toegangsniveau aan, naast owner-wachtwoord en het
+read-only token: een gast die alleen units ziet. Voeden vanuit de
+gezaghebbende bronnen — trades via `fills_pairing.py`, balansen via
+`cash_ledger.py`.
+
+**Verzoek 2 — de publieke momentopname.** `www.mex-traders.com/resultaten` leest
+`web/sites/mex/src/data/public-stats.json`. Dat bestand bestaat nu alleen als
+voorbeelddata (`"sample": true`, waardoor elke pagina die het rendert een
+zichtbare placeholder-melding toont). Er is een taak nodig die het periodiek
+schrijft uit dezelfde bronnen, met `roles.for_public()` en
+`roles.assert_no_currency()` als laatste controle vóór wegschrijven. De site
+doet nooit een API-call — hij leest een bestand — dus er hoeft geen poort open
+naar de handelsdata en de publicatie mag bewust vertraagd worden.
+
+**Waarom Web dit niet zelf doet:** beide verzoeken lezen uit `middleware/**`,
+en dat is niet onze map (§2).
+
+**Let op bij overname:** `units.py` importeert `backtest.config`. Draait de
+middleware met een eigen werkmap, dan moet de repo-root op `sys.path`. Details
+in `web/handover/mex_units/README.md`.
+
+**Losse observatie, geen verzoek:** `viewer.py` heeft eigen styling. De
+huisstijl uit het merkpakket ligt als tokens in
+`web/packages/brand/src/styles/tokens.css`. Als je de cockpit ooit wilt laten
+aansluiten op de sites, is dat de bron — maar dat is jouw map en jouw keuze.
+
 ## DONE
 
 (nog leeg)

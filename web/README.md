@@ -1,12 +1,14 @@
-# web/ — de sites en het portal
-
-Drie dingen, één huisstijl:
+# web/ — de publieke sites
 
 | Wat | Waar | Wat het is |
 |---|---|---|
 | `sites/mex` | www.mex-traders.com | Corporate site. Statisch. |
 | `sites/ppt` | www.pipsandpalmtrees.com | Blog, gidsen en begrippenlijst. Statisch. |
-| `portal` | app.mex-traders.com | Besloten dashboard. Draait op de VPS. |
+| `handover/mex_units` | — | Module ter overname door Middleware App, zie `docs/inbox.md`. |
+
+**Geen dashboard hier.** Dat draait al: `mex-viewer` op app.mex-traders.com,
+bron `middleware/app/viewer.py`. De sites linken ernaartoe; ze vervangen het
+niet.
 
 `packages/brand` bevat de gedeelde huisstijl — kleuren, typografie, ritme en de
 Astro-componenten. Een tweede site is een kopie van `site.config.ts` plus eigen
@@ -58,7 +60,7 @@ Twee velden verdienen aandacht:
 
 `make check-glossary` faalt op een onbekend bron-id, een verwijzing naar een
 begrip dat niet bestaat, en op een begrip dat wel de badge draagt maar geen bron
-heeft. Zet dat in CI naast `check-tokens`.
+heeft. Zet dat in CI.
 
 ### Een gids schrijven
 
@@ -88,70 +90,33 @@ De build schakelt dan automatisch de Cloudflare-adapter in (zie
 van de site blijft gewone bestanden. Opslaan in de admin maakt een commit, en
 die commit triggert een deploy.
 
-### Iemand toegang geven tot het dashboard
-
-Voeg een regel toe aan `users.yaml` op de server (zie `portal/users.example.yaml`):
-
-```yaml
-users:
-  - email: iemand@voorbeeld.nl
-    name: Iemand
-    role: viewer
-```
-
-Daarna in het portal → **Beheer** → *users.yaml opnieuw laden*. Klaar. Die
-persoon vraagt zelf een link aan op de inlogpagina.
-
-| Rol | Ziet |
-|---|---|
-| `owner` | alles in dollars, plus /admin (sessies, audit, intrekken) |
-| `partner` | alles in dollars, alleen lezen |
-| `viewer` | **alleen units** — ticks, R, percentages |
-
-Toegang intrekken: haal de regel weg en laad opnieuw. Dat werkt ook midden in
-een lopende sessie, omdat de rol bij élke aanvraag opnieuw uit dat bestand komt.
-
 ---
 
-## Hoe "geen bedragen voor viewers" is afgedwongen
+## De units-laag (ter overname)
 
-Niet met CSS en niet met een filter. Elke rol heeft in `portal/app/stats.py` een
-eigen functie die zijn eigen payload opbouwt. De viewer-payload bevat geen
-dollarveld — niet verborgen, niet op nul, maar afwezig. Een filter zou elk veld
-lekken dat iemand later toevoegt en vergeet te noteren; een aparte builder kan
-dat niet.
-
-`portal/tests/test_roles.py` bouwt een fleet die gegarandeerd geld bevat en
-controleert daarna de viewer-payload op twee manieren: op veldnaam én op
-waarde. Alle bedragen in de fixture hebben centen en gepubliceerde
-unit-aantallen zijn gehele getallen, dus een match is altijd een echt lek en
-nooit toeval.
-
-Het publicatiebestand krijgt daarbovenop een expliciete poort:
-`publish.assert_no_currency()` weigert te schrijven zodra er een veldnaam
-langskomt die naar geld ruikt.
+`handover/mex_units/` bevat de omrekening naar ticks, pips en R, plus de
+rolgrens die een `viewer` alleen units laat zien. Die module is hier gebouwd
+maar hoort in `middleware/app/`; zie `handover/mex_units/README.md` en het
+verzoek in `docs/inbox.md`.
 
 ```bash
-cd web/portal && python -m pytest tests -q
+python3 -m pytest web/handover/mex_units/tests -q
 ```
 
 ---
 
 ## De publieke cijfers
 
-De statische sites lezen `sites/mex/src/data/public-stats.json`. Dat bestand
-wordt geschreven door een taak op de VPS:
+De statische sites lezen `sites/mex/src/data/public-stats.json`. De site doet
+dus nooit een API-call: er staat geen poort open naar de handelsdata, en de
+publicatie kan bewust vertraagd worden.
 
-```bash
-cd /opt/mex/web/portal
-.venv/bin/python -m app.publish --dry-run   # eerst kijken
-.venv/bin/python -m app.publish             # dan schrijven
-```
-
-De taak neemt een verse kopie van het handelsjournaal, laat alles weg dat
-jonger is dan `PORTAL_PUBLIC_LAG_HOURS` (standaard 24 uur) en rekent alles om
-naar units. De site doet dus nooit een API-call: er staat geen poort open naar
-de handelsdata, en je kunt de publicatie bewust vertragen.
+**Dat bestand wordt nog niet geproduceerd.** Het hoort gemaakt te worden uit de
+gezaghebbende bronnen — trades via `fills_pairing.py`, balansen via
+`cash_ledger.py` — met `mex_units.roles` voor de omrekening en
+`assert_no_currency()` als laatste controle. Dat verzoek staat in
+`docs/inbox.md`; de Web-chat kan het niet zelf doen, want het leest uit
+`middleware/**`.
 
 Zolang het meegeleverde bestand `"sample": true` bevat, toont elke pagina die de
 cijfers rendert een zichtbare placeholder-melding. Illustratieve getallen kunnen
@@ -181,34 +146,6 @@ Per site één Pages-project:
 Elke branch krijgt automatisch een preview-URL, dus je ziet een wijziging
 voordat hij live staat. `public/_headers` regelt de beveiligingsheaders.
 
-### Het portal → de VPS
-
-```bash
-# eenmalig, naast de bestaande middleware
-sudo mkdir -p /etc/mex-portal /var/lib/mex-portal
-sudo cp portal/.env.example /etc/mex-portal/portal.env
-sudo cp portal/users.example.yaml /etc/mex-portal/users.yaml
-sudo chown root:mex /etc/mex-portal/*.yaml /etc/mex-portal/portal.env
-sudo chmod 640 /etc/mex-portal/*
-
-cd /opt/mex/web/portal
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m app.auth        # genereert PORTAL_SECRET → in portal.env
-
-sudo cp deploy/mex-portal.service /etc/systemd/system/
-sudo cp deploy/mex-publish.service deploy/mex-publish.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now mex-portal mex-publish.timer
-```
-
-Plak daarna `deploy/Caddyfile.snippet` in je Caddyfile en herlaad Caddy.
-
-Het portal draait **naast** de middleware, niet erin: eigen proces, eigen poort,
-eigen database, lagere CPU-prioriteit en een geheugenplafond. Webverkeer mag
-nooit met een TradingView-webhook om resources concurreren. Het leest het
-handelsjournaal alleen via een `VACUUM INTO`-kopie, read-only geopend op
-driverniveau — zelfs een programmeerfout kan er niet in schrijven.
-
 ---
 
 ## Ontwikkelen
@@ -218,8 +155,7 @@ make install        # dependencies
 make dev-mex        # corporate site + CMS
 make dev-ppt        # blog + CMS
 make build          # beide sites statisch bouwen
-make test           # portal-tests
-make check-tokens   # faalt als het palet van het portal is afgeweken
+make test           # units/rolgrens-tests
 make check-glossary # faalt op een kapot bron-id of een dode verwijzing
 make check          # alles
 ```
@@ -250,14 +186,6 @@ De bestanden staan in `packages/brand/src/fonts` en worden door
 Vite relatieve `url()`'s in CSS uit een workspace-pakket ongemoeid laat en de
 bestanden niet meebouwt — ze geven dan stilzwijgend 404 op de gebouwde site.
 `make check` faalt wanneer een doelmap afwijkt.
-
-### Waarom het palet twee keer bestaat
-
-De sites importeren `packages/brand/src/styles/tokens.css`. Het portal deployt
-apart, op een andere machine, zonder de npm-workspace — het heeft dus een eigen
-kopie in `portal/app/static/portal.css`. Twee kopieën van een palet lopen
-stilletjes uit elkaar, dus `make check-tokens` vergelijkt ze en faalt bij
-verschil. Zet dat in CI.
 
 ### Nog te doen vóór livegang
 

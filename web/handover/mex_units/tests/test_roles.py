@@ -13,10 +13,13 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# repo-root op het pad: units leest de contract-specs uit backtest.config,
+# want die registry is de single source (werkafspraken §3).
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from app import stats, units  # noqa: E402
-from app.publish import assert_no_currency  # noqa: E402
+from mex_units import roles as stats, units  # noqa: E402
+from mex_units.roles import assert_no_currency  # noqa: E402
 
 
 #: Every currency amount in the fixture carries non-zero cents, and published

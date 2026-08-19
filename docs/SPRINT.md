@@ -65,7 +65,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | ID | Status | Owner | Item |
 |---|---|---|---|
-| **D-14** | todo | Backtest Setup | `backtest/funded.py:19` heeft `APEX_DD` hardcoded terwijl `firms.py` de registry al leest. _(was inbox 2)_ |
+| **D-14** | wip | Backtest Setup | `backtest/funded.py:19` heeft `APEX_DD` hardcoded terwijl `firms.py` de registry al leest. _(was inbox 2)_ |
 | **D-15** | todo | Backtest Setup | ATR-kalibratie MR·FVG: tick-tuning omrekenen naar ATR(14)-veelvouden en sweepen op MGC + ES + NQ. _(was inbox 3)_ |
 | **D-16** | todo | Backtest Setup | `calc_on_order_fills=true` — wordt dit de norm voor de funnel? Trefkans 81% → 74,6%, PF 1,15 → 0,93. Eerlijker model, maar het verandert welke trades vuren. _(was inbox 5)_ |
 | **D-17** | todo | Middleware App | Viewer-rol (units-only) overnemen uit `web/handover/mex_units/` + `public-stats.json` periodiek schrijven. _(was Web-inbox 4)_ |

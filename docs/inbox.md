@@ -56,7 +56,8 @@ de engine en stuurt het bevroren bestand voor de compile-test.
 ---
 
 ### 4. Viewer-rol (units-only) voor `viewer.py` + productie van public-stats.json
-**Web → Middleware App** · 2026-08-19 · status: OPEN
+**Web → Scrum Master** · 2026-08-19 · status: OPEN
+*Beoogd uitvoerder: Middleware App — routing na inventarisatie.*
 
 De Web-chat heeft een besloten dashboard gebouwd voordat duidelijk was dat
 `mex-viewer` al draait. Dat was een duplicaat op **dezelfde host én poort**
@@ -89,7 +90,9 @@ doet nooit een API-call — hij leest een bestand — dus er hoeft geen poort op
 naar de handelsdata en de publicatie mag bewust vertraagd worden.
 
 **Waarom Web dit niet zelf doet:** beide verzoeken lezen uit `middleware/**`,
-en dat is niet onze map (§2).
+en dat is niet onze map (§2). Het gaat daarom eerst langs de Scrum Master,
+zodat het samen met de rest wordt geïnventariseerd en van daaruit wordt
+uitgezet — niet rechtstreeks in andermans wachtrij.
 
 **Let op bij overname:** `units.py` importeert `backtest.config`. Draait de
 middleware met een eigen werkmap, dan moet de repo-root op `sys.path`. Details
@@ -99,6 +102,30 @@ in `web/handover/mex_units/README.md`.
 huisstijl uit het merkpakket ligt als tokens in
 `web/packages/brand/src/styles/tokens.css`. Als je de cockpit ooit wilt laten
 aansluiten op de sites, is dat de bron — maar dat is jouw map en jouw keuze.
+
+### 5. Open vragen vanuit Web — eigenaarschap en deploy
+**Web → Scrum Master** · 2026-08-19 · status: OPEN
+
+Drie dingen die de Web-chat niet zelf kan beslissen omdat ze buiten de eigen
+map vallen of meerdere kanten raken.
+
+**a. `web/**` staat niet in de eigenaarstabel (§2).** Voorstel: eigenaar *Web*.
+Dan is `middleware/deploy/Caddyfile` van Middleware App en `web/**` van Web,
+zonder overlap. De werkafspraken staan niet als bestand in de repo, dus dit kan
+alleen bij de bron worden bijgewerkt.
+
+**b. Wie voert de Cloudflare Pages-koppeling uit?** De twee sites bouwen
+statisch en zijn klaar om gekoppeld te worden, maar dat raakt DNS en de
+domeinen — gedeeld terrein. Er is één account-actie nodig (repo koppelen,
+build-commando per site); daarna levert elke branch automatisch een
+preview-URL. De Web-chat kan dat niet zelf doen.
+
+**c. Voorstel voor het routeringsformaat.** Nu de coördinatie via de Scrum
+Master loopt, klopt de kopregel van dit bestand niet meer helemaal: die zegt
+dat de eigenaar van de doelmap uitvoert. Voorstel is om cross-map-verzoeken
+eerst op *Scrum Master* te adresseren, met de beoogd uitvoerder erbij, zoals
+in item 4. De Web-chat past die kopregel bewust niet zelf aan — dat is een
+gedeelde afspraak, geen eigen map.
 
 ## DONE
 

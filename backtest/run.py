@@ -42,9 +42,9 @@ def run_one(df, cfg, research: bool, progress=None, ind_progress=None):
     res = eng.run(progress=progress)
     try:
         from .diagnose import diagnose_trades, diagnose_signals
-        from .funded import APEX_DD
+        from .funded import account_drawdown
         from .metrics import trades_frame
-        dd = float(APEX_DD.get(int(cfg.initial_capital or 50_000), 2_500))
+        dd = account_drawdown(cfg.initial_capital or 50_000)
         res.diagnosis = {"trades": diagnose_trades(trades_frame(res), cfg, drawdown=dd),
                          "signals": diagnose_signals(ind, cfg, res.veto_counts)}
     except Exception as e:

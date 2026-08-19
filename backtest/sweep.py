@@ -176,14 +176,14 @@ def autotune(df, base_cfg, jobs: int = 0, max_levers: int = 4) -> dict:
     best_funded}]}."""
     from .diagnose import diagnose_trades, diagnose_signals
     from .metrics import trades_frame
-    from .funded import APEX_DD
+    from .funded import account_drawdown
 
     def _ind_prog(k, tot):
         print(f"PROGRESS {k} {tot+40} auto-tune · computing indicators", flush=True)
     ind = ind_mod.compute(df, base_cfg, progress=_ind_prog)
     print("PROGRESS 8 46 auto-tune · running base strategy", flush=True)
     res = Engine(base_cfg, df, ind, research_mode=True, diag=True).run()
-    dd = float(APEX_DD.get(int(base_cfg.initial_capital or 50_000), 2_500))
+    dd = account_drawdown(base_cfg.initial_capital or 50_000)
     dtrades = diagnose_trades(trades_frame(res), base_cfg, drawdown=dd)
     dsignals = diagnose_signals(ind, base_cfg, res.veto_counts)
 

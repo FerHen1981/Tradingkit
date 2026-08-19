@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+# FALLBACK constants only — used when data/propfirms.json lacks the account size.
+# The registry (via backtest.firms) is the single source; see apex_rules().
 APEX_DD = {25_000: 1_500, 50_000: 2_500, 100_000: 3_000,
            150_000: 5_000, 250_000: 6_500, 300_000: 7_500}
 MIN_TRADING_DAYS = 8
@@ -23,6 +25,68 @@ MIN_DAY_PROFIT = 50.0
 CONSISTENCY_LIMIT = 0.30          # best winning day <= 30% of the cycle's total wins
 SAFETY_BUFFER = 100.0            # leave start + drawdown + this in on a payout
 LADDER = [1_500, 1_500, 2_000, 2_500, 2_500, 3_000]   # per-payout caps (Apex 50k-ish)
+
+
+def _val(x):
+    return x.get("value") if isinstance(x, dict) else x
+
+
+def apex_rules(account_size: float = 50_000) -> dict:
+    """Funded-account rules for this size, read from data/propfirms.json via
+    backtest.firms (the single source of truth). Prefers the EOD-DD PA program
+    (the fleet's drawdown model); falls back to the eval program of the same size
+    for the drawdown; falls back to the module constants when the registry lacks
+    the size entirely. `source` names which registry key supplied the rules."""
+    rules = {"drawdown": float(APEX_DD.get(int(account_size), 2_500)),
+             "min_qual_days": MIN_TRADING_DAYS, "min_day_profit": MIN_DAY_PROFIT,
+             "consistency_limit": CONSISTENCY_LIMIT, "safety_buffer": SAFETY_BUFFER,
+             "ladder": list(LADDER), "min_payout": 0.0, "profit_split": 1.0,
+             "daily_loss_limit": None, "source": "fallback-constants"}
+    try:
+        from .firms import raw_programs
+        apex = raw_programs(firm="Apex", size=int(account_size))
+    except Exception:
+        return rules
+    funded = sorted((r for r in apex if r.get("stage") == "funded"),
+                    key=lambda r: 0 if "eod" in r.get("key", "") else 1)
+    src = funded[0] if funded else (apex[0] if apex else None)
+    if src is None:
+        return rules
+    tl = src.get("targets_limits") or {}
+    dd = _val(tl.get("max_overall_loss"))
+    if dd:
+        rules["drawdown"] = float(dd)
+        locks = _val(tl.get("trailing_locks_at"))
+        if locks:
+            rules["safety_buffer"] = max(float(locks) - float(dd), 0.0)
+    tr = src.get("trading_rules") or {}
+    cons = tr.get("consistency") or {}
+    if cons.get("type") == "max_day_pct_of_total" and cons.get("value"):
+        rules["consistency_limit"] = float(cons["value"]) / 100.0
+    mpd = tr.get("min_profitable_days") or {}
+    if mpd.get("days"):
+        rules["min_qual_days"] = int(mpd["days"])
+    me = _val(mpd.get("min_each"))
+    if me:
+        rules["min_day_profit"] = float(me)
+    if funded:                        # payout & risk rules exist only on the PA side
+        mdl = _val(tl.get("max_daily_loss"))
+        if mdl:
+            rules["daily_loss_limit"] = float(mdl)
+        fu = src.get("funded") or {}
+        if fu.get("payout_ladder"):
+            rules["ladder"] = [float(x) for x in fu["payout_ladder"]]
+        if fu.get("min_payout"):
+            rules["min_payout"] = float(fu["min_payout"])
+        if fu.get("profit_split"):
+            rules["profit_split"] = float(fu["profit_split"])
+    rules["source"] = src.get("key", "?")
+    return rules
+
+
+def account_drawdown(account_size: float = 50_000) -> float:
+    """Trailing drawdown for this account size, registry-first."""
+    return apex_rules(account_size)["drawdown"]
 
 
 @dataclass
@@ -54,13 +118,22 @@ class FundedResult:
 
 def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
                     drawdown_type: str = "eod_trailing", drawdown: float | None = None,
-                    daily_loss_limit: float | None = None, profit_split: float = 1.0
+                    daily_loss_limit: float | None = None, profit_split: float | None = None
                     ) -> FundedResult:
-    """daily_pnl: {date: realized_net}. Walks it chronologically."""
-    dd = float(drawdown if drawdown is not None else APEX_DD.get(int(account_size), 2_500))
+    """daily_pnl: {date: realized_net}. Walks it chronologically. All account
+    rules come from data/propfirms.json via apex_rules() — explicit arguments
+    override the registry; profit_split/daily_loss_limit left at None take the
+    registry's value (pass 0 to disable the DLL explicitly)."""
+    rules = apex_rules(account_size)
+    dd = float(drawdown if drawdown is not None else rules["drawdown"])
+    if daily_loss_limit is None:
+        daily_loss_limit = rules["daily_loss_limit"]
+    if profit_split is None:
+        profit_split = rules["profit_split"]
+    ladder = rules["ladder"]
     start = float(account_size)
-    safety_bal = start + dd + SAFETY_BUFFER      # balance to leave in on payout
-    floor_cap = start + SAFETY_BUFFER            # trailing floor locks here
+    safety_bal = start + dd + rules["safety_buffer"]   # balance to leave in on payout
+    floor_cap = start + rules["safety_buffer"]         # trailing floor locks here
     res = FundedResult(account_size=start, drawdown_type=drawdown_type, drawdown=dd)
 
     series = sorted(daily_pnl.items())
@@ -83,7 +156,7 @@ def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
         balance += pnl
         res.trading_days += 1
         cyc_days += 1
-        if pnl >= MIN_DAY_PROFIT:
+        if pnl >= rules["min_day_profit"]:
             res.qualifying_days += 1
             cyc_qual += 1
         if pnl > 0:
@@ -100,11 +173,13 @@ def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
 
         best = max(cyc_wins) if cyc_wins else 0.0
         total_win = sum(cyc_wins)
-        cons_ok = total_win <= 0 or best / total_win <= CONSISTENCY_LIMIT
-        if cyc_qual >= MIN_TRADING_DAYS and cons_ok and balance >= safety_bal:
+        cons_ok = total_win <= 0 or best / total_win <= rules["consistency_limit"]
+        if cyc_qual >= rules["min_qual_days"] and cons_ok and balance >= safety_bal:
             above = balance - safety_bal
-            cap = LADDER[min(res.num_payouts, len(LADDER) - 1)]
+            cap = ladder[min(res.num_payouts, len(ladder) - 1)]
             gross = min(above, cap)
+            if gross < rules["min_payout"]:
+                continue                       # registry minimum payout not met yet
             balance -= gross
             net = round(gross * profit_split, 2)
             res.payouts.append(Payout(d, net, round(balance, 2), cyc_days))

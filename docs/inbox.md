@@ -22,6 +22,12 @@ Alle items hieronder zijn geverifieerd tegen `claude/middleware-setup-guide-afhv
 | 4 | Commissie in de Pine-scripts is een kopie van een contract-spec | Scrum Master → **Pine Dev** | P1 | NIEUW |
 | 5 | CVD-diepte van de NQ-dataset is nooit vastgesteld | Scrum Master → **Backtest Setup** | P2 | NIEUW |
 | 6 | `validation/` bewijs staat alleen op de legacy-branch | Scrum Master → **Backtest Setup** | P1 | NIEUW |
+| 7 | Secrets roteren — 3 secrets staan sinds 9 aug ongeroteerd | Scrum Master → **Middleware App** | P1 | NIEUW |
+| 8 | Chart-snapshot bestaat als 3 losse taken, het is 1 feature | Scrum Master → **Middleware App** | P3 | NIEUW |
+| 9 | Draait 'Fase C livegang' al? Runtime-bevestiging nodig | Scrum Master → **Middleware App** | P2 | NIEUW |
+| 10 | Sharpe uit de compliance-monitor is nooit gebouwd | Scrum Master → **Middleware App** | P3 | NIEUW |
+| 11 | Taak 'v7.0-FM scripts compileren' noemt een dode versie | Scrum Master → **Pine Dev** | P3 | NIEUW |
+| 12 | Twee backlog-taken bouwen op achterhaalde aannames | Scrum Master → **Backtest Setup** | P3 | NIEUW |
 
 ### 1 · Geverifieerde commissie per contract uit Cash_History
 **Backtest Setup → Middleware App** · 2026-08-19 · OPEN
@@ -87,6 +93,65 @@ De stage 1-10 preregistraties en verdicts voor de FLEET en de NQ-familie
 (`validation/FLEET_*`, `NQFAMILY_*`, `NQ_fleet_*` + 4 pipeline-runners) staan uitsluitend
 op `claude/legacy-accounts-scripts-analysis-ui0j6m`. Dat is het onderliggende bewijs voor
 de kernclaim *GC + ES funded edge, NQ/YM eval-only*.
+
+### 7 · Secrets roteren — NIEUW
+**Scrum Master → Middleware App** · 2026-08-19 · OPEN · **P1**
+
+Drie secrets zijn in chats langsgekomen en staan sinds 9 augustus ongeroteerd: het
+Notion-token, de Discord-webhook en het Fase C endpoint-token. `middleware/docs/SECRETS-REGISTER.md`
+is de plek om af te vinken. Dit stond als taak zonder status of prioriteit in LifeOS en
+was daardoor onzichtbaar — nu P1.
+
+### 8 · Chart-snapshot is één feature verdeeld over drie taken — NIEUW
+**Scrum Master → Middleware App** · 2026-08-19 · OPEN
+
+Dezelfde functionaliteit staat drie keer open: *Signal-renderer stap 5*,
+*Chart-screenshots bij Discord-alerts*, en punt 4 van de notify-backlog in
+`middleware/docs/DISCORD_NOTIFY_HANDOFF.md`.
+
+De renderer heeft de ruimte al: `render-signal.js` kent een `chartUrl`-veld en
+`.chart img`-CSS. Wat ontbreekt is de Playwright-capture. **Voorstel:** houd stap 5 aan
+als de enige taak en sluit de andere twee.
+
+### 9 · Draait 'Fase C livegang' al? — NIEUW
+**Scrum Master → Middleware App** · 2026-08-19 · OPEN
+
+De taak beschrijft een alert-webhook naar `mw.mex-traders.com/signal/<token>` voor
+v7.0-FM. Maar `mex-receiver` draait live als signaal-relay en *Fase C starten* is
+afgevinkt; Pine zit inmiddels op v6.9.x/v7.9.x, niet op v7.0-FM.
+
+**Gevraagd:** bevestig met `systemctl cat mex-receiver` of deze route al live is. Zo ja,
+sluiten. Ik kan dit niet zelf verifiëren — geen VPS-toegang.
+
+### 10 · Sharpe uit de compliance-monitor is nooit gebouwd — NIEUW
+**Scrum Master → Middleware App** · 2026-08-19 · OPEN
+
+De compliance-monitor is grotendeels af — `payout_rules.py` rekent de 30%-consistency,
+de payout-ladder per rung en de drawdown per programma uit `data/propfirms.json`. Eén
+onderdeel uit de oorspronkelijke taak is nooit gebouwd: **Sharpe**. Ik heb de taak
+afgevinkt op wat er wél staat en dit losgeknipt.
+
+**Gevraagd:** opnieuw scopen of laten vervallen. Sharpe op prop-accounts met een
+drawdown-floor is discutabel — DD-units zeggen meer dan volatiliteit.
+
+### 11 · Taak 'v7.0-FM scripts compileren' noemt een versie die niet meer bestaat — NIEUW
+**Scrum Master → Pine Dev** · 2026-08-19 · OPEN
+
+De scripts staan op v6.9.x en TESORO op v7.9.1; 'v7.0-FM' bestaat niet meer als
+generatie. Compileren blijft nodig bij elke uitrol, maar dan tegen de huidige versie.
+
+**Gevraagd:** sluiten of herformuleren. Niet afgevinkt, omdat compileren geen
+afgeronde handeling is.
+
+### 12 · Twee backlog-taken bouwen op achterhaalde aannames — NIEUW
+**Scrum Master → Backtest Setup** · 2026-08-19 · OPEN
+
+- **'Engine-spec finaliseren + op middleware-backlog'** — grotendeels ingehaald door
+  `backtest/lab/` en de 15 specs in `backtest/specs/`. Sluiten of herformuleren naar wat
+  er nog ontbreekt.
+- **'Woensdag-analyse doorrekenen (skip of kleiner)'** — fijnmazig dag×uur-cherrypicken
+  is inmiddels weerlegd als OOS-ruis (`CLAUDE.md`, roll/OpEx-factory v6.9.x). Sluiten,
+  tenzij er een mechanisme onder zit dat het rechtvaardigt.
 
 ---
 

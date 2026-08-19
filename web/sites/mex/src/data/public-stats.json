@@ -1,6 +1,6 @@
 {
   "sample": true,
-  "_comment": "PLACEHOLDER. Overwritten by `python -m portal.app.publish` on the VPS (see web/README.md). While `sample` is true every page that renders these figures shows a visible placeholder banner, so illustrative numbers can never be mistaken for a track record. The equity series below is illustrative only. The market rows carry the real unit figures from the reconciled journal; fields that require a value this snapshot cannot yet derive are null rather than invented.",
+  "_comment": "PLACEHOLDER. Overwritten by the publish job that Middleware App owns (SPRINT D-17; see web/README.md). While `sample` is true every page that renders these figures shows a visible placeholder banner, so illustrative numbers can never be mistaken for a track record. The equity series below is illustrative only. The market rows carry the real unit figures from the reconciled journal; fields that require a value this snapshot cannot yet derive are null rather than invented. `status` noemt het type rekening waarop de markt draait (funded of evaluatie) — een operationele stand, uitdrukkelijk geen oordeel over de edge.",
   "generated_at": "2026-08-15T04:00:00Z",
   "period": { "from": "2023-08", "to": "2026-08" },
   "delay": "T+1",
@@ -24,7 +24,7 @@
       "r_total": null,
       "profit_factor": null,
       "slippage_ticks": null,
-      "status": "Gevalideerde edge"
+      "status": "Funded"
     },
     {
       "symbol": "ES",
@@ -36,7 +36,7 @@
       "r_total": null,
       "profit_factor": null,
       "slippage_ticks": null,
-      "status": "Gevalideerde edge"
+      "status": "Funded"
     },
     {
       "symbol": "NQ",

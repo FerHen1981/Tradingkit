@@ -18,13 +18,15 @@ noindex: false
 Elke strategie doorloopt een vaste reeks tests. De parameters worden gekozen op
 de eerste helft van de historie; het oordeel valt op de tweede helft, die tijdens
 het kalibreren niet is gezien. Een strategie die alleen in de eerste helft werkt,
-gaat niet live. Dat klinkt vanzelfsprekend en is in de praktijk de zeef die de
+krijgt geen funded kapitaal. Dat klinkt vanzelfsprekend en is in de praktijk de zeef die de
 meeste ideeën tegenhoudt.
 
 Daarbovenop draait een walk-forward-analyse: het model wordt herhaaldelijk
 opnieuw gekalibreerd op een verschuivend venster en telkens beoordeeld op de
 periode erna. Dit benadert wat er in werkelijkheid gebeurt — je kiest je
 instellingen altijd zonder de toekomst te kennen.
+
+Daar hoort één eerlijke beperking bij. Een venster verliest zijn onafhankelijkheid zodra je er keuzes op hebt gebaseerd: hoe vaker je erop toetst, hoe meer het een tweede kalibratieset wordt. Wij houden daarom bij hoe vaak een periode is gebruikt, en beschouwen een uitkomst pas als bevestiging wanneer zij op ongebruikte jaren staat.
 
 ## 2. Gecontroleerde uitvoering
 

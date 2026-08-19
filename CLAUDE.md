@@ -38,6 +38,9 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Trade Journal `c3e9d05525404849ad484b648c82fd59`
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
+- ⚠️ Deze id's zijn deels dood: *MEX Reconciliation* heeft 0 rijen (geverifieerd 19-08) —
+  de laag is gebouwd maar heeft nooit geschreven. Fleet Performance en Trade Journal nog
+  ongecontroleerd. Zie `docs/SPRINT.md` D-20.
 - MEX Dev loopt via de bestaande LifeOS-databases — geen aparte structuur:
   **Tasks** met voorvoegsel `🛠️ MEX Dev ·`, en **Notes** `🛠️ MEX Dev — Architectuur /
   Besluitregister / Documentatieregister`. Beide gekoppeld aan Area *MEX Traders* en
@@ -57,7 +60,5 @@ firm/asset/volume/channel; not identical mirroring. Channels:
   losse commit) — dat is het slot dat dubbel werk voorkomt. Beslissing die een ander
   raakt? Eén regel in `docs/DECISIONS.md`.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
-- ⚠️ De Notion-id's hieronder zijn deels dood: *MEX Reconciliation* heeft 0 rijen
-  (geverifieerd 19-08); Fleet Performance en Trade Journal nog ongecontroleerd.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

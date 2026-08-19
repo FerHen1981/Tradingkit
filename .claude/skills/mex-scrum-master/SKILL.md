@@ -65,10 +65,19 @@ Issue → eigenaar → afhankelijkheden → risico → gewenste actie → status
 
 ## 3. LIVE architectuur
 
-**Verificatiestatus: geverifieerd door de eigenaar op 2026-08-18. Repo-paden
-hergeverifieerd tegen `claude/middleware-setup-guide-afhvtk` @ `21a1100` op 2026-08-19.
-Runtime (`systemctl`) is sindsdien NIET opnieuw geverifieerd — zie de VPS-toegangsregel
-onderaan deze sectie.**
+**Verificatiestatus: RUNTIME GEVERIFIEERD op 2026-08-19 door de Discord Notify-chat op
+`mex-mw-01`, via `systemctl cat mex-receiver` en `/health`. Repo-paden geverifieerd tegen
+`claude/middleware-setup-guide-afhvtk` @ `41ccf5e`.**
+
+```
+WorkingDirectory=/root/mex-middleware-b/src/Mex.Journal.Receiver
+ExecStart=/usr/bin/dotnet .../bin/Release/net10.0/Mex.Journal.Receiver.dll --urls http://localhost:5000
+/health -> {"status":"alive","dryRun":false,"armed":true,"pmtConfigured":true,
+            "renderEnabled":true,"renderScript":"/root/mex-renderer/render-signal.js"}
+```
+
+`dryRun:false` en `armed:true`: de trechter staat scherp, inclusief PMT. Elke wijziging
+aan het signaalpad raakt echte orders.
 
 | Service | Functie | Source |
 |---|---|---|
@@ -90,6 +99,21 @@ middleware/app/brokers/
 Dit is **NIET het live executiepad**. Sta nooit toe dat een chat daar patcht in de
 aanname dat live execution daarmee verandert, zonder eerst technisch te verifieren wat
 daadwerkelijk draait.
+
+### Bouwvalkuil — de receiver zit niet in de solution
+
+`Mex.Journal.Receiver` staat **niet** in `MexJournal.sln`. Een kale `dotnet build -c
+Release` bouwt alleen `Mex.Journal` en `Mex.Journal.Cli`, meldt toch *Build succeeded*,
+en de oude binary blijft draaien. Bouwen met:
+
+```bash
+dotnet build src/Mex.Journal.Receiver -c Release
+```
+
+Let ook op: van die solution staat alleen `middleware/dotnet-receiver/Program.cs` in de
+repo, en dat bestand *vervangt* `src/Mex.Journal.Receiver/Program.cs` op de VPS. Het
+compileert daar niet standalone (`using Mex.Journal.Recon;`). De repo bevat dus een
+patch, geen volledige broncode.
 
 ### Runtime verifieren
 
@@ -119,7 +143,7 @@ Iedere specialistische chat heeft exclusief mutatierecht binnen zijn domein.
 | `middleware/dotnet-receiver/**` | Middleware App (live executiepad — zie §12) |
 | `data/propfirms.json` | gedeelde bron — gecoordineerde wijziging |
 | `docs/inbox.md`, `.claude/skills/mex-scrum-master/**` | Scrum Master |
-| website / `web/**` | **NIET TOEGEWEZEN — open beslispunt, zie §13** |
+| `web/**` | **Web** — chat actief, `web/` staat sinds `41ccf5e` op de werkbranch; formele bevestiging door Ferry nog open |
 
 ### Hoofdregel
 

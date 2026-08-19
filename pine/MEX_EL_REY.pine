@@ -1264,6 +1264,11 @@ if sigBlockedEvt and notifyBlocked
 if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk and ddGuardOK and maeGuardOK and (not onlyFirstTrade or not hasTraded)
     if isLimitMode and pendDir != 0
         f_markUnfilled(pendBar, pendLimit, true)
+        // The replaced pending limit lives ON at the broker: TradingView swaps the order by id,
+        // PMT does not — it only ever sees a new bracket. Cancel the old one before the new one
+        // goes out, otherwise it stays live and a second position stacks on top of it.
+        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        f_sendDiscord("🚫 " + syminfo.ticker + " PENDING CANCELLED", "Superseded by a new signal — old limit @ " + str.tostring(pendLimit, format.mintick) + " cancelled at the broker.")
     t_tpD := f_tpFixDist(sigQtyEff)
     t_tpPx := sigTpPx
     t_qty := sigQtyEff

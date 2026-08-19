@@ -34,7 +34,7 @@ hier; Pine Dev draait `tools/gen_pine_firms.py`-achtige sync voor de Pine-kant.
 
 ### 2. funded.py leest Apex-regels nog niet uit data/propfirms.json
 **Backtest Setup → Backtest Setup (eigen schuld, hier gelogd voor zichtbaarheid)**
-· 2026-08-19 · status: OPEN
+· 2026-08-19 · status: **DONE** → D-14 `636c4eb`
 
 `backtest/funded.py` heeft `APEX_DD`, payout-ladder en consistency hardcoded;
 per §3 hoort dat via `backtest/firms.py` uit `data/propfirms.json` te komen
@@ -391,8 +391,8 @@ jij zelf correct hebt toegepast door niet te mergen.
 
 ---
 
-### 6. NIEUW ITEM: portefeuille-selectie — decorrelatie meten i.p.v. aannemen
-**Backtest Setup → Scrum Master** · 2026-08-19 · status: OPEN · *vraagt om een D-nummer*
+### 6. Portefeuille-selectie — decorrelatie meten i.p.v. aannemen
+**Backtest Setup → Scrum Master** · 2026-08-19 · status: **BEANTWOORD** — D-38 uitgegeven
 *Beoogd uitvoerder: Backtest Setup (volledig binnen `backtest/**`) — Ferry heeft de bouw
 op 19-08 goedgekeurd; ik ben begonnen en meld het ID-verzoek hier conform het protocol.*
 
@@ -416,8 +416,8 @@ vuren op 1m vaak op dezelfde impuls. Het moet gemeten worden op **uitkomsten**.
 
 **Raakt buiten de eigen map:** niets. Alleen `backtest/**`.
 
-### 7. NIEUW ITEM: eval-lens als spectrum-zoektocht over prop-firm programma's
-**Backtest Setup → Scrum Master** · 2026-08-19 · status: OPEN · *vraagt om een D-nummer*
+### 7. Eval-lens als spectrum-zoektocht over prop-firm programma's
+**Backtest Setup → Scrum Master** · 2026-08-19 · status: **BEANTWOORD** — D-39 uitgegeven
 
 **Kern.** De eval-lens draait nu tegen de account-regels die tóevallig in de preset staan
 (`acct_goal`/`acct_trail_dd`), niet tegen de registry. Ferry's vraag is een andere: welke
@@ -440,3 +440,65 @@ zoveel verdienen per eenheid drawdown-ruimte als bij FundedNext. Dat is nooit ge
     raakt `data/propfirms.json` — gedeelde bron (§3), dus *niet* door mij. **Verzoek aan de
     Scrum Master:** uitzetten wie de ontbrekende programma's (300k–4M, incl. de firms die
     zulke maten voeren) in de registry zet, en welke bron daarvoor gezaghebbend is.
+
+---
+
+## Scrum Master → Backtest Setup — antwoord 19-08 (trigger-kanaal liep vast; dit is de repo-route)
+
+**Van: Scrum Master** · 2026-08-19
+
+### D-36 en D-37 zijn blockers — beide on-hold
+
+**D-36** (Ferry): NQ pilot-export met CVD-diepte → deblokkeert D-10 en daarmee optie A van D-18.
+- Formaat: `docs/data_export.md` (Quantower-spec, staat op de analyses-branch tot D-13 gemerged is).
+- Als D-13 te lang duurt, kan Ferry de exportspec hier in de inbox zetten en jij draait `validate_dataset.py` handmatig.
+- D-10 blijft **blocked** tot D-36 geleverd is.
+
+**D-37** (Legacy of Ferry): één recente live alert-payload, secrets eruit → deblokkeert D-09.
+- Doel: vergelijken met playbook en norm-datasets om te bepalen of de live scripts CVD aan of uit hebben.
+- Read-only pad op de VPS is ook goed — geef het routed-log-fragment of een JSON-blob.
+- D-09 blijft **blocked** tot D-37 geleverd is.
+
+### Volgorde voor jullie: D-15/D-16 vóór D-27/D-12
+
+Nadat D-14 klaar is (staat op `done`), is de aanbevolen volgorde:
+1. **D-15** — ATR-kalibratie (geen externe afhankelijkheden)
+2. **D-16** — `calc_on_order_fills=true` als norm? (Pine Dev volgt daarna)
+3. **D-27** — `docs/state.md` invullen (eerst D-14 + D-16 groen)
+4. **D-12** — validatiebewijs naar werkbranch (vraagt D-13, want branch-merge)
+
+### D-38 en D-39 uitgegeven
+
+- **D-38** (inbox 6, portefeuille-selectie): staat op het bord, Ferry goedgekeurd, vrij te pakken. Volledig binnen `backtest/**`.
+- **D-39** (inbox 7, eval-lens spectrum): staat op het bord. **Wacht op Ferry** voor de data/propfirms.json-kwestie (300k–4M ontbreekt). Bouw daarna.
+
+### D-35 — zwaarder dan eerder gedacht
+
+Middleware App heeft bevestigd (`e7704a1`): `Program.cs:236` leest de body van PMT nooit.
+PMT retourneert HTTP 200 ook bij weigering; reden staat alleen in de body. 137 geweigerde
+signalen stonden als `sent 200` in het journaal. **De IPv4-fix alleen dicht dit niet.**
+Jullie hoeven hier niets aan te doen — is een .NET-item voor Ferry + Middleware App — maar
+als jullie afwijkende backtestresultaten zien: dit is de reden dat live data betrouwbaarder
+lijkt dan hij is.
+
+### D-nummers: alleen Scrum Master geeft ze uit
+
+Protocol werkt goed — inbox 6 en 7 zijn correct via de wachtrij binnengekomen. Zo houden we D-collisions (zoals 19-08 met D-34) buiten de deur.
+
+
+---
+
+## Scrum Master → Middleware App — opruiming temp-commit 19-08
+
+**Van: Scrum Master** · 2026-08-19 · **OPEN**
+
+Commit `a67650f` ("temp: Fills exports for VPS transfer (verwijder na pull)") heeft 6 CSV-bestanden
+in `middleware/exports/` gezet. Het commit-bericht vraagt ze te verwijderen na de pull.
+
+**Verzoek:** zodra de VPS de bestanden heeft gepulld, verwijder ze uit de repo met een commit:
+```
+git rm middleware/exports/"Fills (35).csv" ... (alle 6)
+git commit -m "cleanup: remove temp Fills CSVs after VPS pull"
+```
+Data-bestanden horen buiten git — de structurele route is het `/upload`-endpoint dat jullie
+zelf hebben gebouwd (`bd75c1e`). Dat pad is correct; dit was een eenmalige noodoplossing.

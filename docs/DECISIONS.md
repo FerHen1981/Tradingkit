@@ -9,6 +9,10 @@
 
 ---
 
+- 2026-08-19 · D-39 · **D-39 uitgegeven** (eval-lens spectrum-zoektocht over prop-firm programma's) — `data/propfirms.json` bevat alleen t/m 250k; Ferry beslist wie 300k–4M toevoegt vóór Backtest Setup de sweep bouwt · raakt: backtest, data/propfirms.json
+- 2026-08-19 · D-38 · **D-38 uitgegeven** (portefeuille-selectie via decorrelatiemeting) — volledig binnen `backtest/**`, Ferry goedgekeurd 19-08, Backtest Setup bouwt · raakt: backtest
+- 2026-08-19 · D-14 · **D-14 DONE** — `funded.py` leest Apex-regels registry-first; gedragswijziging op 50k gedocumenteerd · raakt: backtest funded-lens
+- 2026-08-19 · D-35 · **UITGEBREID: IPv4-fix is niet het enige probleem** — `Program.cs:236` leest de response-body van PMT nooit (`if (code < 400) return "sent {code}"`); PMT retourneert HTTP 200 óók bij weigering, reden staat alleen in de body; bevestigd met 137 geweigerde signalen die als `sent 200` in het journaal staan; body-check is vereist naast de IPv4-fix · ontdekt door Middleware App 19-08 · raakt: live executie, D-35
 - 2026-08-19 · — · **PA019-phantom-bug gefixt**: Discord-kaarten zonder PMT-record werden als echte trades getoond; `pair_events()` filtert nu accounts zonder PMT-record (= nooit een order geplaatst) · raakt: viewer, routed_journal
 - 2026-08-19 · D-03 · **Fills-upload pagina `/upload` toegevoegd aan de viewer** — drag-and-drop CSVs in de browser, landt in `/root/exports/`, vervangt SCP · raakt: mex-viewer, reconciliatieflow
 - 2026-08-19 · D-34 · **De publieke sites claimen geen gevalideerde edge meer** · het OOS-venster onder die claim is opgebrand (D-18); `status` in `public-stats.json` noemt nu het rekeningtype (funded/evaluatie) in plaats van een oordeel · raakt: D-17, D-18, web/**

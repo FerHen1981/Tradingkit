@@ -8,7 +8,7 @@
 > `done` (goedgekeurd) · `blocked` (wacht op een ander item of op Ferry).
 > Owner leeg = vrij te pakken.
 
-**Stand:** 2026-08-19 · geverifieerd tegen `claude/middleware-setup-guide-afhvtk` @ `34136d3`
+**Stand:** 2026-08-19 · geverifieerd tegen `claude/middleware-setup-guide-afhvtk` @ `9830cf3`
 
 ---
 
@@ -39,10 +39,10 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | ID | Status | Owner | Item |
 |---|---|---|---|
-| **D-35** | todo | Ferry + Middleware App | **De IPv4-fix is gecommit maar NIET gebouwd en NIET uitgerold** (`97c50cd`; Legacy heeft geen .NET SDK). De draaiende binary heeft nog het oude gedrag, met `dryRun:false` en `armed:true`: uitgaand verkeer kan via IPv6 → **PMT weigert orders**, en een weigering wordt weggeschreven als `sent 200` → **onzichtbaar in het journaal**. Blokkerend daarnaast: **`167.233.215.60` staat niet in de PMT IP-pool** — zolang dat niet geregeld is wordt er niets geplaatst, hoe de code er ook uitziet. Klaar pas na `dotnet build src/Mex.Journal.Receiver -c Release` + herstart, met `curl -s ifconfig.me` als controle. _(gemeld door Legacy 19-08)_ |
+| **D-35** | todo | Ferry + Middleware App | **De IPv4-fix is gecommit maar NIET gebouwd en NIET uitgerold** (`97c50cd`; Legacy heeft geen .NET SDK). De draaiende binary heeft nog het oude gedrag, met `dryRun:false` en `armed:true`: uitgaand verkeer kan via IPv6 → **PMT weigert orders**. Ander probleem, onafhankelijk bevestigd door Middleware App (`e7704a1`): **`Program.cs:236` leest de response-body van PMT nooit** — `if (code < 400) return $"sent {code}";`. PMT retourneert HTTP 200 ook bij weigering; de reden staat alleen in de body. Gevolg: **137 geweigerde signalen** (`Access is denied` 128×, `valid ip not found in pool` 9×, IPv6-adres) staan in `routed_*.jsonl` als `sent 200`. **De IPv4-fix alleen dicht dit niet; er moet ook op de body worden gecontroleerd.** Blokkerend daarnaast: **`167.233.215.60` staat niet in de PMT IP-pool**. Klaar pas na body-check + `dotnet build src/Mex.Journal.Receiver -c Release` + herstart + `curl -s ifconfig.me`. _(gemeld door Legacy 19-08; body-check door Middleware App 19-08)_ |
 | **D-01** | review | Middleware App | **`mex-viewer` serveert de hele vloot zonder authenticatie.** `viewer.py:161` faalt open: staat `VIEWER_PASSWORD` niet in de omgeving, dan zijn `/api/state`, `/api/command` en `/api/widget` publiek — accountnummers, saldi, buffers, open posities. **OPGELOST** `8a14537`: `_authed()` faalt nu closed; open draaien vereist een expliciete `VIEWER_ALLOW_OPEN=1` en het dashboard meldt dan *fleet data is PUBLIC*. Vier tests in `middleware/tests/test_viewer_auth.py`. **Resteert voor Ferry:** `VIEWER_PASSWORD` + `VIEWER_API_TOKEN` zetten en herstarten — zonder wachtwoord weigert hij nu álles. _(was S-08 / SM-01)_ |
 | **D-02** | blocked | Ferry | **De risk-gate heeft geen live executiepunt.** `risk.py` hangt uitsluitend aan `main.py` en `router.py`; die draaien niet. Day caps, DLL en halt worden berekend maar handhaven niets. Blocked by D-05. _(was S-01 / SM-02)_ |
-| **D-03** | review | Middleware App | **De reconciliatielaag heeft nooit gedraaid.** De Notion-database *MEX Reconciliation (live)* heeft een compleet schema en **0 rijen** (geverifieerd 19-08). Dat verklaart het gat dat Analyses vond: `realized_net` $21.597,35 vs `window_net` $31.424,81 — **$9.827,46** verschil dat precies deze laag had moeten vangen. _(was S-10 + S-11)_ |
+| **D-03** | review | Middleware App | **De reconciliatielaag heeft nooit gedraaid.** De Notion-database *MEX Reconciliation (live)* heeft een compleet schema en **0 rijen** (geverifieerd 19-08). Dat verklaart het gat dat Analyses vond: `realized_net` $21.597,35 vs `window_net` $31.424,81 — **$9.827,46** verschil dat precies deze laag had moeten vangen. **Werk gedaan (19-08):** `reconcile_run.py` — bucket op tradingsessie, reconcile op bestaande bronnen, fills-upload-endpoint `/api/upload-fills` + `/upload`-pagina, Notion-creds uit env. **Resteert voor Ferry:** `NOTION_TOKEN` in de service-omgeving zetten + `mex-reconcile.timer` inschakelen zodat hij daadwerkelijk schrijft. _(was S-10 + S-11)_ |
 | **D-04** | blocked | Ferry | **Notice-cards: bevestig de .NET-receiver als eigenaar.** Feitelijk beslecht — runtime toont `renderEnabled:true` met `/root/mex-renderer/render-signal.js`; `notices.py` is nooit uitgerold. Alleen de formele bevestiging ontbreekt, en zonder die bevestiging kan niemand mergen. **Eerstehands bewijs (Legacy, uitrol 11-08):** audit-log `card queued (tier B)` 01:28:52Z → `card sent 200` 01:28:57Z, kaart verscheen in Discord; een volledige tradecyclus liep erdoorheen (FILL 6ct @ 4474,8 → RISK OFF → TRAIL → EXIT +$153,96). De Python-tak bleek dood toen patches daar geen effect op de executie hadden. |
 | **D-05** | blocked | Ferry | **Python fan-out: afvoeren of alsnog activeren?** `main.py`/`router.py`/`brokers/` zien er compleet uit en doen niets. Wortel onder D-02 en D-04. |
 
@@ -72,13 +72,15 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | ID | Status | Owner | Item |
 |---|---|---|---|
-| **D-14** | review | Backtest Setup | `backtest/funded.py:19` heeft `APEX_DD` hardcoded terwijl `firms.py` de registry al leest. _(was inbox 2)_ |
+| **D-14** | done | Backtest Setup | `backtest/funded.py:19` heeft `APEX_DD` hardcoded terwijl `firms.py` de registry al leest. **OPGELOST** `636c4eb`: `funded.py` leest via `funded.apex_rules(size)` registry-first; fallback naar oude constanten voor formaten die ontbreken. Behavior-delta gedocumenteerd: consistency 30%→50%, qualifying days 8→5, DLL $4.000 wordt nu afgedwongen. _(was inbox 2)_ |
 | **D-15** | todo | Backtest Setup | ATR-kalibratie MR·FVG: tick-tuning omrekenen naar ATR(14)-veelvouden en sweepen op MGC + ES + NQ. _(was inbox 3)_ |
 | **D-16** | todo | Backtest Setup | `calc_on_order_fills=true` — wordt dit de norm voor de funnel? Trefkans 81% → 74,6%, PF 1,15 → 0,93. Eerlijker model, maar het verandert welke trades vuren. _(was inbox 5)_ |
 | **D-17** | todo | Middleware App | Viewer-rol (units-only) overnemen uit `web/handover/mex_units/` + `public-stats.json` periodiek schrijven. _(was Web-inbox 4)_ |
 | **D-18** | blocked | Ferry | **OOS-venster 2023-2026 is opgebrand** — herselecteren op pre-2023 of heretiketteren als validatie. Blokkeert elke publieke claim. Blocked by D-10 voor optie A. |
 | **D-21** | todo | Ferry | Account 214 is geslaagd ($3.035/$3.000, `eligible:true`) maar staat nog als eval. _(was S-12)_ |
 | **D-34** | review | Web | **Publieke claims in `web/**` afzwakken zolang D-18 open staat.** De sites beweren op zes plekken dat er een *gevalideerde edge* is; het OOS-venster daarachter is opgebrand. Betreft `public-stats.json`, `resultaten.astro`, de homepage, de pijlerpagina, `methodiek.mdx` en de prop-firm-gids. Begrippen die het *concept* validatie uitleggen blijven staan. Blocked-by-strekking van D-18, maar zelfstandig uit te voeren. |
+| **D-38** | todo | Backtest Setup | **Portefeuille-selectie: decorrelatie meten, niet aannemen.** De mill beoordeelt kandidaten op PF per stuk — dat vindt dezelfde edge N keer terug. Aanpak: dagelijkse P&L-reeks per OOS-overlever → correlatiematrix + gedeelde-verliesdagen + regime-complementariteit → hebzuchtige selectie die een **set** oplevert, niet een ranglijst. Grondstof (`trades.csv` per run) ligt er al. Ferry heeft bouw goedgekeurd 19-08. Volledig binnen `backtest/**`. _(ingediend door Backtest Setup 19-08 als inbox 6)_ |
+| **D-39** | todo | Ferry + Backtest Setup | **Eval-lens: spectrum-zoektocht over prop-firm programma's.** Welke combinatie haalt *welk* prop-firm-account het snelst? De machinerie is er grotendeels (`--firm`/`--funnel`, 13 eval-programma's in de registry). Ontbreekt: sweep over programma's met pass-rate + *tijd-tot-pass in dagen*. **Aandachtspunt:** Ferry's bereik gaat tot 4M, de registry stopt bij 250k — ontbrekende programma's toevoegen raakt `data/propfirms.json` (gedeelde bron, §3). **Verzoek aan Ferry:** besluit wie de 300k–4M programma's toevoegt en welke bron daarvoor gezaghebbend is. Backtest Setup bouwt de sweep daarna. _(ingediend door Backtest Setup 19-08 als inbox 7)_ |
 
 ## ⚪ Later
 
@@ -107,7 +109,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | Branch | Beoordeeld t/m | Datum |
 |---|---|---|
-| `claude/middleware-setup-guide-afhvtk` | `d568233` | 2026-08-19 |
+| `claude/middleware-setup-guide-afhvtk` | `9830cf3` | 2026-08-19 |
 | `claude/legacy-accounts-scripts-analysis-ui0j6m` | `2f05103` | 2026-08-19 |
 | `claude/discord-notify-hnydfa` | `5a5f49a` | 2026-08-19 |
 | `claude/analyses-data-chat-org-3tii8j` | `f6e9af0` | 2026-08-19 |

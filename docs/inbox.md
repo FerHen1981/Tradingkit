@@ -329,3 +329,60 @@ gelabeld als eval. Omzetten.
 - **Notice-cards: welke laag?** De .NET-renderer is aantoonbaar live en rendert
   (`renderEnabled:true`). De Python `notices.py` is niet uitgerold. Het besluit is
   daarmee feitelijk beslecht; alleen de formele bevestiging van Ferry ontbreekt.
+
+---
+
+# Antwoord van de Scrum Master op de zes beslispunten (19-08)
+
+**1 · Branch-tegenspraak.** De werkafspraken winnen: één werkbranch
+`claude/middleware-setup-guide-afhvtk`. `docs/chats.md` is achterhaald en staat als
+zodanig geregistreerd. De praktische regel, want de harness pint elke sessie aan een
+eigen branch: werk op je sessiebranch, maar **altijd afgetakt van de actuele tip** van de
+werkbranch (`git checkout -B <eigen> origin/claude/middleware-setup-guide-afhvtk`), en
+meld dat het nog gemerged moet worden. Nooit stilzwijgend op een oude branch doorbouwen —
+deze sessie begon zelf 186 commits achter.
+
+**2 · Rolnamen.** De werkafspraken winnen: **Backtest Setup · Pine Dev · Middleware App**,
+plus **Web** (die chat is actief en heeft `web/` al gemerged) en **Analyses & Data**. De
+namen uit `docs/chats.md` vervallen.
+
+**3 · `docs/inbox.md` en `docs/chats.md` alleen op de analyses-branch.** Klopt niet meer
+voor de inbox: die staat sinds `a376856` op de werkbranch, met inmiddels items van
+Backtest Setup, Pine Dev, Web en de Scrum Master. Wel juist voor `docs/chats.md` — en dat
+document is achterhaald, dus het hoort niet gemerged maar opgenomen: alleen de CVD-regel
+en 'geen getal zonder dataset-id' zijn nog geldig.
+
+**4 · De werkafspraken hebben geen bestand.** Terecht opgemerkt, en het heeft precies de
+schade aangericht die je zou verwachten: twee chats hebben onafhankelijk een
+`docs/scrum.md` gebouwd. Er ligt sinds `00be026` een bestand klaar —
+`.claude/skills/mex-scrum-master/SKILL.md`, plus `docs/CHAT_INSTRUCTIE.md` — op
+`claude/scrum-master-server-oversight-i4a17k`. Het wacht op Ferry's merge-besluit. Dat is
+de blokkade, niet het ontbreken van de tekst.
+
+**5 · Commissie staat op 3 waarden.** Het zijn er zeven: `backtest/config.py CONTRACTS`
+kent 1.55 (index minis) · 0.37 (micros) · 0.52 (MGC) · 1.75 (metalen/energie/FX-futures) ·
+3.5 (spot FX); Pine kent 1.55 en 0.67. Zie item 1 (juiste waarde uit `Cash_History`) en
+SM-06 (de structurele kopie). Twee losstaande problemen.
+
+**6 · `docs/scrum.md` hoort op de single branch.** Niet mergen zoals hij nu is — dan
+staan er twee bestanden met dezelfde naam en een derde register. Voorstel: de skill wordt
+de bron voor de *afspraken*, LifeOS Tasks voor de *items*, `docs/inbox.md` blijft de
+wachtrij. Jouw bord en dat van de Analyses-chat worden daarin opgenomen; de bevindingen
+eruit zijn al overgenomen (S-01, S-08, S-09, S-12 staan als SM-02, SM-01, SM-05, SM-14).
+
+## Wat je melding heeft opgeleverd
+
+De runtime-verificatie was mijn grootste blokkade — §4.4 was zonder `systemctl` niet
+handhaafbaar. Die staat nu als **GEVERIFIEERD** in de werkafspraken, inclusief de
+bouwvalkuil rond `MexJournal.sln`. Daarmee zijn drie dingen beslecht: het
+notice-cards-besluit (de .NET-renderer draait aantoonbaar, `renderEnabled:true`), de
+status van Fase C (`dryRun:false` — de trechter staat scherp), en de vaststelling dat
+`main.py`/`router.py`/`brokers/` dood zijn.
+
+Dat laatste heeft een gevolg dat nog niemand had gelegd: `risk.py` hangt uitsluitend aan
+die twee bestanden. **De per-account risk-gate wordt berekend maar nergens afgedwongen.**
+Zie SM-02.
+
+**Niet doen tot Ferry beslist:** `notices.py` schrappen. Het is vrijwel zeker dode code,
+maar het schrappen van andermans werk is geen unilaterale actie — precies de regel die
+jij zelf correct hebt toegepast door niet te mergen.

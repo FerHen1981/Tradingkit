@@ -1,7 +1,8 @@
 # Inbox — cross-chat verzoeken
 
 **Dit is een wachtrij, geen archief.** De open lijst met status, prioriteit en
-afhankelijkheden staat in Notion → **[MEX DEV Control Center](https://app.notion.com/p/3c1b61ea444d81fda06afbaaec1bc757) → MEX Dev Backlog**.
+afhankelijkheden staat in **LifeOS → Tasks**, met het voorvoegsel `🛠️ MEX Dev ·` en
+gekoppeld aan Area *MEX Traders* / project *MEX PROP TRADER*.
 Die is leidend. Hieronder staat alleen de index plus het aanleverformaat.
 
 Zie `docs/CHAT_INSTRUCTIE.md` voor de volledige werkwijze.

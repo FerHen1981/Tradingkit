@@ -38,7 +38,10 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Trade Journal `c3e9d05525404849ad484b648c82fd59`
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
-- MEX DEV Control Center `3c1b61ea444d81fda06afbaaec1bc757` (taken · besluiten · documentatieregister) — werkwijze in `docs/CHAT_INSTRUCTIE.md`
+- MEX Dev loopt via de bestaande LifeOS-databases — geen aparte structuur:
+  **Tasks** met voorvoegsel `🛠️ MEX Dev ·`, en **Notes** `🛠️ MEX Dev — Architectuur /
+  Besluitregister / Documentatieregister`. Beide gekoppeld aan Area *MEX Traders* en
+  project *MEX PROP TRADER*. Werkwijze in `docs/CHAT_INSTRUCTIE.md`.
 
 ## Dev conventions
 - Develop/commit/push only to branch `claude/middleware-setup-guide-afhvtk`; never push

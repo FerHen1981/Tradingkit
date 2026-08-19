@@ -19,7 +19,8 @@ is er één route naar Notion, en die loopt via de Scrum Master.
 |---|---|
 | Code, configuratie, contract-specs, firm-regels | **de repo** `ferhen1981/tradingkit` |
 | Wat er LIVE draait | **de VPS zelf** (`systemctl cat <service>`) |
-| Taken, besluiten, documentatie, archief | **Notion — [MEX DEV Control Center](https://app.notion.com/p/3c1b61ea444d81fda06afbaaec1bc757)** |
+| Taken | **LifeOS → Tasks** — voorvoegsel `🛠️ MEX Dev ·` |
+| Besluiten, documentatie, archief | **LifeOS → Notes** — `🛠️ MEX Dev — …` |
 
 Documentatie kan nooit actueler zijn dan code, en code nooit actueler dan runtime.
 Bij tegenspraak wint de laag erboven.
@@ -87,7 +88,7 @@ geen Notion-pagina's.
 Drie plekken, drie soorten waarheid:
 - repo   = code, configuratie, contract-specs, firm-regels
 - VPS    = wat er daadwerkelijk draait (systemctl cat <service>)
-- Notion = taken, besluiten, documentatie, archief (MEX DEV Control Center)
+- LifeOS = taken (Tasks), besluiten + documentatie + archief (Notes)
 
 Wat je zelf doet:
 - code + tests binnen je eigen map

@@ -194,7 +194,13 @@ class RoutedTrade:
 
 def pair_events(events: list[RoutedEvent], amap: dict[str, str]) -> list[RoutedTrade]:
     """FIFO-pair FILL(entry) with EXIT per (account, symbol, direction). Fills carry the
-    intended price from the most recent LIMIT card of the same symbol+direction."""
+    intended price from the most recent LIMIT card of the same symbol+direction.
+
+    Only accounts that have at least one PMT record (present in amap) are included — a
+    Discord card without a corresponding PMT record means the alert fired but PMT was
+    disabled in Pine, so no order was placed at the broker. Showing those as real trades
+    was the PA019 phantom-trade bug.
+    """
     events = sorted(events, key=lambda e: e.ts)
     last_limit: dict[tuple[str, str], float] = {}
     open_q: dict[tuple[str, str, str], deque] = defaultdict(deque)
@@ -204,7 +210,9 @@ def pair_events(events: list[RoutedEvent], amap: dict[str, str]) -> list[RoutedT
             if e.price is not None:
                 last_limit[(e.symbol, e.direction)] = e.price
             continue
-        full = amap.get(e.account_short, e.account_short)
+        if e.account_short not in amap:
+            continue   # no PMT record → alert only, not a real execution
+        full = amap[e.account_short]
         if e.typ == "fill":
             t = RoutedTrade(account=full, symbol=e.symbol, direction=e.direction,
                             entry_ts=e.ts, entry_price=e.price, qty=e.qty, sl=e.sl, tp=e.tp,

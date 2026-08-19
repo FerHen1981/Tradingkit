@@ -89,6 +89,29 @@ def test_open_trade_is_written_before_close():
     assert trade_key(to_record(trades[0])) == k1
 
 
+def test_discord_without_pmt_is_not_a_real_trade():
+    """PA019 bug: alerts with PMT disabled in Pine still fire Discord cards.
+    Without a PMT record the viewer must NOT show them as real trades."""
+    lines = [
+        # PA015 has a PMT record → real trade
+        _pmt("2026-08-19T04:00:00Z", "PAAPEX2700250000015"),
+        _discord("2026-08-19T04:00:05Z", "📥 MGC1! FILL SHORT",
+                 "PA015-0k-260819 | 5ct @ 4403.1 | SL 4413.1 | TP 4378.1"),
+        # PA019 has NO PMT record → phantom, should be filtered out
+        _discord("2026-08-19T04:00:05Z", "📥 MGC1! FILL LONG",
+                 "PA019-0k-260819 | 3ct @ 4405.0 | SL 4395.0 | TP 4430.0"),
+        _discord("2026-08-19T04:30:00Z", "📤 MGC1! EXIT 🟢",
+                 "PA019-0k-260819 | long closed @ 4420.0 | TP | PnL +$150.0 | MFE 50t · MAE 5t"),
+    ]
+    events, amap = parse_routed_lines(lines)
+    assert "PA015" in amap
+    assert "PA019" not in amap   # no PMT record for this account
+    trades = pair_events(events, amap)
+    # Only PA015 should appear — PA019 is a phantom
+    assert len(trades) == 1
+    assert trades[0].account == "PAAPEX2700250000015"
+
+
 def test_record_maps_to_notion_props():
     lines = [
         _pmt("2026-08-13T04:00:00Z", "PAAPEX2700250000018"),

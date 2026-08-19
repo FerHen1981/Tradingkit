@@ -92,10 +92,18 @@ def intents_from_routed(routed_dir: str, since_ts: float, days: int = 3) -> list
     return out
 
 
-def fills_from_exports(exports_dir: str, since_ts: float, skip: list[str] | None = None) -> list[Fill]:
-    """Actual fills from the broker's own export, deduped on fill id across snapshots."""
+def fills_from_exports(exports_dir: str, since_ts: float, skip: list[str] | None = None,
+                       stats: dict | None = None) -> list[Fill]:
+    """Actual fills from the broker's own export, deduped on fill id across snapshots.
+
+    `stats` (optional) is filled with what was on disk vs what fell inside the window. Without
+    it a stale export dir just yields 0 fills, which reads like "nothing traded" when it
+    actually means "nobody exported since <date>" — the failure we spent a day chasing.
+    """
     skip = skip or []
     by_id: dict[str, Fill] = {}
+    seen = 0
+    newest: float | None = None
     for path in sorted(glob.glob(os.path.join(exports_dir, "*Fills*.csv"))):
         try:
             rows = parse_fills_csv(path)
@@ -106,6 +114,8 @@ def fills_from_exports(exports_dir: str, since_ts: float, skip: list[str] | None
             if any(s in f.account for s in skip):
                 continue
             ts = f.ts.timestamp()
+            seen += 1
+            newest = ts if newest is None else max(newest, ts)
             if ts < since_ts:
                 continue
             by_id[f.fill_id] = Fill(
@@ -113,6 +123,15 @@ def fills_from_exports(exports_dir: str, since_ts: float, skip: list[str] | None
                 side="buy" if f.is_buy else "sell", price=f.price, qty=float(f.qty),
                 ts=ts, order_ref=f.order_id,
             )
+    if stats is not None:
+        import datetime as dt
+        stats["fills_on_disk"] = seen
+        stats["newest_export"] = (dt.datetime.fromtimestamp(newest, dt.timezone.utc)
+                                  .strftime("%Y-%m-%d %H:%M UTC") if newest else None)
+        if seen and not by_id:
+            stats["warning"] = (f"{seen} fills on disk but the newest is {stats['newest_export']} — "
+                                "outside the window, so there is nothing recent to reconcile "
+                                "against. The Fills export has stopped.")
     return sorted(by_id.values(), key=lambda x: x.ts)
 
 
@@ -146,8 +165,9 @@ async def run_once() -> dict:
     apply = os.environ.get("RECONCILE_APPLY", "").strip().lower() in ("1", "true", "yes")
     since = time.time() - days * 86400
 
+    fstats: dict = {}
     intended = intents_from_routed(routed, since, days)
-    fills = fills_from_exports(exports, since, skip)
+    fills = fills_from_exports(exports, since, skip, stats=fstats)
 
     slip_rows = match_fills(intended, fills)
     pnl_rows = [roundtrip_pnl(rt, _closest(rt["entry"], intended)) for rt in pair_roundtrips(fills)]
@@ -158,7 +178,15 @@ async def run_once() -> dict:
         "intended": len(intended), "fills": len(fills), "rows": len(rows),
         "matched": len(matched), "unmatched": len(slip_rows) - len(matched),
         "roundtrips": len(pnl_rows), "applied": False,
+        "window_days": days, "newest_export": fstats.get("newest_export"),
     }
+    if fstats.get("warning"):
+        summary["warning"] = fstats["warning"]
+        log.warning("reconcile: %s", fstats["warning"])
+    elif intended and not fills:
+        summary["warning"] = (f"{len(intended)} intents but no fills in {exports} — the actual side "
+                              "has no data, so nothing can be reconciled.")
+        log.warning("reconcile: %s", summary["warning"])
     if not rows:
         log.info("reconcile: nothing to do %s", summary)
         return summary

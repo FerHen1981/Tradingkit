@@ -87,3 +87,21 @@ def test_fills_are_deduped_across_overlapping_exports():
         assert got[0].symbol == "MGC" and got[0].qty == 2.0
         # skip-list drops the account entirely
         assert fills_from_exports(tmp, since_ts=0, skip=["013"]) == []
+
+
+def test_stale_export_says_so_instead_of_reporting_zero():
+    """A dead export pipeline must not read as 'nothing traded' (D-03 dry run, 19-08)."""
+    hdr = ("_id,_orderId,_contractId,_timestamp,_tradeDate,_action,_qty,_price,_active,_accountId,"
+           "Fill ID,Order ID,Timestamp,Date,Account,B/S,Quantity,Price,_priceFormat,"
+           "_priceFormatType,_tickSize,Contract,Product,Product Description,commission\n")
+    row = ("9,9,1,2026-08-08T14:00:00.000Z,2026-08-08,0,2,4450.0,true,1,9,9,x,x,"
+           "PAAPEX2700250000013,Buy,2,4450.0,-1,0,0.1,MGCZ6,MGC,E-Micro Gold,0.67\n")
+    with tempfile.TemporaryDirectory() as tmp:
+        with open(os.path.join(tmp, "20260808_x_Fills.csv"), "w") as f:
+            f.write(hdr + row)
+        stats: dict = {}
+        got = fills_from_exports(tmp, since_ts=4_000_000_000, stats=stats)   # window far in the future
+    assert got == []
+    assert stats["fills_on_disk"] == 1
+    assert stats["newest_export"].startswith("2026-08-08")
+    assert "export has stopped" in stats["warning"]

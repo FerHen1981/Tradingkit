@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -52,7 +54,39 @@ CardRender.Keep = string.Equals(Environment.GetEnvironmentVariable("MEX_RENDER_K
 CardTier.LoadOverrides(Environment.GetEnvironmentVariable("MEX_CARD_TIER_OVERRIDES") ?? "");
 if (renderEnabled) Directory.CreateDirectory(CardRender.OutDir);
 
-var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+// PMT laat alleen geregistreerde IP-adressen toe ("valid ip not found in pool").
+// Deze server heeft zowel IPv4 als IPv6; ging het verkeer via IPv6 naar buiten, dan
+// zag PMT een adres dat niet in de pool staat en werd de order geweigerd — zonder
+// dat je dat aan de statuscode kon zien. Hier binden we uitgaand verkeer aan IPv4,
+// zodat er precies één adres te whitelisten valt. Dit doet hetzelfde als de
+// precedence-regel in /etc/gai.conf, maar dan zo dat een herinstallatie van de
+// server het niet stilletjes terugdraait. Uit te zetten met MEX_FORCE_IPV4=false.
+var forceIpv4 = !string.Equals(Environment.GetEnvironmentVariable("MEX_FORCE_IPV4"),
+                               "false", StringComparison.OrdinalIgnoreCase);
+var handler = new SocketsHttpHandler();
+if (forceIpv4)
+    handler.ConnectCallback = async (ctx, ct) =>
+    {
+        var addrs = await Dns.GetHostAddressesAsync(ctx.DnsEndPoint.Host,
+                                                    AddressFamily.InterNetwork, ct);
+        if (addrs.Length == 0)
+            throw new SocketException((int)SocketError.HostNotFound);
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+        {
+            NoDelay = true
+        };
+        try
+        {
+            await socket.ConnectAsync(addrs, ctx.DnsEndPoint.Port, ct);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    };
+var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
 var seen = new ConcurrentDictionary<string, DateTime>();   // idempotency
 
 app.MapGet("/health", () => Results.Ok(new
@@ -123,6 +157,13 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
         await AppendAsync(storePath, "pmt", body, res, acct);
+
+        // Een geweigerde order is stil: er komt geen fill, geen exit, geen kaart.
+        // Zonder melding merk je het pas als je het bij de broker gaat zoeken.
+        if (res.StartsWith("GEWEIGERD") || res.StartsWith("error"))
+            await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+                $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{res}", 14701138);
+
         return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = res });
     }
 
@@ -231,6 +272,29 @@ static Task AppendAsync(string storePath, string kind, string body, string resul
     => Audit.AppendAsync(storePath, kind, body, result, account);
 
 // POST met retry op netwerkfouten en 5xx; 4xx niet opnieuw proberen (lost niet op).
+// Het antwoord kort houden: het gaat mee in elke journaalregel.
+static string Excerpt(string s)
+{
+    s = (s ?? "").Replace('\n', ' ').Replace('\r', ' ').Trim();
+    return s.Length <= 200 ? s : s[..200] + "…";
+}
+
+// Bewust conservatief: liever een geplaatste order die onterecht als verdacht wordt
+// gemarkeerd, dan een geweigerde order die als geslaagd wegschrijft. Het volledige
+// antwoord staat hoe dan ook in het journaal, dus deze lijst is aan te scherpen zodra
+// we het echte antwoordformaat van PMT hebben gezien.
+static bool Rejected(string reply)
+{
+    if (string.IsNullOrWhiteSpace(reply)) return false;
+    var r = reply.ToLowerInvariant();
+    string[] markers =
+    {
+        "not found in pool", "cannot place", "invalid ip", "unauthorized", "forbidden",
+        "\"error\"", "\"success\":false", "\"status\":false", "not allowed", "rejected",
+    };
+    return markers.Any(m => r.Contains(m));
+}
+
 static async Task<string> ForwardJsonAsync(HttpClient http, string url, string json, bool dryRun)
     => await ForwardAsync(http, url, json, "application/json", dryRun);
 
@@ -249,8 +313,15 @@ static async Task<string> ForwardAsync(HttpClient http, string url, string paylo
             using var content = new StringContent(payload, Encoding.UTF8, contentType);
             var resp = await http.PostAsync(url, content);
             var code = (int)resp.StatusCode;
-            if (code < 400) return $"sent {code} (poging {attempt})";
-            if (code < 500) return $"error {code} (4xx, niet opnieuw)";
+            // PMT antwoordt op een geweigerde order met 200 en de reden in de body.
+            // Alleen naar de statuscode kijken schrijft zo'n weigering weg als
+            // "sent 200" — niet te onderscheiden van een geplaatste order.
+            var reply = Excerpt(await resp.Content.ReadAsStringAsync());
+            if (code < 400)
+                return Rejected(reply)
+                    ? $"GEWEIGERD {code} door doelserver: {reply}"
+                    : $"sent {code} (poging {attempt}){(reply.Length > 0 ? " · " + reply : "")}";
+            if (code < 500) return $"error {code} (4xx, niet opnieuw): {reply}";
         }
         catch (Exception ex)
         {

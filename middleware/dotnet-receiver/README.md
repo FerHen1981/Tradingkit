@@ -56,6 +56,25 @@ Staat het script niet op `MEX_RENDER_SCRIPT`, dan blijft alles tekst.
     MEX_CHROMIUM_PATH=            # vaste Chromium-binary voor Playwright
     MEX_CARD_TIER_OVERRIDES=      # bv. "AUTO FLAT=B,EXIT=C" — tier is data, geen code
 
+    # uitgaand netwerk
+    MEX_FORCE_IPV4=               # 'false' zet de IPv4-binding uit (default: aan)
+
+## Uitgaand IP — waarom dit vastzit op IPv4
+
+PickMyTrade laat alleen geregistreerde IP-adressen toe. Deze server heeft er twee
+(IPv4 en IPv6) en PMT accepteert geen IPv6 in de pool, dus zolang het verkeer via
+IPv6 uitging werd elke order geweigerd met *"valid ip not found in pool"* — en wel
+met **HTTP 200**, zodat het in het journaal als geslaagd oogde.
+
+De receiver bindt uitgaand verkeer daarom aan IPv4 (`SocketsHttpHandler.ConnectCallback`).
+Te whitelisten adres: **167.233.215.60**. Controleren wat de server werkelijk gebruikt:
+
+    curl -s ifconfig.me; echo      # zonder -4; hier hoort het IPv4-adres uit te komen
+
+Weigert een doelserver alsnog, dan staat de reden nu in het journaal:
+`GEWEIGERD 200 door doelserver: …`, met een Discord-melding "⛔ Order NIET geplaatst".
+Een `sent 200` zonder die prefix is een geaccepteerde order.
+
 ## Uitrollen
 
 Twee losse onderdelen. De renderer is een los bestand dat per bericht wordt aangeroepen,

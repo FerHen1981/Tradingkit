@@ -8,7 +8,7 @@
 > `done` (goedgekeurd) · `blocked` (wacht op een ander item of op Ferry).
 > Owner leeg = vrij te pakken.
 
-**Stand:** 2026-08-19 · geverifieerd tegen `claude/middleware-setup-guide-afhvtk` @ `41ccf5e`
+**Stand:** 2026-08-19 · geverifieerd tegen `claude/middleware-setup-guide-afhvtk` @ `34136d3`
 
 ---
 

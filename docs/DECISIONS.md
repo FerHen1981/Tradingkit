@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-08-19 · — · **PA019-phantom-bug gefixt**: Discord-kaarten zonder PMT-record werden als echte trades getoond; `pair_events()` filtert nu accounts zonder PMT-record (= nooit een order geplaatst) · raakt: viewer, routed_journal
+- 2026-08-19 · D-03 · **Fills-upload pagina `/upload` toegevoegd aan de viewer** — drag-and-drop CSVs in de browser, landt in `/root/exports/`, vervangt SCP · raakt: mex-viewer, reconciliatieflow
 - 2026-08-19 · D-34 · **De publieke sites claimen geen gevalideerde edge meer** · het OOS-venster onder die claim is opgebrand (D-18); `status` in `public-stats.json` noemt nu het rekeningtype (funded/evaluatie) in plaats van een oordeel · raakt: D-17, D-18, web/**
 - 2026-08-19 · D-34 · **VASTGESTELD: de regel 'werkt alleen in de eerste helft ⇒ gaat niet live' klopte niet** · NQ/YM draaien juist wél live op eval-rekeningen; de grens ligt bij funded kapitaal, en zo staat het nu op de site · raakt: web/**
 - 2026-08-19 · D-35 · **VASTGESTELD: de IPv4-fix draait niet** — gecommit, niet gebouwd, niet uitgerold; PMT kan orders blijven weigeren en een weigering wordt als `sent 200` gejournald · gemeld door Legacy · raakt: live executie

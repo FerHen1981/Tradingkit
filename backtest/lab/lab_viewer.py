@@ -273,6 +273,13 @@ def _run_job_inner(job_id: str, cmd: list[str], upd) -> None:
                 except Exception:
                     pass
                 continue
+            if line.startswith("PORTFOLIO_JSON "):
+                try:
+                    with _JOBS_LOCK:
+                        _JOBS[job_id]["portfolio"] = json.loads(line[len("PORTFOLIO_JSON "):])
+                except Exception:
+                    pass
+                continue
             if line.startswith("AUTOTUNE_JSON "):
                 try:
                     with _JOBS_LOCK:
@@ -506,6 +513,30 @@ def _start_sweep(q) -> tuple[dict, int]:
     return _spawn(cmd, "auto-tune" if auto else f"sweep {(q.get('param') or [''])[0]}"), 200
 
 
+def _start_portfolio(q) -> tuple[dict, int]:
+    """Decorrelated selection over the OOS survivors (backtest.portfolio)."""
+    seed = "0"
+    try:
+        seed = str(int((q.get("seed") or ["0"])[0]))
+    except Exception:
+        pass
+    vfile = lab_root() / f"verified_seed{seed}.json"
+    if not vfile.exists():
+        return {"error": f"no {vfile.name} yet — run Verify OOS first"}, 400
+    cmd = [sys.executable, "-m", "backtest.portfolio", "--verified", str(vfile)]
+    if (q.get("all") or ["0"])[0] in ("1", "true", "on"):
+        cmd += ["--all"]
+    for name, flag in (("max_corr", "--max-corr"), ("max_badday", "--max-badday"),
+                       ("max_regime", "--max-regime"), ("drawdown", "--drawdown")):
+        v = (q.get(name) or [""])[0].strip()
+        if v:
+            try:
+                cmd += [flag, str(float(v))]
+            except ValueError:
+                pass
+    return _spawn(cmd, f"portfolio seed{seed}"), 200
+
+
 def _candidates() -> dict:
     root = lab_root()
     files = sorted(root.glob("verified_seed*.json")) or sorted(root.glob("candidates_seed*.json"))
@@ -641,6 +672,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(body, code)
         if u.path == "/api/verify":
             body, code = _start_verify(q)
+            return self._json(body, code)
+        if u.path == "/api/portfolio":
+            body, code = _start_portfolio(q)
             return self._json(body, code)
         if u.path == "/api/sweep":
             body, code = _start_sweep(q)
@@ -1253,6 +1287,28 @@ $('#swAuto').addEventListener('click',()=>{
     '&tf='+encodeURIComponent($('#swTf').value);
   postJob('/api/sweep',qs,'#swLog','#swAuto',(j)=>{if(j&&j.autotune)renderAutotune(j.autotune);});
 });
+function renderPortfolio(p){
+  const box=$('#pfOut');if(!p||!p.selected){box.style.display='none';return}
+  box.style.display='block';
+  const keep=p.selected.map(s=>`<div class=lensrow style="margin-top:4px;display:flex;gap:10px;align-items:center">
+    <span class=tag style="color:var(--gold);border-color:var(--gold);min-width:52px;text-align:center">keep</span>
+    <b style="min-width:150px">${s.name}</b>
+    <span class=muted>net $${Math.round(s.edge||0).toLocaleString()}</span>
+    <span class=muted>bad days ${s.bad_days}</span>
+    <span class=muted>earns in: ${(s.top_regimes||[]).join(', ')||'—'}</span></div>`).join('');
+  const drop=(p.rejected||[]).map(r=>`<div class=lensrow style="margin-top:4px;display:flex;gap:10px;align-items:flex-start">
+    <span class=tag style="color:var(--rose);border-color:var(--rose);min-width:52px;text-align:center">drop</span>
+    <b style="min-width:150px">${r.name}</b>
+    <span class=muted style="flex:1">${(r.message||'').replace(/</g,'&lt;')}</span></div>`).join('');
+  box.innerHTML=`<div class=muted><b style="color:var(--sand)">${p.selected.length} of ${p.n}</b> survivors are genuinely different.</div>`
+    +keep+drop+`<div class=muted style="margin-top:10px">Dropped candidates add size to a position you already hold — not diversification.</div>`;
+}
+$('#pfRun').addEventListener('click',()=>{
+  $('#pfOut').style.display='none';
+  const qs='all='+($('#pfAll').checked?'1':'0')+'&max_corr='+encodeURIComponent($('#pfCorr').value)
+    +'&max_badday='+encodeURIComponent($('#pfBad').value)+'&max_regime='+encodeURIComponent($('#pfReg').value);
+  postJob('/api/portfolio',qs,'#pfLog','#pfRun',(j)=>{if(j&&j.portfolio)renderPortfolio(j.portfolio);});
+});
 $('#swRun').addEventListener('click',()=>{
   const ds=$('#swDs').value;if(!ds){$('#swLog').style.display='block';$('#swLog').textContent='Upload a dataset first.';return}
   $('#swCurve').style.display='none';
@@ -1500,6 +1556,27 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <div id=swCurve style="display:none;margin-top:14px"></div>
     </details>
     <pre id=swLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Portfolio — which survivors are actually different</b>
+      <span class=muted>a set, not a ranking</span></div>
+    <div class=hint>The OOS gate judges every candidate <i>on its own</i>, so survivors are often the
+      same trade under different names — and running clones on separate prop accounts means they
+      breach on the <b>same day</b>. This measures it: daily-return correlation (only positive
+      counts against you — losing on opposite days is a feature), shared <b>bad days</b>
+      (a day losing 20%+ of the drawdown buffer), and regime overlap. Every drop names the peer
+      it duplicates.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Include failed</span><span style="padding:8px 0"><input type=checkbox id=pfAll> also non-passing</span></label>
+      <label class=field><span class=fld>Max corr</span><input id=pfCorr value="0.35" style="width:70px"></label>
+      <label class=field><span class=fld>Max bad-day overlap</span><input id=pfBad value="0.40" style="width:70px"></label>
+      <label class=field><span class=fld>Max regime overlap</span><input id=pfReg value="0.90" style="width:70px"></label>
+      <button class=go id=pfRun>Select portfolio</button>
+    </div>
+    <div id=pfOut style="display:none;margin-top:14px"></div>
+    <pre id=pfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
   <div class=panel>

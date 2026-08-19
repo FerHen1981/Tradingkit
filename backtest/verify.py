@@ -34,23 +34,48 @@ from datetime import datetime, timezone
 # None unless --recompute-is is set (default reuses the stored coarse IS).
 _IS_DF = None
 _OOS_DF = None
+_OOS_REGIME = None      # per-bar regime labels for the OOS frame, computed ONCE
+                        # in the parent so every worker can attribute its trades
+                        # without reclassifying the frame per candidate.
 
 
-def _pool_init(is_df, oos_df):
-    global _IS_DF, _OOS_DF
-    _IS_DF, _OOS_DF = is_df, oos_df
+def _pool_init(is_df, oos_df, oos_regime=None):
+    global _IS_DF, _OOS_DF, _OOS_REGIME
+    _IS_DF, _OOS_DF, _OOS_REGIME = is_df, oos_df, oos_regime
+
+
+def _run_and_daily(cfg, df):
+    """Run one candidate and return (kpis, daily P&L). The daily series is what
+    the portfolio layer needs to measure whether two survivors are the same trade
+    under another name — capturing it here costs nothing (the run already
+    happened) and saves a full re-run per candidate later."""
+    from . import indicators as ind_mod
+    from .engine import Engine
+    from .funded import daily_from_trades
+    from .metrics import kpis
+    res = Engine(cfg, df, ind_mod.compute(df, cfg), research_mode=True).run()
+    daily = {str(d): round(float(v), 2) for d, v in daily_from_trades(res.trades).items()}
+    edge_reg = {}
+    if _OOS_REGIME is not None and df is _OOS_DF:
+        try:
+            from .metrics import edge_by_regime
+            edge_reg = edge_by_regime(res, _OOS_REGIME)
+        except Exception:
+            edge_reg = {}
+    return kpis(res), daily, edge_reg
 
 
 def _verify_cfg(cfg):
-    """Worker: score one candidate on the shared OOS frame. Returns kpis_oos."""
-    from .generate import run_cfg
-    return run_cfg(cfg, _OOS_DF)
+    """Worker: score one candidate on the shared OOS frame.
+    Returns (kpis, daily, edge_by_regime)."""
+    return _run_and_daily(cfg, _OOS_DF)
 
 
 def _verify_cfg_both(cfg):
-    """Worker (--recompute-is): run on BOTH frames. Returns (kpis_is, kpis_oos)."""
+    """Worker (--recompute-is): run on BOTH frames.
+    Returns (kpis_is, (kpis_oos, daily, edge_by_regime))."""
     from .generate import run_cfg
-    return run_cfg(cfg, _IS_DF), run_cfg(cfg, _OOS_DF)
+    return run_cfg(cfg, _IS_DF), _run_and_daily(cfg, _OOS_DF)
 
 
 def _verdict(kis: dict, koos: dict, min_trades: int, min_pf: float, retain: float) -> dict:
@@ -142,14 +167,25 @@ def main():
     # Pass 2 (the expensive part): score each candidate on OOS across worker
     # processes. Workers get the OOS frame (and IS frame only if --recompute-is)
     # once via the pool initializer, so only the small Config ships per task.
+    # regime labels for the OOS frame, once (workers attribute their own trades)
+    oos_regime = None
+    try:
+        from . import indicators as ind_mod
+        from .config import PRESETS
+        oos_regime = ind_mod.regime_labels(oos_tf, PRESETS["EL_TORO"])
+    except Exception as e:
+        print(f"  note: regime attribution unavailable ({e})")
+
     jobs = args.jobs if args.jobs and args.jobs > 0 else (os.cpu_count() or 1)
     t0 = time.time()
     print(f"  verifying {len(prepared)} candidates on {jobs} core(s) "
           f"({'OOS pass only' if reuse_is else 'IS+OOS passes'}) ...")
 
-    def _record(spec, kis, koos):
+    def _record(spec, kis, koos, daily=None, edge_reg=None):
         v = _verdict(kis, koos, args.min_oos_trades, args.min_oos_pf, args.retain)
-        recs.append({"spec": spec, "kpis_is": kis, "kpis_oos": koos, "verdict": v})
+        recs.append({"spec": spec, "kpis_is": kis, "kpis_oos": koos, "verdict": v,
+                     "daily_oos": daily or {},              # feeds backtest.portfolio
+                     "edge_by_regime": edge_reg or {}})
         if args.lab:
             segs = (("oos", koos, oosw),) if reuse_is else (("is", kis, isw), ("oos", koos, oosw))
             for seg, k, win in segs:
@@ -165,35 +201,39 @@ def main():
     worker = _verify_cfg_both if args.recompute_is else _verify_cfg
 
     def _unpack(result, kis_stored):
-        # both-mode returns (kis, koos); OOS-only mode returns koos.
-        return result if args.recompute_is else (kis_stored, result)
+        # both-mode returns (kis, (koos, daily)); OOS-only returns (koos, daily).
+        if args.recompute_is:
+            kis, (koos, daily, ereg) = result
+            return kis, koos, daily, ereg
+        koos, daily, ereg = result
+        return kis_stored, koos, daily, ereg
 
     ntot = len(prepared)
     if jobs <= 1:                       # serial path (debug / single core)
-        _pool_init(is_tf, oos_tf)
+        _pool_init(is_tf, oos_tf, oos_regime)
         for i, (spec, cfg, kis_stored) in enumerate(prepared, 1):
             try:
-                kis, koos = _unpack(worker(cfg), kis_stored)
+                kis, koos, daily, ereg = _unpack(worker(cfg), kis_stored)
             except Exception:
                 errors += 1
                 continue
-            _record(spec, kis, koos)
+            _record(spec, kis, koos, daily, ereg)
             npass = sum(1 for r in recs if r['verdict']['pass'])
             print(f"PROGRESS {i} {ntot} verify OOS · survivors={npass}", flush=True)
             if i % 5 == 0:
                 print(f"    {i}/{ntot}  survivors={npass}  ({time.time()-t0:.0f}s)", flush=True)
     else:
         with ProcessPoolExecutor(max_workers=jobs, initializer=_pool_init,
-                                 initargs=(is_tf, oos_tf)) as ex:
+                                 initargs=(is_tf, oos_tf, oos_regime)) as ex:
             futs = {ex.submit(worker, cfg): i for i, (spec, cfg, _k) in enumerate(prepared)}
             for done, fut in enumerate(as_completed(futs), 1):
                 spec, cfg, kis_stored = prepared[futs[fut]]
                 try:
-                    kis, koos = _unpack(fut.result(), kis_stored)
+                    kis, koos, daily, ereg = _unpack(fut.result(), kis_stored)
                 except Exception:
                     errors += 1
                     continue
-                _record(spec, kis, koos)
+                _record(spec, kis, koos, daily, ereg)
                 npass = sum(1 for r in recs if r['verdict']['pass'])
                 print(f"PROGRESS {done} {ntot} verify OOS · survivors={npass}", flush=True)
                 if done % 5 == 0:

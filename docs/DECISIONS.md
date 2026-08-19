@@ -20,3 +20,5 @@
 - 2026-08-19 · D-02 · **VASTGESTELD: `risk.py` wordt alleen door `main.py` en `router.py` geïmporteerd** en die draaien niet · de per-account risicolimieten handhaven niets · raakt: D-05
 - 2026-08-19 · D-01 · **VASTGESTELD: `viewer.py:161` faalt open bij een lege `VIEWER_PASSWORD`** · de hele fleet-API is publiek zolang die variabele niet gezet is · raakt: mex-viewer
 - 2026-08-19 · — · **RUNTIME GEVERIFIEERD op mex-mw-01**: `mex-receiver` (.NET) draait uit `/root/mex-middleware-b/src/Mex.Journal.Receiver`, `dryRun:false`, `armed:true`, `pmtConfigured:true`, `renderEnabled:true` · geleverd door de Discord Notify-chat · raakt: D-02, D-04, D-05, D-06
+- 2026-08-19 · D-01 · **`viewer.py` faalt nu GESLOTEN**: zonder `VIEWER_PASSWORD` wordt elk verzoek geweigerd; open draaien is een expliciete keuze (`VIEWER_ALLOW_OPEN=1`) · de service logt bij start `auth=locked` of een waarschuwing, en `deploy/mex-viewer.service` markeert de variabele als REQUIRED · **let op: zet `VIEWER_PASSWORD` vóór of samen met de deploy, anders sluit het dashboard zichzelf af** · raakt: mex-viewer, Web, Analyses & Data
+

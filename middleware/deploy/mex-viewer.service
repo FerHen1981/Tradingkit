@@ -2,8 +2,11 @@
 # Stdlib-only web server; reads the routed-log; owner-only behind a password.
 # Install on mex-mw-01:
 #   1. Deploy middleware/ (e.g. /root/mex-journal/middleware).
-#   2. Put VIEWER_PASSWORD (+ optional VIEWER_SECRET) in the EnvironmentFile below —
-#      reuse /root/mex-journal/middleware/.env or a dedicated file.
+#   2. REQUIRED: put VIEWER_PASSWORD (+ optional VIEWER_SECRET, VIEWER_API_TOKEN) in the
+#      EnvironmentFile below — reuse /root/mex-journal/middleware/.env or a dedicated file.
+#      Without VIEWER_PASSWORD the server now REFUSES every request (it used to serve the
+#      whole fleet openly). Check with: journalctl -u mex-viewer | grep auth=
+#      Local dev only, never on a public host: VIEWER_ALLOW_OPEN=1 runs it without auth.
 #   3. sudo cp deploy/mex-viewer.service /etc/systemd/system/
 #      sudo systemctl daemon-reload && sudo systemctl enable --now mex-viewer
 #   4. Front it with TLS (see the app.mex-traders.com block in deploy/Caddyfile).

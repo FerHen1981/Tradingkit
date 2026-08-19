@@ -42,6 +42,9 @@ _DAYS = int(os.environ.get("ROUTED_DAYS", "2"))
 _PASSWORD = os.environ.get("VIEWER_PASSWORD", "")
 _SECRET = (os.environ.get("VIEWER_SECRET") or _PASSWORD or "mex-dev-secret").encode()
 _API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the iPhone widget etc.
+# Explicit opt-in to run WITHOUT auth (local dev only). Absent VIEWER_PASSWORD the server
+# refuses every request instead of serving the fleet openly — see _authed().
+_ALLOW_OPEN = os.environ.get("VIEWER_ALLOW_OPEN", "").strip().lower() in ("1", "true", "yes")
 _STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" fills with a missed exit
 _STARTED = time.monotonic()                                        # for the system-status uptime
 
@@ -158,8 +161,12 @@ def _token() -> str:
 
 
 def _authed(headers) -> bool:
+    # Fail CLOSED. With no password configured this used to return True, so a service whose
+    # environment lacked VIEWER_PASSWORD served the whole fleet — account numbers, balances,
+    # survival buffers, open positions — to anyone who asked. Running open is now something you
+    # have to ask for explicitly (VIEWER_ALLOW_OPEN=1), never something you get by omission.
     if not _PASSWORD:
-        return True   # no password set → open (dev)
+        return _ALLOW_OPEN
     cookie = headers.get("Cookie", "")
     for part in cookie.split(";"):
         if part.strip().startswith("mexsession="):
@@ -284,7 +291,17 @@ def serve() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     port = int(os.environ.get("VIEWER_PORT", "8080"))
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
-    log.info("MEX cockpit on :%d (routed=%s, auth=%s)", port, _ROUTED_DIR, "on" if _PASSWORD else "OFF")
+    if _PASSWORD:
+        mode = "on"
+    elif _ALLOW_OPEN:
+        mode = "OFF — VIEWER_ALLOW_OPEN=1, fleet data is PUBLIC"
+        log.warning("VIEWER_ALLOW_OPEN=1 and no VIEWER_PASSWORD: serving the fleet WITHOUT auth. "
+                    "Only do this on a machine nobody else can reach.")
+    else:
+        mode = "locked — no VIEWER_PASSWORD"
+        log.error("VIEWER_PASSWORD is not set: every request is refused. Set VIEWER_PASSWORD in the "
+                  "service environment and restart, or set VIEWER_ALLOW_OPEN=1 for local dev.")
+    log.info("MEX cockpit on :%d (routed=%s, auth=%s)", port, _ROUTED_DIR, mode)
     srv.serve_forever()
 
 

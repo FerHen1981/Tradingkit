@@ -38,9 +38,18 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Trade Journal `c3e9d05525404849ad484b648c82fd59`
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
+- MEX DEV Control Center `3c1b61ea444d81fda06afbaaec1bc757` (taken · besluiten · documentatieregister) — werkwijze in `docs/CHAT_INSTRUCTIE.md`
 
 ## Dev conventions
-- Develop/commit/push only to branch `claude/mcp-trader-dev-sse-ibl64y`; never push elsewhere
-  without permission. Do not create PRs unless asked.
+- Develop/commit/push only to branch `claude/middleware-setup-guide-afhvtk`; never push
+  elsewhere without permission. Do not create PRs unless asked. (`claude/mcp-trader-dev-sse-ibl64y`
+  is dood — volledig opgenomen in de werkbranch, liep 186 commits achter.)
+- Ownership: `backtest/**` Backtest Setup · `pine/**` + `tools/gen_pine_firms.py` Pine Dev ·
+  `middleware/**` Middleware App · `data/propfirms.json` gedeeld. Buiten je eigen map:
+  niet muteren, maar melden in `docs/inbox.md`.
+- **`middleware/app/main.py`, `router.py` en `brokers/` draaien NIET live.** Het live
+  executiepad is `mex-receiver` (.NET). Verifieer met `systemctl cat` vóór je aanneemt
+  dat een wijziging de executie raakt.
+- Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

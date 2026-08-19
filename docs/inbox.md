@@ -1,60 +1,113 @@
-# Inbox — cross-chat verzoeken (zie werkafspraken §2/§4)
+# Inbox — cross-chat verzoeken
 
-Formaat per item: **van → aan** · datum · status. De eigenaar van de doelmap voert
-uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen map.
+**Dit is een wachtrij, geen archief.** De open lijst met status, prioriteit en
+afhankelijkheden staat in Notion → **[MEX DEV Control Center](https://app.notion.com/p/3c1b61ea444d81fda06afbaaec1bc757) → MEX Dev Backlog**.
+Die is leidend. Hieronder staat alleen de index plus het aanleverformaat.
 
----
-
-## OPEN
-
-### 1. Geverifieerde commissie per contract uit Cash_History
-**Backtest Setup → Middleware App** · 2026-08-19 · status: OPEN
-
-Schuldpunt uit de werkafspraken §6: commissie staat op drie waarden (Pine 0.67/1.55,
-backtest 0.52/1.75). `backtest/config.py CONTRACTS` is de single source, maar de
-*juiste* getallen komen uit de broker-waarheid — en die is van Middleware
-(Tradovate `Cash_History` → `cash_ledger.py`, net gewired in `b317575`).
-
-**Verzoek:** lever per verhandeld contract (NQ/MNQ, ES/MES, GC/MGC, …) de werkelijke
-round-turn commissie + fees per venue (Apex/Tradovate, MFFU, FTMO/MT5) uit de ledger.
-Eén tabelletje hier als antwoord is genoeg.
-
-**Waarom het urgent is voor het lab:** de commissie beslist mee welke kandidaten de
-funnel overleven. Hoogfrequente kandidaten (10-17k trades/jaar op 1m) kantelen van
-winstgevend naar verliesgevend tussen $0.52 en $1.75 per side — zolang dit niet klopt
-zijn PF-oordelen op die groep onbetrouwbaar.
-
-**Afhandeling daarna:** Backtest Setup werkt `CONTRACTS` bij (de bron), meldt het
-hier; Pine Dev draait `tools/gen_pine_firms.py`-achtige sync voor de Pine-kant.
-
-### 2. funded.py leest Apex-regels nog niet uit data/propfirms.json
-**Backtest Setup → Backtest Setup (eigen schuld, hier gelogd voor zichtbaarheid)**
-· 2026-08-19 · status: OPEN
-
-`backtest/funded.py` heeft `APEX_DD`, payout-ladder en consistency hardcoded;
-per §3 hoort dat via `backtest/firms.py` uit `data/propfirms.json` te komen
-(firms.py leest die al). Backtest Setup lost dit in eigen map op; geen actie van
-anderen nodig. Let op bij Middleware/Pine: tot die tijd kunnen funded-simulaties
-in het lab afwijken van de registry als propfirms.json wijzigt.
-
-### 3. ATR-kalibratie voor de MR·FVG engine (Fase 1 un-overfit)
-**Pine Dev → Backtest Setup** · 2026-08-19 · status: OPEN
-
-Pine `MEX_EL_TESORO` v7.9.1 stelt `Distance Unit` open met een `ATR`-optie: op
-`unitMode = ATR` worden FVG-band, stop, TP en buffers ATR(14)-veelvouden, zodat één
-getallenset op elke asset klopt (de un-overfit primitief uit de vastgelegde scope).
-Default blijft `Ticks`, dus live is onveranderd.
-
-**Verzoek uit `backtest/`:** (a) reken de huidige MGC-tick-tuning om naar ATR(14)-
-veelvouden op 1m — FVG 9–18t, stop 100t, max 130t, TP R-mult 2.5; (b) sweep die
-veelvouden op **MGC + ES + NQ** en lever de set die over de drie assets standhoudt.
-Doel: bewijzen dat één ATR-set generiek werkt vóór Pine Dev hem als default vastzet.
-
-**Afhandeling daarna:** Backtest Setup levert de multiples hier; Pine Dev zet ze in
-de engine en stuurt het bevroren bestand voor de compile-test.
+Zie `docs/CHAT_INSTRUCTIE.md` voor de volledige werkwijze.
 
 ---
 
-## DONE
+## Open — stand 2026-08-19
 
-(nog leeg)
+Alle items hieronder zijn geverifieerd tegen `claude/middleware-setup-guide-afhvtk`
+@ `21a1100` en staan in de Notion-backlog.
+
+| # | Item | Van → eigenaar | Prio | Status |
+|---|---|---|---|---|
+| 1 | Geverifieerde commissie per contract uit `Cash_History` | Backtest Setup → **Middleware App** | P1 | OPEN |
+| 2 | `backtest/funded.py` leest Apex-regels niet uit `data/propfirms.json` | Backtest Setup → **Backtest Setup** | P1 | OPEN |
+| 3 | ATR-kalibratie voor de MR·FVG engine (Fase 1 un-overfit) | Pine Dev → **Backtest Setup** | P1 | OPEN |
+| 4 | Commissie in de Pine-scripts is een kopie van een contract-spec | Scrum Master → **Pine Dev** | P1 | NIEUW |
+| 5 | CVD-diepte van de NQ-dataset is nooit vastgesteld | Scrum Master → **Backtest Setup** | P2 | NIEUW |
+| 6 | `validation/` bewijs staat alleen op de legacy-branch | Scrum Master → **Backtest Setup** | P1 | NIEUW |
+
+### 1 · Geverifieerde commissie per contract uit Cash_History
+**Backtest Setup → Middleware App** · 2026-08-19 · OPEN
+
+`backtest/config.py CONTRACTS` is de single source, maar de *juiste* getallen komen uit
+broker-waarheid: Tradovate `Cash_History` → `cash_ledger.py`. Die aggregeert commissies
+al, maar de uitsplitsing per contract ontbreekt — dat is de deliverable.
+
+**Gevraagd:** per verhandeld contract (NQ/MNQ, ES/MES, GC/MGC, …) de werkelijke
+round-turn commissie + fees per venue (Apex/Tradovate, MFFU, FTMO/MT5).
+
+**Waarom urgent:** kandidaten met 10-17k trades/jaar op 1m kantelen van winstgevend naar
+verliesgevend tussen $0.52 en $1.75 per side. PF-oordelen op die groep zijn onbetrouwbaar
+zolang dit open staat.
+
+### 2 · funded.py leest Apex-regels niet uit de registry
+**Backtest Setup → Backtest Setup** · 2026-08-19 · OPEN
+
+`backtest/funded.py:19` heeft `APEX_DD` hardcoded, plus payout-ladder en consistency.
+`backtest/firms.py` leest `data/propfirms.json` al correct. Tot dit opgelost is kunnen
+funded-simulaties afwijken van de registry zodra de JSON verandert.
+
+### 3 · ATR-kalibratie voor de MR·FVG engine
+**Pine Dev → Backtest Setup** · 2026-08-19 · OPEN
+
+`MEX_EL_TESORO` v7.9.1 stelt `Distance Unit` open met een ATR-optie (`unitMode`, regel
+118): op ATR worden FVG-band, stop, TP en buffers ATR(14)-veelvouden. Default blijft
+`Ticks`, dus live is onveranderd.
+
+**Gevraagd:** (a) huidige MGC-tick-tuning omrekenen naar ATR(14)-veelvouden op 1m —
+FVG 9-18t, stop 100t, max 130t, TP R-mult 2.5; (b) die veelvouden sweepen op
+**MGC + ES + NQ**; (c) de set leveren die over de drie assets standhoudt.
+
+### 4 · Commissie in Pine is een kopie van een contract-spec — NIEUW
+**Scrum Master → Pine Dev** · 2026-08-19 · OPEN
+
+`pine/*.pine` regel ~58 zet `commission_value=1.55`; `MEX_EL_TESORO.pine` regel ~70 zet
+`0.67`. De bron `backtest/config.py CONTRACTS` kent zeven waarden (1.55 index · 0.37
+micros · 0.52 MGC · 1.75 metalen/energie/FX-futures · 3.5 spot FX).
+
+Twee losstaande problemen: het **getal** klopt niet (MGC 0.52 vs 0.67, en TESORO is
+funded), en de **structuur** klopt niet — een handmatig getal in Pine is een tweede
+source of truth, ook als het getal juist is. `PropFirms.pine` wordt al gegenereerd; de
+contract-specs niet.
+
+Wacht op item 1 voor de juiste waarde; de structuurfix kan onafhankelijk.
+
+### 5 · CVD-diepte van de NQ-dataset is nooit vastgesteld — NIEUW
+**Scrum Master → Backtest Setup** · 2026-08-19 · OPEN
+
+`docs/state.md` (analyses-branch): NQ 2023-06-18 → 2026-06-17, ~1.1M rows,
+*CVD valid from: unknown, CVD depth unverified*. De regel is dat CVD nooit uitgezet
+wordt — met `use_cvd_filter=False` backtest je een andere strategie dan de live versie,
+omdat de filter dan een pass-through wordt.
+
+Dit blokkeert optie A van het OOS-besluit (herselecteren op pre-2023) volledig.
+`tools/validate_dataset.py` op de analyses-branch heeft hier een CVD-gate voor.
+
+### 6 · validation/ bewijs staat alleen op de legacy-branch — NIEUW
+**Scrum Master → Backtest Setup** · 2026-08-19 · OPEN
+
+De stage 1-10 preregistraties en verdicts voor de FLEET en de NQ-familie
+(`validation/FLEET_*`, `NQFAMILY_*`, `NQ_fleet_*` + 4 pipeline-runners) staan uitsluitend
+op `claude/legacy-accounts-scripts-analysis-ui0j6m`. Dat is het onderliggende bewijs voor
+de kernclaim *GC + ES funded edge, NQ/YM eval-only*.
+
+---
+
+## Aanleverformaat
+
+```
+### <korte titel>
+**<van> → <naar/eigenaar>** · <datum> · status: OPEN
+
+Probleem:
+Waarom cross-chat:
+Betrokken bestanden:
+Benodigde wijziging:
+Live-impact:      NONE / LOW / MEDIUM / HIGH
+Acceptatiecriteria:
+```
+
+Raakt het het live executiepad, voeg toe: service · runtime geverifieerd (ja/nee + hoe) ·
+huidig gedrag · nieuw gedrag · failure mode · rollback.
+
+## Afhandeling
+
+De eigenaar voert uit en meldt het hier met de commit-hash. De Scrum Master werkt de
+Notion-backlog bij en haalt het item hier weg. Een item dat op een andere chat wacht is
+**BLOCKED**, niet DONE.

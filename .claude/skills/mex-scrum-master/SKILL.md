@@ -46,6 +46,26 @@ Zorg continu dat:
 
 ---
 
+## 1b. Het bord — `docs/SPRINT.md`
+
+Eén lijst met lopend werk, in de repo, want chats kunnen elkaar niet bereiken en schrijven
+niet in Notion. Elke sessie leest het bord eerst en **claimt één item**: status op `wip`,
+eigen chatnaam als owner, en die ene regel meteen committen (`claim: D-xx — <chat>`) vóór
+het werk begint. Een merge-conflict op dat bestand is het signaal dat een ander hetzelfde
+item pakte — kies dan een ander item, forceer niet.
+
+Afronden = commit → status `review` → regel in `docs/DECISIONS.md`. Alleen de Scrum Master
+zet iets op `done`.
+
+Rolverdeling van de drie plekken:
+
+| Plek | Wat |
+|---|---|
+| `docs/SPRINT.md` | het bord: lopend werk van alle chats, met claim-slot |
+| `docs/DECISIONS.md` | één regel per beslissing die buiten het eigen item reikt |
+| `docs/inbox.md` | de wachtrij: nieuwe meldingen, door de Scrum Master op het bord gezet |
+| LifeOS (Tasks + Notes) | Ferry's beeld: besluiten die op hem wachten, en het archief |
+
 ## 2. Centrale communicatiehub
 
 Deze chat is de centrale inbox voor cross-chat onderwerpen. Andere chats escaleren

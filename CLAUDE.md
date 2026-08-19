@@ -53,6 +53,11 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - **`middleware/app/main.py`, `router.py` en `brokers/` draaien NIET live.** Het live
   executiepad is `mex-receiver` (.NET). Verifieer met `systemctl cat` vóór je aanneemt
   dat een wijziging de executie raakt.
+- **Lees `docs/SPRINT.md` vóór je begint** en claim één item (status `wip` + owner +
+  losse commit) — dat is het slot dat dubbel werk voorkomt. Beslissing die een ander
+  raakt? Eén regel in `docs/DECISIONS.md`.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
+- ⚠️ De Notion-id's hieronder zijn deels dood: *MEX Reconciliation* heeft 0 rijen
+  (geverifieerd 19-08); Fleet Performance en Trade Journal nog ongecontroleerd.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

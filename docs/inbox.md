@@ -1,9 +1,9 @@
 # Inbox — cross-chat verzoeken (zie werkafspraken §2/§4)
 
-> **Register:** de bijgehouden lijst met status, prioriteit en afhankelijkheden staat in
-> **LifeOS → Tasks**, voorvoegsel `🛠️ MEX Dev ·`, Area *MEX Traders* / project *MEX PROP
-> TRADER*. Dit bestand is de wachtrij ernaartoe. Items met `SM-` zijn door de Scrum
-> Master toegevoegd.
+> **Bord:** lopend werk staat in **`docs/SPRINT.md`** — dit bestand is de wachtrij
+> ernaartoe. Ferry's beeld (besluiten, archief) staat in
+> **LifeOS → Tasks/Notes**. Items met `SM-` zijn inmiddels als `D-xx` op het bord
+> gezet.
 
 Formaat per item: **van → aan** · datum · status. De eigenaar van de doelmap voert
 uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen map.

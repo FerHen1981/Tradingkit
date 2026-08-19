@@ -37,6 +37,22 @@ per §3 hoort dat via `backtest/firms.py` uit `data/propfirms.json` te komen
 anderen nodig. Let op bij Middleware/Pine: tot die tijd kunnen funded-simulaties
 in het lab afwijken van de registry als propfirms.json wijzigt.
 
+### 3. ATR-kalibratie voor de MR·FVG engine (Fase 1 un-overfit)
+**Pine Dev → Backtest Setup** · 2026-08-19 · status: OPEN
+
+Pine `MEX_EL_TESORO` v7.9.1 stelt `Distance Unit` open met een `ATR`-optie: op
+`unitMode = ATR` worden FVG-band, stop, TP en buffers ATR(14)-veelvouden, zodat één
+getallenset op elke asset klopt (de un-overfit primitief uit de vastgelegde scope).
+Default blijft `Ticks`, dus live is onveranderd.
+
+**Verzoek uit `backtest/`:** (a) reken de huidige MGC-tick-tuning om naar ATR(14)-
+veelvouden op 1m — FVG 9–18t, stop 100t, max 130t, TP R-mult 2.5; (b) sweep die
+veelvouden op **MGC + ES + NQ** en lever de set die over de drie assets standhoudt.
+Doel: bewijzen dat één ATR-set generiek werkt vóór Pine Dev hem als default vastzet.
+
+**Afhandeling daarna:** Backtest Setup levert de multiples hier; Pine Dev zet ze in
+de engine en stuurt het bevroren bestand voor de compile-test.
+
 ---
 
 ## DONE

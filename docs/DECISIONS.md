@@ -9,6 +9,7 @@
 
 ---
 
+- 2026-08-19 · D-02 · **Risk-gate wordt geïmplementeerd in de .NET-receiver, niet in Python** — `risk.py` berekent day caps/DLL/halt maar hangt aan `main.py`/`router.py` die niet draaien; de gate hoort op het live executiepad (`Mex.Journal.Receiver`). Dependency verschuift van D-05 naar D-06 (broncode in git). Python `risk.py` vervalt als levend pad · raakt: D-05, D-06, live executie
 - 2026-08-19 · D-39 · **D-39 uitgegeven** (eval-lens spectrum-zoektocht over prop-firm programma's) — `data/propfirms.json` bevat alleen t/m 250k; Ferry beslist wie 300k–4M toevoegt vóór Backtest Setup de sweep bouwt · raakt: backtest, data/propfirms.json
 - 2026-08-19 · D-38 · **D-38 uitgegeven** (portefeuille-selectie via decorrelatiemeting) — volledig binnen `backtest/**`, Ferry goedgekeurd 19-08, Backtest Setup bouwt · raakt: backtest
 - 2026-08-19 · D-14 · **D-14 DONE** — `funded.py` leest Apex-regels registry-first; gedragswijziging op 50k gedocumenteerd · raakt: backtest funded-lens

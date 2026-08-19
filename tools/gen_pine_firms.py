@@ -24,6 +24,21 @@ import sys
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, REPO)
 from backtest import firms  # noqa: E402
+from backtest.config import CONTRACTS  # noqa: E402  -- THE source for contract specs (D-08)
+
+# Which contract each script actually trades, per the Operating Schema in CLAUDE.md: funded runs
+# the edge on MICROS, eval accounts are pass-hunters on the full MINIS. Drives the compile-time
+# commission constant, which Pine's strategy() will not take as an expression.
+ASSET_DEFAULT = {
+    "MEX_EL_TESORO.pine":  "MGC",   # GC funded  -> micro
+    "MEX_EL_REY.pine":     "MES",   # ES funded  -> micro
+    "MEX_EL_PATRON.pine":  "MNQ",   # NQ funded  -> micro
+    "MEX_EL_DORADO.pine":  "MNQ",   # NQ funded  -> micro
+    "MEX_EL_MINERO.pine":  "GC",    # GC eval    -> mini
+    "MEX_EL_LEON.pine":    "ES",    # ES eval    -> mini
+    "MEX_EL_MATADOR.pine": "NQ",    # NQ eval    -> mini
+    "MEX_EL_TORO.pine":    "NQ",    # NQ eval    -> mini
+}
 
 OUT = os.path.join(REPO, "pine", "lib", "PropFirms.pine")
 PINE = os.path.join(REPO, "pine")
@@ -138,6 +153,18 @@ def patch_strategies(progs):
                  "        _qd := %s" % float(qd if qd is not None else 50.0)]
         emitted += 1
     body.append("    [_md, _pd, _qd]")
+    # contract specs -- generated from backtest/config.py CONTRACTS, THE source (D-08). Pine's
+    # strategy() takes only a constant for commission_value, so the header carries the value for
+    # this script's own asset and the runtime compares it against the spec of the CHART symbol.
+    body += ["f_contractSpec(string _root) =>", "    float _mt = 0.0", "    float _pv = 0.0",
+             "    float _cm = 0.0", "    float _sl = 0.0"]
+    for i, (sym, c) in enumerate(sorted(CONTRACTS.items())):
+        body += ['    %s _root == "%s"' % ("if" if i == 0 else "else if", sym),
+                 "        _mt := %s" % float(c.mintick),
+                 "        _pv := %s" % float(c.pointvalue),
+                 "        _cm := %s" % float(c.commission_per_contract),
+                 "        _sl := %s" % float(c.slippage_ticks)]
+    body.append("    [_mt, _pv, _cm, _sl]")
     body.append("// <<< GENERATED — do not edit above by hand; run tools/gen_pine_firms.py")
 
     for name, default in sorted(STRATEGY_DEFAULT.items()):
@@ -152,6 +179,20 @@ def patch_strategies(progs):
         if end is None:   # first run on a file that still has the hand-written block
             end = next(k for k in range(a, len(lines)) if lines[k].strip() == "[_dd, _ml, _g, _dll, _cons]")
         lines[a:end + 1] = body
+        # commission_value from the source, never hand-typed (D-08)
+        asset = ASSET_DEFAULT.get(name)
+        if asset and asset in CONTRACTS:
+            comm = float(CONTRACTS[asset].commission_per_contract)
+            for k, l in enumerate(lines):
+                if "commission_type=strategy.commission.cash_per_contract" in l:
+                    lines[k] = re.sub(r"commission_value=[0-9.]+",
+                                      "commission_value=%s" % comm, l)
+                    break
+            for k, l in enumerate(lines):
+                if l.startswith("float SPEC_COMMISSION_SET"):
+                    lines[k] = ("float SPEC_COMMISSION_SET = %s    // generated: %s per side, "
+                                "from backtest/config.py CONTRACTS" % (comm, asset))
+                    break
         open(path, "w", encoding="utf-8").write("\n".join(lines))
         print(f"  patched {name}  default={default}")
         # A firm key that matches no branch does not fail — the lookups silently return their

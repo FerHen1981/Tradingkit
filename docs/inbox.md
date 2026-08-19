@@ -53,6 +53,28 @@ Doel: bewijzen dat één ATR-set generiek werkt vóór Pine Dev hem als default 
 **Afhandeling daarna:** Backtest Setup levert de multiples hier; Pine Dev zet ze in
 de engine en stuurt het bevroren bestand voor de compile-test.
 
+### 4. Ondersteunt PMT een order-cancel? (blokkeert executie-fix)
+**Pine Dev → Middleware App / receiver-eigenaar** · 2026-08-19 · status: OPEN
+
+Zie `docs/execution-contract.md`. Pine annuleert een verlopen pending limit met
+`f_sendExec("close")` → payload `data:"close"`. Bij de broker is "sluit positie" iets
+anders dan "annuleer werkende order", dus de limit blijft vermoedelijk live bij PMT
+na de 12-bar expiry. `strategy.cancel()` werkt alleen binnen TradingView.
+
+**Vraag:** ondersteunt PMT een cancel van een werkende order, en met welke `data`-waarde
+(of endpoint)? Zodra dat bekend is past Pine Dev de expiry-, replace- en halt-paden aan.
+Tweede vraag: honoreert PMT `trail`/`trail_trigger`/`trail_stop`/`breakeven` uit de
+entry-payload server-side? Zo niet, dan moet er een `move_stop`-intentie in het contract.
+
+### 5. calc_on_order_fills=true — bewuste keuze?
+**Pine Dev → Backtest Setup** · 2026-08-19 · status: OPEN
+
+In v7.6 heb ik `calc_on_order_fills=true` toegevoegd. Uit de export-vergelijking van de
+eigenaar blijkt dat dit de trefkans van 81% naar 74,6% brengt op dezelfde periode (PF
+1,15 → 0,93) — het is het eerlijker model, maar het verandert wél welke trades vuren,
+live én in de tester. Graag jullie oordeel of dit de norm wordt voor de funnel; Pine
+volgt die keuze.
+
 ---
 
 ### 4. Viewer-rol (units-only) voor `viewer.py` + productie van public-stats.json

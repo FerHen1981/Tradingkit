@@ -195,10 +195,9 @@ async def run_once() -> dict:
         log.info("reconcile DRY (set RECONCILE_APPLY=1 to write): %s", summary)
         return summary
 
-    from .config import Settings
     from .notion_sync import NotionRecon
-    s = Settings()
-    recon = NotionRecon(s.notion_token, s.notion_recon_db)
+    recon = NotionRecon(os.environ.get("NOTION_TOKEN", ""),
+                        os.environ.get("NOTION_RECON_DB", ""))
     if not recon.enabled:
         log.error("NOTION_TOKEN / NOTION_RECON_DB unset — cannot write the reconciliation rows")
         return {**summary, "error": "notion not configured"}

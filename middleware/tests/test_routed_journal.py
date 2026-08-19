@@ -6,6 +6,7 @@ from app.routed_journal import (
     parse_routed_lines, pair_events, to_record, _short, _acct_token,
 )
 from app.notion_journal import trade_key, scalar_properties, slippage_entry_ticks
+from app.fills_pairing import session_date
 
 
 def _discord(ts, title, desc):
@@ -128,3 +129,19 @@ def test_record_maps_to_notion_props():
     # entry slippage: (short) intended 4400.5 vs fill 4400.2 → filled 0.3 worse-or-better in ticks
     assert slippage_entry_ticks(rec) is not None
     assert "MFE=97t" in props["Notes"]["rich_text"][0]["text"]["content"]
+
+
+def test_session_date_rolls_at_18_et():
+    """The CME session day rolls at 18:00 ET. A trade at 17:59 ET on Aug 19 belongs to
+    session 2026-08-19; a trade at 18:01 ET on Aug 19 belongs to session 2026-08-20.
+    The viewer LIVE tab uses this to decide what counts as 'Realized today'."""
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
+    # 17:59 ET on Aug 19 → session date 2026-08-19
+    before_roll = dt.datetime(2026, 8, 19, 17, 59, tzinfo=ET)
+    assert session_date(before_roll) == dt.date(2026, 8, 19)
+    # 18:01 ET on Aug 19 → session date 2026-08-20 (new session started)
+    after_roll = dt.datetime(2026, 8, 19, 18, 1, tzinfo=ET)
+    assert session_date(after_roll) == dt.date(2026, 8, 20)
+    # The viewer must not show the 17:59 trade as "today" after 18:01
+    assert session_date(before_roll) != session_date(after_roll)

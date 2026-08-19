@@ -22,6 +22,7 @@ Env:
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import glob
 import hashlib
 import hmac
@@ -76,10 +77,11 @@ def build_state() -> dict:
     trades = pair_events(events, amap)
 
     as_of = max((e.ts for e in events), default=None)
-    # Use the CME session date (rolls at 18:00 ET), not the calendar date.
-    # After 18:00 ET the new session has started — "today" is the next calendar day,
-    # so old-session trades no longer count as "Realized today".
-    today = session_date(as_of) if as_of else None
+    # "Today" = the CME session that is live RIGHT NOW (wall clock), not the session of the
+    # last logged event.  The CME session rolls at 18:00 ET: after the roll the viewer must
+    # show a clean slate even if no new events have arrived yet.
+    now = dt.datetime.now(dt.timezone.utc)
+    today = session_date(now)
 
     # last exit per account: any later close means an earlier still-"open" fill is a phantom
     # (its exit was missed/mismatched in the log). These strategies hold one position per

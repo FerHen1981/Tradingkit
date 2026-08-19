@@ -1,19 +1,7 @@
-# Inbox
+# Inbox — moved
 
-Capture point for anything noticed outside the three working chats (mobile,
-regular chats, while trading). Nothing here is a decision — it is a note waiting
-to be triaged by the Analyses & Data chat.
+Superseded by **`docs/scrum.md`**. One register, coordinated by the Scrum Master.
 
-Format: one line, dated, with enough context to act on later.
-
-```
-2026-08-11 — [observation] ES filled 3 ticks worse than intended around 09:31 ET
-```
-
-## Open
-
-_(empty)_
-
-## Triaged
-
-_(empty)_
+Anything you would have dropped here — a question touching another chat's map, an
+observation from a mobile chat, a conflict between two chats — becomes an item on
+that board instead. Add it yourself; the Scrum Master assigns the owner.

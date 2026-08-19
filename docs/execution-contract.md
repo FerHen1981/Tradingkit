@@ -42,11 +42,11 @@ Discord / journaal / opslag.
 | Gewenst | Nu in code | Status |
 |---|---|---|
 | Pending overrulen bij nieuw signaal (close + new) | plek 4, `f_sendExec("close")` | ✅ werkt |
-| Pending **cancellen** bij expiry (12 bars) via PMT | plek 5 stuurt `data:"close"` — dat is "sluit positie", geen order-cancel. `strategy.cancel()` werkt alleen in TV, niet bij de broker | ❌ **defect** |
+| Pending **cancellen** bij expiry (12 bars) via PMT | plek 5 stuurt `data:"close"` | ✅ werkt — **eigenaar bevestigd 19-08: PMT annuleert een werkende order op een `close`-bericht, zoals in eerdere versies.** Geen aparte cancel-actie nodig |
 | In positie én niet risk-off → géén nieuwe signalen | `gateOK = isFlat or posRiskOff` | ✅ werkt |
 | Na risk-off → gate open **alleen in dezelfde richting** | `gateOK` kent geen richting; een tegengesteld signaal doet `strategy.entry` in de andere richting = **reversal** van de open positie | ❌ **defect** |
-| Positie naar BE → melden aan PMT | BE zet `posRiskOff`, stuurt Discord + journaal. Géén `f_sendExec` | ❌ ontbreekt (in álle versies) |
-| Trailing verplaatst stop → melden aan PMT | idem: alleen Discord | ❌ ontbreekt (in álle versies) |
+| Positie naar BE → PMT verplaatst de stop | bracket-velden uit de entry-payload | ✅ werkt — **eigenaar bevestigd 19-08: de JSON-embed doet dit en doet het nog steeds.** Geen losse alert nodig |
+| Trailing verplaatst de stop | idem, `trail`/`trail_trigger`/`trail_stop` | ✅ werkt (zelfde bevestiging) |
 
 **Historische correctie.** BE/trail-updates naar PMT hebben in gééns van de repo-versies
 bestaan — v6.8.14 t/m v7.9.1 hebben exact dezelfde 8 `f_sendExec`-plekken. Het ontwerp is
@@ -89,15 +89,14 @@ broker-state.** Concreet betekent dat één nieuwe actie in het contract — een
 `cancel` naast `close` — omdat "sluit positie" en "annuleer werkende order" bij de broker
 twee verschillende dingen zijn en Pine ze nu op dezelfde manier verstuurt.
 
-## 6. Voorgestelde stappen (in afhankelijkheidsorde)
+## 6. Beantwoord door de eigenaar (19-08-2026)
 
-1. **[receiver-eigenaar]** Bevestigen: ondersteunt PMT een order-cancel, en onder welke
-   `data`-waarde? Zonder dat antwoord is defect 1 niet op te lossen.
-2. **[Pine Dev]** Gate op richting: na risk-off alleen hetzelfde teken toestaan, nooit
-   reverse. Voorstel + review vóór push (raakt live pad).
-3. **[Pine Dev]** Expiry stuurt de echte cancel-actie zodra 1 beantwoord is.
-4. **[gedeeld]** Verifiëren dat PMT `trail`/`breakeven` uit de entry-payload honoreert.
-   Zo niet: `move_stop`-intentie toevoegen aan het contract.
-5. **[Pine Dev]** MGC-hardcode uit de MEX Policy-tabel (`polFam`) en `mwStrategy`;
-   chart-asset wordt de bron.
-6. **[gedeeld]** `calc_on_order_fills=true` heroverwegen — bewust gekozen of niet?
+1. **`close` ís de cancel.** PMT annuleert een werkende order op een `close`-bericht, zoals
+   eerdere versies al deden. Het expiry-pad is dus correct — geen `cancel`-actie in het contract.
+2. **De bracket werkt.** `trail`/`trail_trigger`/`trail_stop`/`breakeven` uit de JSON-embed
+   worden door PMT server-side uitgevoerd, toen en nu. Geen `move_stop`-intentie nodig.
+3. **De richting-gate moet gefixt.** Apex staat niet toe dat er twee tegengestelde orders
+   openstaan. Dit is het enige echte defect.
+4. **`calc_on_order_fills` moet eruit.** Dat stond in eerdere versies niet aan, dus nu ook niet.
+
+Netto blijft er één defect en één regressie over. Zie `docs/proposal-gate-and-exec.md`.

@@ -71,6 +71,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 | **D-17** | todo | Middleware App | Viewer-rol (units-only) overnemen uit `web/handover/mex_units/` + `public-stats.json` periodiek schrijven. _(was Web-inbox 4)_ |
 | **D-18** | blocked | Ferry | **OOS-venster 2023-2026 is opgebrand** — herselecteren op pre-2023 of heretiketteren als validatie. Blokkeert elke publieke claim. Blocked by D-10 voor optie A. |
 | **D-21** | todo | Ferry | Account 214 is geslaagd ($3.035/$3.000, `eligible:true`) maar staat nog als eval. _(was S-12)_ |
+| **D-34** | wip | Web | **Publieke claims in `web/**` afzwakken zolang D-18 open staat.** De sites beweren op zes plekken dat er een *gevalideerde edge* is; het OOS-venster daarachter is opgebrand. Betreft `public-stats.json`, `resultaten.astro`, de homepage, de pijlerpagina, `methodiek.mdx` en de prop-firm-gids. Begrippen die het *concept* validatie uitleggen blijven staan. Blocked-by-strekking van D-18, maar zelfstandig uit te voeren. |
 
 ## ⚪ Later
 

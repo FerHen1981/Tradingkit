@@ -47,7 +47,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 |---|---|---|---|
 | **D-06** | todo | Middleware App | **De live .NET-broncode staat niet volledig in git.** Alleen `middleware/dotnet-receiver/Program.cs` (641 r), en dat *vervangt* `src/Mex.Journal.Receiver/Program.cs` op de VPS; `using Mex.Journal.Recon;` bestaat hier niet. Bouwvalkuil: de receiver zit niet in `MexJournal.sln`, een kale `dotnet build -c Release` meldt succes zonder hem te bouwen. Bouwen met `dotnet build src/Mex.Journal.Receiver -c Release`. _(was S-07 / SM-04)_ |
 | **D-07** | todo | Middleware App | **Werkelijke commissie per contract uit `Cash_History`.** De bron `backtest/config.py CONTRACTS` kent zeven waarden; Pine twee; de FLEET-validatie mat micro 0.67. Lever per contract de round-turn commissie + fees per venue. _(was inbox 1 / S-06)_ |
-| **D-08** | todo | Pine Dev | **De commissie in Pine is een kopie van een contract-spec.** Ook als het getal klopt is een handmatig getal een tweede bron. `PropFirms.pine` wordt al gegenereerd; de contract-specs niet. Onafhankelijk van D-07 op te lossen. _(was SM-06)_ |
+| **D-08** | wip | Pine Dev | **De commissie in Pine is een kopie van een contract-spec.** Ook als het getal klopt is een handmatig getal een tweede bron. `PropFirms.pine` wordt al gegenereerd; de contract-specs niet. Onafhankelijk van D-07 op te lossen. _(was SM-06)_ |
 | **D-09** | todo | Backtest Setup | **CVD-tegenspraak.** `legacy_accounts_playbook.md` zegt dat de instellingen zijn gevalideerd met de delta-filter **uit**; de projectregel is dat CVD nooit uitgaat. `ES/GC/YM_norm.csv` dragen `Delta ≡ 0`. Draaien de live scripts CVD aan, dan beschrijft elk getal in het playbook een andere strategie. Eén live alert nakijken. _(was S-09 / SM-05)_ |
 | **D-10** | blocked | Backtest Setup | **CVD-diepte van de NQ-dataset is onbekend.** Blokkeert optie A van D-18. Wacht op de pilot-export + validator-output. _(was S-13 / SM-09)_ |
 | **D-11** | todo | Middleware App | **Secrets roteren** — Notion-token, Discord-webhook, Fase C endpoint-token. Alle drie in chats langsgekomen, sinds 9 aug ongeroteerd. Afvinken in `middleware/docs/SECRETS-REGISTER.md`. _(was SM-07)_ |
@@ -78,7 +78,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 |---|---|---|---|
 | **D-22** | todo | Middleware App | Chart-snapshot staat 3× open voor één feature. De renderer heeft de haak (`chartUrl`); de Playwright-capture ontbreekt. Houd er één aan. _(was SM-10)_ |
 | **D-23** | todo | Middleware App | Sharpe uit de compliance-monitor is nooit gebouwd — opnieuw scopen of laten vervallen. _(was SM-11)_ |
-| **D-24** | todo | Pine Dev | De taak *v7.0-FM scripts compileren* noemt een generatie die niet meer bestaat. _(was SM-13)_ |
+| **D-24** | wip | Pine Dev | De taak *v7.0-FM scripts compileren* noemt een generatie die niet meer bestaat. _(was SM-13)_ |
 | **D-25** | todo | Backtest Setup | Twee taken bouwen op weerlegde aannames: engine-spec (ingehaald door het lab) en woensdag-analyse (cherrypicking weerlegd). _(was SM-12)_ |
 | **D-26** | todo | Scrum Master | `docs/chats.md` archiveren; eerst de CVD-regel en 'geen getal zonder dataset-id' redden. |
 | **D-27** | todo | Backtest Setup | `docs/state.md` is nooit ingevuld — live settings `_TBD_`, `data/manifest.json` bestaat niet. |

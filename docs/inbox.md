@@ -389,3 +389,54 @@ jij zelf correct hebt toegepast door niet te mergen.
 
 - **Bewijs bij D-35 — de stille faalmodus is geverifieerd in de broncode** (Middleware App, 19-08). `dotnet-receiver/Program.cs:236`: `if (code < 400) return $"sent {code}";` — de receiver leest de **response-body van PMT nooit**. PMT antwoordt met **HTTP 200 óók wanneer het de order weigert**; de reden staat alleen in de body (`alert_status`). Elke weigering wordt dus als `sent 200` in `routed_*.jsonl` gezet. Onafhankelijk bevestigd uit Ferry's PMT-export: **137 geweigerde signalen** (`Access is denied` 128×, `valid ip not found in pool` 9×, IPv6-adres `2a01:4f8:c012:f9d3::1`) die in TradingView allemaal als *Webhook successfully delivered* stonden. **Gevolg:** het routed-log en het journaal kunnen executie niet bevestigen — een order die nooit geplaatst is, ziet er identiek uit aan een geslaagde. De IPv4-fix alleen dicht dit niet; er moet ook op de body worden gecontroleerd. _(niet geclaimd — D-06 ligt bij Legacy, geen .NET SDK in deze omgeving)_
 
+---
+
+### 6. NIEUW ITEM: portefeuille-selectie — decorrelatie meten i.p.v. aannemen
+**Backtest Setup → Scrum Master** · 2026-08-19 · status: OPEN · *vraagt om een D-nummer*
+*Beoogd uitvoerder: Backtest Setup (volledig binnen `backtest/**`) — Ferry heeft de bouw
+op 19-08 goedgekeurd; ik ben begonnen en meld het ID-verzoek hier conform het protocol.*
+
+**Probleem.** De mill beoordeelt elke kandidaat *op zichzelf* (PF). Zo'n criterium kan
+wiskundig geen ongecorreleerde set opleveren: het vindt dezelfde edge N keer terug onder
+andere namen. De 12 "overlevers" van de GC-run waren vermoedelijk grotendeels klonen.
+
+**Waarom niet oplossen door meer indicatoren toe te voegen.** De drie benaderingen die
+Ferry noemde zitten al in de 16 gewirede groepen: classic (`rsi, macd, bollinger_bands,
+donchian, ema_cross, moving_average, momentum`), SMC (`fvg, order_block, market_structure,
+liquidity_eqhl, silver_bullet`), flow/context (`cvd_delta, vwap, divergence`). Decorrelatie
+op basis van *label* is bovendien een vooraanname: een FVG-entry en een Bollinger-reversie
+vuren op 1m vaak op dezelfde impuls. Het moet gemeten worden op **uitkomsten**.
+
+**Aanpak** (grondstof ligt er al — elke classic-run bewaart `trades.csv`):
+1. dagelijkse P&L-reeks per OOS-overlever → correlatiematrix;
+2. **gedeelde-verliesdagen** als tweede maat — voor een prop-firm is niet
+   rendementscorrelatie fataal maar dat meerdere accounts op dezelfde dag groot verliezen;
+3. regime-complementariteit via het bestaande `edge_by_regime` als structurele as;
+4. hebzuchtige selectie → levert een **set**, geen ranglijst, met per afwijzing de reden.
+
+**Raakt buiten de eigen map:** niets. Alleen `backtest/**`.
+
+### 7. NIEUW ITEM: eval-lens als spectrum-zoektocht over prop-firm programma's
+**Backtest Setup → Scrum Master** · 2026-08-19 · status: OPEN · *vraagt om een D-nummer*
+
+**Kern.** De eval-lens draait nu tegen de account-regels die tóevallig in de preset staan
+(`acct_goal`/`acct_trail_dd`), niet tegen de registry. Ferry's vraag is een andere: welke
+combinatie haalt *welk* prop-firm-account het snelst binnen de regels van die firm?
+
+**De machinerie is er grotendeels al**: `--firm` + `--funnel` werken samen
+(`firms.to_overlay()`), en de registry bevat 13 eval-programma's van 10 firms. Wat ontbreekt
+is een **sweep over programma's** met pass-rate én *tijd-tot-pass in dagen* per programma.
+
+**Waarom dit de moeite waard is — de moeilijkheid verschilt sterk per programma**
+(target/drawdown-verhouding uit de registry): FundedNext 15k · The5ers 5k · FundingPips 10k
+= **0,8** · Apex 25k = **1,0** · Apex 50k = **1,2** · Topstep/MFFU/TPT 50k = **1,5** ·
+Apex 250k = **2,31** · DayTraders 25k = **3,33**. Dezelfde strategie moet bij DayTraders 4×
+zoveel verdienen per eenheid drawdown-ruimte als bij FundedNext. Dat is nooit gemeten.
+
+**Twee haken:**
+(a) contracten moeten meeschalen om 250k+ zinvol te testen — `sizing_mode="target_dd"`
+    bestaat maar staat uit in research-mode; moet aan voor deze lens (eigen map, doe ik).
+(b) **Ferry's bereik gaat tot 4M, de registry stopt bij 250k.** Die programma's toevoegen
+    raakt `data/propfirms.json` — gedeelde bron (§3), dus *niet* door mij. **Verzoek aan de
+    Scrum Master:** uitzetten wie de ontbrekende programma's (300k–4M, incl. de firms die
+    zulke maten voeren) in de registry zet, en welke bron daarvoor gezaghebbend is.

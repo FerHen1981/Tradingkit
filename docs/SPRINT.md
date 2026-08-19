@@ -24,7 +24,11 @@
 4. **Eén item tegelijk.** Rond af voor je een nieuw item claimt.
 5. **Afronden:** wijziging gecommit → status op `review` → regel in `docs/DECISIONS.md`.
    Zet zelf niets op `done`; dat doet de Scrum Master bij de controle.
-6. Nieuwe items onderaan met een oplopend ID. `done`-items blijven staan als historie.
+6. **Nieuwe ID's geeft de Scrum Master uit.** Heb je een nieuw item, zet het in
+   `docs/inbox.md`; je krijgt er een D-nummer voor terug. Twee partijen die tegelijk
+   het volgende vrije nummer pakken botsen namelijk *niet* in git — dat gebeurde op
+   19-08 met D-34 — en dan staan er twee items met hetzelfde ID. `done`-items blijven
+   staan als historie.
 
 Raakt je werk iets buiten je eigen map of het live executiepad? Dan geldt daarnaast de
 beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`).
@@ -35,21 +39,22 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | ID | Status | Owner | Item |
 |---|---|---|---|
-| **D-01** | review | Middleware App | **`mex-viewer` serveert de hele vloot zonder authenticatie.** `viewer.py:161` faalt open: staat `VIEWER_PASSWORD` niet in de omgeving, dan zijn `/api/state`, `/api/command` en `/api/widget` publiek — accountnummers, saldi, buffers, open posities. **Direct:** variabele zetten + herstarten. **Structureel:** default omdraaien naar weigeren. _(was S-08 / SM-01)_ |
+| **D-35** | todo | Ferry + Middleware App | **De IPv4-fix is gecommit maar NIET gebouwd en NIET uitgerold** (`97c50cd`; Legacy heeft geen .NET SDK). De draaiende binary heeft nog het oude gedrag, met `dryRun:false` en `armed:true`: uitgaand verkeer kan via IPv6 → **PMT weigert orders**, en een weigering wordt weggeschreven als `sent 200` → **onzichtbaar in het journaal**. Blokkerend daarnaast: **`167.233.215.60` staat niet in de PMT IP-pool** — zolang dat niet geregeld is wordt er niets geplaatst, hoe de code er ook uitziet. Klaar pas na `dotnet build src/Mex.Journal.Receiver -c Release` + herstart, met `curl -s ifconfig.me` als controle. _(gemeld door Legacy 19-08)_ |
+| **D-01** | review | Middleware App | **`mex-viewer` serveert de hele vloot zonder authenticatie.** `viewer.py:161` faalt open: staat `VIEWER_PASSWORD` niet in de omgeving, dan zijn `/api/state`, `/api/command` en `/api/widget` publiek — accountnummers, saldi, buffers, open posities. **OPGELOST** `8a14537`: `_authed()` faalt nu closed; open draaien vereist een expliciete `VIEWER_ALLOW_OPEN=1` en het dashboard meldt dan *fleet data is PUBLIC*. Vier tests in `middleware/tests/test_viewer_auth.py`. **Resteert voor Ferry:** `VIEWER_PASSWORD` + `VIEWER_API_TOKEN` zetten en herstarten — zonder wachtwoord weigert hij nu álles. _(was S-08 / SM-01)_ |
 | **D-02** | blocked | Ferry | **De risk-gate heeft geen live executiepunt.** `risk.py` hangt uitsluitend aan `main.py` en `router.py`; die draaien niet. Day caps, DLL en halt worden berekend maar handhaven niets. Blocked by D-05. _(was S-01 / SM-02)_ |
 | **D-03** | todo | Middleware App | **De reconciliatielaag heeft nooit gedraaid.** De Notion-database *MEX Reconciliation (live)* heeft een compleet schema en **0 rijen** (geverifieerd 19-08). Dat verklaart het gat dat Analyses vond: `realized_net` $21.597,35 vs `window_net` $31.424,81 — **$9.827,46** verschil dat precies deze laag had moeten vangen. _(was S-10 + S-11)_ |
-| **D-04** | blocked | Ferry | **Notice-cards: bevestig de .NET-receiver als eigenaar.** Feitelijk beslecht — runtime toont `renderEnabled:true` met `/root/mex-renderer/render-signal.js`; `notices.py` is nooit uitgerold. Alleen de formele bevestiging ontbreekt, en zonder die bevestiging kan niemand mergen. |
+| **D-04** | blocked | Ferry | **Notice-cards: bevestig de .NET-receiver als eigenaar.** Feitelijk beslecht — runtime toont `renderEnabled:true` met `/root/mex-renderer/render-signal.js`; `notices.py` is nooit uitgerold. Alleen de formele bevestiging ontbreekt, en zonder die bevestiging kan niemand mergen. **Eerstehands bewijs (Legacy, uitrol 11-08):** audit-log `card queued (tier B)` 01:28:52Z → `card sent 200` 01:28:57Z, kaart verscheen in Discord; een volledige tradecyclus liep erdoorheen (FILL 6ct @ 4474,8 → RISK OFF → TRAIL → EXIT +$153,96). De Python-tak bleek dood toen patches daar geen effect op de executie hadden. |
 | **D-05** | blocked | Ferry | **Python fan-out: afvoeren of alsnog activeren?** `main.py`/`router.py`/`brokers/` zien er compleet uit en doen niets. Wortel onder D-02 en D-04. |
 
 ## 🟠 Bronnen die niet kloppen of onbereikbaar zijn
 
 | ID | Status | Owner | Item |
 |---|---|---|---|
-| **D-06** | todo | Middleware App | **De live .NET-broncode staat niet volledig in git.** Alleen `middleware/dotnet-receiver/Program.cs` (641 r), en dat *vervangt* `src/Mex.Journal.Receiver/Program.cs` op de VPS; `using Mex.Journal.Recon;` bestaat hier niet. Bouwvalkuil: de receiver zit niet in `MexJournal.sln`, een kale `dotnet build -c Release` meldt succes zonder hem te bouwen. Bouwen met `dotnet build src/Mex.Journal.Receiver -c Release`. _(was S-07 / SM-04)_ |
+| **D-06** | wip | Legacy (Middleware App) | **De live .NET-broncode staat niet volledig in git.** Alleen `middleware/dotnet-receiver/Program.cs` (641 r), en dat *vervangt* `src/Mex.Journal.Receiver/Program.cs` op de VPS; `using Mex.Journal.Recon;` bestaat hier niet. Bouwvalkuil: de receiver zit niet in `MexJournal.sln`, een kale `dotnet build -c Release` meldt succes zonder hem te bouwen. Bouwen met `dotnet build src/Mex.Journal.Receiver -c Release`. **Geclaimd door Legacy 19-08**; die chat mag niet naar deze branch pushen, dus de Scrum Master zet de regel. **Voorstel overgenomen: de hele solution onder versiebeheer**, niet 'de VPS is de bron' vastleggen — dat laatste laat live code zonder historie en zonder review, en de sln-valkuil laat een deploy stil mislukken met *Build succeeded*. _(was S-07 / SM-04)_ |
 | **D-07** | todo | Middleware App | **Werkelijke commissie per contract uit `Cash_History`.** De bron `backtest/config.py CONTRACTS` kent zeven waarden; Pine twee; de FLEET-validatie mat micro 0.67. Lever per contract de round-turn commissie + fees per venue. _(was inbox 1 / S-06)_ |
 | **D-08** | review | Pine Dev | **De commissie in Pine is een kopie van een contract-spec.** Ook als het getal klopt is een handmatig getal een tweede bron. `PropFirms.pine` wordt al gegenereerd; de contract-specs niet. Onafhankelijk van D-07 op te lossen. _(was SM-06)_ |
 | **D-09** | todo | Backtest Setup | **CVD-tegenspraak.** `legacy_accounts_playbook.md` zegt dat de instellingen zijn gevalideerd met de delta-filter **uit**; de projectregel is dat CVD nooit uitgaat. `ES/GC/YM_norm.csv` dragen `Delta ≡ 0`. Draaien de live scripts CVD aan, dan beschrijft elk getal in het playbook een andere strategie. Eén live alert nakijken. _(was S-09 / SM-05)_ |
-| **D-10** | blocked | Backtest Setup | **CVD-diepte van de NQ-dataset is onbekend.** Blokkeert optie A van D-18. Wacht op de pilot-export + validator-output. _(was S-13 / SM-09)_ |
+| **D-10** | blocked | Backtest Setup | **CVD-diepte van de NQ-dataset is onbekend.** Blokkeert optie A van D-18. Wacht op de pilot-export + validator-output — **blocked by D-36**. _(was S-13 / SM-09)_ |
 | **D-11** | todo | Middleware App | **Secrets roteren** — Notion-token, Discord-webhook, Fase C endpoint-token. Alle drie in chats langsgekomen, sinds 9 aug ongeroteerd. Afvinken in `middleware/docs/SECRETS-REGISTER.md`. _(was SM-07)_ |
 | **D-20** | todo | Scrum Master | **De Notion-ids in `CLAUDE.md` zijn deels dood.** *MEX Reconciliation* heeft 0 rijen (geverifieerd). Fleet Performance en Trade Journal nog te controleren. _(was S-11)_ |
 
@@ -59,6 +64,8 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 |---|---|---|---|
 | **D-12** | todo | Backtest Setup | **`validation/` bewijs staat alleen op de legacy-branch** — stage 1-2 preregistraties én 3-10 verdicts, het onderliggende bewijs voor *GC + ES funded edge, NQ/YM eval-only*. _(was SM-08)_ |
 | **D-13** | blocked | Ferry | **Merge-plan voor de drie resterende branches** (website is al gemerged): legacy (.NET + validation), discord-notify (notices.py + tests), analyses (state.md, validate_dataset.py, goals.py, 3 engine-fixes). Blocked by D-04. _(was S-03)_ |
+| **D-36** | todo | Ferry | **Lever de NQ pilot-export met CVD-diepte** — deblokkeert D-10 en daarmee optie A van D-18. Formaat volgens `docs/data_export.md` (Quantower-spec, analyses-branch). Backtest Setup draait daarna `tools/validate_dataset.py` met de CVD-gate en rapporteert op het bord. Let op: die validator staat óók nog op de analyses-branch, dus D-13 loopt hier doorheen. _(gevraagd door Backtest Setup 19-08)_ |
+| **D-37** | todo | Legacy (of Ferry) | **Lever één recente live alert-payload** uit het executiepad — deblokkeert D-09. Backtest Setup vergelijkt hem tegen het playbook en de norm-datasets om te bepalen of de live scripts CVD aan of uit hebben. Read-only pad op de VPS mag ook. **Secrets eruit** vóór levering (webhook-URL's, tokens). _(gevraagd door Backtest Setup 19-08)_ |
 | **D-19** | todo | Ferry | **`docs/**`, `tools/**` en `validation/**` hebben geen eigenaar** terwijl meerdere chats erin schrijven. _(was S-02)_ |
 
 ## 🟡 Lopend werk
@@ -100,8 +107,8 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | Branch | Beoordeeld t/m | Datum |
 |---|---|---|
-| `claude/middleware-setup-guide-afhvtk` | `c1aa131` | 2026-08-19 |
-| `claude/legacy-accounts-scripts-analysis-ui0j6m` | `f538fc3` | 2026-08-19 |
+| `claude/middleware-setup-guide-afhvtk` | `d568233` | 2026-08-19 |
+| `claude/legacy-accounts-scripts-analysis-ui0j6m` | `2f05103` | 2026-08-19 |
 | `claude/discord-notify-hnydfa` | `5a5f49a` | 2026-08-19 |
 | `claude/analyses-data-chat-org-3tii8j` | `f6e9af0` | 2026-08-19 |
 | `claude/pine-dev-l410a6` | `dc567e8` | 2026-08-18 |

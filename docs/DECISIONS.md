@@ -11,6 +11,11 @@
 
 - 2026-08-19 · D-34 · **De publieke sites claimen geen gevalideerde edge meer** · het OOS-venster onder die claim is opgebrand (D-18); `status` in `public-stats.json` noemt nu het rekeningtype (funded/evaluatie) in plaats van een oordeel · raakt: D-17, D-18, web/**
 - 2026-08-19 · D-34 · **VASTGESTELD: de regel 'werkt alleen in de eerste helft ⇒ gaat niet live' klopte niet** · NQ/YM draaien juist wél live op eval-rekeningen; de grens ligt bij funded kapitaal, en zo staat het nu op de site · raakt: web/**
+- 2026-08-19 · D-35 · **VASTGESTELD: de IPv4-fix draait niet** — gecommit, niet gebouwd, niet uitgerold; PMT kan orders blijven weigeren en een weigering wordt als `sent 200` gejournald · gemeld door Legacy · raakt: live executie
+- 2026-08-19 · D-00 · **Nieuwe D-nummers geeft de Scrum Master uit** · twee partijen die tegelijk het volgende vrije nummer pakken botsen niet in git, wat op 19-08 met D-34 gebeurde · raakt: alle chats
+- 2026-08-19 · D-06 · **CORRECTIE op mijn eigen toeschrijving:** `BlockedGate`, LIMIT EXPIRED→tier B en het deploy-recept met de sln-valkuil komen van de Discord Notify-sessie, niet van Legacy — die pushte naar dezelfde branch; alleen `97c50cd` is van Legacy · raakt: het spoor
+- 2026-08-19 · D-06 · **Voorstel Legacy overgenomen: hele solution onder versiebeheer**, niet 'de VPS is de bron' · anders leeft live code zonder historie en zonder review · raakt: D-06
+- 2026-08-19 · D-15/D-16 · **Volgorde-correctie voor Backtest Setup: D-15 en D-16 vóór D-27 en D-12** · beide deblokkeren Pine Dev, de rest niet · raakt: Backtest Setup, Pine Dev
 - 2026-08-19 · D-00 · **Bord en LifeOS worden elke ronde gesynchroniseerd**, met het D-nummer als sleutel en het bord als leidende bron · ze liepen binnen één dag uit elkaar toen dat niet gebeurde · raakt: Scrum Master
 - 2026-08-19 · D-32 · **Scrum Master mag zelf corrigeren** binnen eigen domein, bij aantoonbaar onjuiste documentatie en bij een aantoonbare, lokale breuk — nooit op het live executiepad, nooit andermans werk weggooien, nooit een open architectuurkeuze zelf maken · elke correctie krijgt een regel hier · raakt: alle chats
 - 2026-08-19 · D-33 · **Toezicht is mutatie-gedreven, niet op een klok** · elke Scrum Master-sessie start met een diff tegen het watermerk onderaan `SPRINT.md` · raakt: alle chats

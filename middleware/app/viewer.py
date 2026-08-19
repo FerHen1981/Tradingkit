@@ -246,10 +246,15 @@ class Handler(BaseHTTPRequestHandler):
                     f = command_state("all", stage)["fleet"]      # realized = ledger (matches dashboard)
                     wkf = command_state("week", stage)["fleet"]
                     dyf = command_state("day", stage)["fleet"]
+                    yf = command_state("yesterday", stage)["fleet"]
                     return {
                         "realized": round(f.get("realized_net") or 0, 2),
                         "week": round(wkf.get("window_net") or 0, 2),
                         "today": round(dyf.get("window_net") or 0, 2),
+                        "yesterday": round(yf.get("window_net") or 0, 2),
+                        "yesterdayTrades": yf.get("trades") or 0,
+                        "yesterdayWinrate": yf.get("win_rate") or 0,
+                        "yesterdayPf": yf.get("pf") or 0,
                         "trades": f.get("trades") or 0,
                         "winrate": f.get("win_rate") or 0,
                         "pf": f.get("pf") or 0,
@@ -260,6 +265,7 @@ class Handler(BaseHTTPRequestHandler):
                 allc = command_state("all")
                 wkall = command_state("week")["fleet"]
                 dyall = command_state("day")["fleet"]
+                yall = command_state("yesterday")["fleet"]
                 spark = [c["cum"] for c in allc["equity"]["curve"]][-12:] or [0]
                 widget = {
                     "goal": float(os.environ.get("WIDGET_GOAL", "0")),
@@ -269,6 +275,10 @@ class Handler(BaseHTTPRequestHandler):
                     "week": {"net": round(wkall.get("window_net") or 0, 2), "trades": wkall.get("trades") or 0,
                              "winrate": wkall.get("win_rate") or 0, "pf": wkall.get("pf") or 0},
                     "today": round(dyall.get("window_net") or 0, 2),
+                    "yesterday": {"net": round(yall.get("window_net") or 0, 2),
+                                  "trades": yall.get("trades") or 0,
+                                  "winrate": yall.get("win_rate") or 0,
+                                  "pf": yall.get("pf") or 0},
                 }
                 body = json.dumps(widget).encode()
             except Exception as exc:

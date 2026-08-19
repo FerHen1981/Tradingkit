@@ -62,7 +62,7 @@ gedragsneutraal. **Geen regressie**, ondanks dat het op een verlies lijkt.
 
 | Wijziging | Versie | Effect |
 |---|---|---|
-| `calc_on_order_fills=true` | v7.6 | **Groot.** Strategie herrekent op elke fill; verandert intrabar-evaluatie live én in de tester. Dit is het "On order fills" dat in de export-vergelijking de trefkans van 81% → 74,6% bracht |
+| `calc_on_order_fills=true` | v7.6 | **Groot,** maar **bewust behouden** (besluit eigenaar 19-08). Strategie herrekent op elke fill; dit is het "On order fills" dat in de export-vergelijking de trefkans 81% → 74,6% bracht. Het is het eerlijker uitvoeringsmodel — niet terugdraaien |
 | `use_bar_magnifier=true` | v7.6 | alleen backtest-realisme |
 | `maxStopSize` default 100 → 130 | v7.8.2 | selecteert bredere setups; raakt welke trades vuren |
 | Firm-keys + dagentellers uit registry | v7.7-7.9 | voedt `payoutEligible` → `pmtBlock` → **blokkeert entries** bij wait-for-cap |
@@ -97,6 +97,7 @@ twee verschillende dingen zijn en Pine ze nu op dezelfde manier verstuurt.
    worden door PMT server-side uitgevoerd, toen en nu. Geen `move_stop`-intentie nodig.
 3. **De richting-gate moet gefixt.** Apex staat niet toe dat er twee tegengestelde orders
    openstaan. Dit is het enige echte defect.
-4. **`calc_on_order_fills` moet eruit.** Dat stond in eerdere versies niet aan, dus nu ook niet.
+4. **`calc_on_order_fills` blijft aan.** Pine Dev las een eerder antwoord verkeerd en stelde een
+   revert voor; de eigenaar heeft dat 19-08 afgewezen. De regel blijft staan.
 
-Netto blijft er één defect en één regressie over. Zie `docs/proposal-gate-and-exec.md`.
+Netto blijft er één defect over. Zie `docs/proposal-gate-and-exec.md`.

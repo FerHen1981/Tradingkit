@@ -1,4 +1,4 @@
-# Voorstel · positie-gate met richting + calc_on_order_fills terug
+# Voorstel · positie-gate met richting
 
 Status: **voorstel — niets gebouwd.** Ter beoordeling door de scrum master.
 Eigenaar uitvoering: Pine Dev (`pine/**`). Raakt het live executiepad.
@@ -13,10 +13,9 @@ Na de bevestigingen van de eigenaar (19-08) blijven er precies twee dingen over:
    signaal doet dan `strategy.entry` de andere kant op, en dat **reverseert** de open
    positie. **Apex staat twee tegengestelde open orders niet toe**, dus dit is niet
    alleen ongewenst gedrag maar een firm-risico. Dit gedrag zit er sinds v6.8.14 in.
-2. **Regressie — `calc_on_order_fills=true`** is in v7.6 door Pine Dev toegevoegd en stond
-   in eerdere versies niet aan. Uit de eigen export-vergelijking van de eigenaar: dezelfde
-   periode, trefkans 81% → 74,6%, PF 1,15 → 0,93. Het verandert welke trades vuren, live
-   én in de tester.
+**Niet in dit voorstel:** `calc_on_order_fills=true` **blijft aan** — besluit eigenaar 19-08-2026.
+Pine Dev had een revert voorgesteld op een verkeerde lezing van een eerder antwoord; daar was geen
+akkoord voor. De regel blijft ongemoeid. Vastgelegd in de backlog als besluit, niet als werk.
 
 ## Voorstel A · richting-gate (3 regels, één nieuwe hulpvariabele)
 
@@ -58,16 +57,7 @@ same-direction signaal na risk-off wordt door TradingView genegeerd — de gate 
 maar er komt geen tweede order. Willen we bijladen na risk-off, dan is dat een aparte
 beslissing (pyramiding + qty-ladder) en géén onderdeel van dit voorstel.
 
-## Voorstel B · `calc_on_order_fills` eruit
-
-Eén regel uit de `strategy()`-header verwijderen. Terug naar v7.3-gedrag.
-`use_bar_magnifier=true` **blijft** — dat raakt alleen backtest-realisme, niet welke
-signalen vuren.
-
-Openstaand voor Backtest Setup (inbox item 5): wordt "on bar close + realtime" de norm voor
-de funnel? Pine volgt die keuze; dit voorstel zet hem terug naar de eerdere stand.
-
-## Voorstel C · chart-asset in plaats van MGC-hardcode
+## Voorstel B · chart-asset in plaats van MGC-hardcode
 
 Laatste harde asset-aannames in het script:
 - `f_pol()`-tabel: elke preset draagt `"MGC"` als familie; `polInstrOK` blokkeert handel als
@@ -86,7 +76,7 @@ asset-onafhankelijk (`syminfo.mintick`/`pointvalue` overal), dus dit is de laats
    `strategy.position_size` niet omklapt.
 3. **DRY_RUN op de receiver aan**, dan het receiver-log lezen: bij een tegengesteld signaal
    mag er géén `buy`/`sell` langskomen, alleen de blocked-melding.
-4. Backtest v7.9.2 vs v7.3 op dezelfde periode: het verschil moet verklaarbaar zijn uit A+B
+4. Backtest v7.9.2 vs v7.3 op dezelfde periode: het verschil moet verklaarbaar zijn uit voorstel A
    en niets anders.
 
 ## Impact

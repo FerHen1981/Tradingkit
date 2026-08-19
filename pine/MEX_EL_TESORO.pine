@@ -40,6 +40,11 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.9.2: positie-gate krijgt RICHTING. Apex staat geen twee tegengestelde open orders toe; de
+//         gate kende geen richting, dus na risk-off stond hij voor beide kanten open en
+//         reverseerde een tegengesteld signaal de positie. Nu: flat = beide, in positie zonder
+//         risk-off = niets, in positie met risk-off = alleen dezelfde kant. Geen stacking
+//         (pyramiding blijft 1). Blockers-rij toont "In position (opposite)".
 // v7.9.1: Fase 1 (un-overfit) — Distance Unit and ATR Length are inputs now. With unit=ATR the
 //         geometry (FVG/stop/TP) is expressed in ATR multiples, so ONE parameter set is correct
 //         on every asset — the generic primitive that replaces per-asset tuning. Default Ticks,
@@ -56,7 +61,7 @@
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.9.1"
+var string currentVersion = "v7.9.2"
 strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1078,6 +1083,16 @@ f_calcQty(_slDistPrice) =>
 isFlat = strategy.position_size == 0 and strategy.opentrades == 0
 var bool posRiskOff = false
 
+// --- POSITIE-GATE MET RICHTING ----------------------------------------------------------------
+// Apex staat geen twee tegengestelde open orders toe. De gate kende geen richting, dus zodra een
+// positie risk-off was stond hij voor BEIDE kanten open en liet een tegengesteld signaal
+// strategy.entry de positie reverseren. Regel: flat = beide richtingen; in positie zonder
+// risk-off = niets; in positie met risk-off = alleen dezelfde kant als de open positie.
+int  posDir      = strategy.position_size > 0 ? 1 : strategy.position_size < 0 ? -1 : 0
+bool gateAnyDir  = isFlat
+bool gateSameDir = not isFlat and posRiskOff
+f_gateFor(int _dir) => gateAnyDir or (gateSameDir and _dir == posDir)
+
 bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and barstate.isconfirmed
 bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and barstate.isconfirmed
 
@@ -1116,7 +1131,7 @@ if confirmBars > 0 and barstate.isconfirmed
                 array.remove(memMid, _p)
                 array.remove(memTop, _p)
                 array.remove(memBot, _p)
-    bool gateMemOK = (isFlat or posRiskOff) and canTrade
+    bool gateMemOK = (gateAnyDir or gateSameDir) and canTrade
     if not (long0 or short0) and gateMemOK and array.size(memBar) > 0
         int _n = array.size(memBar)
         for _j = 0 to _n - 1
@@ -1138,7 +1153,7 @@ if confirmBars > 0 and barstate.isconfirmed
                     array.remove(memTop, _k)
                     array.remove(memBot, _k)
                     break
-    bool consumed0 = (long0 or short0) and (isFlat or posRiskOff)
+    bool consumed0 = (long0 and f_gateFor(1)) or (short0 and f_gateFor(-1))
     if fvgDirection != 0 and fvgPasses and not consumed0
         array.push(memBar, bar_index)
         array.push(memDir, fvgDirection)
@@ -1309,7 +1324,8 @@ var float t_tpD = na
 var float t_tpPx = na
 var float t_qty = na
 
-gateOK = isFlat or posRiskOff
+// "mag er überhaupt iets" — de blockers-tekst gebruikt dit; de order toetst per richting
+gateOK = f_gateFor(1) or f_gateFor(-1)
 
 // === v6.0: BLOCKERS ENGINE ==================================================
 bool rawLong  = (bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
@@ -1343,7 +1359,8 @@ f_signalBlockers() =>
 string persistBlk = f_persistentBlockers()
 bool rawSig = rawLong or rawShort
 string sigBlk = rawSig ? f_signalBlockers() : ""
-string occBlk = rawSig and not gateOK ? (isFlat ? "" : "In position, ") : ""
+bool rawDirBlocked = (rawLong and not f_gateFor(1)) or (rawShort and not f_gateFor(-1))
+string occBlk = rawSig and rawDirBlocked ? (isFlat ? "" : (gateSameDir ? "In position (opposite), " : "In position, ")) : ""
 string allBlk = persistBlk + sigBlk + occBlk
 bool sigBlockedEvt = rawSig and not preStartBlock and (str.length(persistBlk) > 0 or str.length(sigBlk) > 0)
 var string lastBlockedInfo = "—"
@@ -1355,7 +1372,7 @@ if sigBlockedEvt and notifyBlocked
         alert(f_msgHead() + " | ⛔ SIGNAL BLOCKED | " + (rawLong ? "LONG" : "SHORT") + " " + syminfo.ticker + " | strategy rules met, blocked by: " + _reasons, alert.freq_once_per_bar)
     if useDiscord
         f_sendDiscord("⛔ " + syminfo.ticker + " SIGNAL BLOCKED", (rawLong ? "Long" : "Short") + " setup meets all strategy rules but was blocked by: " + _reasons)
-if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk and ddGuardOK and maeGuardOK and (not onlyFirstTrade or not hasTraded)
+if ((longSignal and f_gateFor(1)) or (shortSignal and f_gateFor(-1))) and stopValid and tpValid and qtyOk and ddGuardOK and maeGuardOK and (not onlyFirstTrade or not hasTraded)
     if isLimitMode and pendDir != 0
         f_markUnfilled(pendBar, pendLimit, true)
         // The replaced pending limit lives ON at the broker: TradingView swaps the order by id,

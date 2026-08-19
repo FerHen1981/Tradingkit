@@ -86,5 +86,24 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 | **D-29** | todo | Ferry | `web/**` formeel als *Web* in de eigenaarstabel. De merge is al gebeurd. |
 | **D-30** | todo | Ferry | Vier vervallen Notion-items op workspace-niveau verwijderen (API kan niet naar de prullenbak). |
 | **D-31** | todo | Ferry | Duurzame route naar runtime-waarheid: gecommitte snapshot of read-only ops-endpoint. Nu hangt het ervan af of een chat toevallig op de VPS kan. |
-| **D-32** | todo | Ferry | Bevoegdheid Scrum Master: alleen signaleren, of ook zelf corrigeren bij een aantoonbare breuk? |
-| **D-33** | todo | Ferry | Toezichtritme: wanneer draait de Scrum Master zijn controle? |
+| **D-32** | done | Ferry | ~~Bevoegdheid Scrum Master~~ — **beantwoord 19-08: mag zelf corrigeren.** Grenzen vastgelegd in de werkafspraken §1c. |
+| **D-33** | done | Ferry | ~~Toezichtritme~~ — **beantwoord 19-08: hybride, op mutaties.** Werkwijze en watermerk vastgelegd in §1d. |
+
+---
+
+## Watermerk — laatste toezichtronde
+
+> De Scrum Master begint elke sessie met `git fetch origin --prune` en vergelijkt
+> hiermee. Alles wat nieuwer is dan deze hashes is nog niet beoordeeld.
+> **Werk dit blok bij aan het eind van elke ronde.**
+
+| Branch | Beoordeeld t/m | Datum |
+|---|---|---|
+| `claude/middleware-setup-guide-afhvtk` | `c1aa131` | 2026-08-19 |
+| `claude/legacy-accounts-scripts-analysis-ui0j6m` | `f538fc3` | 2026-08-19 |
+| `claude/discord-notify-hnydfa` | `5a5f49a` | 2026-08-19 |
+| `claude/analyses-data-chat-org-3tii8j` | `f6e9af0` | 2026-08-19 |
+| `claude/pine-dev-l410a6` | `dc567e8` | 2026-08-18 |
+| `claude/mex-traders-website-ont1mk` | `9920af1` | opgenomen in de werkbranch |
+| `claude/mcp-trader-dev-sse-ibl64y` | `34537f5` | dood — opgenomen in de werkbranch |
+| `main` | `c767a0d` | 2026-07-29 |

@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-08-19 · D-32 · **Scrum Master mag zelf corrigeren** binnen eigen domein, bij aantoonbaar onjuiste documentatie en bij een aantoonbare, lokale breuk — nooit op het live executiepad, nooit andermans werk weggooien, nooit een open architectuurkeuze zelf maken · elke correctie krijgt een regel hier · raakt: alle chats
+- 2026-08-19 · D-33 · **Toezicht is mutatie-gedreven, niet op een klok** · elke Scrum Master-sessie start met een diff tegen het watermerk onderaan `SPRINT.md` · raakt: alle chats
 - 2026-08-19 · D-00 · **Één bord: `docs/SPRINT.md`** · drie coördinatiedocumenten waren onafhankelijk ontstaan (twee `docs/scrum.md` + de itemlijst in `inbox.md`) · raakt: alle chats
 - 2026-08-19 · D-00 · **Claim-protocol ingevoerd** (status `wip` + owner + losse commit vóór het werk; conflict = signaal) · voorkomt dat twee chats dezelfde feature bouwen, zoals bij de notice-cards gebeurde · raakt: alle chats
 - 2026-08-19 · D-00 · **Rolverdeling vastgezet**: Backtest Setup · Pine Dev · Middleware App · Web · Analyses & Data · Scrum Master · de namen uit `docs/chats.md` vervallen · raakt: eigenaarstabel

@@ -66,6 +66,59 @@ Rolverdeling van de drie plekken:
 | `docs/inbox.md` | de wachtrij: nieuwe meldingen, door de Scrum Master op het bord gezet |
 | LifeOS (Tasks + Notes) | Ferry's beeld: besluiten die op hem wachten, en het archief |
 
+## 1c. Correctiebevoegdheid — vastgesteld 2026-08-19 door Ferry
+
+De Scrum Master **mag zelf corrigeren**. Dat is geen vrijbrief; het is een smalle
+bevoegdheid met een harde buitengrens.
+
+### Zelf doen, zonder vooraf te vragen
+
+- Eigen domein: `docs/SPRINT.md`, `docs/DECISIONS.md`, `docs/inbox.md`, `CLAUDE.md`,
+  `.claude/skills/mex-scrum-master/**`.
+- **Aantoonbaar onjuiste feiten** in documentatie, waar de code of runtime het tegendeel
+  laat zien — een dode branchnaam, een pad dat niet bestaat, een getal dat niet klopt.
+- **Aantoonbare breuk** in code: iets dat meetbaar stuk is en waarvan de fix eenduidig is.
+  Klein, lokaal, met een test of een reproductie erbij.
+- Statussen op het bord bijwerken, items samenvoegen, dubbelingen opheffen.
+
+Elke correctie krijgt een regel in `docs/DECISIONS.md`. Geen stille wijzigingen.
+
+### Nooit zelf, ook niet als het "duidelijk" is
+
+- **Het live executiepad** (`mex-receiver`, Pine order-alerts, PMT-payloads, routing,
+  broker-integratie). Daar geldt het protocol uit §12 — melden, verifiëren, dan pas.
+- **Werk van een andere chat weggooien of herschrijven.** Ook als het aantoonbaar dode
+  code is. Dat is een besluit, geen correctie.
+- **Een architectuurkeuze maken** die nog openstaat. Signaleren en voorleggen.
+- **Iets verwijderen** — bestanden, branches, Notion-pagina's. Altijd bevestiging vooraf.
+- Muteren in `backtest/`, `pine/`, `middleware/`, `web/` buiten een aantoonbare breuk.
+
+Twijfel je of iets een correctie of een besluit is? Dan is het een besluit.
+
+## 1d. Toezichtritme — mutatie-gedreven
+
+Vastgesteld 2026-08-19: **hybride, dus op mutaties.** Geen vaste klok; toezicht draait
+wanneer er iets veranderd is.
+
+Praktisch betekent dat: **de eerste handeling in elke Scrum Master-sessie is een
+mutatiecheck** tegen het watermerk onderaan `docs/SPRINT.md`.
+
+```bash
+git fetch origin --prune
+# per branch: wat is er bij gekomen sinds het watermerk?
+git log --oneline <watermerk>..origin/<branch>
+```
+
+Beoordeel elke nieuwe commit op: raakt het live executie · raakt het een gedeelde bron ·
+raakt het andermans map · dupliceert het bestaand werk · maakt het documentatie onjuist.
+Werk daarna het bord bij en zet het watermerk op de nieuwe tips.
+
+**Bekende beperking:** een sessie in een container merkt een push niet uit zichzelf op —
+er is geen kanaal dat mij wakker maakt. Het watermerk vangt dat op: hoe lang het ook
+stilstaat, de eerstvolgende ronde ziet precies wat er tussentijds gebeurde. Wat het niet
+oplost is de *vertraging*. Wil je die weg, dan is er een trigger nodig die op een push
+vuurt — zie D-31.
+
 ## 2. Centrale communicatiehub
 
 Deze chat is de centrale inbox voor cross-chat onderwerpen. Andere chats escaleren

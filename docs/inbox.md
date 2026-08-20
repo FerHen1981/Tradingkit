@@ -47,6 +47,42 @@ ATM-instelling wél verdacht — dat valt buiten de repo en is bij PMT/Tradovate
 
 **Vraagt om een D-nummer.**
 
+---
+
+**UITZOEKWERK GEDAAN (20-08, Legacy) — PMT-documentatie geraadpleegd.** Ferry meldt er
+bovendien bij: *het heeft wél gewerkt*, en de ATM-logica bij Tradovate is veranderd.
+
+1. **`breakeven_offset` is een NIEUWE PMT-feature.** PMT schrijft letterlijk: *"Earlier,
+   users could only move their stop to breakeven. Now, with BreakEven Offset, you can
+   move it slightly beyond or below breakeven."* Onze payload droeg nooit een offset —
+   dus vóór deze feature betekende onze `breakeven` per definitie *stop naar entry*.
+   Werkte de offset eerder tóch, dan kwam die van een PMT- of Tradovate-instelling, niet
+   uit ons alert. Dat sluit aan bij de ATM-wijziging die Ferry ziet.
+2. **Harde blokkade uit de PMT-docs:** *"Not supported when using Price risk type —
+   breakeven and offset will not apply in those modes."* Wij sturen `dollar_sl`. Staat
+   het risk type van dat symbool/account in PMT op **Price**, dan wordt BE helemaal niet
+   toegepast. **Dit eerst controleren** — het verklaart het symptoom volledig.
+3. **Eenheid-val:** de offset volgt de meeteenheid uit PMT's Risk Settings (ticks /
+   points / dollars / percentage), *niet* Pine's units. `beOffsetSize = 8` gaat in Pine
+   door `f_distPrice()` naar een prijsafstand; PMT leest 8 in zíjn eenheid. Zonder
+   afstemming zet je $8 waar je 8 ticks bedoelde.
+4. **Veldnaam nog niet hard bevestigd.** De zoekresultaten noemen `breakeven_offset`,
+   maar PMT's eigen JSON-veldreferentie somt hem niet op. Niet gokken: bevestigen bij
+   PMT-support of met één testorder op een demo-account.
+5. **Let op bij het bevestigen:** diezelfde veldreferentie omschrijft `breakeven` als
+   *"Price level that triggers breakeven stop activation"* — een prijs, terwijl wij een
+   *afstand* sturen (`f_distPrice(beTrigEff)`). Als dat klopt, triggert de BE mogelijk
+   nooit of meteen. Meenemen in dezelfde vraag aan support.
+6. **Over ATM staat niets in de PMT-docs.** De wijziging die Ferry ziet is daar niet te
+   bevestigen of te weerleggen; dat moet via PMT-support.
+
+Bronnen: docs.pickmytrade.trade — *BreakEven Offset — New Feature Update* en
+*TradingView JSON Alert Configuration*.
+
+**Volgorde die ik voorstel:** eerst 2 en 3 controleren in het PMT-dashboard (kost minuten,
+geen code), dan pas 4 uitvragen. Pas als de veldnaam bevestigd is heeft een Pine-wijziging
+zin — anders bouw je op een aanname.
+
 ### 8. Guard-kaarten dragen geen account — routing kan ze niet splitsen
 **Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: **BEANTWOORD** → **D-41** uitgegeven, staat op het bord onder 🟡 (owner Pine Dev)
 

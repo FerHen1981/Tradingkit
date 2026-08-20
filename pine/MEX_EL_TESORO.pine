@@ -40,6 +40,14 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.9.4: DLL wordt een VERLIESBEGRENZER. Nieuwe schakelaar "DLL basis": op "Realized + open"
+//         sluit de positie zodra gerealiseerd + open <= -DLL, midden in de trade, in plaats van
+//         het verlies vol te laten lopen en pas daarna te halten. Zelfde aantal gestopte dagen,
+//         maar op de validatieset (e5951, venster 18-23, T10/B100/DLL150) is het verschil op q3
+//         +$5.067 tegen -$9.851 -- want gemiddeld verlies $182 wordt afgekapt op $150. De trail
+//         blijft in beide standen uitsluitend op trade-closes. Slip: de DLL toetst op bar-close
+//         en order-fills (calc_on_every_tick staat uit), dus de werkelijke fill kan iets voorbij
+//         de drempel liggen -- bekend en aanvaard, zoals de spec voorschrijft.
 // v7.9.3: DAILY RISK-GATE. Twee onafhankelijke drempels per sessie, allebei op GEREALISEERDE
 //         P&L: DLL (cum <= -DLL) en een trail die pas na trigger T scherpstaat en de piek volgt
 //         met buffer B. De trail beweegt UITSLUITEND op een trade-close, zodat intra-trade ruis
@@ -68,7 +76,7 @@
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.9.3"
+var string currentVersion = "v7.9.4"
 strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -214,7 +222,10 @@ var string GROUP_RG = "1F · ACCOUNT — DAILY RISK-GATE"
 useRiskGate = input.bool(true, "Enable daily risk-gate", group=GROUP_RG, tooltip="Master switch. Uit = gedrag van vóór v7.9.3.")
 rgTriggerT  = input.float(10,  "Trigger T ($) — trail arms above this", minval=0, step=1, group=GROUP_RG)
 rgBufferB   = input.float(100, "Buffer B ($) — give-back from the peak", minval=0, step=1, group=GROUP_RG)
-rgDLL       = input.float(150, "DLL ($) — realized loss that halts the day", minval=0, step=10, group=GROUP_RG)
+rgDLL       = input.float(150, "DLL ($) — loss that halts the day", minval=0, step=10, group=GROUP_RG)
+rgDllBasis  = input.string("Realized + open (cuts the trade)", "DLL basis",
+     options=["Realized + open (cuts the trade)", "Realized only (halts after the close)"], group=GROUP_RG,
+     tooltip="Realized + open: de DLL is een VERLIESBEGRENZER — zodra gerealiseerd + open <= -DLL gaat de positie dicht, midden in de trade. Realized only: de DLL is een HALT-TRIGGER — de verliestrade loopt vol naar zijn stop en pas daarna sluit de dag. Zelfde aantal gestopte dagen, groot verschil in kosten: op de validatieset q3 +$5.067 tegen -$9.851. De trail werkt in BEIDE standen uitsluitend op trade-closes.")
 rgRollHour  = input.int(18, "Session roll hour (ET)", minval=0, maxval=23, group=GROUP_RG, tooltip="CME-roll: hier reset de sessie-P&L, de piek en de halt.")
 rgUseWindow = input.bool(true, "Entries only inside the window", group=GROUP_RG)
 rgWinStart  = input.int(18, "Window start hour (ET)", minval=0, maxval=23, group=GROUP_RG)
@@ -1154,7 +1165,11 @@ if useRiskGate and strategy.closedtrades > rgClosedSeen
     else if rgTrailArmed and rgCum > rgPeak
         rgPeak    := rgCum
         rgExitLvl := rgPeak - rgBufferB
-bool rgDllHit   = useRiskGate and rgDLL > 0 and rgCum <= -rgDLL
+// De DLL mag WEL naar de open positie kijken (dat is het punt van een begrenzer); de trail
+// bewust NIET -- die blijft op trade-closes, zodat intra-trade ruis hem niet aanraakt.
+bool  rgDllOpen = rgDllBasis == "Realized + open (cuts the trade)"
+float rgLive    = rgCum + (rgDllOpen ? nz(strategy.openprofit) : 0.0)
+bool rgDllHit   = useRiskGate and rgDLL > 0 and rgLive <= -rgDLL
 bool rgTrailHit = useRiskGate and rgTrailArmed and not na(rgExitLvl) and rgCum <= rgExitLvl
 bool rgWindowOK = not (useRiskGate and rgUseWindow) or (_rgHour >= rgWinStart and _rgHour <= rgWinEnd)
 
@@ -1955,7 +1970,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 0, 4, useRiskGate ? "Risk-gate" : "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 4, not useRiskGate ? ((close > vwapVal ? "above" : "below") + (useVwapVeto ? " · veto" : "")) :
              dayHalted ? "HALT · " + haltReason :
-             (str.tostring(rgCum, "#") + (rgTrailArmed ? " · trail " + str.tostring(rgExitLvl, "#") : " · arm " + str.tostring(rgTriggerT, "#")) + " · DLL " + str.tostring(-rgDLL, "#")),
+             (str.tostring(rgLive, "#") + (rgDllOpen and strategy.position_size != 0 ? "*" : "") + (rgTrailArmed ? " · trail " + str.tostring(rgExitLvl, "#") : " · arm " + str.tostring(rgTriggerT, "#")) + " · DLL " + str.tostring(-rgDLL, "#")),
              text_color=dayHalted ? negTxt : rgTrailArmed ? C_GOLD : txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 5, "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 5, _gateOpen ? "OPEN" : "CLOSED", text_color=_gateOpen ? C_GOLD : negTxt, text_size=txtSize, text_halign=text.align_right)

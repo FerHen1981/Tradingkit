@@ -31,6 +31,7 @@ import logging
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .routed_journal import parse_routed_lines, pair_events
@@ -50,6 +51,7 @@ _API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the 
 # refuses every request instead of serving the fleet openly — see _authed().
 _ALLOW_OPEN = os.environ.get("VIEWER_ALLOW_OPEN", "").strip().lower() in ("1", "true", "yes")
 _STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" fills with a missed exit
+_PUBLIC_STATS_PATH = os.environ.get("PUBLIC_STATS_PATH", "/root/public-stats.json")
 _STARTED = time.monotonic()                                        # for the system-status uptime
 
 
@@ -294,6 +296,17 @@ class Handler(BaseHTTPRequestHandler):
                               {"Cache-Control": "public, max-age=86400"})
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain")
+        if path == "/public-stats.json":
+            # No auth: this IS the public artefact.  A missing file is a valid
+            # state (writer never ran), not a 5xx — return an empty scaffold so
+            # the site can render "no data yet" instead of a page error.
+            try:
+                data = Path(_PUBLIC_STATS_PATH).read_bytes()
+            except FileNotFoundError:
+                data = b'{"headline":{},"markets":[],"equity":[],"delay":"T+1"}'
+            return self._send(200, data, "application/json",
+                              {"Cache-Control": "public, max-age=300",
+                               "Access-Control-Allow-Origin": "*"})
         return self._send(404, b"not found", "text/plain")
 
     def do_POST(self):

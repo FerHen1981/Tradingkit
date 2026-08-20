@@ -9,6 +9,12 @@
 
 ---
 
+- 2026-08-20 · D-40 · **D-40 uitgegeven** (PMT account-blokkade moet de receiver tegenhouden) — als PMT's embed `blocked=true` toont (day cap / DLL), mag receiver het signaal niet forwarden, ongeacht TradingView-vinkje; live handhavingspunt van D-02 · raakt: middleware .NET receiver, live executie
+- 2026-08-20 · D-01 · **D-01 DONE** — Ferry heeft VIEWER_PASSWORD + VIEWER_API_TOKEN gezet en mex-viewer herstart; dashboard faalt nu gesloten · raakt: mex-viewer
+- 2026-08-20 · D-36 · **D-36 DONE** — NQ pilot-export met CVD-diepte opgeleverd door Ferry; deblokkeert D-10 · raakt: backtest D-10, D-18
+- 2026-08-20 · D-37 · **D-37 DONE** — live alert-payload opgeleverd; deblokkeert D-09; bijkomende bevinding leidt tot D-40 · raakt: backtest D-09
+- 2026-08-20 · D-35 · **GEDEELTELIJK OPGELOST: `167.233.215.60` toegevoegd aan PMT IP-pool** — de 9 `valid ip not found in pool`-fouten zijn hiermee opgelost; binary rebuild (`97c50cd`) en body-check (`Program.cs:236`) zijn afzonderlijke restpunten · raakt: live executie, D-35
+- 2026-08-20 · D-39 · **Eigenaar D-39 gewijzigd naar Backtest Setup** — Ferry autoriseert de uitbreiding van `data/propfirms.json` naar 300k–4M; Backtest Setup voert dit uit · raakt: backtest, data/propfirms.json
 - 2026-08-19 · D-39 · **D-39 uitgegeven** (eval-lens spectrum-zoektocht over prop-firm programma's) — `data/propfirms.json` bevat alleen t/m 250k; Ferry beslist wie 300k–4M toevoegt vóór Backtest Setup de sweep bouwt · raakt: backtest, data/propfirms.json
 - 2026-08-19 · D-38 · **D-38 uitgegeven** (portefeuille-selectie via decorrelatiemeting) — volledig binnen `backtest/**`, Ferry goedgekeurd 19-08, Backtest Setup bouwt · raakt: backtest
 - 2026-08-19 · D-14 · **D-14 DONE** — `funded.py` leest Apex-regels registry-first; gedragswijziging op 50k gedocumenteerd · raakt: backtest funded-lens

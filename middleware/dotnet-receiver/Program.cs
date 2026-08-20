@@ -170,9 +170,16 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
     // ------------------------------------------------------------ Discord ---
     if (obj is not null && (obj.ContainsKey("embeds") || obj.ContainsKey("content")))
     {
-        var url = Environment.GetEnvironmentVariable(discordEnv) ?? "";
         var title = obj["embeds"]?[0]?["title"]?.ToString() ?? "";
         var tier = CardTier.For(title);
+
+        // D-28/2 — per-kanaal routing. Funded, eval en per-firm kunnen elk hun eigen
+        // webhook krijgen; is er niets gezet, dan blijft MEX_DISCORD_WEBHOOK het doel en
+        // verandert er niets aan een bestaande installatie.
+        var account = NotifyRoute.AccountFrom(obj);
+        var routed = NotifyRoute.WebhookFor(account, "trade", "discord");
+        var url = routed.Length > 0 ? routed : (Environment.GetEnvironmentVariable(discordEnv) ?? "");
+
 
         // SIGNAL BLOCKED is hoogfrequent: tijdens een day halt wordt élk signaal
         // geblokkeerd, dus zonder poort loopt het kanaal vol met hetzelfde bericht.
@@ -190,14 +197,30 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             tier = 'B';   // eerste terminale blokkade van deze handelsdag: wél een kaart
         }
 
+        // D-28/6 — Telegram-pariteit. Ná de blocked-poort: wat Discord niet mag halen,
+        // mag Telegram ook niet halen. De payload draagt al {content, text}, dus dezelfde
+        // body volstaat voor beide kanten.
+        var telegram = NotifyRoute.WebhookFor(account, "trade", "telegram");
+        if (telegram.Length > 0 && telegram != url)
+            _ = Task.Run(() => ForwardJsonAsync(http, telegram, body, dryRun));
+
         // Tier A/B krijgt een kaart. Renderen duurt seconden, dus dat gebeurt in
         // de achtergrond: TradingView krijgt direct antwoord en probeert niet
         // opnieuw. Mislukt de render, dan gaat het originele bericht alsnog door.
         if (renderEnabled && tier != 'C')
         {
+            // D-28/5 — rate-limit. Bij een burst kost elke kaart een Chromium-render plus
+            // een post op een webhook die 30/min toestaat. Tier A gaat altijd door.
+            int held;
+            if (!PostRate.Allow(url, tier, out held))
+            {
+                await AppendAsync(storePath, "discord", body, $"card rate-limited (tier {tier})");
+                return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), rateLimited = true });
+            }
+            var note = held > 0 ? $" (+{held} gedempt)" : "";
             _ = Task.Run(() => CardRender.RenderAndPostAsync(http, url, body, title, storePath, dryRun));
-            await AppendAsync(storePath, "discord", body, $"card queued (tier {tier})");
-            return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), card = "queued" });
+            await AppendAsync(storePath, "discord", body, $"card queued (tier {tier}){note}");
+            return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), card = "queued", suppressedBefore = held });
         }
 
         var res = await ForwardJsonAsync(http, url, body, dryRun);
@@ -423,6 +446,118 @@ public static class CardTier
         foreach (var (needle, _) in Overrides)
             if (t.Contains(needle)) return true;
         return false;
+    }
+}
+
+// D-28 uitbreiding 2 + 6 — waar gaat deze notificatie heen.
+// Spiegelt `middleware/app/notify_routing.py` regel voor regel: dezelfde env-namen,
+// dezelfde prioriteit (per-firm > per-fase > globaal). Bewust GEEN tweede routing-tabel:
+// verandert de Python-kant, dan verandert deze mee — en andersom.
+// Niets gezet => lege string => de aanroeper valt terug op MEX_DISCORD_WEBHOOK, dus een
+// bestaande installatie zonder deze vars gedraagt zich exact als voorheen.
+public static class NotifyRoute
+{
+    // "PA..." = funded, "APEX.../AP..." = eval, rest = other (geen fase-kandidaat).
+    static string Phase(string account)
+    {
+        var a = (account ?? "").ToUpperInvariant().Trim();
+        if (a.StartsWith("PA", StringComparison.Ordinal)) return "FUNDED";
+        if (a.StartsWith("APEX", StringComparison.Ordinal) || a.StartsWith("AP", StringComparison.Ordinal)) return "EVAL";
+        return "OTHER";
+    }
+
+    static string Firm(string account)
+    {
+        var a = (account ?? "").ToUpperInvariant().Trim();
+        if (a.Contains("APEX")) return "APEX";
+        if (a.Contains("FTMO")) return "FTMO";
+        if (a.Contains("MFF") || a.Contains("MYFOREXFUNDS")) return "MFF";
+        return "";
+    }
+
+    static string Env(params string[] names)
+    {
+        foreach (var name in names)
+        {
+            var v = (Environment.GetEnvironmentVariable(name) ?? "").Trim();
+            if (v.Length > 0) return v;
+        }
+        return "";
+    }
+
+    /// kind: "trade" | "failure" · channel: "discord" | "telegram".
+    /// Lege string = niets geconfigureerd; de aanroeper beslist wat dan.
+    public static string WebhookFor(string account, string kind, string channel)
+    {
+        if (kind == "failure")
+            return channel == "telegram"
+                ? Env("TELEGRAM_ALERT_WEBHOOK", "ALERT_WEBHOOK")
+                : Env("ALERT_WEBHOOK");
+
+        var firm = Firm(account);
+        var phase = Phase(account);
+        var prefix = channel == "telegram" ? "TELEGRAM_NOTIFY_WEBHOOK" : "NOTIFY_WEBHOOK";
+
+        var names = new List<string>();
+        if (firm.Length > 0) names.Add(prefix + "_" + firm);
+        if (phase != "OTHER") names.Add(prefix + "_" + phase);
+        names.Add(prefix);
+        if (channel == "telegram") names.Add("NOTIFY_WEBHOOK");   // cross-channel fallback
+        return Env(names.ToArray());
+    }
+
+    /// Account uit een Pine-bericht. De kaarten dragen het als eerste pipe-deel van de
+    /// description ("PA016-0k-260813 | 4ct @ ..."); ontbreekt het, dan lege string en
+    /// valt de routing terug op de globale webhook.
+    public static string AccountFrom(JsonObject obj)
+    {
+        var desc = obj["embeds"]?[0]?["description"]?.ToString() ?? "";
+        var head = desc.Split('|')[0].Trim();
+        if (head.Length == 0 || head.Length > 40) return "";
+        foreach (var ch in head)
+            if (char.IsDigit(ch)) return head;      // een account-id draagt cijfers
+        return "";
+    }
+}
+
+// D-28 uitbreiding 5 — rate-limit op kaarten.
+// Elke kaart is een Chromium-render plus een webhook-post; Discord staat 30 berichten
+// per minuut per webhook toe. Bij een burst gaan de kaarten dicht en volgt één korte
+// samenvatting. Tier A gaat ALTIJD door: dat is het "er is iets heel erg mis"-signaal.
+public static class PostRate
+{
+    static readonly int MaxPerMinute = int.TryParse(
+        Environment.GetEnvironmentVariable("MEX_CARD_MAX_PER_MINUTE"), out var m) ? m : 12;
+
+    static readonly object Gate = new object();
+    static readonly Dictionary<string, List<DateTime>> Stamps = new Dictionary<string, List<DateTime>>();
+    static readonly Dictionary<string, int> Suppressed = new Dictionary<string, int>();
+
+    /// True = versturen. False = gedempt; `suppressed` telt hoeveel er sinds de laatste
+    /// doorgelaten post zijn ingeslikt, zodat de volgende melding dat kan noemen.
+    public static bool Allow(string webhook, char tier, out int suppressed)
+    {
+        suppressed = 0;
+        if (tier == 'A') return true;                       // nooit dempen
+        var key = webhook ?? "";
+        var now = DateTime.UtcNow;
+        lock (Gate)
+        {
+            List<DateTime> list;
+            if (!Stamps.TryGetValue(key, out list)) { list = new List<DateTime>(); Stamps[key] = list; }
+            list.RemoveAll(t => (now - t).TotalSeconds >= 60);
+            if (list.Count >= MaxPerMinute)
+            {
+                int n;
+                Suppressed.TryGetValue(key, out n);
+                Suppressed[key] = n + 1;
+                return false;
+            }
+            list.Add(now);
+            Suppressed.TryGetValue(key, out suppressed);
+            Suppressed.Remove(key);
+            return true;
+        }
     }
 }
 

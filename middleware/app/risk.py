@@ -1,3 +1,10 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+# The risk gate (day caps, DLL, halt) is being ported to the .NET receiver
+# (`Mex.Journal.Receiver`), which is the only process on the live executor path.
+# This module is currently only imported by main.py/router.py — both dead.
+# See docs/SPRINT.md D-02 (port) and D-05 (removal).
+# =============================================================================
 """Per-account risk overlay.
 
 What it enforces NOW (no PnL feed required):

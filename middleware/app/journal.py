@@ -1,3 +1,9 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+# This SQLite `events` table is only filled by main.py; that FastAPI app is
+# not deployed. The live journal is `/root/intent-store/routed_*.jsonl`,
+# written by the .NET receiver. See docs/SPRINT.md D-05 — removal after D-02.
+# =============================================================================
 """Append-only SQLite journal. Every inbound signal and every outbound attempt is
 recorded, so you can always answer "did that order actually go out, and what came back".
 """

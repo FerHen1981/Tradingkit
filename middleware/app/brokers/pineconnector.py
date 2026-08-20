@@ -1,3 +1,8 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+# No FTMO / MT5 accounts are wired in the live executor. This module is not
+# imported by anything that runs. See docs/SPRINT.md D-05.
+# =============================================================================
 """PineConnector (MT4/5) route — for FTMO / MetaTrader accounts.
 
 PineConnector consumes a comma command as the alert body and its licensed EA on MT4/5

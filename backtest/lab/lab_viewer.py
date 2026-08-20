@@ -1403,8 +1403,17 @@ function gqs(){return 'dataset='+encodeURIComponent($('#gDs').value)+'&n='+encod
   '&pao='+($('#gPao').checked?'1':'0')+'&seed='+encodeURIComponent($('#gSeed').value||'0')+
   '&setup_class='+encodeURIComponent($('#gThesis').value||'any')+'&regimes='+encodeURIComponent($('#gRegime').value||'');}
 $('#gRun').addEventListener('click',()=>{if(!$('#gDs').value){$('#gLog').style.display='block';$('#gLog').textContent='Upload a dataset first.';return}
-  postJob('/api/generate',gqs(),'#gLog','#gRun',()=>{load();loadCandidates();});});
-$('#gVerify').addEventListener('click',()=>postJob('/api/verify',gqs(),'#gLog','#gVerify',()=>{load();loadCandidates();}));
+  postJob('/api/generate',gqs(),'#gLog','#gRun',()=>{load();loadCandidates();syncVerifyWhat();});});
+$('#gVerify').addEventListener('click',()=>postJob('/api/verify',gqs(),'#vfLog','#gVerify',()=>{load();loadCandidates();}));
+// toon welke instellingen Verify gebruikt (ze staan in 2 · Create)
+function syncVerifyWhat(){
+  const el=$('#vfWhat');if(!el)return;
+  const ds=$('#gDs')&&$('#gDs').value||'—';
+  el.textContent='uses '+ds+' · '+($('#gTf')?$('#gTf').value:'?')+' · holdout '
+    +($('#gHold')?$('#gHold').value:'?')+'d · seed '+($('#gSeed')?$('#gSeed').value:'0')
+    +'  (set in 2 · Create)';
+}
+['#gDs','#gTf','#gHold','#gSeed'].forEach(sel=>{const e=$(sel);if(e)e.addEventListener('change',syncVerifyWhat)});
 async function loadCandidates(){
   const j=await (await fetch('/api/candidates')).json();
   $('#lbSrc').textContent=j.source?(j.source+(j.verified?' · OOS-verified':' · in-sample only (run Verify OOS)')):'no candidates yet';
@@ -1489,6 +1498,7 @@ showTab('create');
 loadWizard();loadGenDatasets();
 load();
 loadCandidates();
+setTimeout(syncVerifyWhat, 300);   // na loadWizard(), zodra de dropdowns gevuld zijn
 loadFleet();
 """
 
@@ -1509,7 +1519,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
 
-<div class=steps>Pipeline: <b>1 Data</b> → <b>2 Create</b> a strategy → <b>3 Test</b> it (classic · eval · funded) → <b>4 Runs</b> to review &amp; promote</div>
+<div class=steps>Pipeline: <b>1 Data</b> load it → <b>2 Create</b> discover candidates → <b>3 Test</b> verify · select · tune · match to an account → <b>4 Runs</b> review &amp; promote</div>
 <div class=tabs id=tabs>
   <button data-tab=data>1 · Data</button>
   <button data-tab=create class=on>2 · Create</button>
@@ -1558,7 +1568,6 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       </select></label>
       <label class=field><span class=fld>Candidates</span><input id=gN value=100 style="width:70px"></label>
       <button class=go id=gRun>Discover</button>
-      <button id=gVerify>Verify OOS</button>
       <button class=linkbtn id=gAdvToggle>+ advanced</button>
     </div>
     <div class=up id=gAdv style="margin-top:10px;display:none">
@@ -1585,30 +1594,48 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Run a backtest</b><span class=muted>test a strategy toward a goal</span></div>
-    <div class=hint>Pick a strategy and dataset, choose the goal (lens), and run. Classic = raw edge · Eval = prop-firm pass-rate · Funded = payout simulation.</div>
+      <b class=sub>3.1 · Candidates — what survived the OOS gate</b><span class=muted id=lbSrc>no candidates yet</span></div>
+    <div class=hint>The overfit gate: every candidate from <b>2 · Create</b> is re-run on the untouched
+      hold-out window. IS PF next to OOS PF — what does not hold here won the in-sample lottery.
+      Run this <b>before</b> 3.2, it also records the daily series the portfolio step needs.</div>
     <div class=up style="margin-top:12px">
-      <label class=field><span class=fld>Strategy</span><select id=wSpec style="min-width:200px"></select></label>
-      <label class=field><span class=fld>Dataset</span><select id=wDs style="min-width:150px"></select></label>
-      <label class=field><span class=fld>Timeframes</span><input id=wTf value="5m,15m" style="width:150px"></label>
-      <label class=field><span class=fld>Goal (lens)</span><select id=wLens>
-        <option value=research>Classic — edge</option>
-        <option value=funnel>Eval — funnel</option>
-        <option value=funded>Funded — payouts</option>
-      </select></label>
-      <label class=field><span class=fld>Window</span><select id=wWin>
-        <option value=recent3y>Recent 3y — fast</option>
-        <option value=full>Full history — validation (minutes)</option>
-      </select></label>
-      <label class=field><span class=fld>Micro twin</span><span style="padding:8px 0"><input type=checkbox id=wMicro> + MGC/MES…</span></label>
-      <button class=go id=wRun>Run</button>
+      <button class=go id=gVerify>Verify OOS</button>
+      <span class=muted id=vfWhat style="margin-left:4px"></span>
     </div>
-    <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
+    <pre id=vfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap"></pre>
+    <div style="overflow-x:auto"><table style="margin-top:8px"><thead><tr>
+      <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
+      <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
+    </tr></thead><tbody id=lbrows></tbody></table></div>
+  </div>
+
+</div>
+
+<!-- ===================== 4 · RUNS ===================== -->
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>3.2 · Portfolio — which survivors are actually different</b>
+      <span class=muted>a set, not a ranking</span></div>
+    <div class=hint>The OOS gate judges every candidate <i>on its own</i>, so survivors are often the
+      same trade under different names — and running clones on separate prop accounts means they
+      breach on the <b>same day</b>. This measures it: daily-return correlation (only positive
+      counts against you — losing on opposite days is a feature), shared <b>bad days</b>
+      (a day losing 20%+ of the drawdown buffer), and regime overlap. Every drop names the peer
+      it duplicates.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Include failed</span><span style="padding:8px 0"><input type=checkbox id=pfAll> also non-passing</span></label>
+      <label class=field><span class=fld>Max corr</span><input id=pfCorr value="0.35" style="width:70px"></label>
+      <label class=field><span class=fld>Max bad-day overlap</span><input id=pfBad value="0.40" style="width:70px"></label>
+      <label class=field><span class=fld>Max regime overlap</span><input id=pfReg value="0.90" style="width:70px"></label>
+      <button class=go id=pfRun>Select portfolio</button>
+    </div>
+    <div id=pfOut style="display:none;margin-top:14px"></div>
+    <pre id=pfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
+      <b class=sub>3.3 · Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
     <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. Every value is measured on <b>both</b> raw edge and funded survival — the outcome tells you what the strategy is suited for (funded · eval-only · nothing); you choose no goal up front. Tunes on the <b>last 3 years</b> (coarse gate, same design as the mill) — validate the winner on the full history with Run/Verify. On a 2-core box run this OR a backtest, not both at once.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
@@ -1639,7 +1666,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Eval spectrum — which account, how fast</b>
+      <b class=sub>3.4 · Eval spectrum — which account, how fast</b>
       <span class=muted>every firm sells a different bargain</span></div>
     <div class=hint>Runs a <b>fresh eval</b> every N sessions against <b>each program in the registry</b>
       and reports pass rate and median <b>trading days</b> to pass. The task differs sharply per program —
@@ -1661,38 +1688,27 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Portfolio — which survivors are actually different</b>
-      <span class=muted>a set, not a ranking</span></div>
-    <div class=hint>The OOS gate judges every candidate <i>on its own</i>, so survivors are often the
-      same trade under different names — and running clones on separate prop accounts means they
-      breach on the <b>same day</b>. This measures it: daily-return correlation (only positive
-      counts against you — losing on opposite days is a feature), shared <b>bad days</b>
-      (a day losing 20%+ of the drawdown buffer), and regime overlap. Every drop names the peer
-      it duplicates.</div>
+      <b class=sub>3.5 · Run a backtest — validate the pick</b><span class=muted>test a strategy toward a goal</span></div>
+    <div class=hint>Pick a strategy and dataset, choose the goal (lens), and run. Classic = raw edge · Eval = prop-firm pass-rate · Funded = payout simulation.</div>
     <div class=up style="margin-top:12px">
-      <label class=field><span class=fld>Include failed</span><span style="padding:8px 0"><input type=checkbox id=pfAll> also non-passing</span></label>
-      <label class=field><span class=fld>Max corr</span><input id=pfCorr value="0.35" style="width:70px"></label>
-      <label class=field><span class=fld>Max bad-day overlap</span><input id=pfBad value="0.40" style="width:70px"></label>
-      <label class=field><span class=fld>Max regime overlap</span><input id=pfReg value="0.90" style="width:70px"></label>
-      <button class=go id=pfRun>Select portfolio</button>
+      <label class=field><span class=fld>Strategy</span><select id=wSpec style="min-width:200px"></select></label>
+      <label class=field><span class=fld>Dataset</span><select id=wDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Timeframes</span><input id=wTf value="5m,15m" style="width:150px"></label>
+      <label class=field><span class=fld>Goal (lens)</span><select id=wLens>
+        <option value=research>Classic — edge</option>
+        <option value=funnel>Eval — funnel</option>
+        <option value=funded>Funded — payouts</option>
+      </select></label>
+      <label class=field><span class=fld>Window</span><select id=wWin>
+        <option value=recent3y>Recent 3y — fast</option>
+        <option value=full>Full history — validation (minutes)</option>
+      </select></label>
+      <label class=field><span class=fld>Micro twin</span><span style="padding:8px 0"><input type=checkbox id=wMicro> + MGC/MES…</span></label>
+      <button class=go id=wRun>Run</button>
     </div>
-    <div id=pfOut style="display:none;margin-top:14px"></div>
-    <pre id=pfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap"></pre>
+    <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
-  <div class=panel>
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Candidates</b><span class=muted id=lbSrc>no candidates yet</span></div>
-    <div class=hint>OOS-verified survivors from the factory — the overfit gate. IS PF vs OOS PF, retain and verdict.</div>
-    <div style="overflow-x:auto"><table style="margin-top:8px"><thead><tr>
-      <th style="text-align:left">Strategy</th><th style="text-align:left">Indicators</th>
-      <th>IS PF</th><th>OOS PF</th><th>Retain</th><th>OOS n</th><th>Verdict</th>
-    </tr></thead><tbody id=lbrows></tbody></table></div>
-  </div>
-
-</div>
-
-<!-- ===================== 4 · RUNS ===================== -->
 <div class=tab id=tab-runs>
 
   <div class=panel>

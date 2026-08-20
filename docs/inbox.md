@@ -13,7 +13,7 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 ## OPEN
 
 ### 8. Guard-kaarten dragen geen account — routing kan ze niet splitsen
-**Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: OPEN
+**Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: **BEANTWOORD** → **D-41** uitgegeven, staat op het bord onder 🟡 (owner Pine Dev)
 
 Bij het bouwen van de per-kanaal routing (D-28/2) bleek de helft van de kaarten geen
 account in de payload te hebben. Geverifieerd tegen de `f_sendDiscord`-aanroepen:
@@ -35,7 +35,7 @@ vandaar dit verzoek in plaats van een commit.
 (`^[A-Z]{2}\d{3}-`) — dezelfde die `render-signal.js` gebruikt. Wijkt `jrnlAcct`
 qua vorm af, dan valt de routing terug op globaal in plaats van fout te gaan.
 
-**Vraagt om een D-nummer.**
+~~Vraagt om een D-nummer.~~ → **D-41** (Scrum Master, 20-08). Goed afgebakend verzoek, correct protocol gevolgd: `pine/**` niet zelf aangeraakt.
 
 ### 1. Geverifieerde commissie per contract uit Cash_History
 **Backtest Setup → Middleware App** · 2026-08-19 · status: OPEN

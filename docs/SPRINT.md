@@ -82,6 +82,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 | **D-34** | review | Web | **Publieke claims in `web/**` afzwakken zolang D-18 open staat.** De sites beweren op zes plekken dat er een *gevalideerde edge* is; het OOS-venster daarachter is opgebrand. Betreft `public-stats.json`, `resultaten.astro`, de homepage, de pijlerpagina, `methodiek.mdx` en de prop-firm-gids. Begrippen die het *concept* validatie uitleggen blijven staan. Blocked-by-strekking van D-18, maar zelfstandig uit te voeren. |
 | **D-38** | todo | Backtest Setup | **Portefeuille-selectie: decorrelatie meten, niet aannemen.** De mill beoordeelt kandidaten op PF per stuk — dat vindt dezelfde edge N keer terug. Aanpak: dagelijkse P&L-reeks per OOS-overlever → correlatiematrix + gedeelde-verliesdagen + regime-complementariteit → hebzuchtige selectie die een **set** oplevert, niet een ranglijst. Grondstof (`trades.csv` per run) ligt er al. Ferry heeft bouw goedgekeurd 19-08. Volledig binnen `backtest/**`. _(ingediend door Backtest Setup 19-08 als inbox 6)_ |
 | **D-39** | todo | Backtest Setup | **Eval-lens: spectrum-zoektocht over prop-firm programma's.** Welke combinatie haalt *welk* prop-firm-account het snelst? De machinerie is er grotendeels (`--firm`/`--funnel`, 13 eval-programma's in de registry). Ontbreekt: sweep over programma's met pass-rate + *tijd-tot-pass in dagen*. **Aandachtspunt:** Ferry's bereik gaat tot 4M, de registry stopt bij 250k — ontbrekende programma's toevoegen raakt `data/propfirms.json` (gedeelde bron, §3). **Verzoek aan Ferry:** besluit wie de 300k–4M programma's toevoegt en welke bron daarvoor gezaghebbend is. Backtest Setup bouwt de sweep daarna. _(ingediend door Backtest Setup 19-08 als inbox 7)_ |
+| **D-41** | todo | Pine Dev | **Elf guard-kaarten dragen geen account, dus de per-kanaal routing kan ze niet splitsen.** Bij het bouwen van D-28/2 stelde Legacy vast dat de helft van de emitters geen account in de payload zet: **DAY HALT · LIMIT EXPIRED · AUTO FLAT · ACCOUNT HALT · SIGNAL BLOCKED · CONFIG · PAYOUT · CAP LOCK · PASSED · FAILED · PA THRESHOLD**. Waar het account zou staan, staat bij DAY HALT de haltReden en bij LIMIT EXPIRED een prijs. Gevolg: juist de account-niveau veiligheidskaarten landen op de globale `NOTIFY_WEBHOOK` en zijn niet naar een funded- of eval-kanaal te sturen — een halt op funded ziet er hetzelfde uit als een halt op eval. **Verzoek:** `jrnlAcct + " | "` vooraan in de description van die elf emitters (of de eval-tail eraan hangen); één regel per emitter. **Let op:** de receiver herkent alleen de vorm `PA016-0k-260813` (`^[A-Z]{2}\d{3}-`), dezelfde die `render-signal.js` gebruikt — wijkt `jrnlAcct` qua vorm af, dan valt de routing stil terug op globaal in plaats van te falen. Maakt D-28/2 pas volledig werkend. _(ingediend door Legacy 20-08 als inbox 8)_ |
 
 ## ⚪ Later
 
@@ -110,7 +111,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | Branch | Beoordeeld t/m | Datum |
 |---|---|---|
-| `claude/middleware-setup-guide-afhvtk` | `d51d5e3` | 2026-08-20 |
+| `claude/middleware-setup-guide-afhvtk` | `c380b29` | 2026-08-20 |
 | `claude/legacy-accounts-scripts-analysis-ui0j6m` | `2f05103` | 2026-08-19 |
 | `claude/discord-notify-hnydfa` | `5a5f49a` | 2026-08-19 |
 | `claude/analyses-data-chat-org-3tii8j` | `f6e9af0` | 2026-08-19 |

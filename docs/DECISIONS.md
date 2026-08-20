@@ -9,6 +9,7 @@
 
 ---
 
+- 2026-08-19 · D-05 · **Akkoord Ferry op stap 1** — de zes dead-path bestanden dragen nu een DEAD PATH-header (`19a47d2`); stap 2 (fysiek verwijderen) wacht op D-02 groen · raakt: middleware/app
 - 2026-08-19 · D-05 · **Python fan-out wordt afgevoerd** (besluit Ferry 19-08) — nu D-02 naar .NET gaat en D-04 bevestigt dat notices via de .NET-receiver lopen, is er geen levend pad meer voor `main.py`/`router.py`/`brokers/**`/`risk.py`/`journal.py`; die zijn nu met een DEAD PATH-header gemarkeerd zodat niemand er per ongeluk aan hangt en worden fysiek verwijderd na D-02 groen · raakt: middleware/app, D-02
 - 2026-08-19 · D-02 · **Risk-gate wordt geïmplementeerd in de .NET-receiver, niet in Python** — `risk.py` berekent day caps/DLL/halt maar hangt aan `main.py`/`router.py` die niet draaien; de gate hoort op het live executiepad (`Mex.Journal.Receiver`). Dependency verschuift van D-05 naar D-06 (broncode in git). Python `risk.py` vervalt als levend pad · raakt: D-05, D-06, live executie
 - 2026-08-19 · D-39 · **D-39 uitgegeven** (eval-lens spectrum-zoektocht over prop-firm programma's) — `data/propfirms.json` bevat alleen t/m 250k; Ferry beslist wie 300k–4M toevoegt vóór Backtest Setup de sweep bouwt · raakt: backtest, data/propfirms.json

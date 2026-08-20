@@ -40,6 +40,11 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
+// v7.9.5: drawdown-model, trailing drawdown en PA daily loss komen uit de registry zodra een
+//         Firm program actief is. f_firmRules leverde _fkDD/_fkMax/_fkDLL al aan maar NIEMAND
+//         gebruikte ze: ddModel stond als losse input op "EOD", dus een intraday-programma werd
+//         als EOD gerekend en zag een breach niet aankomen. Schakelaar "Firm program fills the
+//         account rules" (default aan); de inputs blijven de expliciete override voor research.
 // v7.9.4: DLL wordt een VERLIESBEGRENZER. Nieuwe schakelaar "DLL basis": op "Realized + open"
 //         sluit de positie zodra gerealiseerd + open <= -DLL, midden in de trade, in plaats van
 //         het verlies vol te laten lopen en pas daarna te halten. Zelfde aantal gestopte dagen,
@@ -76,7 +81,7 @@
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.9.4"
+var string currentVersion = "v7.9.5"
 strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -265,6 +270,8 @@ int    lastPayoutTime = timestamp("2024-01-01T00:00:00")
 // === 0 · FIRM PRESET — auto-fills account rules from data/propfirms.json ======
 // Futures (trailing-DD) firms only. Forex/static firms run via the Python
 // backtester until the static-DD Pine engine is added. Manual inputs stay as override.
+useFirmRules  = input.bool(true, "Firm program fills the account rules", group=GROUP_PHASE,
+     tooltip="AAN: drawdown-model, trailing drawdown en de PA daily loss limit komen uit data/propfirms.json voor het gekozen Firm program — één bron, net als de commissie. Een Intraday-programma wordt dan ook echt intraday gerekend. UIT: de handmatige inputs hieronder gelden, voor tests en research.")
 firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Which prop-firm program this account runs. Used only when the MEX preset in group 0 is set to Manual — otherwise the preset decides, so one choice covers the account. Drives the consistency rule, the minimum payout and the payout ladder. Drawdown model, trailing drawdown and daily loss stay manual below, because those deviate per account. Auto-generated from data/propfirms.json; trailing-drawdown futures programs only.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
@@ -615,6 +622,12 @@ bool polInstrOK = not polOn or polFam == "ANY" or polRoot == polFam
 // daily loss stay manual, because those genuinely differ per account (this one runs a $473 DLL).
 string firmKeyEff = polOn and polFirmKey != "" ? polFirmKey : firmPreset
 [_fkDD, _fkMax, _fkGoal, _fkDLL, fkCons] = f_firmRules(firmKeyEff)
+// Drawdown-model, trailing drawdown en daily loss zijn FIRMAREGELS: bij een actief programma
+// komen ze uit de registry, niet uit een tweede handmatig getal. De inputs blijven de expliciete
+// override voor research. Zonder dit rekende een Intraday-programma alsnog als EOD.
+string ddModelEff   = useFirmRules ? _fkDD  : ddModel
+float  acctTrailEff = useFirmRules ? _fkMax : acctTrailDD
+float  acctDllEff   = useFirmRules ? _fkDLL : acctDLL
 float consistencyPct = fkCons
 float minPayout      = f_firmMinPayout(firmKeyEff)
 // Two day counters, and they are NOT the same number: the first counts days with FILLS, the
@@ -852,8 +865,8 @@ evalEndTime     = input.time(timestamp("01 Jan 2027 00:00 -0400"), "End date/tim
      tooltip="Only active when 'Use end date' is on. Set equal to your backtester period end date for an exact match.", display=display.none)
 float  evalStartBal   = 0.0
 evalProfitTgt   = acctGoal
-evalTrailDD     = acctTrailDD
-bool   evalTrailEod   = ddModel == "EOD"
+evalTrailDD     = acctTrailEff
+bool   evalTrailEod   = ddModelEff == "EOD"
 
 // === v5.4: APEX LEGACY 30% MAE-GUARD =========================================
 var string GROUP_MAE = GROUP_PHASE
@@ -1116,7 +1129,7 @@ if isNewTradingDay
             bestDaySince := math.max(bestDaySince, _yday)
             if _yday >= minQualDayUSD
                 qualDays += 1
-    if phaseOn and ddModel == "EOD"
+    if phaseOn and ddModelEff == "EOD"
         acctHwm := math.max(nz(acctHwm, math.max(acctPnlOffset, acctHwmOffset)), acctPnlOffset + strategy.netprofit - paResetPnLPrev)
     riskBaseNetProfit := strategy.netprofit
     dayStartClosed := strategy.closedtrades
@@ -1134,7 +1147,7 @@ lossHit     = enableDailyLossLimit and lossBasis <= -dailyLossLimit
 drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
-dllHit      = (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+dllHit      = (isPA or (isEval and ddModelEff == "EOD")) and runningPnL <= -acctDllEff
 bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Trail + cap") and not (polOn and not na(polCapUSD))
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
 dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dayTrailUSD
@@ -1184,21 +1197,21 @@ float acctRealized = acctPnlOffset + strategy.netprofit - paResetPnLPrev
 var float maeSodProfit = na
 if isNewTradingDay or na(maeSodProfit)
     maeSodProfit := acctPnlOffset + strategy.netprofit
-float maeSafetyNet = acctTrailDD + 100
+float maeSafetyNet = acctTrailEff + 100
 float maePct = maeSodProfit >= 2 * maeSafetyNet ? maeGrownPct : maeBasePct
-float maeAllowUSD = (maePct / 100.0) * math.max(nz(maeSodProfit, 0), acctTrailDD) * (1 - maeMarginPct / 100.0)
+float maeAllowUSD = (maePct / 100.0) * math.max(nz(maeSodProfit, 0), acctTrailEff) * (1 - maeMarginPct / 100.0)
 if phaseOn
-    acctHwm := na(acctHwm) ? math.max(acctPnlOffset, acctHwmOffset) : ddModel == "Intraday" ? math.max(acctHwm, acctPnL) : acctHwm
-bool  acctLocked = phaseOn and acctHwm >= acctTrailDD + 100
-float acctFloor  = not phaseOn ? na : acctLocked ? 100.0 : acctHwm - acctTrailDD
+    acctHwm := na(acctHwm) ? math.max(acctPnlOffset, acctHwmOffset) : ddModelEff == "Intraday" ? math.max(acctHwm, acctPnL) : acctHwm
+bool  acctLocked = phaseOn and acctHwm >= acctTrailEff + 100
+float acctFloor  = not phaseOn ? na : acctLocked ? 100.0 : acctHwm - acctTrailEff
 float ddRoom     = phaseOn ? acctPnL - acctFloor : na
 bool  consistencyOK = consistencyPct <= 0 or (profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0)    // <= 0 = no consistency rule (evals)
 f_ladderCap(_n) =>
     f_firmLadder(firmKeyEff, _n)
 int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
 float curLadderCap = f_ladderCap(effPayoutNr)
-bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and tradedDays >= fkMinDays and qualDays >= fkProfitDays and consistencyOK
-float withdrawable = acctRealized - (acctTrailDD + 100)
+bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailEff + 100 + payoutBuffer + minPayout and tradedDays >= fkMinDays and qualDays >= fkProfitDays and consistencyOK
+float withdrawable = acctRealized - (acctTrailEff + 100)
 pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap
 pmtBlockReason := "PAYOUT CAP REACHED — request payout, then raise payout number"
 bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
@@ -1484,7 +1497,7 @@ if payoutReady and not payoutDiscordSent
 var bool capLocked = false
 if lockOnCap and isPA and useWaitForCap and not capLocked and strategy.position_size != 0
     float _lockBufC = lockBufTicks * syminfo.mintick * syminfo.pointvalue * math.abs(strategy.position_size)
-    if (acctRealized + strategy.openprofit) - (acctTrailDD + 100) >= curLadderCap + _lockBufC
+    if (acctRealized + strategy.openprofit) - (acctTrailEff + 100) >= curLadderCap + _lockBufC
         capLocked := true
         exitReasonNext := "CAP-LOCK"
         strategy.close_all(comment="CAP-LOCK")
@@ -1972,6 +1985,10 @@ if showDashboard and barstate.islast
              dayHalted ? "HALT · " + haltReason :
              (str.tostring(rgLive, "#") + (rgDllOpen and strategy.position_size != 0 ? "*" : "") + (rgTrailArmed ? " · trail " + str.tostring(rgExitLvl, "#") : " · arm " + str.tostring(rgTriggerT, "#")) + " · DLL " + str.tostring(-rgDLL, "#")),
              text_color=dayHalted ? negTxt : rgTrailArmed ? C_GOLD : txtColor, text_size=txtSize, text_halign=text.align_right)
+        table.cell(dash, 0, 3, phaseOn ? "DD · " + ddModelEff : "CVD streak", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, 3, not phaseOn ? (useCVDFilter ? str.tostring(cvdTrendCount) : "uit") :
+             ("$" + str.tostring(acctTrailEff, "#") + (useFirmRules ? " · registry" : " · manual") + (acctLocked ? " · 🔓" : "")),
+             text_color=useFirmRules ? txtColor : C_GOLD, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 5, "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 5, _gateOpen ? "OPEN" : "CLOSED", text_color=_gateOpen ? C_GOLD : negTxt, text_size=txtSize, text_halign=text.align_right)
         string _srcTxt = polOn ? polPreset : "Manual"
@@ -2007,7 +2024,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 3, 4, _gateTxt, text_color=txtColor, text_size=txtSize)
         if phaseOn
             table.cell(dash, 0, 5, accountPhase, text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-            table.cell(dash, 1, 5, isPA and paBacktestMode ? "🧪 BT: " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×breach · $" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#"), text_color=acctHalted ? hdrTxt : ddRoom < acctTrailDD*0.25 ? vNegTxt : txtColor, text_size=txtSize)
+            table.cell(dash, 1, 5, isPA and paBacktestMode ? "🧪 BT: " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×breach · $" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#"), text_color=acctHalted ? hdrTxt : ddRoom < acctTrailEff*0.25 ? vNegTxt : txtColor, text_size=txtSize)
             table.cell(dash, 2, 5, acctLocked ? "🔓 Locked (+$100)" : "Floor " + str.tostring(acctFloor, "#"), text_color=txtColor, text_size=txtSize)
             string _payTxt = isEval ? "Goal $" + str.tostring(math.max(acctGoal - acctRealized, 0), "#") + " to go" : payoutReady ? "💰 P" + str.tostring(effPayoutNr) + " CAP $" + str.tostring(curLadderCap, "#") + " ✓" : payoutEligible and useWaitForCap ? "⏳ P" + str.tostring(effPayoutNr) + " $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#") : "Days " + str.tostring(tradedDays) + "/" + str.tostring(fkMinDays) + " · Qual " + str.tostring(qualDays) + "/" + str.tostring(fkProfitDays) + " · Cons " + (profitSince > 0 ? str.tostring(100*bestDaySince/profitSince, "#") + "%" : "—")
             table.cell(dash, 3, 5, _payTxt,
@@ -2056,7 +2073,7 @@ if showDashboard and barstate.islast
                  "\n" + (isEval ? "Goal $" + str.tostring(math.max(acctGoal - acctRealized, 0), "#") + " to go" :
                  payoutReady ? "💰 P" + str.tostring(effPayoutNr) + " CAP $" + str.tostring(curLadderCap, "#") + " ✓" : payoutEligible and useWaitForCap ? "⏳ $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#") : "Days " + str.tostring(tradedDays) + "/" + str.tostring(fkMinDays) + " · Qual " + str.tostring(qualDays) + "/" + str.tostring(fkProfitDays) + " · Cons " + (profitSince > 0 ? str.tostring(100 * bestDaySince / profitSince, "#") + "%" : "—"))
             table.cell(dash, 0, 4, accountPhase, text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-            table.cell(dash, 1, 4, cPhase, text_color=payoutReady ? color.lime : acctHalted ? hdrTxt : ddRoom < acctTrailDD * 0.25 ? vNegTxt : txtColor, text_size=txtSize, text_halign=text.align_left)
+            table.cell(dash, 1, 4, cPhase, text_color=payoutReady ? color.lime : acctHalted ? hdrTxt : ddRoom < acctTrailEff * 0.25 ? vNegTxt : txtColor, text_size=txtSize, text_halign=text.align_left)
         string cEvalLn = not evalTrack ? "Eval —" :
              not evalStarted ? "⏳ start " + str.tostring(dayofmonth(evalStartTime, activeTz)) + "-" + str.tostring(month(evalStartTime, activeTz)) :
              evalPassed ? "🏆 PASSED" : evalFailed ? "💀 FAILED" :

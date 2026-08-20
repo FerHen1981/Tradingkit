@@ -506,17 +506,51 @@ public static class NotifyRoute
         return Env(names.ToArray());
     }
 
-    /// Account uit een Pine-bericht. De kaarten dragen het als eerste pipe-deel van de
-    /// description ("PA016-0k-260813 | 4ct @ ..."); ontbreekt het, dan lege string en
-    /// valt de routing terug op de globale webhook.
+    /// Account uit een Pine-bericht — zelfde vorm die render-signal.js herkent
+    /// (`^[A-Z]{2}\d{3}-`, bv. "PA016-0k-260813"), zodat er één conventie is.
+    ///
+    /// Let op: lang niet elke kaart draagt een account. FILL, EXIT, DERISK, PA DERISK en
+    /// ACCOUNT STARTED zetten `jrnlAcct` vooraan; entries en RISK OFF dragen het in de
+    /// eval-tail ("📍 PA016-0k-260813 | →🎯 …") en dan alleen als de eval loopt. DAY HALT,
+    /// LIMIT EXPIRED, AUTO FLAT, ACCOUNT HALT, SIGNAL BLOCKED, CONFIG, PAYOUT en
+    /// PASSED/FAILED dragen er géén — daar staat een reden of een prijs waar het account
+    /// zou staan. Zonder herkend account: lege string, en de routing valt terug op de
+    /// globale webhook. Nooit een zin als account behandelen: "PA Daily Loss Limit" uit
+    /// een DAY HALT begint met "PA" en zou anders als funded gelezen worden.
     public static string AccountFrom(JsonObject obj)
     {
         var desc = obj["embeds"]?[0]?["description"]?.ToString() ?? "";
-        var head = desc.Split('|')[0].Trim();
-        if (head.Length == 0 || head.Length > 40) return "";
-        foreach (var ch in head)
-            if (char.IsDigit(ch)) return head;      // een account-id draagt cijfers
+        // De eval-tail komt als LETTERLIJKE \n binnen (Pine schrijft "\\n"); render-signal.js
+        // normaliseert dat ook voor het parsen. Zonder deze stap plakt het account aan de
+        // vorige kolom en wordt het niet herkend.
+        desc = desc.Replace("\\n", "\n");
+        foreach (var part in desc.Split('|', '\n'))
+        {
+            var s = Trimmed(part);
+            if (LooksLikeAccount(s)) return s;
+        }
         return "";
+    }
+
+    // Voorloop-emoji en spaties eraf; de eval-tail begint met "📍 ".
+    static string Trimmed(string part)
+    {
+        var s = (part ?? "").Trim();
+        var i = 0;
+        while (i < s.Length && !char.IsLetterOrDigit(s[i])) i++;
+        s = s.Substring(i).Trim();
+        var end = s.Length;
+        while (end > 0 && char.IsWhiteSpace(s[end - 1])) end--;
+        return s.Substring(0, end);
+    }
+
+    // Twee letters, drie cijfers, koppelteken — "PA016-0k-260813".
+    static bool LooksLikeAccount(string s)
+    {
+        if (s.Length < 6 || s.Length > 40) return false;
+        if (!char.IsLetter(s[0]) || !char.IsLetter(s[1])) return false;
+        if (!char.IsDigit(s[2]) || !char.IsDigit(s[3]) || !char.IsDigit(s[4])) return false;
+        return s[5] == '-';
     }
 }
 

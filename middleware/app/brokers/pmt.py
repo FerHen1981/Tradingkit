@@ -1,3 +1,9 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+# The live PMT → Tradovate call is made by the .NET receiver
+# (`Mex.Journal.Receiver`). This module is only imported by router.py, which
+# never runs in production. See docs/SPRINT.md D-05.
+# =============================================================================
 """PickMyTrade (PMT) → Tradovate route.
 
 Builds the exact PMT JSON payload the Pine strategy proved out (dollar SL/TP, the

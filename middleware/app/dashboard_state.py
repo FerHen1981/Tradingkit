@@ -67,8 +67,9 @@ _HEALTH_RANK = {"Healthy": 5, "Watch": 4, "Warning": 3, "Critical": 2, "Breached
 _TICK = {"GC": 0.1, "MGC": 0.1, "ES": 0.25, "MES": 0.25, "NQ": 0.25, "MNQ": 0.25,
          "YM": 1.0, "MYM": 1.0, "RTY": 0.1, "M2K": 0.1, "CL": 0.01, "MCL": 0.01}
 
-WINDOWS = ("day", "week", "month", "quarter", "rolling", "all")
-_WINDOW_LABEL = {"day": "Last trading day", "week": "This week", "month": "This month",
+WINDOWS = ("day", "yesterday", "week", "month", "quarter", "rolling", "all")
+_WINDOW_LABEL = {"day": "Current session", "yesterday": "Previous session",
+                 "week": "This week", "month": "This month",
                  "quarter": "This quarter", "rolling": "Rolling 30d", "all": "All time"}
 
 
@@ -485,12 +486,18 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
 
 
 def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
-    today = dt.datetime.now(_ET).date()
+    today = _session_date(dt.datetime.now(dt.timezone.utc))   # CME session date (18:00 ET roll)
     start = _window_start(window, today)
     if window == "day":
-        # the LAST trading day that actually has trades (not necessarily today)
-        last = max((t["close"] for t in trades), default=today)
-        rows = [t for t in trades if t["close"] == last]
+        # Current session day only. After the 18:00 ET roll, "today" is the next calendar day
+        # and this correctly returns an empty set until the new session's first trade.
+        rows = [t for t in trades if t["close"] == today]
+    elif window == "yesterday":
+        # The most recent COMPLETED session that has trades (so on Monday morning it shows
+        # Friday, not an empty Saturday/Sunday).
+        prev_days = sorted(set(t["close"] for t in trades if t["close"] < today), reverse=True)
+        target = prev_days[0] if prev_days else today - dt.timedelta(days=1)
+        rows = [t for t in trades if t["close"] == target]
     elif start is not None:
         rows = [t for t in trades if t["close"] >= start]
     else:

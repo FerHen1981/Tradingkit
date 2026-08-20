@@ -1,3 +1,9 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+# The live fan-out runs in the .NET receiver (`Mex.Journal.Receiver`) on the VPS;
+# this router is not wired to any HTTP entry point that runs in production.
+# See docs/SPRINT.md D-05 — removal scheduled after D-02.
+# =============================================================================
 """Fan-out: one strategy signal -> every subscribed account, via that account's broker.
 
 Phase 1 wires the PMT (Tradovate) route. Adding PineConnector later is a new branch

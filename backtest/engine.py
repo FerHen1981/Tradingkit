@@ -58,6 +58,7 @@ class Result:
     bars: int = 0
     first_time: Optional[pd.Timestamp] = None
     last_time: Optional[pd.Timestamp] = None
+    resolve_bar: int = -1                   # bar where the account halted (pass/breach), -1 = never
     veto_counts: Optional[dict] = None      # phase-2 signal-veto attribution (diag mode)
     diagnosis: Optional[dict] = None        # phase-1/2 data-derived explanation of the run
 
@@ -318,6 +319,7 @@ class Engine:
         res.bars = end - self.start_bar
         res.first_time = pd.Timestamp(self.time[self.start_bar])
         res.last_time = pd.Timestamp(self.time[min(end - 1, self.n - 1)])
+        res.resolve_bar = i if self.acct_halted else -1
         res.veto_counts = self.veto_counts
         return res
 

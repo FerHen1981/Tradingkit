@@ -1,3 +1,13 @@
+# =============================================================================
+# DEAD PATH — do not add features here.
+#
+# The live executor is the .NET receiver (`Mex.Journal.Receiver`) on the VPS.
+# This FastAPI app is not deployed and does not process any live signals.
+# See docs/SPRINT.md D-05: this module + router.py + brokers/** + risk.py +
+# journal.py will be removed once D-02 (risk-gate in .NET) is green.
+# Verify with `systemctl cat mex-receiver` before assuming a change here
+# reaches production — it does not.
+# =============================================================================
 """MEX trade middleware — the switchboard between TradingView and your broker accounts.
 
 Endpoints

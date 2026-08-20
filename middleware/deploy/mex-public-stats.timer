@@ -1,0 +1,15 @@
+# Herbouw public-stats.json ieder uur.
+#
+# T+1 is de belofte aan de publieke lezer — zolang we die halen mag deze rustig
+# elk uur draaien. Fires 5 min voorbij het uur zodat een reconciliatie die op
+# de klok start (17:30 ET) niet dezelfde CPU probeert te pakken.
+[Unit]
+Description=Herbouw MEX public-stats.json elk uur
+
+[Timer]
+OnCalendar=*-*-* *:05:00
+Persistent=true
+Unit=mex-public-stats.service
+
+[Install]
+WantedBy=timers.target

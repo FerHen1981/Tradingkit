@@ -22,6 +22,7 @@ Env:
 from __future__ import annotations
 
 import base64
+import datetime as dt
 import glob
 import hashlib
 import hmac
@@ -30,10 +31,12 @@ import logging
 import os
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .routed_journal import parse_routed_lines, pair_events
 from .journal_sync import FRAMEWORK, _ASSET, _phase, _sym_root
+from .fills_pairing import session_date
 from .dashboard_state import command_state
 
 log = logging.getLogger("mex.viewer")
@@ -48,6 +51,7 @@ _API_TOKEN = os.environ.get("VIEWER_API_TOKEN", "")   # read-only token for the 
 # refuses every request instead of serving the fleet openly — see _authed().
 _ALLOW_OPEN = os.environ.get("VIEWER_ALLOW_OPEN", "").strip().lower() in ("1", "true", "yes")
 _STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" fills with a missed exit
+_PUBLIC_STATS_PATH = os.environ.get("PUBLIC_STATS_PATH", "/root/public-stats.json")
 _STARTED = time.monotonic()                                        # for the system-status uptime
 
 
@@ -75,7 +79,11 @@ def build_state() -> dict:
     trades = pair_events(events, amap)
 
     as_of = max((e.ts for e in events), default=None)
-    today = as_of.date() if as_of else None
+    # "Today" = the CME session that is live RIGHT NOW (wall clock), not the session of the
+    # last logged event.  The CME session rolls at 18:00 ET: after the roll the viewer must
+    # show a clean slate even if no new events have arrived yet.
+    now = dt.datetime.now(dt.timezone.utc)
+    today = session_date(now)
 
     # last exit per account: any later close means an earlier still-"open" fill is a phantom
     # (its exit was missed/mismatched in the log). These strategies hold one position per
@@ -115,7 +123,7 @@ def build_state() -> dict:
                 "sl": t.sl, "tp": t.tp, "signal_price": t.signal_price,
                 "framework": _framework(t.account, product),
             })
-        elif today and t.exit_ts and t.exit_ts.date() == today:
+        elif today and t.exit_ts and session_date(t.exit_ts) == today:
             pnl = t.pnl or 0.0
             a["realized_today"] += pnl
             a["wins" if pnl >= 0 else "losses"] += 1
@@ -240,10 +248,15 @@ class Handler(BaseHTTPRequestHandler):
                     f = command_state("all", stage)["fleet"]      # realized = ledger (matches dashboard)
                     wkf = command_state("week", stage)["fleet"]
                     dyf = command_state("day", stage)["fleet"]
+                    yf = command_state("yesterday", stage)["fleet"]
                     return {
                         "realized": round(f.get("realized_net") or 0, 2),
                         "week": round(wkf.get("window_net") or 0, 2),
                         "today": round(dyf.get("window_net") or 0, 2),
+                        "yesterday": round(yf.get("window_net") or 0, 2),
+                        "yesterdayTrades": yf.get("trades") or 0,
+                        "yesterdayWinrate": yf.get("win_rate") or 0,
+                        "yesterdayPf": yf.get("pf") or 0,
                         "trades": f.get("trades") or 0,
                         "winrate": f.get("win_rate") or 0,
                         "pf": f.get("pf") or 0,
@@ -254,6 +267,7 @@ class Handler(BaseHTTPRequestHandler):
                 allc = command_state("all")
                 wkall = command_state("week")["fleet"]
                 dyall = command_state("day")["fleet"]
+                yall = command_state("yesterday")["fleet"]
                 spark = [c["cum"] for c in allc["equity"]["curve"]][-12:] or [0]
                 widget = {
                     "goal": float(os.environ.get("WIDGET_GOAL", "0")),
@@ -263,6 +277,10 @@ class Handler(BaseHTTPRequestHandler):
                     "week": {"net": round(wkall.get("window_net") or 0, 2), "trades": wkall.get("trades") or 0,
                              "winrate": wkall.get("win_rate") or 0, "pf": wkall.get("pf") or 0},
                     "today": round(dyall.get("window_net") or 0, 2),
+                    "yesterday": {"net": round(yall.get("window_net") or 0, 2),
+                                  "trades": yall.get("trades") or 0,
+                                  "winrate": yall.get("win_rate") or 0,
+                                  "pf": yall.get("pf") or 0},
                 }
                 body = json.dumps(widget).encode()
             except Exception as exc:
@@ -278,6 +296,17 @@ class Handler(BaseHTTPRequestHandler):
                               {"Cache-Control": "public, max-age=86400"})
         if path == "/healthz":
             return self._send(200, b"ok", "text/plain")
+        if path == "/public-stats.json":
+            # No auth: this IS the public artefact.  A missing file is a valid
+            # state (writer never ran), not a 5xx — return an empty scaffold so
+            # the site can render "no data yet" instead of a page error.
+            try:
+                data = Path(_PUBLIC_STATS_PATH).read_bytes()
+            except FileNotFoundError:
+                data = b'{"headline":{},"markets":[],"equity":[],"delay":"T+1"}'
+            return self._send(200, data, "application/json",
+                              {"Cache-Control": "public, max-age=300",
+                               "Access-Control-Allow-Origin": "*"})
         return self._send(404, b"not found", "text/plain")
 
     def do_POST(self):

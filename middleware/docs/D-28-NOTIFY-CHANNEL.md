@@ -64,6 +64,9 @@ NOTIFY_WEBHOOK_APEX=https://discord.com/api/webhooks/…apex…
 # Failures — apart kanaal (bestaat al)
 ALERT_WEBHOOK=https://discord.com/api/webhooks/…errors…
 
+# Rate-limit op kaarten (nieuw). Discord staat 30/min/webhook toe.
+# MEX_CARD_MAX_PER_MINUTE=12
+
 # Telegram-pariteit (nieuw). Wordt gebruikt als je Telegram-kanaal aan wilt zetten;
 # ontbrekend = val terug op de Discord-vars (want _post stuurt {content, text}).
 # TELEGRAM_NOTIFY_WEBHOOK=…
@@ -71,7 +74,35 @@ ALERT_WEBHOOK=https://discord.com/api/webhooks/…errors…
 # TELEGRAM_ALERT_WEBHOOK=…
 ```
 
-## Wat er voor Legacy resteert (.NET-kant)
+## Legacy-deel opgeleverd (20-08, `c8216ac` op de legacy-branch)
+
+Alle drie de hooks zitten in `middleware/dotnet-receiver/Program.cs`:
+
+| # | Klasse | Gedrag |
+|---|---|---|
+| 2 | `NotifyRoute` | `WebhookFor(account, kind, channel)` — spiegelt `app/notify_routing.py` regel voor regel. Account komt uit het eerste pipe-deel van de embed-description. Niets gezet ⇒ lege string ⇒ `MEX_DISCORD_WEBHOOK` blijft het doel |
+| 5 | `PostRate` | Teller per webhook per minuut (`MEX_CARD_MAX_PER_MINUTE`, default 12). Boven de grens: geen kaart, wel `card rate-limited` in het journaal; de eerstvolgende kaart meldt `(+N gedempt)`. **Tier A gaat altijd door** |
+| 6 | — | Telegram krijgt dezelfde body zodra `TELEGRAM_NOTIFY_WEBHOOK*` gezet is. Bewust **ná** de blocked-poort: wat Discord niet mag halen, mag Telegram ook niet halen |
+
+⚠️ **Niet gecompileerd.** Geen dotnet in de sessie, en de receiver is niet uit git te
+bouwen (D-06). `dotnet build src/Mex.Journal.Receiver -c Release` op de VPS is de eerste
+echte controle.
+
+### De twee kanten synchroon houden
+
+`NotifyRoute` en `notify_routing.py` moeten dezelfde kandidaten in dezelfde volgorde
+opleveren. Verandert er één, verander dan beide:
+
+```
+trade   · discord   NOTIFY_WEBHOOK_<FIRM> → NOTIFY_WEBHOOK_<PHASE> → NOTIFY_WEBHOOK
+trade   · telegram  TELEGRAM_NOTIFY_WEBHOOK_<FIRM> → …_<PHASE> → TELEGRAM_NOTIFY_WEBHOOK → NOTIFY_WEBHOOK
+failure · discord   ALERT_WEBHOOK
+failure · telegram  TELEGRAM_ALERT_WEBHOOK → ALERT_WEBHOOK
+FIRM    apex | ftmo | mff   (substring in de account-string)
+PHASE   PA* = FUNDED · APEX*/AP* = EVAL · anders geen fase-kandidaat
+```
+
+## Wat er voor Legacy resteerde (.NET-kant)
 
 Drie kleine hooks in `Mex.Journal.Receiver`; alle drie leunen op de env-tabel
 hierboven en hoeven geen tweede routing-tabel te dragen:

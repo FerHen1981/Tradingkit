@@ -12,6 +12,31 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 8. Guard-kaarten dragen geen account — routing kan ze niet splitsen
+**Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: OPEN
+
+Bij het bouwen van de per-kanaal routing (D-28/2) bleek de helft van de kaarten geen
+account in de payload te hebben. Geverifieerd tegen de `f_sendDiscord`-aanroepen:
+
+- **wél**: FILL · EXIT · DERISK · PA DERISK · ACCOUNT STARTED (vooraan), en
+  LONG/SHORT LIMIT · MARKET · RISK OFF (in de eval-tail, alleen als de eval loopt)
+- **niet**: DAY HALT · LIMIT EXPIRED · AUTO FLAT · ACCOUNT HALT · SIGNAL BLOCKED ·
+  CONFIG · PAYOUT · CAP LOCK · PASSED · FAILED · PA THRESHOLD
+
+Waar het account zou staan, staat bij DAY HALT de haltReden en bij LIMIT EXPIRED een
+prijs. Die kaarten landen daarom op de globale `NOTIFY_WEBHOOK` en zijn niet naar een
+funded- of eval-kanaal te sturen.
+
+**Verzoek:** zet `jrnlAcct + " | "` vooraan in de descriptions van die elf emitters
+(of hang er de eval-tail aan). Eén regel per emitter; `pine/**` is niet van Legacy,
+vandaar dit verzoek in plaats van een commit.
+
+**Let op bij de uitvoering:** de receiver herkent alleen de vorm `PA016-0k-260813`
+(`^[A-Z]{2}\d{3}-`) — dezelfde die `render-signal.js` gebruikt. Wijkt `jrnlAcct`
+qua vorm af, dan valt de routing terug op globaal in plaats van fout te gaan.
+
+**Vraagt om een D-nummer.**
+
 ### 1. Geverifieerde commissie per contract uit Cash_History
 **Backtest Setup → Middleware App** · 2026-08-19 · status: OPEN
 

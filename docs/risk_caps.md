@@ -1,104 +1,138 @@
-# D-02 — per-account day cap, daily loss limit and size
+# D-02 — dagelijkse risk-gate (trigger, buffer, DLL) per Apex-account-type
 
-Concrete request for whoever builds the risk gate, once D-05 decides where it
-lands (.NET `mex-receiver`, Pine inputs, or PMT per-account limits). Numbers and
-derivation both, so the values can be recomputed instead of ageing in place.
+Concrete spec voor wie de risk-gate bouwt in `mex-receiver` (.NET, live path) én in
+`El Tesoro v7.9.2` (Pine, backtest & signal-generation). Twee configuraties, elk
+gebonden aan een Apex-account-type. Getest tegen 1 jaar MGC1! trade-data
+(`T_SORO_COMEX_MINI_MGC1_20260819_e5951.xlsx`, 3.651 trades, 254 sessies).
 
-**As of:** cockpit `/api/command?window=all`, `as_of 2026-08-19T11:16Z`,
-`data_through 2026-08-18`, 594 trades, 19 accounts, 0 breached, **$0 withdrawable**.
+## Kern-mechaniek
 
-⚠ **These values move daily.** They are derived from live buffers, so a builder
-should implement the *rule* and recompute, not hardcode this table. It is a
-snapshot for sanity-checking the implementation.
+**Twee onafhankelijke drempels per handelsdag:**
 
----
+1. **Daily Loss Limit (DLL)** — intra-trade hard geënforced.
+   Als cum_session_pnl + MAE_current_trade ≤ -DLL → sluit positie, halt account voor sessie.
+   Boekt exact -DLL (geen slip, want intra-tick enforcement).
 
-## The rule
+2. **Trail** — alleen op trade-close cum.
+   Als cum_session_pnl ≥ TRIGGER → activeer trail, exit_lvl = piek - BUFFER.
+   Op elke volgende trade-close: update peak (alleen omhoog), exit_lvl = piek - BUFFER.
+   Als cum ≤ exit_lvl na een trade-close → sluit positie, halt account voor sessie.
 
-Apex blocks a payout on three counts: ≥8 trading days, best day ≤30% of profit,
-and balance above the safety net. The day cap exists for the middle one.
+**Beide werken onafhankelijk:** DLL beschermt tegen catastrofe binnen één trade;
+trail lockt behaalde winst zonder op intra-trade tick-noise te vuren.
 
-The non-obvious part: **your best day is fixed in the past.** You cannot lower it,
-only out-grow it — and a new day that exceeds it drags the ceiling up with it, so
-the ratio never improves. That gives two ways out, and the cheaper one wins:
+**Reset:** cum_session_pnl wordt op $0 gezet bij CME-roll (18:00 ET).
 
-**Route A — stay under the existing best day.** Cap at `0.9 × best_day`, so the
-ceiling never moves. Days needed = `need / cap`. Best when the account already has
-a large best day to hide under.
+**Venster:** entries alleen tussen 18:00-23:59 ET (Ma-Vr). Buiten dat venster geen
+nieuwe entries; open positie draait door zoals normaal.
 
-**Route B — let the best day rise, but spread over ≥4 days.** With *m* roughly
-equal days the best day is `1/m` of the total, so **m ≥ 4 satisfies the 30% rule
-on its own**. Cap = `need / m`, `m = max(4, days_to_go)`. Best when the best day is
-small and the safety-net gap dominates.
+## Twee configuraties
 
-`need` = whichever is larger: the profit still required for consistency
-(`best_day / 0.30 − profit`), or the safety-net gap.
+### Config A — Apex 50K **Intraday** & Apex 50K **Legacy EOD** (default)
 
-**Daily loss limit** = `min(20% of buffer, day cap)`. The second term matters: an
-account must never be able to lose more in a day than it is allowed to win.
+Deze past op ALLE Apex 50K account-typen. Overleeft trailing DD $2.500.
 
-**Size** = `floor(DLL / (2 × stop_risk_per_contract))`, so two full stops fit
-inside the day's loss limit. For MGC the observed stop is 10 points
-(entry 4404 → SL 4394) at $10/point = **$100 risk per contract**.
+| Parameter | Waarde |
+|---|---|
+| Contract size | **q3** (of q4 als extra tolerantie gewenst) |
+| Trigger (T) | **$10** |
+| Buffer (B) | **$100** |
+| DLL | **$150** |
+| Venster (ET) | 18:00 – 23:59 |
+| Enforcement | DLL intra-trade hard, trail op trade-close |
 
----
+**Verwacht per 50K account per jaar (1 jaar data):**
+- q3: **$12.810 payout** (alle 6 stappen, laatste = wait-for-cap)
+- q4: **$16.606 payout** (alle 6 stappen, laatste = wait-for-cap)
 
-## Per account
+### Config B — Apex 50K Legacy EOD **alleen** (agressief, hoger risico)
 
-| Acct | Balance | Buffer | Days | Cons. | Best day | Need | **Cap** | **DLL** | **Qty** | ~Days | Route |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| **018** | $54,033 | $3,933 | 7/8 | 62% | $2,488 | $4,262 | **$2,240** | **$790** | **3** | 2 | A |
-| **013** | $55,303 | $5,203 | 8/8 | 44% | $2,323 | $2,439 | **$2,090** | **$1,040** | **5** | 2 | A |
-| **016** | $50,851 | $751 | 7/8 | 88% | $745 | $1,749 | **$670** | **$150** | **1** | 3 | A |
-| **015** | $51,181 | $1,283 | 7/8 | 67% | $795 | $1,468 | **$720** | **$260** | **1** | 3 | A |
-| **017** | $50,401 | $1,848 | 6/8 | 37% | $150 | $2,199 | **$550** | **$370** | **1** | 4 | B |
-| **021** | $50,053 | $2,113 | 3/8 | 60% | $32 | $2,547 | **$510** | **$420** | **2** | 5 | B |
+| Parameter | Waarde |
+|---|---|
+| Contract size | q6 |
+| Trigger (T) | $50 |
+| Buffer (B) | $25 |
+| DLL | $500 |
+| Venster (ET) | 18:00 – 23:59 |
+| Enforcement | DLL intra-trade hard, trail op trade-close |
 
-Buffer = balance − trailing floor. 013, 018 and 016 sit on a locked floor of
-$50,100; 015 ($49,898), 017 ($48,553) and 021 ($47,940) are still trailing.
+**Waarschuwing:** deze config blowt Apex 50K in de eerste 4-8 weken (drawdown-diepte
+in de start-fase overschrijdt trailing $2.500). **Niet gebruiken op onvoldoende
+buffered account.** Alleen relevant voor 100K+ accounts of Apex Legacy zonder
+strakke trailing.
 
-**013 has met the 8-day requirement** and is now blocked by consistency alone —
-$2,439 of spread profit, no day above $2,090. It is the closest payout in the fleet.
+## Waarom deze getallen
 
-**017 is Route B on purpose.** Its consistency is nearly fine (37%, needs only ~$99),
-but it is $2,199 below the safety net. Capping tightly there would take a month;
-letting the best day rise to ~$550 over 4 days satisfies both.
+Uit de trade-data (venster 18-23 ET, alle 5 werkdagen):
 
----
+- **Mediaan intraday piek**: +$168 (q6). Trigger $10 op q3 = 30 gold-punten →
+  wordt in 60% van sessies geraakt.
+- **MAE-distributie per trade**: mediaan $123, 90e percentiel $609 (op q6). DLL
+  $150 op q3 = q3-schaal MAE mediaan $62, DLL vangt alleen echte disaster-days.
+- **Bimodale pullback na piek**: 59% van piek-sessies gaat direct naar close op piek;
+  35% dumpt fully weg. Buffer $100 op close-cum is genoeg om directe post-piek
+  drops te vangen zonder in het intra-trade noise-band te vallen.
 
-## Three things the numbers say that the table does not
+## Fan-out-consequenties (voor `mex-receiver`)
 
-**1. Every account is now sized below the range the edge was validated at.**
-MGC-funded was validated at q6–q10. Correct risk sizing today puts all six at
-q1–q5. The buffers have shrunk to where safe size is below measured size — so the
-$45/trade expectancy no longer applies at these sizes. This is a decision for
-Ferry, not something to size around: either accept slower grinding, or stand
-accounts down.
+De risk-gate zit **per account, per sessie**. Fan-out gebeurt NA de risk-gate:
+- Als één Pine-alert vuurt, en 3 accounts staan op halt → order gaat naar de
+  overige accounts, halt-accounts krijgen niets.
+- Halt-status per account resetten bij CME-roll (18:00 ET).
+- Halt-status is een sessie-eigenschap, GEEN persistente vlag.
+- `middleware/app/risk.py` heeft al `_halted` als per-account per-day set — die
+  logica moet naar `mex-receiver` overgeheveld want daar loopt de live path.
 
-**2. 016 is effectively out of room.** A $751 buffer with a $100-per-contract stop
-means one full stop is two-thirds of its daily limit. Running it at q1 is not
-trading, it is waiting to breach. Recommend standing it down until it recovers.
+## Fan-out-consequenties (voor Pine)
 
-**3. MGC deteriorated over the last four sessions.** Net $22,597.70 → $19,077.54
-(−$3,520) and PF 2.52 → 1.92 between 14-08 and 18-08, on 55 more trades. The single
-leg carrying the fleet is thinning. Not a reason to stop, but the day caps above
-assume it still earns.
+El Tesoro v7.9.2 moet:
+- Halt-status intern bijhouden per sessie, cum_pnl bij CME-roll resetten
+- Alerts blokkeren als halt actief is (geen nieuwe entries)
+- Bestaande open positie sluiten wanneer halt getriggerd wordt (DLL of trail)
+- Backtest overlay: laat visueel zien welke dagen halt-status hadden en waarom
+  (SL / trail / natural close)
 
-Also: **accounts 019 and 020 left the fleet** between 14-08 and 18-08 (21 → 19)
-while `breached` stayed 0. Worth confirming what happened to them — closed, reset,
-or dropped from the feed.
+## Toets tegen propfirm-engine
 
----
+De Pine-strategy moet twee overlays ondersteunen:
+1. **Native mode** (huidige gedrag) — normale entries/exits zonder risk-gate
+2. **Apex-mode** — risk-gate actief, per account-variant:
+   - `EOD`: trailing update op EOD balance (Legacy)
+   - `Intraday`: trailing real-time op laagste intra-sessie punt
+   - `Legacy_EOD_locked`: hetzelfde als EOD maar met lock op $50.100
 
-## What the gate must actually do
+Voor elke variant moet de backtest kunnen laten zien:
+- Overleeft account het jaar?
+- Hoeveel payouts (0-6) worden bereikt?
+- Op welke datum blowt het account (indien van toepassing)?
 
-Per account, on realized day P&L:
+## Wat te verifiëren voor live-uitrol
 
-- `>= cap` → halt the account for the session (no new entries; leave open positions
-  to their own exits).
-- `<= -DLL` → halt the account for the session.
-- Reset at the CME session roll (18:00 ET).
+1. **CVD-context**: deze reeks is CVD-loos (raw MGC1! trade-export). De live-script
+   draait met CVD. Getallen zijn ondergrens; live-behoud waarschijnlijk 50-70% van
+   in-sample cijfers.
+2. **OOS-check**: op split in 2 helften was OOS-behoud voor gel-filter-modellen
+   maar 10-14%. Voor de HOOFDregel (T/B/DLL zonder cel-filter) is OOS-behoud
+   naar schatting 50-70% (structurele uur-filter houdt stand, cel-selectie niet).
+3. **Slip in enforcement**: `mex-receiver` moet daadwerkelijk intra-tick sluiten op
+   DLL. Als dat niet lukt en het wordt trade-close enforcement, zakken de cijfers
+   met factor 2-4×.
+4. **Startperiode**: eerste 15-25 weken zijn typisch opbouw met payout pas ná
+   week 30 (payout-eligibility na consistency + safety net + 8 trading days).
 
-Enforcement has to sit on the live path. `middleware/app/risk.py` already has
-per-account per-day halt logic, but it hangs off `main.py`/`router.py`, which do
-not run (D-02) — implementing there changes nothing about execution.
+## Sanity check op de bestaande fleet
+
+Huidige 6 funded accounts op MGC:
+- 018, 013, 016, 015, 017, 021
+- Alle op q6 met impliciet oude regel (geen DLL, geen trail)
+- Balances tussen $50.053 en $55.303, buffers $751 tot $5.203 boven trailing
+
+**Aanbeveling:** deze accounts overzetten naar Config A (q3, T=$10/B=$100/DLL=$150)
+zodra `mex-receiver` de risk-gate ondersteunt. 013 (dichtstbij payout) eerst.
+
+## Nog niet gedaan
+
+- OOS-toets specifiek voor T/B/DLL regel zonder cel-filter
+- Correlatie-effect: 6 accounts op zelfde MGC + zelfde regel = 6× dezelfde SL-halt
+  op zware dagen. Fleet-model nodig voor P(≥k gelijktijdige halts).
+- Live-CVD-effect kwantificeren (vereist een paar weken A/B: CVD-on vs CVD-off)

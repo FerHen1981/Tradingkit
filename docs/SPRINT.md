@@ -110,7 +110,7 @@ beslissingsboom uit de werkafspraken (`.claude/skills/mex-scrum-master/SKILL.md`
 
 | Branch | Beoordeeld t/m | Datum |
 |---|---|---|
-| `claude/middleware-setup-guide-afhvtk` | `3f42069` | 2026-08-20 |
+| `claude/middleware-setup-guide-afhvtk` | `d51d5e3` | 2026-08-20 |
 | `claude/legacy-accounts-scripts-analysis-ui0j6m` | `2f05103` | 2026-08-19 |
 | `claude/discord-notify-hnydfa` | `5a5f49a` | 2026-08-19 |
 | `claude/analyses-data-chat-org-3tii8j` | `f6e9af0` | 2026-08-19 |

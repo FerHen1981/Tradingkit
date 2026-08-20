@@ -527,3 +527,75 @@ git commit -m "cleanup: remove temp Fills CSVs after VPS pull"
 ```
 Data-bestanden horen buiten git — de structurele route is het `/upload`-endpoint dat jullie
 zelf hebben gebouwd (`bd75c1e`). Dat pad is correct; dit was een eenmalige noodoplossing.
+
+---
+
+## Scrum Master → alle chats — ronde 20-08 (Ferry-besluiten + één correctie)
+
+### D-04 BESLECHT: de .NET-receiver is eigenaar van de notice-cards
+
+Ferry heeft 20-08 formeel bevestigd. Gevolgen:
+
+- **Discord Notify:** `notices.py` en de bijbehorende tests op
+  `claude/discord-notify-hnydfa` zijn **dood materiaal** — die gaan niet naar
+  productie. Bouw er niets meer op. Wat wél waarde heeft (`BlockedGate`,
+  LIMIT EXPIRED→tier B, het deploy-recept) zit al in de .NET-receiver.
+- **D-13 (merge-plan) is gedeblokkeerd** → `todo`. Volgorde-advies: **legacy eerst**,
+  want die branch draagt `97c50cd` én `validation/`, en is de enige route naar D-06.
+- **D-28 is gedeblokkeerd** → `todo`, owner **Legacy**. Het Middleware App-deel is
+  af (`notify_routing.py` + 10 tests + de spec); er resteren 3 hooks in
+  `Mex.Journal.Receiver`.
+
+### ⚠️ CORRECTIE D-35 — de body-check hoeft NIET geschreven te worden
+
+Het bord zei tot vandaag dat er náást de IPv4-fix nog een body-check gebouwd moest
+worden. **Dat klopt niet.** Ik heb de broncode nagelopen:
+
+`97c50cd` heet *"receiver: uitgaand verkeer op IPv4 + weigering van de doelserver
+zichtbaar maken"* en bevat **beide** fixes al. In `ForwardAsync()`:
+
+```csharp
+var code = (int)resp.StatusCode;
+// PMT antwoordt op een geweigerde order met 200 en de reden in de body.
+var reply = Excerpt(await resp.Content.ReadAsStringAsync());
+if (code < 400)
+    return Rejected(reply)
+        ? $"GEWEIGERD {code} door doelserver: {reply}"
+        : $"sent {code} (poging {attempt})...";
+```
+
+Plus `Rejected()` met 10 weigeringsmarkers, en op de PMT-route een Discord-melding
+*⛔ Order NIET geplaatst* zodra het antwoord met `GEWEIGERD` of `error` begint.
+
+**Aan Middleware App:** je waarneming in `e7704a1` is juist — maar hij beschrijft de
+**draaiende binary**, niet de broncode. Er is dus geen tweede fix te schrijven; de
+137 stille weigeringen komen allemaal uit één oorzaak: **de fix draait niet.**
+Schrijf géén concurrerende body-check in Python of in een tweede kopie van
+`Program.cs` — dat zou een derde bron maken.
+
+### D-06 is de kritieke schakel geworden
+
+Hard geverifieerd: de repo bevat over **alle branches samen één** `.cs`-bestand en
+**geen** `.sln`/`.csproj`, terwijl `Program.cs:10` `using Mex.Journal.Recon;` doet.
+Die namespace staat nergens in git. **De receiver is niet uit git te bouwen** —
+alleen de VPS heeft de volledige solution.
+
+Daar hangt nu alles achter:
+
+```
+D-06 (solution in git)
+  ├─ D-02  risk-gate in .NET
+  ├─ D-35  uitrol 97c50cd  (IPv4 + body-check)
+  └─ D-40  PMT-blokkadegate  ← zelfde bestand, zelfde build als D-35
+```
+
+**Aan Legacy:** D-06 staat op jou en is nu de duurste blocker op het bord. Zolang
+`Mex.Journal.Recon` niet in git staat, is elke .NET-wijziging een VPS-only actie
+zonder review.
+
+### D-40 nieuw (🔴) — PMT-accountblokkade respecteren
+
+Als PMT's embed aangeeft dat een account geblokkeerd is (day cap / DLL), mag de
+receiver het signaal **niet** forwarden, ook al staat het TradingView-vinkje aan.
+Raakt `Program.cs` rond regel 158 — **plan dit in dezelfde build als D-35**, niet als
+een tweede herstart van het live executiepad.

@@ -4,12 +4,30 @@ Kopieer dit blok integraal naar de Pine Dev-chat. **Prio: P1.**
 
 ---
 
+## Basis-script (bijlage)
+
+**Gebruik als startpunt uitsluitend:** `EL_TORO_v6.8.13-FM1.pine` (bijgevoegd,
+oorspronkelijk aangeleverd als `EL_TESORO_v6_813.txt` — de bestandsnaam klopt niet,
+de inhoud is Toro). Titel-string in script:
+`"MΞX ΞL TORO · Eval Intraday · v6.8.13-FM1"`. 1.658 regels.
+
+**NIET** de v6.9.1 in de repo gebruiken. Die versie bevat de roll/OpEx/news factory
+(v6.9.0) en de "→ Middleware" route (v6.9.1) — die passen niet bij deze v7-cleanup.
+De winnende backtest-run van 20-08-2026 is gedraaid op v6.8.13-FM1; alle defaults
+in dit document verwijzen naar precies die run.
+
+De doelfile heet straks `MEX_EL_TORO.pine` versie **v7.0-eval** (of hoger). De
+oude v6.9.1 in de repo moet naar `MEX_EL_TORO.v6.9.1.pine.bak` of getagd zijn
+voordat v7.0 die plek inneemt.
+
+---
+
 ## Wat er nodig is
 
-De huidige El Toro (**`pine/MEX_EL_TORO.pine`**, v6.9.1, 1.725 regels) is functioneel maar
-draagt veel legacy-inputs mee die inert zijn, en de defaults staan niet op de config
-waarmee we net de beste 12-maands eval-resultaten hebben gedraaid. Ik wil een **v7.0**
-die drie dingen tegelijk doet:
+Het huidige v6.8.13-FM1-script is functioneel maar draagt veel legacy-inputs mee
+die inert zijn, en de defaults staan niet op de config waarmee we net de beste
+12-maands eval-resultaten hebben gedraaid. Ik wil een **v7.0** die drie dingen
+tegelijk doet:
 
 1. **Bewezen backtest-config als default** — de winnende run van 20-08-2026 op NQ1! (12 mnd
    backtest, netto +$109.726, 52% eval-pass rate, 37% one-shot passes) moet 1-op-1 als
@@ -233,8 +251,9 @@ onder deze noemers vallen:
 
 ## Wat ik terug wil zien
 
-1. **`pine/MEX_EL_TORO.pine` v7.0** — nieuwe file, current v6.9.1 blijft als backup
-   (rename naar `.pine.bak` of tag in git).
+1. **`pine/MEX_EL_TORO.pine` v7.0** — nieuwe file, gebouwd op de bijgevoegde
+   v6.8.13-FM1. De huidige v6.9.1 in de repo mag naar `.pine.bak` of git-tag
+   (die versie speelde geen rol in deze v7-brief).
 2. Screenshots van de nieuwe input-panel (default openings-view) + van de dashboard
    overlay tijdens een backtest.
 3. Bevestiging dat de default-run op NQ1! 1-min chart, 12 mnd terug,
@@ -260,7 +279,13 @@ naar dagen.
 **"Zit deze data-set (die van 20-08-2026) in de repo?"**
 Nee — het is een lokaal TradingView-export op mijn machine
 (`_L_TORO_CME_MINI_NQ1_20260820_d35bd.xlsx`). Ik stuur hem apart aan, of je genereert
-dezelfde run zelf via jouw v7.0 op MGC1! 1-min chart om te valideren.
+dezelfde run zelf via jouw v7.0 op NQ1! 1-min chart om te valideren.
+
+**"Waarom niet vanaf v6.9.1 uit de repo starten?"**
+De winnende backtest is gedraaid op v6.8.13-FM1. De v6.9.0/v6.9.1-features
+(regime factory, middleware-route) waren daar nog niet in en zitten niet in
+scope voor deze v7-cleanup. Als die features later wél nodig zijn: aparte
+prompt, aparte scope.
 
 **"Wat als een default default niet klopt met de backtest-properties?"**
 De properties-export in de bijlage is de bron van waarheid. Bij twijfel: neem

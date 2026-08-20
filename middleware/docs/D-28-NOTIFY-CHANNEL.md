@@ -88,6 +88,26 @@ Alle drie de hooks zitten in `middleware/dotnet-receiver/Program.cs`:
 bouwen (D-06). `dotnet build src/Mex.Journal.Receiver -c Release` op de VPS is de eerste
 echte controle.
 
+### Welke kaart draagt een account? (bepaalt of routing kán)
+
+Routing per funded/eval werkt alleen als het bericht een account draagt. Geverifieerd
+tegen de `f_sendDiscord`-aanroepen in de Pine-scripts:
+
+| Draagt `jrnlAcct` | Kaart |
+|---|---|
+| ✅ vooraan | FILL · EXIT · DERISK · PA DERISK · ACCOUNT STARTED |
+| ✅ in de eval-tail (alleen als de eval loopt) | LONG/SHORT LIMIT · MARKET · RISK OFF |
+| ❌ helemaal niet | **DAY HALT** · **LIMIT EXPIRED** · AUTO FLAT · ACCOUNT HALT · SIGNAL BLOCKED · CONFIG · PAYOUT · CAP LOCK · PASSED · FAILED · PA THRESHOLD |
+
+De onderste rij landt op de globale `NOTIFY_WEBHOOK`. Dat is geen bug in de routing maar
+een gat in de payload: waar het account zou staan, staat bij DAY HALT de haltReden en bij
+LIMIT EXPIRED een prijs. Wil je die kaarten ook per funded/eval splitsen, dan moet Pine
+`jrnlAcct` in die descriptions zetten — inbox-item voor Pine Dev.
+
+⚠️ Daarom herkent `NotifyRoute.AccountFrom` alléén de vorm `^[A-Z]{2}\d{3}-` en nooit
+"de eerste kolom met een cijfer erin": `PA Daily Loss Limit` uit een DAY HALT begint met
+`PA` en zou anders als funded gelezen worden.
+
 ### De twee kanten synchroon houden
 
 `NotifyRoute` en `notify_routing.py` moeten dezelfde kandidaten in dezelfde volgorde

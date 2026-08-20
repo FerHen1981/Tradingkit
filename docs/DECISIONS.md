@@ -9,6 +9,9 @@
 
 ---
 
+- 2026-08-20 · D-35 · **CORRECTIE op het bord: de body-check hoeft niet geschreven te worden, hij bestaat al.** `97c50cd` (*"uitgaand verkeer op IPv4 + weigering van de doelserver zichtbaar maken"*) bevat béide fixes: IPv4-forcering én de body-check in `ForwardAsync()` (`Excerpt()` leest de body, `Rejected()` toetst 10 markers, weigering keert terug als `GEWEIGERD …` plus een Discord-melding *⛔ Order NIET geplaatst*). De vaststelling van Middleware App (`e7704a1`) beschrijft de dráaiende binary, niet de broncode; het bord las het als twee losse problemen · geverifieerd in de broncode door de Scrum Master · raakt: D-35 (alleen nog uitrol), D-40
+- 2026-08-20 · D-06 · **VASTGESTELD: de receiver is niet uit git te bouwen** — de hele repo bevat over alle branches samen **één** `.cs`-bestand en géén `.sln`/`.csproj`, terwijl `Program.cs:10` `using Mex.Journal.Recon;` doet; die namespace bestaat alleen op de VPS · daarmee is D-06 de kritieke schakel waar D-02, D-35 en D-40 alle drie achter hangen · raakt: D-02, D-13, D-35, D-40
+- 2026-08-20 · D-04 · **BESLECHT door Ferry 20-08: de .NET-receiver is eigenaar van de notice-cards** — `notices.py` van de discord-notify-branch gaat niet naar productie · deblokkeert D-13 (merge-plan) en het .NET-deel van D-28 · raakt: D-13, D-28, discord-notify-branch
 - 2026-08-20 · D-40 · **D-40 uitgegeven** (PMT account-blokkade moet de receiver tegenhouden) — als PMT's embed `blocked=true` toont (day cap / DLL), mag receiver het signaal niet forwarden, ongeacht TradingView-vinkje; live handhavingspunt van D-02 · raakt: middleware .NET receiver, live executie
 - 2026-08-20 · D-01 · **D-01 DONE** — Ferry heeft VIEWER_PASSWORD + VIEWER_API_TOKEN gezet en mex-viewer herstart; dashboard faalt nu gesloten · raakt: mex-viewer
 - 2026-08-20 · D-36 · **D-36 DONE** — NQ pilot-export met CVD-diepte opgeleverd door Ferry; deblokkeert D-10 · raakt: backtest D-10, D-18

@@ -12,6 +12,41 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 9. BE-offset komt niet bij de broker aan — de payload draagt alleen de trigger
+**Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: OPEN · **raakt live executie**
+
+Ferry ziet dat break-even met offset niet goed doorkomt in Tradovate. Nagekeken in de
+bron; het is geen regressie en waarschijnlijk niet de ATM-instelling.
+
+**Wat er feitelijk gebeurt.** BE en trailing zijn aan PMT gedelegeerd: de entry-payload
+(`f_pmtJSON`) draagt `trail`, `trail_stop`, `trail_trigger`, `trail_freq` én
+`breakeven`. Die laatste krijgt `f_distPrice(beTrigEff)` — de **trigger**afstand.
+`beOffEff` (de offset, default 8) zit in **geen enkel** veld. Identiek in alle 8 scripts.
+Gevolg: ook als PMT de BE correct uitvoert, gaat de stop naar *entry*, niet naar
+*entry + 8*.
+
+**Tweede helft:** bij de BE-trigger zelf stuurt Pine niets naar de broker. In het
+RISK OFF-blok (`MEX_EL_TESORO.pine:1432-1438`) staan alleen `f_sendDiscord` en
+`f_journal`, geen `f_sendExec`. De `strategy.exit` die de verhoogde `curStop` draagt
+(regel 1452 / 1475) heeft géén `alert_message`. De intern verplaatste stop verlaat
+TradingView dus nooit; alles hangt aan wat bij entry is meegegeven.
+
+**Verzoek aan Pine Dev, in deze volgorde:**
+1. Controleer in de PMT-documentatie of er een offset-parameter bestaat naast
+   `breakeven` (bv. `breakeven_offset`). Zo ja: meesturen, klaar.
+2. Zo nee: BE-met-offset is niet delegeerbaar. Stuur dan bij de trigger een expliciete
+   stop-update — het veld `update_sl` staat al in de payload en staat nu hard op
+   `false`; met `update_sl: true` plus de nieuwe `dollar_sl` kan de stop alsnog
+   verplaatst worden. Dat is een wijziging in het live executiepad, dus eerst melden
+   volgens de beslissingsboom.
+
+**Onderscheidende observatie voor Ferry** (bepaalt of ATM meespeelt): schuift de stop in
+Tradovate naar *exact entry*, dan werkt PMT's BE en ontbreekt alleen de offset → punt 1/2
+hierboven. Schuift hij *helemaal niet*, dan wordt PMT's BE niet toegepast en is de
+ATM-instelling wél verdacht — dat valt buiten de repo en is bij PMT/Tradovate na te gaan.
+
+**Vraagt om een D-nummer.**
+
 ### 8. Guard-kaarten dragen geen account — routing kan ze niet splitsen
 **Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: **BEANTWOORD** → **D-41** uitgegeven, staat op het bord onder 🟡 (owner Pine Dev)
 

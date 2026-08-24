@@ -239,3 +239,32 @@ def test_as_tested_keeps_booleans_boolean():
     assert changes["entry_limit_mode"] == (False, True)
     assert out.entry_limit_mode is True and isinstance(out.entry_limit_mode, bool)
     assert out.use_breakeven is False and isinstance(out.use_breakeven, bool)
+
+
+# --- UI artifact detail: the deep numbers reach the browser -------------------
+
+def test_artifact_detail_trims_each_stage_to_its_key_numbers(tmp_path, monkeypatch):
+    """The Pijplijn tab reads these; each stage must expose the fields its
+    renderer needs, and nothing must throw on a missing stage."""
+    import json as _json
+
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    art = tmp_path / "artifacts"
+    art.mkdir()
+    (art / "EL_MATADOR_MES_PROD_EOD_trap8_time_for_money_20260824.json").write_text(_json.dumps({
+        "banked_per_account_day": 42.5, "payouts": 2, "days_to_first_payout": 30,
+        "dll_hits": 1, "trading_days": 120, "breached": False,
+        "withdrawable": 5100.0, "per_month": 1200.0, "status": "passed"}))
+    (art / "EL_MATADOR_MES_PROD_EOD_trap3_regimes_20260824.json").write_text(_json.dumps({
+        "total": {"trades": 100}, "by_regime": {"X": {"in": {}, "out": {}, "share_pct": 50}},
+        "best_regime": "X", "best_share_pct": 40, "status": "passed"}))
+
+    from backtest.lab import lab_viewer as lv
+    d8 = lv._artifact_detail("EL_MATADOR_MES_PROD_EOD", "8")
+    assert d8["found"] and d8["data"]["banked_per_account_day"] == 42.5
+    assert d8["data"]["dll_hits"] == 1
+    d3 = lv._artifact_detail("EL_MATADOR_MES_PROD_EOD", "3")
+    assert d3["found"] and d3["data"]["best_regime"] == "X"
+    # a stage with no artifact returns found=False, does not raise
+    assert lv._artifact_detail("EL_MATADOR_MES_PROD_EOD", "5")["found"] is False
+    assert lv._artifact_detail("EL_NOPE", "8")["found"] is False

@@ -602,6 +602,70 @@ def _pipeline_view() -> dict:
     }
 
 
+_STAGE_ARTIFACT_TAG = {
+    "0": "trap0_data-audit", "1": "trap1_pariteit", "2": "trap2_structurele-edge",
+    "3": "trap3_regimes", "4": "trap4_plateau", "5": "trap5_sizing",
+    "6": "trap6_daily_mgmt", "7": "trap7_pa_lifecycle", "8": "trap8_time_for_money",
+    "9": "trap9_prod_vs_harvest",
+}
+
+
+def _artifact_detail(engine: str, stage: str) -> dict:
+    """The latest artifact for one engine+stage, trimmed to the numbers a human
+    wants to see for that stage. Reads the files ground rule 11 already writes."""
+    import glob
+    tag = _STAGE_ARTIFACT_TAG.get(str(stage))
+    if not engine or not tag:
+        return {"found": False}
+    d = lab_root() / "artifacts"
+    hits = sorted(glob.glob(str(d / f"{engine}_{tag}_*.json")))
+    if not hits:
+        return {"found": False}
+    try:
+        raw = json.loads(open(hits[-1]).read())
+    except Exception as e:
+        return {"found": False, "error": str(e)[:120]}
+    return {"found": True, "stage": stage, "file": os.path.basename(hits[-1]),
+            "data": _trim_artifact(stage, raw)}
+
+
+def _trim_artifact(stage: str, a: dict) -> dict:
+    """Pick the human-relevant fields per stage (artifacts are large)."""
+    s = str(stage)
+    if s == "0":
+        r = a.get("report", a)
+        return {k: r.get(k) for k in ("bars", "years", "sessions", "median_bar_range_ticks",
+                "roll_like_jumps", "ohlc_violations", "gaps_over_6h", "Delta_nonzero_pct",
+                "findings", "verdict")}
+    if s == "1":
+        c = a.get("comparison", {})
+        return {"status": a.get("status"), "checks": c.get("checks"), "sim": c.get("sim"),
+                "pine": c.get("pine"), "paired_pct": a.get("paired_pct"),
+                "pine_only_split": a.get("pine_only_split")}
+    if s == "2":
+        return {"kpis": a.get("kpis"), "by_year": a.get("by_year"), "verdict": a.get("verdict")}
+    if s == "3":
+        return {"total": a.get("total"), "by_regime": a.get("by_regime"),
+                "best_regime": a.get("best_regime"), "best_share_pct": a.get("best_share_pct")}
+    if s == "4":
+        return {"years": a.get("years"), "quarters": a.get("quarters"), "long": a.get("long"),
+                "short": a.get("short"), "neighbourhood": a.get("neighbourhood")}
+    if s == "5":
+        return {k: a.get(k) for k in ("stop_usd_total", "worst_case_usd", "dll",
+                "fits_under_dll", "pf_1", "pf_n", "pf_invariant", "qty")}
+    if s in ("6", "7"):
+        return {k: a.get(k) for k in ("with_day_mgmt", "without_day_mgmt", "eod",
+                "intraday", "intended_model") if k in a}
+    if s == "8":
+        return {k: a.get(k) for k in ("banked_per_account_day", "payouts",
+                "days_to_first_payout", "dll_hits", "trading_days", "breached",
+                "withdrawable", "per_month")}
+    if s == "9":
+        return {"with_filter": a.get("with_filter"), "without_filter": a.get("without_filter"),
+                "mask_contribution_pct": a.get("mask_contribution_pct")}
+    return a
+
+
 def _stage1_coverage() -> list[dict]:
     """Per TradingView export: which market and window it actually tested, and
     whether we hold a dataset that can run it. Trap 1 is a hard gate, so this is
@@ -838,6 +902,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(_pipeline_view())
         if u.path == "/api/exports":
             return self._json({"exports": _exports()})
+        if u.path == "/api/artifact":
+            q = urllib.parse.parse_qs(u.query)
+            return self._json(_artifact_detail((q.get("engine") or [""])[0],
+                                               (q.get("stage") or [""])[0]))
         if u.path == "/api/candidates":
             return self._json(_candidates())
         if u.path == "/api/builder/options":
@@ -1713,13 +1781,65 @@ function showEngine(name){
   box.innerHTML=`<div style="font-size:13px"><b style="color:var(--gold)">${name.replace('EL_','')}</b> — poorten</div>`
     +view.map(v=>{const m=ST_MARK[v.status]||ST_MARK.todo;
       const blocked=(v.blocked_by||[]).length?`<div class=muted style="margin-left:36px;color:var(--rose)">geblokkeerd door open harde poort: ${v.blocked_by.join(', ')}</div>`:'';
-      return `<div style="margin-top:8px"><div style="display:flex;gap:9px;align-items:baseline">
+      const done=['passed','data_parity','failed','inconclusive'].includes(v.status);
+      return `<div style="margin-top:8px"><div style="display:flex;gap:9px;align-items:baseline;${done?'cursor:pointer':''}"
+          ${done?`onclick="toggleArtifact('${name}','${v.n}',this)"`:''}>
         <span style="min-width:26px;text-align:right;font-family:var(--mono);color:${m[1]}">${v.n}${m[0]}</span>
         <b>${v.title}</b>${v.hard?' <span class=tag style="color:var(--rose);border-color:var(--rose)">harde poort</span>':''}
-        <span class=muted>${v.status}${v.summary?' — '+v.summary:''}</span></div>
-        <div class=muted style="margin-left:36px">${v.gate}</div>${v.note?`<div class=muted style="margin-left:36px;color:var(--gold)">${v.note}</div>`:''}${blocked}</div>`;
+        <span class=muted>${v.status}${v.summary?' — '+v.summary:''}</span>${done?' <span class=muted style="color:var(--azure)">▸ cijfers</span>':''}</div>
+        <div class=muted style="margin-left:36px">${v.gate}</div>${v.note?`<div class=muted style="margin-left:36px;color:var(--gold)">${v.note}</div>`:''}${blocked}
+        <div class=artbox style="margin-left:36px;margin-top:6px;display:none"></div></div>`;
     }).join('');
   box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function toggleArtifact(engine,n,el){
+  const box=el.parentElement.querySelector('.artbox');
+  if(box.style.display!=='none'){box.style.display='none';return;}
+  box.style.display='block'; box.innerHTML='<span class=muted>laden…</span>';
+  try{
+    const j=await (await fetch('/api/artifact?engine='+encodeURIComponent(engine)+'&stage='+n)).json();
+    if(!j.found){box.innerHTML='<span class=muted>geen artefact — trap nog niet gedraaid</span>';return;}
+    box.innerHTML=renderArtifact(n, j.data);
+  }catch(e){box.innerHTML='<span style="color:var(--rose)">kon artefact niet laden</span>';}
+}
+function _tbl(rows){return '<table style="font-size:12px;margin-top:4px"><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>`<td style="text-align:${i?'right':'left'};padding:1px 10px 1px 0">${c}</td>`).join('')+'</tr>').join('')+'</tbody></table>';}
+function _e(e){return e?`${e.trades} tr · net $${(e.net||0).toLocaleString()} · PF ${e.pf} · WR ${e.wr}% · E $${e.expectancy}`:'—';}
+function renderArtifact(n, d){
+  n=String(n);
+  if(n==='0'){const f=(d.findings||[]).map(x=>`<div style="color:var(--gold)">• ${x.message}</div>`).join('');
+    return _tbl([['bars',(d.bars||0).toLocaleString()],['jaren',d.years],['sessies',d.sessions],
+      ['bar-range (ticks)',d.median_bar_range_ticks],['roll-sprongen',d.roll_like_jumps],
+      ['OHLC-fouten',d.ohlc_violations],['Delta ≠0 %',d.Delta_nonzero_pct]])+f;}
+  if(n==='1'){const c=(d.checks||[]).map(x=>[x.name,(x.sim+' / '+x.pine),(x.ok?'ok':'✗ '+x.detail)]);
+    const sp=d.pine_only_split||{};
+    return _tbl(c)+`<div class=muted style="margin-top:4px">gepaard ${d.paired_pct}% · pine-only: `
+      +`${sp.we_placed_but_never_filled||0} niet-gevuld · ${sp.we_were_in_a_position||0} in positie · ${sp.we_never_placed||0} geen order</div>`;}
+  if(n==='2'){const y=Object.entries(d.by_year||{}).map(([k,v])=>[k,`${v.trades} tr`,`net $${(v.net||0).toLocaleString()}`,`PF ${v.pf}`,`E $${v.expectancy}`]);
+    const k=d.kpis||{};
+    return `<div class=muted>volledige periode: ${_e({trades:k.trades,net:k.net_profit,pf:k.profit_factor,wr:k.win_rate_pct,expectancy:k.expectancy})}</div>`+_tbl(y);}
+  if(n==='3'){const r=Object.entries(d.by_regime||{}).map(([k,v])=>[k,`${v.share_pct}%`,`IN: ${_e(v.in)}`]);
+    return `<div class=muted>totaal: ${_e(d.total)} · beste regime ${d.best_regime} (${d.best_share_pct}% netto)</div>`+_tbl(r);}
+  if(n==='4'){const y=Object.entries(d.years||{}).map(([k,v])=>[k,`PF ${v.pf}`,`E $${v.expectancy}`]);
+    const nb=(d.neighbourhood||[]).map(x=>[`${x.param} ${x.delta>0?'+':''}${x.delta}`,`PF ${x.pf}`,`${x.trades} tr`]);
+    return `<div class=muted>LONG ${_e(d.long)}<br>SHORT ${_e(d.short)}</div>`
+      +'<div class=muted style="margin-top:4px">per jaar</div>'+_tbl(y)
+      +'<div class=muted style="margin-top:4px">parameterburen (plateau-check)</div>'+_tbl(nb);}
+  if(n==='5')return _tbl([['volledige stop $',(d.stop_usd_total||0).toLocaleString()],
+    ['worst-case incl. kosten $',(d.worst_case_usd||0).toLocaleString()],['DLL $',(d.dll||0).toLocaleString()],
+    ['past onder DLL',d.fits_under_dll?'ja':'NEE'],['PF 1 contract',d.pf_1],['PF '+d.qty+' contracten',d.pf_n],
+    ['PF grootte-invariant',d.pf_invariant?'ja':'NEE']]);
+  if(n==='6'||n==='7'){const w=d.with_day_mgmt||d.eod||{},o=d.without_day_mgmt||d.intraday||{};
+    return _tbl([['','MÉT / EOD','ZONDER / Intraday'],
+      ['payouts',w.payouts,o.payouts],['gebankt $',(w.withdrawable||0).toLocaleString(),(o.withdrawable||0).toLocaleString()],
+      ['$/account-dag',w.banked_per_account_day,o.banked_per_account_day],
+      ['breach',w.breached?'ja':'nee',o.breached?'ja':'nee']]);}
+  if(n==='8')return _tbl([['$ per bezette account-dag',`<b style="color:var(--gold)">$${d.banked_per_account_day}</b>`],
+    ['payouts',d.payouts],['dagen tot payout #1',d.days_to_first_payout??'—'],['DLL-hits',d.dll_hits],
+    ['handelsdagen',d.trading_days],['gebankt totaal $',(d.withdrawable||0).toLocaleString()],
+    ['per maand $',(d.per_month||0).toLocaleString()],['breach',d.breached?'ja':'nee']]);
+  if(n==='9')return `<div class=muted>mét uur/dag-masker: ${_e(d.with_filter)}<br>`
+    +`zónder masker: ${_e(d.without_filter)}<br>masker draagt ${d.mask_contribution_pct}% van de netto bij</div>`;
+  return '<pre style="font-size:11px;white-space:pre-wrap">'+JSON.stringify(d,null,1).slice(0,1200)+'</pre>';
 }
 async function loadExports(){
   try{const j=await (await fetch('/api/exports')).json();

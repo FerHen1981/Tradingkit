@@ -9,17 +9,41 @@
 ## What this repo is
 An automated prop-firm trading system with three parts:
 - `backtest/` — Python bar-by-bar backtester + walk-forward eval funnel + prop-firm registry.
-- `pine/` — 8 Pine v6 strategies (one engine, differ by phase/DD model). Spanish "El ___" names.
+- `pine/` — Pine v6 strategies, Spanish "El ___" names. **De v6.9.5-familie is vervangen**
+  door de `v1_0_0`-lijn uit `MEX_FLEET_PACKAGE_2026-08-23` (zie hieronder).
 - `middleware/` — the control plane: one TradingView alert → fan-out across channels.
 
-## The strategies & the edge (validated, 3y OOS)
-- **Real funded edges: GC + ES only** (both halves PF>1). GC (El Tesoro/El Minero) = robust
-  workhorse; ES (El Rey/El Leon) = strongest OOS after the factory.
-- NQ (El Toro/Matador/Dorado/Patron) + YM = **eval-only** (H2≈1.00, no funded edge) — use as
-  variance lottery tickets, never compound funded.
-- **Roll/OpEx/News factory (v6.9.x)**: selectable event-regime filters (avoid quarterly
-  roll/triple-witching, week-after-OpEx, FOMC/NFP) per strategy·type·phase. Mechanism-backed;
-  lifts ES funded H2 1.00→1.16. Fine-grained day×hour cherry-picking is OOS noise (disproven).
+## De vloot (stand 2026-08-23 — vervangt de oude GC+ES-conclusie)
+
+> ⚠️ **De regel "funded edge = alleen GC + ES, NQ/YM eval-only" is INGETROKKEN** (Ferry, 24-08).
+> Die kwam uit de funnel van vóór de pariteitscorrecties. Onder de research-invalidatieregel
+> van de pijplijn vervallen alle rankings die onder een materiële pariteitsfout tot stand
+> kwamen — en dat gold voor die conclusie. Zie `docs/DECISIONS.md`.
+
+Merknaam = vaste strategie-persoonlijkheid. Titel codeert MARKT + CON/AGG/PROD/HF + EOD/INTRA.
+Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
+
+| Merk | Markt | Profiel | Shorttitle |
+|---|---|---|---|
+| EL TESORO | MGC | Conservative EOD | `TES-MGC-C` |
+| EL PATRON | MGC | Aggressive EOD | `PAT-MGC-A` |
+| EL REY | MNQ | Production EOD / Intraday | `REY-MNQ-P` / `REY-NQ-PI` |
+| EL MATADOR | MES | Production CVD6 EOD | `MAT-MES-P` |
+| EL LEON | MYM | Production / recovery | `LEO-MYM-P` / `LEO-YM-CI` / `LEO-YM-CE` |
+| EL BANDIDO | MYM | HF / Harvest EOD | `BAN-MYM-H` — **Pine-pariteit open, niet live** |
+| EL PRINCIPE | MNQ | Balanced | research, niet live |
+| EL MINERO | — | gereserveerd | toekomstige HF/commodity |
+
+- **Rangorde:** REY (MNQ) › MATADOR (MES) › TESORO (MGC) › LEON (MYM) › PATRON (MGC) ›
+  BANDIDO (specialist) › PRINCIPE (research). Rangorde ≠ accounttoewijzing.
+- **Doel is niet PF maar gebankte payout-$ per bezette account-dag.** Account-mechanica kan
+  de rangorde van twee identieke engines omdraaien.
+- **Correlatie:** MGC is de enige niet-aandelenbucket; MNQ/MES/MYM zijn alle drie
+  index-exposure. Claim geen decorrelatie vóór 20–30 actieve dagen gemeten P&L-correlatie.
+- Fine-grained day×hour cherry-picking blijft OOS-ruis (weerlegd). Regimes mogen alleen
+  economisch vooraf gedefinieerd.
+- Bevroren parameters per engine: `.claude/skills/strategy-validation-pipeline/references/frozen-engines.md`.
+  **Die zijn bevroren** — wijzigen is een nieuwe onderzoeksronde vanaf trap 1, geen tweak.
 
 ## Middleware = control plane (NOT a copy-trader)
 One alert per strategy → middleware maps strategy→accounts and fans out. Per account YOU set

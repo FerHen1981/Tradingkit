@@ -82,7 +82,14 @@ class Export:
 
 def read_export(path: str) -> Export:
     """Parse a TradingView strategy export (.xlsx): Properties, Trades, Performance."""
-    import openpyxl
+    try:
+        import openpyxl
+    except ImportError as e:                       # a traceback here reads as a bug
+        raise SystemExit(
+            "trap 1 leest TradingView-exports met openpyxl, en die staat niet in "
+            "deze omgeving.\n  Installeer hem in dezelfde interpreter als de lab-service:\n"
+            "    /root/mex-journal/.venv-bt/bin/pip install openpyxl\n"
+            "  (of: <venv>/bin/pip install -r backtest/requirements.txt)") from e
     wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
     props = {}
     if "Properties" in wb.sheetnames:

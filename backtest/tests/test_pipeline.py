@@ -185,3 +185,44 @@ def test_a_micro_and_its_mini_produce_the_same_trade_sequence(tmp_path):
         assert out["MES"][key] == out["ES"][key], (
             f"{key} verschilt tussen micro en mini: "
             f"{out['MES'][key]} vs {out['ES'][key]}")
+
+
+# --- window coverage: a short tail is not the same as a missing dataset ---------
+
+def test_window_overlap_grades_a_short_tail_apart_from_a_real_gap():
+    """The VPS case: 20-year files that stop 8 days before the export's end must
+    read as usable, while a dataset ending months early must not."""
+    from datetime import datetime
+
+    from backtest.pipeline.cli import window_overlap
+
+    a, b = datetime(2025, 8, 24), datetime(2026, 8, 23)
+    near = window_overlap(datetime(2011, 12, 4), datetime(2026, 8, 16), a, b)
+    assert near["verdict"] == "bijna volledig"
+    assert near["missing_days"] == 7 or near["missing_days"] == 8, near
+    assert near["missing_frac"] < 0.05
+
+    full = window_overlap(datetime(2011, 12, 4), datetime(2026, 9, 1), a, b)
+    assert full["verdict"] == "volledig"
+    assert full["missing_days"] == 0
+
+    short = window_overlap(datetime(2011, 12, 4), datetime(2025, 12, 31), a, b)
+    assert short["verdict"] == "te kort"
+    assert short["missing_frac"] > 0.5
+
+    late = window_overlap(datetime(2026, 6, 1), datetime(2026, 8, 23), a, b)
+    assert late["verdict"] == "te kort", "een dataset die pas laat begint mist het begin"
+    assert late["first_gap_days"] > 200
+
+    assert window_overlap(None, None, a, b)["verdict"] == "onbekend"
+
+
+def test_short_tail_tolerance_stays_under_the_stage1_trade_tolerance():
+    """The 5% line only means anything while it is below the gate it defends."""
+    import inspect
+
+    from backtest.pipeline import parity
+    from backtest.pipeline.cli import SHORT_TAIL_TOLERANCE
+
+    trade_tol = inspect.signature(parity.compare).parameters["trade_tol"].default
+    assert SHORT_TAIL_TOLERANCE < trade_tol

@@ -622,25 +622,32 @@ def _stage1_coverage() -> list[dict]:
             a, b = export_window(exp)
             root = "".join(c for c in str(exp.properties.get("Symbol") or "").split(":")[-1]
                            if c.isalpha())
+            from ..pipeline.cli import window_overlap
             twin = fleet.TWIN.get(root)
-            usable, short = [], []
+            usable, short, missing_days = [], [], 0
             for d in dsets:
                 if d["symbol"] not in (root, twin) or not d["symbol"]:
                     continue
                 lo, hi = _dt(d.get("first")), _dt(d.get("last"))
-                covers = (a is None or b is None or
-                          (lo is not None and hi is not None and lo <= a and hi >= b))
+                ov = window_overlap(lo, hi, a, b)
                 label = d["name"] + ("" if d["symbol"] == root else f" (twin {d['symbol']})")
-                (usable if covers else short).append(
-                    label if covers else
-                    f"{label} loopt tot {hi:%Y-%m-%d}" if hi else label)
+                if ov["verdict"] in ("volledig", "onbekend"):
+                    usable.append(label)
+                elif ov["verdict"] == "bijna volledig":
+                    usable.append(f"{label} — mist {ov['missing_days']}d")
+                    missing_days = max(missing_days, ov["missing_days"])
+                else:
+                    pct = 100 - (ov["missing_frac"] or 0) * 100
+                    short.append(f"{label} dekt {pct:.0f}%"
+                                 + (f", loopt tot {hi:%Y-%m-%d}" if hi else ""))
             out.append({"export": nm, "market": root, "twin": twin, "trades": exp.n_trades,
                         "window": f"{a:%Y-%m-%d} → {b:%Y-%m-%d}" if a and b else "?",
-                        "datasets": usable, "too_short": short, "runnable": bool(usable)})
+                        "datasets": usable, "too_short": short, "runnable": bool(usable),
+                        "missing_days": missing_days})
         except Exception as e:                       # a corrupt upload must not blank the tab
             out.append({"export": nm, "market": "?", "twin": None, "trades": 0,
                         "window": "?", "datasets": [], "too_short": [],
-                        "runnable": False, "error": str(e)[:120]})
+                        "runnable": False, "missing_days": 0, "error": str(e)[:120]})
     return out
 
 
@@ -1654,7 +1661,9 @@ async function loadPipeline(){
     +cov.map(c=>`<tr><td style="text-align:left" class=mono>${c.export}</td><td>${c.market}</td>
       <td>${c.trades}</td><td style="text-align:left">${c.window}</td>
       <td style="text-align:left">${c.runnable
-        ? '<span style="color:var(--azure)">'+c.datasets.join(', ')+'</span>'
+        ? '<span style="color:'+(c.missing_days?'var(--gold)':'var(--azure)')+'">'
+          +c.datasets.join(', ')
+          +(c.missing_days?' — staart ontbreekt, onder de 10%-tolerantie':'')+'</span>'
         : '<span style="color:var(--rose)">'
           +((c.too_short||[]).length
             ? 'te kort — '+c.too_short.join(', ')+'; export vraagt tot '+(c.window.split('→')[1]||'').trim()

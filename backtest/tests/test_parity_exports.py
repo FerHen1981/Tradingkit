@@ -157,6 +157,26 @@ def test_coverage_accepts_a_twin_but_only_when_the_window_reaches(tmp_path, monk
     assert any("YM_20y" in x for x in cov["MYM"]["too_short"])
 
 
+def test_coverage_accepts_a_dataset_that_is_only_days_short(tmp_path, monkeypatch):
+    """The live VPS case: the 20-year files stop 2026-08-16 while the exports run
+    through 2026-08-23. Eight days on a one-year window is under stage 1's trade
+    tolerance, so this must read as usable-with-a-note, not as blocked."""
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    for name, sym in (("ES_20y", "ES"), ("NQ_20y", "NQ"), ("YM_20y", "YM")):
+        _fake_dataset(tmp_path, name, sym, "04-12-2011 00:00:00 -05:00",
+                      "16-08-2026 17:00:00 -04:00")
+
+    from backtest.lab import lab_viewer as lv
+    cov = {c["market"]: c for c in lv._stage1_coverage()}
+    assert set(cov) == {"MES", "MNQ", "MYM"}
+    for market, expected in (("MES", "ES_20y"), ("MNQ", "NQ_20y"), ("MYM", "YM_20y")):
+        c = cov[market]
+        assert c["runnable"] is True, f"{market} zou bruikbaar moeten zijn"
+        assert c["too_short"] == []
+        assert any(expected in x for x in c["datasets"])
+        assert 0 < c["missing_days"] <= 10, c["missing_days"]
+
+
 def test_coverage_reports_nothing_runnable_without_datasets(tmp_path, monkeypatch):
     monkeypatch.setenv("LAB_DIR", str(tmp_path))
     from backtest.lab import lab_viewer as lv

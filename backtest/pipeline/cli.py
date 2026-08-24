@@ -44,16 +44,40 @@ def _dt(value):
     return None
 
 
+# A dataset that stops shortly before the export's end is still usable: stage 1
+# gates on trade count within 10%, so a window shortfall well under that cannot
+# by itself blow the gate. Half the trade tolerance is the line — beyond it the
+# comparison stops being about engine semantics and starts being about missing bars.
+SHORT_TAIL_TOLERANCE = 0.05
+
+
+def window_overlap(ds_first, ds_last, exp_start, exp_end) -> dict:
+    """How much of the export's window a dataset actually covers."""
+    if not all((ds_first, ds_last, exp_start, exp_end)):
+        return {"known": False, "missing_frac": None, "missing_days": None,
+                "verdict": "onbekend"}
+    span = (exp_end - exp_start).days or 1
+    lo, hi = max(ds_first, exp_start), min(ds_last, exp_end)
+    have = max((hi - lo).days, 0)
+    missing = max(span - have, 0)
+    frac = missing / span
+    verdict = ("volledig" if missing == 0 else
+               "bijna volledig" if frac <= SHORT_TAIL_TOLERANCE else "te kort")
+    return {"known": True, "missing_frac": round(frac, 4), "missing_days": missing,
+            "span_days": span, "first_gap_days": max((lo - exp_start).days, 0),
+            "tail_gap_days": max((exp_end - hi).days, 0), "verdict": verdict}
+
+
 def cmd_coverage(_args):
     """What can trap 1 actually run today, and what data is missing?
 
     Trap 1 is a hard gate, so this answers the only question that matters while
     it is open: for each TradingView export we hold, is there a dataset that
-    covers the market AND the window the export was actually tested over?
+    covers the market AND (near enough) the window the export was tested over?
 
     A mini's price history counts for its micro (see fleet.TWIN) — same ticks,
-    same trade sequence — but only if it reaches far enough. A 20-year file that
-    stops before the export's end date is the failure mode this catches."""
+    same trade sequence. A short tail is reported in days rather than waved
+    through or treated as fatal."""
     from ..lab.lab_viewer import _datasets, _export_dirs, _export_path, _exports
     from .parity import export_window, read_export
 
@@ -73,7 +97,7 @@ def cmd_coverage(_args):
     else:
         print("  GEEN datasets geladen — upload ze onder 1 · Data.\n")
 
-    runnable, blocked = 0, []
+    runnable, blocked, caveats = 0, [], []
     for nm in _exports():
         f = _export_path(nm)
         if f is None:
@@ -87,38 +111,47 @@ def cmd_coverage(_args):
         print(f"  {nm}")
         print(f"     markt {root} · getest {window} · {exp.n_trades} trades")
 
-        exact = [d for d in dsets if d["symbol"] == root]
-        twins = [d for d in dsets if twin and d["symbol"] == twin]
-        usable, short = [], []
-        for d in exact + twins:
-            covers = (a is None or b is None or
-                      (d["first"] is not None and d["last"] is not None
-                       and d["first"] <= a and d["last"] >= b))
-            (usable if covers else short).append(d)
+        best = None
+        for d in [x for x in dsets if x["symbol"] in (root, twin) and x["symbol"]]:
+            ov = window_overlap(d["first"], d["last"], a, b)
+            rank = {"volledig": 0, "bijna volledig": 1, "onbekend": 2, "te kort": 3}
+            if best is None or rank[ov["verdict"]] < rank[best[1]["verdict"]]:
+                best = (d, ov)
+            via = "" if d["symbol"] == root else f" (twin {d['symbol']} — zelfde ticks)"
+            if ov["verdict"] == "volledig":
+                print(f"     BRUIKBAAR: {d['name']}{via} — dekt het hele venster")
+            elif ov["verdict"] == "bijna volledig":
+                print(f"     BRUIKBAAR: {d['name']}{via} — mist {ov['missing_days']} dag(en) "
+                      f"({ov['missing_frac']*100:.1f}% van het venster; loopt tot "
+                      f"{d['last']:%Y-%m-%d}). Onder de 10%-tolerantie op trade count, "
+                      f"dus niet de oorzaak als trap 1 faalt — wordt wel vastgelegd.")
+            elif ov["verdict"] == "te kort":
+                print(f"     TE KORT: {d['name']}{via} dekt {100-ov['missing_frac']*100:.0f}% "
+                      f"van het venster (loopt tot {d['last']:%Y-%m-%d}, export vraagt tot "
+                      f"{b:%Y-%m-%d})")
+            else:
+                print(f"     VENSTER ONBEKEND: {d['name']}{via} heeft geen datums in "
+                      f"zijn manifest — opnieuw catalogiseren")
 
-        if usable:
+        if best and best[1]["verdict"] in ("volledig", "bijna volledig"):
             runnable += 1
-            for d in usable:
-                via = "" if d["symbol"] == root else f" (via twin {d['symbol']} — zelfde ticks)"
-                print(f"     BRUIKBAAR: {d['name']}{via}")
-        for d in short:
-            end = f"{d['last']:%Y-%m-%d}" if d["last"] else "?"
-            via = "" if d["symbol"] == root else f" (twin {d['symbol']})"
-            print(f"     TE KORT: {d['name']}{via} loopt tot {end}, export vraagt tot "
-                  f"{b:%Y-%m-%d}" if b else f"     TE KORT: {d['name']}{via}")
-        if not usable:
-            blocked.append((root, twin, window, bool(short)))
-            if not short:
-                need = f"{root}" + (f" of {twin}" if twin else "")
+            if best[1]["verdict"] == "bijna volledig":
+                caveats.append((root, best[1]["missing_days"]))
+        else:
+            blocked.append((root, twin, window, best is not None))
+            if best is None:
+                need = root + (f" of {twin}" if twin else "")
                 print(f"     GEBLOKKEERD — geen dataset voor {need}.")
 
     print(f"\n  {runnable} van {len(_exports())} export(s) is nu te draaien op trap 1.")
+    for root, days in caveats:
+        print(f"    let op: {root} mist de laatste {days} dag(en) van het exportvenster")
     if blocked:
         print("\n  ONTBREKENDE DATA (kritiek pad — trap 1 is een harde poort, dus trap 2")
         print("  t/m 9 zijn ongeldig zolang die dichtstaat):")
-        for root, twin, window, only_short in blocked:
+        for root, twin, window, partial in blocked:
             need = root + (f" (of {twin}: zelfde tick size, zelfde trades)" if twin else "")
-            why = "bestaande dataset loopt niet ver genoeg door" if only_short else "geen dataset"
+            why = "bestaande dataset dekt te weinig" if partial else "geen dataset"
             print(f"    · 1-minuut {need}, minimaal {window}  — {why}")
 
 
@@ -241,6 +274,21 @@ def cmd_stage1(args):
         raise SystemExit(
             f"de dataset {args.dataset!r} bevat geen bars in het exportvenster "
             f"{since} -> {until}. Trap 1 is niet te draaien zonder overlappende data.")
+
+    # How much of the export's window these bars actually cover. A short tail is
+    # not fatal, but a comparison run on 80% of the window is not evidence about
+    # engine semantics, so the number goes in the artifact either way.
+    ov = window_overlap(df["et"].iloc[0].tz_localize(None) if df["et"].iloc[0].tzinfo
+                        else df["et"].iloc[0],
+                        df["et"].iloc[-1].tz_localize(None) if df["et"].iloc[-1].tzinfo
+                        else df["et"].iloc[-1],
+                        pa["window_start"], pa["window_end"])
+    if ov["known"] and ov["missing_days"]:
+        note = ("onder de tolerantie op trade count" if ov["verdict"] == "bijna volledig"
+                else "BOVEN de tolerantie — een afwijkend aantal trades zegt hier weinig "
+                     "over de engine")
+        print(f"  dekking: {100 - ov['missing_frac']*100:.1f}% van het exportvenster, "
+              f"{ov['missing_days']} dag(en) ontbreken ({note})")
     print(f"\n  simulator op {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
     k = kpis(Engine(cfg, df, im.compute(df, cfg), research_mode=True).run())
     cmp_ = compare(k, exp)
@@ -254,7 +302,8 @@ def cmd_stage1(args):
                           {"properties_audit": pa, "comparison": cmp_,
                            "dataset": args.dataset, "dataset_symbol": ds_sym,
                            "price_series_borrowed_from": substituted,
-                           "window": {"since": since, "until": until, "bars": len(df)}})
+                           "window": {"since": since, "until": until, "bars": len(df),
+                                      "coverage": ov}})
     state.record(args.engine, "parity", "passed" if ok else "failed",
                  summary=cmp_["verdict"] + (f" [prijsreeks geleend van {substituted}]"
                                             if substituted else ""),

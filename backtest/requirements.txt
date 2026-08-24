@@ -2,4 +2,5 @@ pandas>=2.0
 numpy>=1.24
 pytest>=7.0
 jsonschema>=4.0
+openpyxl>=3.1        # trap 1 leest de TradingView .xlsx-exports
 pyyaml>=6.0

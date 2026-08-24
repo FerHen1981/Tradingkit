@@ -112,3 +112,63 @@ def test_survival_runs_with_the_account_layer_on(frame):
     r = survival(frame, cfg, seeds=(1,), prob=0.0)
     assert r["mean_survival_pct"] == 100.0
     assert r["runs"][0]["fill_pct"] == r["baseline_fill_pct"]
+
+
+# --- the instrument must not measure itself -----------------------------------
+
+def test_shift_mode_preserves_each_bar_range_exactly(frame):
+    """The bias that invalidated the first fill-ratio band: jittering O/H/L/C
+    independently and repairing with max/min widens bars and adds noise to every
+    gap size. Noise measured against a NARROW band (FVG 10-22 ticks) pushes net
+    mass out of it, so placements fall and the fill ratio rises for a reason that
+    has nothing to do with the data."""
+    out = jitter(frame, 0.25, prob=0.6, seed=5, mode="shift")
+    base_rng = (frame["High"] - frame["Low"]).to_numpy()
+    got_rng = (out["High"] - out["Low"]).to_numpy()
+    assert np.allclose(base_rng, got_rng), "bar-range veranderde onder shift-modus"
+
+
+def test_shift_mode_moves_whole_bars_by_one_tick(frame):
+    out = jitter(frame, 0.25, prob=1.0, seed=6, mode="shift")
+    steps = [(out[c].to_numpy() - frame[c].to_numpy()) for c in
+             ("Open", "High", "Low", "Close")]
+    for s in steps[1:]:
+        assert np.allclose(s, steps[0]), "velden binnen een bar schoven verschillend"
+    q = steps[0] / 0.25
+    assert np.allclose(q, np.round(q)) and np.abs(q).max() <= 1.0 + 1e-9
+
+
+def test_independent_mode_is_the_biased_one_and_stays_labelled(frame):
+    """Kept for comparison, and its bias is a measured fact rather than a note."""
+    wide = jitter(frame, 0.25, prob=0.35, seed=7, mode="independent")
+    base = (frame["High"] - frame["Low"]).to_numpy().mean()
+    assert (wide["High"] - wide["Low"]).to_numpy().mean() > base, (
+        "independent-modus verbreedt bars niet meer — dan klopt de waarschuwing niet")
+    assert "not neutral" in jitter.__doc__
+
+
+def test_an_unknown_mode_is_refused(frame):
+    with pytest.raises(ValueError, match="unknown jitter mode"):
+        jitter(frame, 0.25, mode="whatever")
+
+
+def test_shift_mode_keeps_the_placement_count_centred(frame):
+    """If the instrument itself moves the number of placements, its fill-ratio
+    band describes the instrument rather than the data — which is exactly what
+    went wrong with the independent-jitter version.
+
+    The bound is sample-size aware on purpose: this fixture yields only a handful
+    of placements, and at n=9 a spread of 6-11 is ordinary counting noise. A flat
+    percentage would either pass vacuously on large samples or fail on noise
+    here, so the tolerance is a few standard errors of a count."""
+    import math
+
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    r = survival(frame, cfg, seeds=(1, 2, 3), prob=0.35, mode="shift")
+    lo, hi = r["placed_range"]
+    mid, base = (lo + hi) / 2, r["baseline_placed"]
+    assert base, "geen plaatsingen — de test bewijst niets"
+    tol = max(3.0 * math.sqrt(base), 0.05 * base)
+    assert abs(mid - base) <= tol, (
+        f"plaatsingen drijven weg: basis {base}, jitter {lo}-{hi}, "
+        f"toegestaan +/-{tol:.1f}")

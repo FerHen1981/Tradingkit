@@ -210,6 +210,7 @@ def cmd_sensitivity(args):
           f"{int(args.prob*100)}% van de bars krijgt +/- 1 tick op O/H/L/C")
 
     r = survival(df, cfg, seeds=tuple(range(1, args.seeds + 1)), prob=args.prob,
+                 mode=args.mode,
                  progress=lambda i, n: print(f"  run {i+1}/{n} ...", flush=True))
     print(f"\n  basislijn: {r['baseline_trades']} trades"
           + (f" uit {r['baseline_placed']} limieten ({r['baseline_fill_pct']}% gevuld)"
@@ -220,10 +221,15 @@ def cmd_sensitivity(args):
               + (f" · fill {run['fill_pct']}%" if run.get("fill_pct") is not None else ""))
     if r.get("fill_pct_range"):
         lo, hi = r["fill_pct_range"]
-        print(f"\n  fill-ratio schommelt tussen {lo}% en {hi}% door alleen tick-ruis "
-              f"(basislijn {r['baseline_fill_pct']}%)")
-        print(f"  -> een fill-ratio-verschil binnen die bandbreedte is dataruis, "
-              f"geen engine-verschil")
+        pl = r.get("placed_range")
+        print(f"\n  fill-ratio {lo}%–{hi}% door tick-ruis (basislijn {r['baseline_fill_pct']}%)")
+        if pl:
+            print(f"  geplaatste limieten {pl[0]}–{pl[1]} (basislijn {r['baseline_placed']})")
+            drift = abs((pl[0] + pl[1]) / 2 - r["baseline_placed"]) / r["baseline_placed"]
+            if drift > 0.03:
+                print(f"  LET OP: het aantal plaatsingen verschuift zelf {drift*100:.0f}%, dus de")
+                print(f"  fill-ratio-band meet deels het instrument. Lees hem niet als een "
+                      f"symmetrische ruisband.")
     print(f"\n  gemiddeld {r['mean_survival_pct']}% overleeft (laagste {r['min_survival_pct']}%)")
     print(f"  {verdict(r)}")
     art = _write_artifact(args.engine, "tick-gevoeligheid", r)
@@ -605,6 +611,9 @@ def main():
     ps.add_argument("--prob", type=float, default=0.35,
                     help="aandeel bars dat een tick verschuift (default 0.35)")
     ps.add_argument("--seeds", type=int, default=3)
+    ps.add_argument("--mode", choices=("shift", "independent"), default="shift",
+                    help="shift = hele bar verschuift, range blijft behouden (default); "
+                         "independent = O/H/L/C los, verbreedt bars (oude gedrag)")
 
     p0 = sub.add_parser("stage0"); p0.set_defaults(fn=cmd_stage0)
     p0.add_argument("--dataset", required=True); p0.add_argument("--engine", default="")

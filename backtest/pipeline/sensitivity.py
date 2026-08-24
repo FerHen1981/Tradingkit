@@ -25,15 +25,36 @@ from __future__ import annotations
 import numpy as np
 
 
-def jitter(df, mintick: float, prob: float = 0.35, seed: int = 0):
+def jitter(df, mintick: float, prob: float = 0.35, seed: int = 0,
+           mode: str = "shift"):
     """A copy of `df` where some bars differ by one tick.
 
-    Models the disagreement between two venues quoting the same instrument:
-    each of open/high/low/close may independently sit a tick either side. OHLC
-    consistency is restored afterwards so the result is still a valid bar."""
+    Two models of the disagreement between venues quoting the same instrument:
+
+    "shift" (default) moves a bar's whole OHLC by the same tick, so the bar's
+    RANGE is preserved exactly. This is the honest instrument. The first version
+    of this function jittered O/H/L/C independently and then repaired OHLC
+    validity with max/min — which quietly widened bars and, worse, added noise
+    to every gap size. Noise on a value measured against a NARROW BAND (the FVG
+    filter is 10-22 ticks) pushes net mass out of the band, so placements fell
+    from 213 to ~196 and the fill ratio rose from 50.2% to ~53% purely because
+    the denominator shrank. The band that measurement produced described the
+    instrument, not the data.
+
+    "independent" keeps that older behaviour for comparison. It is not neutral —
+    do not read its fill-ratio band as a symmetric noise band.
+    """
     rng = np.random.default_rng(seed)
     out = df.copy()
     n = len(out)
+    if mode == "shift":
+        step = rng.choice([-1.0, 0.0, 1.0], size=n,
+                          p=[prob / 2, 1 - prob, prob / 2]) * mintick
+        for col in ("Open", "High", "Low", "Close"):
+            out[col] = out[col].to_numpy() + step
+        return out
+    if mode != "independent":
+        raise ValueError(f"unknown jitter mode {mode!r}")
     for col in ("Open", "High", "Low", "Close"):
         step = rng.choice([-1.0, 0.0, 1.0], size=n, p=[prob / 2, 1 - prob, prob / 2])
         out[col] = out[col].to_numpy() + step * mintick
@@ -59,7 +80,8 @@ def _keys(trades, minutes=1):
     return out
 
 
-def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None) -> dict:
+def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None,
+             mode: str = "shift") -> dict:
     """Fraction of the trade list that survives a one-tick jitter.
 
     Returns the baseline trade count, and per seed how many trades still appear
@@ -76,7 +98,7 @@ def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None) -> dic
     for i, seed in enumerate(seeds):
         if progress:
             progress(i, len(seeds))
-        jdf = jitter(df, cfg.contract.mintick, prob=prob, seed=seed)
+        jdf = jitter(df, cfg.contract.mintick, prob=prob, seed=seed, mode=mode)
         gres = Engine(cfg, jdf, im.compute(jdf, cfg), research_mode=False).run()
         got_keys = _keys(gres.trades)
         kept = len(base_set & set(got_keys))
@@ -96,7 +118,9 @@ def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None) -> dic
         "baseline_placed": base_oc.get("placed"),
         "baseline_fill_pct": base_fill,
         "fill_pct_range": [min(fills), max(fills)] if fills else None,
-        "jitter_prob": prob,
+        "placed_range": [min(r["placed"] for r in rows), max(r["placed"] for r in rows)]
+                        if rows and rows[0]["placed"] else None,
+        "jitter_prob": prob, "jitter_mode": mode,
         "runs": rows,
         "mean_survival_pct": round(sum(surv) / len(surv), 1) if surv else 0.0,
         "min_survival_pct": min(surv) if surv else 0.0,

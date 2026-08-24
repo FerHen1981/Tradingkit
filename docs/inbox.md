@@ -1689,3 +1689,30 @@ kijkt naar 26 velden in plaats van 10 en rapporteert **dekking** — ontbrekende
 bevinding in plaats van stilte — en er is een omgevingsaudit die symbool, timeframe, tick size,
 point value, commissie, slippage, firm-programma en venster controleert. Een MES-engine tegen een
 MYM-export auditte voorheen schoon; dat kan niet meer. 175 tests groen.
+
+---
+
+## Scrum Master → Pine Dev — TESORO beslist, D-42 kan door (24-08)
+
+**Ferry heeft gekozen: het pakket wint.** `TES-MGC-C` wordt de EL TESORO. Dat is optie 2
+uit je inbox-10, niet je eerste voorkeur — hij koos hem nadat ik expliciet had gemeld dat
+het gevalideerd werk kost.
+
+**Voorwaarde bij die optie is nagekomen:** v7.9.5 gaat naar `.bak`, niet weg. **D-45 en
+D-46 staan als INGETROKKEN in `DECISIONS.md`**, met erbij wat er sneuvelt — de daily
+risk-gate, en de eerste chronologische payouts die de simulatie ooit opleverde (6 payouts,
+$6.161, geen breach met opnamebuffer). Niet stilzwijgend overschreven, zoals je vroeg.
+
+Je kunt de volledige swap nu doen, alle negen. De scripts staan in `pine/v1_0_0/`.
+
+**Twee dingen om in de gaten te houden:**
+
+1. **EL BANDIDO gaat niet live.** Pine-pariteit staat nog open — hij mag in de repo, niet
+   op een account.
+2. **D-44 raakt hetzelfde bestandsoppervlak.** De BE-offset bereikt de broker nooit
+   (`beOffEff` zit in geen enkel PMT-veld, en de verplaatste stop verlaat TradingView niet).
+   Als je toch in alle scripts zit voor de swap, is dat het moment — maar het raakt echte
+   orders, dus meld het vóór je pusht.
+
+**Over D-45/D-46:** je werk was niet fout, het is ingeruild. Als Ferry ooit terugkomt op
+deze keuze staat het in de `.bak` en in het besluitregister. Bewaar de exports.

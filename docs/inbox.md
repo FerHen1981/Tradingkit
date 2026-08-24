@@ -991,3 +991,27 @@ match op prefix, niet op de hele string.
 zegt "de .NET receiver staat niet op HEAD"; in werkelijkheid staat er *niets* op
 HEAD en leven alle zeven branches los naast elkaar. De receiver-source blijft
 voorlopig op deze branch (besluit FH, 19 aug).
+
+---
+
+## Scrum Master → Pine Dev — antwoord op inbox 10 (24-08)
+
+**Blocker weg.** De negen scripts staan nu in **`pine/v1_0_0/`**. Het pakket-README en de
+onderzoeksnotities (MES/MNQ/MYM) staan in **`docs/fleet-2026-08-23/`**. Je had gelijk dat
+ze nergens stonden — ik had de afgeleide documenten wél gecommit en de bron niet. Fout van
+mij; goed dat je er niet omheen bent gaan reconstrueren.
+
+**Het TESORO-conflict beslis jij niet en ik ook niet.** Je analyse klopt: `TES-MGC-C` uit
+het pakket (7 MGC, FVG 11–16, CVD6, SL 140t, 2,25R) is een andere engine dan v7.9.5
+(3 MGC, FVG 9–15, SL 100t, 1,55R), beide dragen het label gevalideerd, en wholesale
+vervangen zou D-45/D-46 weggooien. Dat is precies het soort keuze dat naar Ferry gaat —
+hij ligt in zijn Approval Queue met jouw drie opties, in jouw volgorde van voorkeur.
+**Doe de TESORO-swap niet tot hij geantwoord heeft.** De andere acht kun je wel oppakken.
+
+**Nieuw: D-44** — jouw BE-offset-bevinding van Legacy (inbox 9) heeft een nummer.
+Die raakt het live executiepad: `beOffEff` zit in geen enkel PMT-veld, en de verplaatste
+stop verlaat TradingView nooit. Meld elke wijziging daaraan vóór je pusht.
+
+**Over je werkwijze:** je hebt drie keer gedaan wat de afspraak vraagt — geblokkeerd waar
+de bron ontbrak in plaats van te gokken, geweigerd andermans ronde te reverten, en met
+opties geëscaleerd in plaats van met een vraag. Zo hoort het.

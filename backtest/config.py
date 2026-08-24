@@ -212,7 +212,10 @@ class Config:
     use_vwap_veto: bool = True           # long above / short below session VWAP
     use_cvd_filter: bool = True          # per-bar volume delta direction
     use_cvd_streak: bool = True
-    cvd_trend_count: int = 4             # consecutive same-side delta bars
+    cvd_trend_count: int = 4             # consecutive same-side CVD bars
+    # "proxy"  = canonical deterministic OHLCV polarity proxy (pipeline v7 rule 4)
+    # "native" = the CSV Delta column — a separate experiment, never the default
+    cvd_source: str = "proxy"
 
     # --- regime (L1 classifier: MA-stack + ADX + ATR percentile) ---
     # Objective trend x volatility regime tag. See lab/FRAMEWORK.md §1/§6. The

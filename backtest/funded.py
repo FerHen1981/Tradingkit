@@ -15,6 +15,12 @@ Apex config below is what we operate on — verify against Apex's current terms.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
+
+# CME/Apex trading day rolls at 18:00 ET, not midnight (pipeline v7, ground rule 3).
+# Shifting by +6h puts 18:00 ET at 00:00 of the next trade date — the same
+# convention data.py already uses for `session_date`.
+SESSION_ROLL_HOURS = 6
 
 # FALLBACK constants only — used when data/propfirms.json lacks the account size.
 # The registry (via backtest.firms) is the single source; see apex_rules().
@@ -118,13 +124,19 @@ class FundedResult:
 
 def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
                     drawdown_type: str = "eod_trailing", drawdown: float | None = None,
-                    daily_loss_limit: float | None = None, profit_split: float | None = None
-                    ) -> FundedResult:
-    """daily_pnl: {date: realized_net}. Walks it chronologically. All account
-    rules come from data/propfirms.json via apex_rules() — explicit arguments
-    override the registry; profit_split/daily_loss_limit left at None take the
-    registry's value (pass 0 to disable the DLL explicitly)."""
-    rules = apex_rules(account_size)
+                    daily_loss_limit: float | None = None, profit_split: float | None = None,
+                    rules: dict | None = None) -> FundedResult:
+    """daily_pnl: {trade_date: realized_net} — key on the 18:00 ET session date
+    (see session_date / daily_from_trades), not the calendar date.
+
+    Account rules come from data/propfirms.json via apex_rules(); explicit
+    arguments override the registry, and `rules` overrides individual rule keys
+    (min_qual_days, consistency_limit, ladder, ...) so a caller — or a test — can
+    pin an exact rule set independent of what the registry currently holds."""
+    base = apex_rules(account_size)
+    if rules:
+        base = {**base, **rules}
+    rules = base
     dd = float(drawdown if drawdown is not None else rules["drawdown"])
     if daily_loss_limit is None:
         daily_loss_limit = rules["daily_loss_limit"]
@@ -217,13 +229,25 @@ def summarize(res: FundedResult) -> dict:
     }
 
 
+def session_date(ts):
+    """The CME trade date a timestamp belongs to. A bar at or after 18:00 ET is
+    part of the NEXT session — grouping prop-firm lifecycle on the calendar date
+    is invalid (pipeline v7, ground rule 3), because DLL resets, qualifying days,
+    consistency and daily caps all key off the 18:00 ET boundary."""
+    try:
+        return (ts + timedelta(hours=SESSION_ROLL_HOURS)).date()
+    except Exception:
+        return ts
+
+
 def daily_from_trades(trades) -> dict:
-    """Aggregate a list of engine Trade objects into {date: net}."""
+    """Aggregate engine Trades into {trade_date: net}, keyed on the 18:00 ET
+    session boundary (NOT the calendar date)."""
     out: dict = {}
     for t in trades:
         xt = getattr(t, "exit_time", None)
         if xt is None:
             continue
-        day = xt.date() if hasattr(xt, "date") else xt
+        day = session_date(xt)
         out[day] = out.get(day, 0.0) + float(getattr(t, "net", 0.0) or 0.0)
     return out

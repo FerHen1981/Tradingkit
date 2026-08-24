@@ -38,6 +38,30 @@ def _pivot_confirmed(values: np.ndarray, k: int, kind: str) -> np.ndarray:
     return out
 
 
+def cvd_polarity(open_: np.ndarray, close: np.ndarray) -> np.ndarray:
+    """CANONICAL CVD proxy (pipeline v7, ground rule 4) — a deterministic OHLCV
+    price-polarity series, independent of the CSV `Delta` column and of Pine's
+    `ta.requestVolumeDelta()`. Those two are separate experiments and must never
+    silently replace this proxy, because only this one is reproducible in both
+    Python and Pine on any dataset that has OHLC.
+
+    Per bar: close>open -> +1 · close<open -> -1 · doji -> compare to the previous
+    close · still unresolved -> carry the previous polarity forward."""
+    n = len(close)
+    if n == 0:
+        return np.zeros(0, dtype=np.int64)
+    up, dn = close > open_, close < open_
+    pol = np.where(up, 1, np.where(dn, -1, 0)).astype(np.int64)
+    doji = ~up & ~dn
+    prev_close = np.concatenate([[np.nan], close[:-1]])
+    pol = np.where(doji & (close > prev_close), 1, pol)
+    pol = np.where(doji & (close < prev_close), -1, pol)
+    # carry the last resolved polarity forward over the remaining zeros
+    idx = np.where(pol != 0, np.arange(n), 0)
+    np.maximum.accumulate(idx, out=idx)
+    return pol[idx].astype(np.int64)
+
+
 def _run_length_positive(delta: np.ndarray) -> np.ndarray:
     """Consecutive count (incl. current) of strictly-positive delta bars."""
     n = len(delta)
@@ -457,9 +481,17 @@ def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
     out["vwap"] = _session_vwap(hlc3, vol, new_session)
     _tick(3)
 
-    # --- Volume-delta direction + streak --------------------------------------
-    bull_run = _run_length_positive(delta)
-    bear_run = _run_length_negative(delta)
+    # --- CVD direction + streak ------------------------------------------------
+    # Source is EXPLICIT: the canonical OHLCV polarity proxy by default, the raw
+    # Delta column only when asked for by name (ground rule 4 — never a silent
+    # substitution in either direction).
+    if getattr(cfg, "cvd_source", "proxy") == "native":
+        cvd_series = delta
+    else:
+        cvd_series = cvd_polarity(open_, close).astype(float)
+    out["cvd_polarity"] = cvd_series
+    bull_run = _run_length_positive(cvd_series)
+    bear_run = _run_length_negative(cvd_series)
     if cfg.use_cvd_filter:
         if cfg.use_cvd_streak:
             bull_cvd = bull_run >= cfg.cvd_trend_count

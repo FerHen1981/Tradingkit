@@ -97,8 +97,13 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   project *MEX PROP TRADER*. Werkwijze in `docs/CHAT_INSTRUCTIE.md`.
 
 ## Dev conventions
-- Develop/commit/push only to branch `claude/middleware-setup-guide-afhvtk`; never push
-  elsewhere without permission. Do not create PRs unless asked. (`claude/mcp-trader-dev-sse-ibl64y`
+- **Eén branch: `claude/middleware-setup-guide-afhvtk`.** Develop/commit/push daar en nergens
+  anders zonder toestemming. **Begin elke sessie met `git pull origin claude/middleware-setup-guide-afhvtk`** —
+  het bord, de inbox en dit bestand staan daar en lopen anders achter. De chat-branches zijn
+  **bevroren**: `pine-dev` en `legacy` zijn opgenomen (24-08), `analyses` botst nog (D-43) en
+  `discord-notify` is dood materiaal sinds D-04. Push er niets nieuws heen — werk dat op een
+  eigen branch blijft staan bereikt niemand, en dat is precies hoe de analyses-chat dagen op een
+  ingetrokken aanname doorwerkte. Do not create PRs unless asked. (`claude/mcp-trader-dev-sse-ibl64y`
   is dood — volledig opgenomen in de werkbranch, liep 186 commits achter.)
 - Ownership: `backtest/**` Backtest Setup · `pine/**` + `tools/gen_pine_firms.py` Pine Dev ·
   `middleware/**` Middleware App · `data/propfirms.json` gedeeld. Buiten je eigen map:

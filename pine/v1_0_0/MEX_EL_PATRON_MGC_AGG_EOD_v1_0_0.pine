@@ -42,7 +42,7 @@
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-var string currentVersion = "v1.0.0"
+var string currentVersion = "v1.0.1"
 strategy("MΞX EL PATRON · MGC AGG EOD · " + currentVersion, shorttitle="PAT-MGC-A", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

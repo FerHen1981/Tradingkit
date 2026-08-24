@@ -45,7 +45,7 @@
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
 // EL CENTINELA MES Production parity: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // EL CENTINELA parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
-var string currentVersion = "v1.0.0"
+var string currentVersion = "v1.0.1"
 strategy("MΞX EL MATADOR · MES PROD EOD · " + currentVersion, shorttitle="MAT-MES-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

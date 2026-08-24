@@ -468,6 +468,7 @@ def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
     out["fvg_top"] = fvg_top
     out["fvg_bot"] = fvg_bot
     out["fvg_mid"] = fvg_mid
+    out["fvg_size"] = fvg_size          # price units; /mintick for the tick size
     out["fvg_pass"] = fvg_pass
     _tick(1)
 

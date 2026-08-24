@@ -235,6 +235,7 @@ def classify_pine_only(placements, export, sim_trades, expiry_bars: int,
         "first_placed_but_unfilled": got[:8],
         "first_never_placed": missing[:8],
         "first_blocked_by_position": blocked[:8],
+        "_never_placed_all": missing,
         "verdict": (
             "geen pine-only trades" if not n else
             "OVERWEGEND FILLS: we hadden op die momenten wél een limiet liggen die niet "
@@ -248,3 +249,65 @@ def classify_pine_only(placements, export, sim_trades, expiry_bars: int,
             else "GEMENGD: geen enkele oorzaak domineert (een categorie telt pas als "
             "verklaring bij meer dan de helft én tweemaal de eerstvolgende)"),
     }
+
+
+def explain_missing(df, ind, cfg, rows, expiry_bars: int) -> dict:
+    """For each trade Pine took while we were flat and orderless: what did OUR
+    indicators see on those bars?
+
+    Pine's entry comment carries the fingerprint of the signal it acted on
+    (gap size in ticks, CVD streak length), so this is a direct comparison
+    rather than a reconstruction. The point is to name WHICH condition differs — a
+    gap we never detected, a gap we sized differently, a streak that fell short,
+    or a time gate — because each has a different fix and guessing between them
+    is how a parity hunt turns into a week.
+    """
+    import numpy as np
+    import pandas as pd
+    from collections import Counter
+
+    et = pd.DatetimeIndex(df["et"])
+    if et.tz is not None:
+        et = et.tz_localize(None)
+    minutes = (et.asi8 // 60_000_000_000)
+    order = np.argsort(minutes)
+
+    fvg_dir = np.asarray(ind["fvg_dir"])
+    fvg_size = np.asarray(ind["fvg_size"]) if "fvg_size" in ind else None
+    fvg_pass = np.asarray(ind["fvg_pass"])
+    bull_cvd = np.asarray(ind["bull_cvd"])
+    bear_cvd = np.asarray(ind["bear_cvd"])
+    tick = cfg.contract.mintick
+
+    reasons, examples = Counter(), []
+    for r in rows:
+        lo = np.searchsorted(minutes[order], r["t"] - expiry_bars - 1, "left")
+        hi = np.searchsorted(minutes[order], r["t"], "right")
+        idx = order[lo:hi]
+        same = [i for i in idx if fvg_dir[i] == r["dir"]]
+        if not same:
+            reasons["geen FVG van die richting in het venster"] += 1
+            examples.append({"entry": r["entry_time"], "dir": r["dir"],
+                             "pine_fvg": r.get("pine_fvg_ticks"),
+                             "reason": "geen FVG"})
+            continue
+        passed = [i for i in same if fvg_pass[i]]
+        if not passed:
+            sizes = sorted({round(float(fvg_size[i]) / tick, 1) for i in same
+                            if fvg_size is not None and not np.isnan(fvg_size[i])})
+            reasons["FVG gedetecteerd maar buiten de maatband"] += 1
+            examples.append({"entry": r["entry_time"], "dir": r["dir"],
+                             "pine_fvg": r.get("pine_fvg_ticks"),
+                             "ons_fvg_ticks": sizes[:4], "reason": "maatband"})
+            continue
+        cvd = bull_cvd if r["dir"] > 0 else bear_cvd
+        if not any(cvd[i] for i in passed):
+            reasons["FVG ok maar CVD-streak niet gehaald"] += 1
+            examples.append({"entry": r["entry_time"], "dir": r["dir"],
+                             "pine_cvd": r.get("pine_cvd_streak"), "reason": "cvd"})
+            continue
+        reasons["FVG en CVD ok — geblokkeerd door tijd/dag/halte"] += 1
+        examples.append({"entry": r["entry_time"], "dir": r["dir"], "reason": "gate"})
+
+    return {"checked": len(rows), "reasons": dict(reasons.most_common()),
+            "examples": examples[:10]}

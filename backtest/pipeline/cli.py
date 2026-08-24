@@ -496,7 +496,8 @@ def cmd_stage1(args):
     # simulator has no PA daily loss limit, no day-trail and no day-cap — while
     # the Pine script runs all three. That turned every DLL exit into a full
     # stop-out and was worth ~11 percentage points of the exit mix.
-    res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
+    ind = im.compute(df, cfg)
+    res = Engine(cfg, df, ind, research_mode=False).run()
     k = kpis(res)
     cmp_ = compare(k, exp)
     print(f"\n    {'check':<18}{'simulator':>14}{'pine':>14}   ")
@@ -514,7 +515,7 @@ def cmd_stage1(args):
               f"niet in de uitvoering)")
 
     from .tracediff import (classify_pine_only, diff as trace_diff,
-                            render as trace_render)
+                            explain_missing, render as trace_render)
     td = trace_diff(res.trades, exp)
     po = classify_pine_only(res.placements, exp, res.trades, cfg.expiry_bars)
     if po["pine_only"]:
@@ -525,6 +526,11 @@ def cmd_stage1(args):
               f"({po['blocked_share_pct']}%) — signaal was niet beschikbaar")
         print(f"    {po['we_never_placed']} keer waren we vrij en hadden toch geen order")
         print(f"    -> {po['verdict']}")
+        if po.get("first_never_placed") is not None and po["we_never_placed"]:
+            ex = explain_missing(df, ind, cfg, po["_never_placed_all"], cfg.expiry_bars)
+            print(f"\n  waarom hadden wij daar geen order ({ex['checked']} gevallen):")
+            for reason, cnt in ex["reasons"].items():
+                print(f"    {cnt:>4}x  {reason}")
     if not cmp_["pass"] or args.diff:
         print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "
               "her-optimaliseer niet)")
@@ -556,7 +562,9 @@ def cmd_stage1(args):
                            "costs_from_export": costs,
                            "as_tested": bool(tested_changes),
                            "paired_pct": pair_pct, "status": status,
-                           "order_counts": oc, "pine_only_split": po,
+                           "order_counts": oc,
+                           "pine_only_split": {k: v for k, v in po.items()
+                                               if not k.startswith("_")},
                            "as_tested_changes": {k: [v[0], v[1]]
                                                  for k, v in tested_changes.items()},
                            "dataset": args.dataset, "dataset_symbol": ds_sym,

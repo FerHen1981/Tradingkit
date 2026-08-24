@@ -211,3 +211,72 @@ def test_the_three_categories_always_add_up():
                              expiry_bars=6)
     assert (out["we_placed_but_never_filled"] + out["we_were_in_a_position"]
             + out["we_never_placed"]) == out["pine_only"] == 3
+
+
+# --- explain_missing: name the condition that differs -------------------------
+
+def _frame_and_ind(tmp_path, cfg):
+    import numpy as np
+    from backtest import data as dm, indicators as im
+    rng = np.random.default_rng(3)
+    n, sigma = 20_000, 4.0
+    px = 6000 + np.cumsum(rng.normal(0, sigma, n))
+    idx = pd.date_range("2025-09-02 00:00", periods=n, freq="1min",
+                        tz="America/New_York")
+    raw = pd.DataFrame({
+        "Open": px, "Close": px + rng.normal(0, sigma * 0.7, n),
+        "High": px + np.abs(rng.normal(0, sigma * 2, n)),
+        "Low": px - np.abs(rng.normal(0, sigma * 2, n)),
+        "Volume": rng.integers(50, 900, n).astype(float), "Delta": np.zeros(n)})
+    raw["High"] = raw[["High", "Open", "Close"]].max(axis=1)
+    raw["Low"] = raw[["Low", "Open", "Close"]].min(axis=1)
+    raw.insert(0, "DateTime", idx.strftime("%d-%m-%Y %H:%M:%S %z"))
+    csv = tmp_path / "x.csv"
+    raw.to_csv(csv, index=False)
+    df = dm.load(str(csv), cache=False)
+    return df, im.compute(df, cfg)
+
+
+def test_explain_missing_names_a_bar_with_no_gap_at_all(tmp_path):
+    from backtest.pipeline import fleet
+    from backtest.pipeline.tracediff import explain_missing
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    df, ind = _frame_and_ind(tmp_path, cfg)
+    far = {"t": int(pd.Timestamp("2030-01-01 12:00").value // 60_000_000_000),
+           "dir": 1, "entry_time": "2030-01-01 12:00", "pine_fvg_ticks": 12}
+    out = explain_missing(df, ind, cfg, [far], expiry_bars=6)
+    assert out["checked"] == 1
+    assert "geen FVG van die richting in het venster" in out["reasons"]
+
+
+def test_explain_missing_separates_band_from_streak(tmp_path):
+    """Every case must land in exactly one named bucket — an unexplained
+    remainder would send the search back to guessing."""
+    import numpy as np
+
+    from backtest.pipeline import fleet
+    from backtest.pipeline.tracediff import explain_missing
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    df, ind = _frame_and_ind(tmp_path, cfg)
+    et = pd.DatetimeIndex(df["et"]).tz_localize(None)
+    mins = et.asi8 // 60_000_000_000
+
+    rows = []
+    for i in np.where(np.asarray(ind["fvg_dir"]) != 0)[0][:40]:
+        rows.append({"t": int(mins[i]) + 1, "dir": int(ind["fvg_dir"][i]),
+                     "entry_time": str(et[i]), "pine_fvg_ticks": 12,
+                     "pine_cvd_streak": 6})
+    out = explain_missing(df, ind, cfg, rows, expiry_bars=6)
+    assert out["checked"] == len(rows)
+    assert sum(out["reasons"].values()) == len(rows), "gevallen verdwenen uit de telling"
+    assert set(out["reasons"]) <= {
+        "geen FVG van die richting in het venster",
+        "FVG gedetecteerd maar buiten de maatband",
+        "FVG ok maar CVD-streak niet gehaald",
+        "FVG en CVD ok — geblokkeerd door tijd/dag/halte"}
+    # Which buckets actually occur is data-dependent; the invariant is that every
+    # case lands in exactly one and that a band case, when it occurs, reports the
+    # sizes we measured — that number is what makes the finding actionable.
+    for e in out["examples"]:
+        if e["reason"] == "maatband":
+            assert e["ons_fvg_ticks"], "onze tickgroottes worden niet gerapporteerd"

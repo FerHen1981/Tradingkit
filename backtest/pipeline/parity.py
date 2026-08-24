@@ -136,6 +136,7 @@ def read_export(path: str) -> Export:
                 "entry_px": _f(get(entry, "Price USD")), "exit_px": _f(get(exit_, "Price USD")),
                 "qty": _f(get(entry, "Size (qty)")), "net": net,
                 "signal": str(get(entry, "Signal") or ""),
+                **_sigdiag(str(get(entry, "Signal") or "")),
                 "exit_reason": str(get(exit_, "Signal") or ""),
             })
         trades.sort(key=lambda t: t["n"])
@@ -147,6 +148,24 @@ def read_export(path: str) -> Export:
                 perf[str(row[0]).strip()] = row[1]
     wb.close()
     return Export(path=path, properties=props, trades=trades, performance=perf)
+
+
+_SIGDIAG = __import__("re").compile(
+    r"FVG(\d+)\|CVD(\d+)\|AGE(\d+)\|H(\d+)\|D(\d+)")
+
+
+def _sigdiag(signal: str) -> dict:
+    """Pine writes its own signal fingerprint into each entry comment:
+    FVG<ticks>|CVD<streak>|AGE<age>|H<hour>|D<dayofweek>|SL<stop>t.
+
+    That makes Pine's side of the comparison directly measurable instead of
+    inferred — the gap size and streak length it actually acted on, per trade."""
+    m = _SIGDIAG.search(signal or "")
+    if not m:
+        return {}
+    return {"pine_fvg_ticks": int(m.group(1)), "pine_cvd_streak": int(m.group(2)),
+            "pine_fvg_age": int(m.group(3)), "pine_hour": int(m.group(4)),
+            "pine_dow": int(m.group(5))}
 
 
 def _f(x, d=0.0):

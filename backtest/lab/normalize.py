@@ -28,6 +28,14 @@ _REQUIRED = {
     "Low":    ["Low"],
     "Close":  ["Close"],
     "Volume": ["Volume(from bar)", "Volume"],   # bar volume preferred (always populated)
+}
+# Written when present, filled with 0 when not. Delta lives here rather than in
+# _REQUIRED because the canonical CVD is the deterministic OHLCV polarity proxy
+# (pipeline v7, ground rule 4) — native Delta is an explicit experiment, never a
+# dependency. Half our existing datasets carry Delta ≡ 0 anyway (D-09), so
+# refusing an export that simply lacks the column bought nothing and blocked
+# every source that does not ship order-flow.
+_FILLED = {
     "Delta":  ["Delta"],
 }
 _OPTIONAL = {
@@ -87,10 +95,11 @@ def to_canonical(src: str | Path, dst: str | Path,
                 raise ValueError(f"export missing a source column for {canon!r} "
                                  f"(tried {srcs})")
             req_i[canon] = j
+        fill_i = {canon: _first_index(idx, srcs) for canon, srcs in _FILLED.items()}
         opt_i = {canon: _first_index(idx, srcs) for canon, srcs in _OPTIONAL.items()}
         opt_i = {c: j for c, j in opt_i.items() if j is not None}
 
-        out_cols = ["DateTime", *_REQUIRED.keys(), *opt_i.keys()]
+        out_cols = ["DateTime", *_REQUIRED.keys(), *_FILLED.keys(), *opt_i.keys()]
         dst.parent.mkdir(parents=True, exist_ok=True)
         n = 0
         with open(dst, "w", newline="", encoding="utf-8") as fout:
@@ -105,6 +114,8 @@ def to_canonical(src: str | Path, dst: str | Path,
                 out = [dt]
                 for canon in _REQUIRED:
                     out.append(_num(row, req_i[canon]))
+                for canon, j in fill_i.items():
+                    out.append(_num(row, j) if j is not None else "0")
                 for canon in opt_i:
                     out.append(_num(row, opt_i[canon]))
                 w.writerow(out)

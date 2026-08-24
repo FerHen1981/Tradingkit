@@ -58,3 +58,51 @@ def test_missing_required_rejected():
     open(src, "w").write("DateTime,UTC,Open,High,Low,Close\n1,-04:00,1,2,3,4\n")  # no Volume/Delta
     with pytest.raises(ValueError, match="missing a source column"):
         to_canonical(src, dst)
+
+
+def _write(path, header, *rows):
+    import csv
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for r in rows:
+            w.writerow(r)
+    return path
+
+
+def test_export_without_a_delta_column_still_ingests(tmp_path):
+    """The canonical CVD is the OHLCV polarity proxy (ground rule 4), so a source
+    that ships no order-flow column must not be rejected. Delta is written as 0."""
+    from backtest.lab.normalize import to_canonical
+    src = _write(tmp_path / "MES.csv",
+                 ["DateTime", "UTC", "Open", "High", "Low", "Close", "Volume"],
+                 ["24-08-2025 18:00:00", "-04:00", "6400,25", "6401,00", "6400,00", "6400,75", "812"])
+    out, n = to_canonical(src, tmp_path / "canonical.csv")
+    assert n == 1
+    lines = open(out).read().strip().splitlines()
+    assert lines[0].split(",") == ["DateTime", "Open", "High", "Low", "Close", "Volume", "Delta"]
+    assert lines[1].endswith(",0"), lines[1]
+    assert lines[1].startswith("24-08-2025 18:00:00 -04:00,6400.25")
+
+
+def test_a_real_delta_column_is_still_carried_through(tmp_path):
+    """The counter-example: making Delta optional may not silently zero a source
+    that does ship it."""
+    from backtest.lab.normalize import to_canonical
+    src = _write(tmp_path / "MES.csv",
+                 ["DateTime", "UTC", "Open", "High", "Low", "Close", "Volume", "Delta"],
+                 ["24-08-2025 18:00:00", "-04:00", "6400,25", "6401,00", "6400,00", "6400,75",
+                  "812", "-137"])
+    out, _ = to_canonical(src, tmp_path / "canonical.csv")
+    assert open(out).read().strip().splitlines()[1].endswith(",-137")
+
+
+def test_a_missing_price_column_is_still_refused(tmp_path):
+    """Delta became optional; OHLCV did not."""
+    import pytest
+    from backtest.lab.normalize import to_canonical
+    src = _write(tmp_path / "MES.csv",
+                 ["DateTime", "UTC", "Open", "High", "Low", "Volume"],
+                 ["24-08-2025 18:00:00", "-04:00", "1", "2", "0", "5"])
+    with pytest.raises(ValueError, match="Close"):
+        to_canonical(src, tmp_path / "canonical.csv")

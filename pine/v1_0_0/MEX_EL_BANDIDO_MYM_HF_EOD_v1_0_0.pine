@@ -1678,9 +1678,9 @@ if dayHalted and not haltCloseSent
         strategy.close_all(comment=haltReason)
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
     exitReasonNext := haltReason
-    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", haltReason + " | Today: $" + str.tostring(todayRealizedPnL, "#.##"))
+    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", haltReason + " | Today: $" + str.tostring(runningPnL, "#.##"))
     if plainAlertsOK
-        alert(f_msgHead() + " | 🔒 DAY HALT (" + haltReason + ") | PnL $" + str.tostring(todayRealizedPnL, "#.##"), alert.freq_once_per_bar)
+        alert(f_msgHead() + " | 🔒 DAY HALT (" + haltReason + ") | PnL $" + str.tostring(runningPnL, "#.##"), alert.freq_once_per_bar)
 
 var bool acctCloseSent = false
 if acctHalted and not acctCloseSent

@@ -217,9 +217,18 @@ float trailUpdateStep = 2.0
 
 
 // === DAILY RISK / EQUITY =====================================================
-enableDailyLossLimit = false
-dailyLossLimit       = 700.0
-includeOpenInLoss    = true
+// De dagverlieslimiet stond hier als harde constante `false`, dus hij was niet aan te
+// zetten -- de machinerie eronder (lossHit -> dayHalted) werkte wel, maar niets kon hem
+// ooit voeden. Weer inputs, met de bevroren waarde als default: `frozen-engines.md` zegt
+// voor deze engine "daily OFF", dus AAN zetten is een parameterbesluit en een nieuwe
+// onderzoeksronde, geen tweak. De knop hoort er wel te zijn.
+// Let op: de PA-limiet (`dllHit` op `acctDLL`) staat hier los van en is WEL actief.
+enableDailyLossLimit = input.bool(false, "Enable daily loss limit", group=GROUP_PHASE,
+     tooltip="Strategie-eigen dagverlieslimiet, los van de PA daily loss limit hieronder. UIT = de bevroren configuratie van deze engine.")
+dailyLossLimit       = input.float(700, "Daily loss limit ($)", minval=0, step=50, group=GROUP_PHASE,
+     tooltip="Verlies dat de dag stopt. Wordt geschaald door de dagschaal-instelling.", display=display.none)
+includeOpenInLoss    = input.bool(true, "Count open PnL in the loss check", group=GROUP_PHASE,
+     tooltip="AAN: de limiet is een VERLIESBEGRENZER en snijdt de lopende trade af. UIT: hij is een halt-trigger en de verliestrade loopt eerst vol naar zijn stop.", display=display.none)
 enableDailyTarget    = false
 dailyProfitTarget    = 350.0
 enableDailyDrawdown    = false
@@ -1676,9 +1685,9 @@ if dayHalted and not haltCloseSent
         strategy.close_all(comment=haltReason)
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
     exitReasonNext := haltReason
-    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", haltReason + " | Today: $" + str.tostring(todayRealizedPnL, "#.##"))
+    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", haltReason + " | Today: $" + str.tostring(runningPnL, "#.##"))
     if plainAlertsOK
-        alert(f_msgHead() + " | 🔒 DAY HALT (" + haltReason + ") | PnL $" + str.tostring(todayRealizedPnL, "#.##"), alert.freq_once_per_bar)
+        alert(f_msgHead() + " | 🔒 DAY HALT (" + haltReason + ") | PnL $" + str.tostring(runningPnL, "#.##"), alert.freq_once_per_bar)
 
 var bool acctCloseSent = false
 if acctHalted and not acctCloseSent

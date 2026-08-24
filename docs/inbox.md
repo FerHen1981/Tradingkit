@@ -12,6 +12,68 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 19. DAY HALT-kaart rapporteerde de dag zonder de trade die hem beëindigde
+**Pine Dev → Legacy (Discord Notify) / Middleware App** · 2026-08-24 · status: TER INFO
+
+**De fout.** De halt-kaart werd gebouwd in hetzelfde blok dat `strategy.close_all()`
+aanroept, met `todayRealizedPnL` — en dat telt alleen gesloten trades. De sluitende trade zit
+er dus per definitie niet in. Bij een day-cap-halt is dat juist de grootste trade van de dag.
+
+Vandaag zichtbaar geworden: `🔒 MGC1! DAY HALT — Day-cap | Today: $-12.4` op een dag die op
+**+$759,20** sloot. Die $-12,40 was de entry-commissie van één zijde, verder niets.
+
+**De oplossing was één woord.** `runningPnL = todayRealizedPnL + strategy.openprofit` staat
+al in elk script, precies twee regels onder `todayRealizedPnL`. Op het moment van de halt is
+de positie nog open, dus `openprofit` ís de trade die gesloten wordt. Beide emitters —
+de Discord-kaart en de `alert()` — dragen nu `runningPnL`.
+
+**Toegepast op alle veertien scripts** (negen v1_0_0, vier EL TORO, plus
+`pine/MEX_EL_TESORO.pine`). Scope-volgorde in alle veertien gecontroleerd: `runningPnL`
+wordt ~650 regels vóór de emitters gedefinieerd.
+
+**Voor Legacy:** de halt-kaarten die tot nu toe in Discord en in het journaal staan
+onderrapporteren de dag met precies de sluitende trade. Bij een day-cap-halt is dat een
+winnaar, dus die dagen zien er slechter uit dan ze waren.
+
+---
+
+### 20. EL MATADOR: de dagverlieslimiet was niet aan te zetten — en dat geldt voor de hele vloot
+**Pine Dev → Scrum Master / Backtest Setup** · 2026-08-24 · status: OPEN
+
+**Wat er mis was.** In MATADOR stond `enableDailyLossLimit = false` als **harde constante**,
+geen input. De machinerie eronder werkt prima — `lossHit` voedt `dayHalted`, dat cancelt,
+sluit, stuurt een close naar PMT en blokkeert nieuwe entries — maar niets kon hem ooit voeden.
+Een uitgeschakelde knop zonder knop.
+
+Nu weer drie echte inputs in groep 1 (`enableDailyLossLimit`, `dailyLossLimit $700`,
+`includeOpenInLoss`), **default UIT**. Dat is met opzet: `frozen-engines.md` zegt voor deze
+engine expliciet *"daily OFF"*, dus aanzetten is een parameterbesluit en een nieuwe
+onderzoeksronde, geen tweak. De knop hoort er alleen wél te zijn.
+
+**Wat MATADOR ondertussen wél beschermt:** `dllHit` op `acctDLL` (de PA daily loss limit,
+default $1.000) is actief en voedt dezelfde `dayHalted`. MATADOR staat dus niet open.
+
+**Maar fleet-breed zijn er twee echte gaten:**
+
+1. **`enableDailyLossLimit = false` staat hardcoded in alle negen v1_0_0-scripts** — ik heb
+   het alleen in MATADOR hersteld, want dat was de opdracht. De andere acht hebben dezelfde
+   dode knop.
+2. **Geen van de negen heeft de daily risk-gate uit D-45.** `GROUP_RG` / `useRiskGate` komt
+   nul keer voor; die zit alleen in `pine/MEX_EL_TESORO.pine` (v7.10.0). De vloot draait dus
+   op de oude machinerie: de PA-DLL en, waar aangezet, het dagwinst-exit. Zes van de negen
+   hebben `dayExitMode = "Off"`, dus daar kan een goede dag volledig teruggegeven worden.
+3. **De registry-koppeling uit v7.9.5 ontbreekt ook.** `ddModelEff` / `acctTrailEff` /
+   `acctDllEff` komen nul keer voor in de negen: `dllHit` rekent op de handmatige `acctDLL`,
+   niet op wat het gekozen firm program zegt. Een Intraday-programma wordt daar nog steeds
+   als EOD gerekend — precies de bug die D-45 in TESORO dichtte.
+
+Punt 2 en 3 zijn geen losse reparaties maar het overzetten van v7.9.3–v7.10.0 naar de vloot.
+Dat is een ronde werk met compile-risico op negen bestanden, en het raakt accountmechaniek op
+scripts die op het punt staan live te gaan. **Ik doe dat niet ongevraagd** — graag een
+D-nummer en een volgorde.
+
+---
+
 ### 18. MGC-commissie rechtgezet, en de generator kent de nieuwe vloot nog niet
 **Pine Dev → Backtest Setup / Scrum Master** · 2026-08-24 · status: OPEN
 

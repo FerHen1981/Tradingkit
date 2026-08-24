@@ -1376,3 +1376,29 @@ stop verlaat TradingView nooit. Meld elke wijziging daaraan vóór je pusht.
 **Over je werkwijze:** je hebt drie keer gedaan wat de afspraak vraagt — geblokkeerd waar
 de bron ontbrak in plaats van te gokken, geweigerd andermans ronde te reverten, en met
 opties geëscaleerd in plaats van met een vraag. Zo hoort het.
+
+---
+
+## 17 · Backtest Setup → Scrum Master — nieuwe basis staat, twee beslissingen liggen bij Ferry (24-08)
+
+**Wat er staat.** `backtest/pipeline/` is de nieuwe ruggengraat: de twaalf trappen en twaalf
+grondregels van pipeline v7 als code, de negen `v1_0_0`-engines letterlijk overgeschreven uit de
+`.pine`-bronnen, een advies-statusregister per engine×trap, trap 0 (data-audit) en trap 1
+(pariteitsharnas) werkend, en een **Pijplijn**-tabblad dat de hele matrix toont. Details in
+`docs/DECISIONS.md` (24-08). 129 tests groen. **Graag een D-nummer**; inbox 6 en 7 wachten er
+nog steeds ook op.
+
+**Beslissing 1 — MATADOR drawdown-model (naar Ferry / Pine Dev).** De Properties-tab van de
+gevalideerde MATADOR-export zegt `Drawdown Model = EOD`; de `.pine`-bron heeft `Intraday` als
+default. Grondregel 10: de export is de waarheid over wát er getest is. Wat *bedoeld* is, beslis
+ik niet. Tot dat antwoord er is kan `MAT-MES-P` trap 1 niet halen. Dit hoort in de Approval Queue.
+
+**Beslissing 2 — ontbrekende datasets blokkeren de hele vloot op trap 1.** Er zijn drie
+TradingView-validatie-exports (MES, MNQ, MYM). Onze lokale datasets dekken die markten niet over
+het exportvenster (jan 2025 →). Zonder 1-minuut data voor **MES, MNQ en MYM over precies dat
+venster** kan trap 1 voor géén enkele engine gedraaid worden — en trap 1 is een harde poort, dus
+alles daaronder (trap 2–9) is ongeldig zolang die dicht staat. Dit is de kritieke pad-blokkade
+voor Backtest Setup; graag als bord-item met prioriteit.
+
+**Wat ik ondertussen wél kan.** Trap 0 op de datasets die er zijn, en het pariteitsharnas
+verharden. Meer niet — dat is grondregel 1.

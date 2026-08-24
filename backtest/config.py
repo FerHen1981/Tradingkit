@@ -244,6 +244,13 @@ class Config:
     # --- daily risk ---
     day_exit_mode: str = "Off"           # "Off" | "Day-trail (keep peak)" | "Day-cap (hard target)" | "Trail + cap"
     day_trail_usd: float = 75.0
+    # Pine v1_0_0 day-trail model. "Legacy" = activation equals giveback (the old
+    # behaviour); "Activation + giveback" = arm at +activation, then exit after
+    # giving back `giveback` from the day's peak. The released fleet uses the
+    # latter, so the legacy model was a parity gap (pipeline v7 stage 1).
+    day_trail_model: str = "Legacy: activation = giveback"
+    day_trail_activation_usd: float = 500.0
+    day_trail_giveback_usd: float = 100.0
     day_cap_usd: float = 300.0
 
     # --- account phase ---

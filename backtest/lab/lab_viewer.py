@@ -584,6 +584,60 @@ def _start_portfolio(q) -> tuple[dict, int]:
     return _spawn(cmd, f"portfolio seed{seed}"), 200
 
 
+def _pipeline_view() -> dict:
+    """The twelve-stage plan plus each engine's status — the cockpit's spine."""
+    from ..pipeline import fleet, state
+    from ..pipeline.stages import GROUND_RULES, STAGES
+    engines = fleet.names()
+    return {
+        "stages": [{"n": s.n, "key": s.key, "title": s.title, "gate": s.gate,
+                    "hard": s.hard, "note": s.note} for s in STAGES],
+        "ground_rules": list(GROUND_RULES),
+        "fleet": fleet.summary(),
+        "overview": state.overview(engines),
+        "detail": {e: state.engine_view(e) for e in engines},
+    }
+
+
+def _start_stage(q) -> tuple[dict, int]:
+    from ..pipeline import fleet
+    stage = (q.get("stage") or [""])[0]
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    engine = (q.get("engine") or [""])[0]
+    if stage == "0":
+        cmd = [sys.executable, "-m", "backtest.pipeline.cli", "stage0", "--dataset", dataset]
+        if engine:
+            if engine not in fleet.names():
+                return {"error": f"unknown engine {engine!r}"}, 400
+            cmd += ["--engine", engine]
+        return _spawn(cmd, f"trap 0 · {dataset}"), 200
+    if stage == "1":
+        if engine not in fleet.names():
+            return {"error": "pick an engine for the parity run"}, 400
+        exp = (q.get("export") or [""])[0].strip()
+        if not exp:
+            return {"error": "stage 1 needs a TradingView export (.xlsx) to compare against"}, 400
+        f = (lab_root() / "exports" / os.path.basename(exp)).resolve()
+        if not f.exists():
+            return {"error": f"export not found: {f.name} — upload it under 1 · Data"}, 400
+        cmd = [sys.executable, "-m", "backtest.pipeline.cli", "stage1", "--dataset", dataset,
+               "--engine", engine, "--export", str(f)]
+        for name, flag in (("since", "--since"), ("until", "--until")):
+            v = (q.get(name) or [""])[0].strip()
+            if v:
+                cmd += [flag, v]
+        return _spawn(cmd, f"trap 1 · {engine}"), 200
+    return {"error": f"stage {stage!r} is not implemented yet"}, 400
+
+
+def _exports() -> list[str]:
+    d = lab_root() / "exports"
+    return sorted(p.name for p in d.glob("*.xlsx")) if d.exists() else []
+
+
 def _candidates() -> dict:
     root = lab_root()
     files = sorted(root.glob("verified_seed*.json")) or sorted(root.glob("candidates_seed*.json"))
@@ -683,6 +737,10 @@ class Handler(BaseHTTPRequestHandler):
             with _JOBS_LOCK:
                 st = dict(_JOBS.get(j) or {})
             return self._json(st or {"error": "unknown job"}, 200 if st else 404)
+        if u.path == "/api/pipeline":
+            return self._json(_pipeline_view())
+        if u.path == "/api/exports":
+            return self._json({"exports": _exports()})
         if u.path == "/api/candidates":
             return self._json(_candidates())
         if u.path == "/api/builder/options":
@@ -722,6 +780,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(body, code)
         if u.path == "/api/evalsweep":
             body, code = _start_evalsweep(q)
+            return self._json(body, code)
+        if u.path == "/api/stage":
+            body, code = _start_stage(q)
             return self._json(body, code)
         if u.path == "/api/portfolio":
             body, code = _start_portfolio(q)
@@ -1184,6 +1245,7 @@ async function loadWizard(){
     $('#wDs').innerHTML=dsOpts;
     const swD=$('#swDs');if(swD)swD.innerHTML=dsOpts;
     const esD=$('#esDs');if(esD)esD.innerHTML=dsOpts;
+    const stD=$('#stDs');if(stD)stD.innerHTML=dsOpts;
     loadLibrary();
   }catch(e){}
 }
@@ -1486,6 +1548,71 @@ async function loadBuilder(){
   }catch(e){}
 }
 // ---- tabs ----
+
+// ---------- 2 · Pijplijn ----------
+let PIPE=null;
+const ST_MARK={passed:['+','var(--gold)'],failed:['x','var(--rose)'],running:['~','var(--azure)'],
+               inconclusive:['?','var(--sub)'],todo:['·','var(--dim)']};
+async function loadPipeline(){
+  try{PIPE=await (await fetch('/api/pipeline')).json();}catch(e){return}
+  const S=PIPE.stages;
+  $('#plHead').textContent=S.length+' gated trappen · '+PIPE.fleet.length+' engines';
+  // matrix: engine x trap
+  const head='<tr><th style="text-align:left">Engine</th><th>Markt</th>'
+    +S.map(s=>`<th title="${(s.title+' — '+s.gate).replace(/"/g,'&quot;')}">${s.n}${s.hard?'!':''}</th>`).join('')
+    +'<th style="text-align:left">Gehaald t/m</th></tr>';
+  const rows=PIPE.overview.map(o=>{
+    const f=PIPE.fleet.find(x=>x.name===o.engine)||{};
+    const cells=o.stages.map(v=>{const m=ST_MARK[v.status]||ST_MARK.todo;
+      return `<td style="color:${m[1]};font-family:var(--mono)" title="${v.status}">${m[0]}</td>`}).join('');
+    const reached=o.reached>=0?('trap '+o.reached):'—';
+    return `<tr data-eng="${o.engine}" style="cursor:pointer"><td style="text-align:left">${o.engine.replace('EL_','')}</td>
+      <td>${f.market||''}</td>${cells}<td style="text-align:left;color:${o.reached>=0?'var(--gold)':'var(--sub)'}">${reached}</td></tr>`;
+  }).join('');
+  $('#plMatrix').innerHTML=`<table><thead>${head}</thead><tbody>${rows}</tbody></table>
+    <div class=muted style="margin-top:8px">+ gehaald · x gefaald · ~ loopt · ? inconclusief · · nog niet gedraaid.
+    <b>!</b> = harde poort. Klik een rij voor de poorten per trap.</div>`;
+  document.querySelectorAll('#plMatrix tbody tr').forEach(tr=>tr.addEventListener('click',()=>showEngine(tr.dataset.eng)));
+  $('#plRules').innerHTML='<b>Niet-onderhandelbare grondregels</b><div style="margin-top:6px">'
+    +PIPE.ground_rules.map((r,i)=>`<div class=lensrow style="margin-top:3px"><span class=tag style="min-width:26px;text-align:center">${i+1}</span> ${r}</div>`).join('')+'</div>';
+  // vloot
+  $('#flCount').textContent=PIPE.fleet.length+' engines';
+  $('#flTable').innerHTML='<table><thead><tr><th style="text-align:left">Engine</th><th>Markt</th><th>Qty</th>'
+    +'<th>FVG</th><th>CVD</th><th>Stop</th><th>R</th><th>Expiry</th><th style="text-align:left">Dagexit</th>'
+    +'<th style="text-align:left">Regime</th></tr></thead><tbody>'
+    +PIPE.fleet.map(f=>`<tr><td style="text-align:left">${f.name.replace('EL_','')}${f.parity_pending?' <span class=tag style="color:var(--rose);border-color:var(--rose)">pariteit open</span>':''}</td>
+      <td>${f.market}</td><td>${f.qty}</td><td>${f.fvg}</td><td>${f.cvd}</td><td>${f.stop}</td>
+      <td>${f.r}</td><td>${f.expiry}</td><td style="text-align:left">${f.day_exit}</td>
+      <td style="text-align:left">${f.regime}</td></tr>`).join('')+'</tbody></table>';
+  const es=$('#stEngine'); if(es) es.innerHTML=PIPE.fleet.map(f=>`<option value="${f.name}">${f.name.replace('EL_','')}</option>`).join('');
+}
+function showEngine(name){
+  const view=(PIPE.detail||{})[name]||[];
+  const box=$('#stOut'); box.style.display='block';
+  box.innerHTML=`<div style="font-size:13px"><b style="color:var(--gold)">${name.replace('EL_','')}</b> — poorten</div>`
+    +view.map(v=>{const m=ST_MARK[v.status]||ST_MARK.todo;
+      const blocked=(v.blocked_by||[]).length?`<div class=muted style="margin-left:36px;color:var(--rose)">geblokkeerd door open harde poort: ${v.blocked_by.join(', ')}</div>`:'';
+      return `<div style="margin-top:8px"><div style="display:flex;gap:9px;align-items:baseline">
+        <span style="min-width:26px;text-align:right;font-family:var(--mono);color:${m[1]}">${v.n}${m[0]}</span>
+        <b>${v.title}</b>${v.hard?' <span class=tag style="color:var(--rose);border-color:var(--rose)">harde poort</span>':''}
+        <span class=muted>${v.status}${v.summary?' — '+v.summary:''}</span></div>
+        <div class=muted style="margin-left:36px">${v.gate}</div>${v.note?`<div class=muted style="margin-left:36px;color:var(--gold)">${v.note}</div>`:''}${blocked}</div>`;
+    }).join('');
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+async function loadExports(){
+  try{const j=await (await fetch('/api/exports')).json();
+    const el=$('#stExport'); if(!el)return;
+    el.innerHTML=(j.exports||[]).map(x=>`<option value="${x}">${x}</option>`).join('')
+      ||'<option value="">geen export — upload een .xlsx</option>';
+  }catch(e){}
+}
+$('#stRun')&&$('#stRun').addEventListener('click',()=>{
+  const qs='stage='+encodeURIComponent($('#stStage').value)+'&engine='+encodeURIComponent($('#stEngine').value)
+    +'&dataset='+encodeURIComponent($('#stDs').value)+'&export='+encodeURIComponent($('#stExport').value||'');
+  postJob('/api/stage',qs,'#stLog','#stRun',()=>{loadPipeline();});
+});
+
 function showTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+name));
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
@@ -1493,7 +1620,8 @@ function showTab(name){
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 const gAdvT=$('#gAdvToggle');
 if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.style.display!=='none';a.style.display=open?'none':'flex';gAdvT.textContent=open?'+ advanced':'− advanced';});
-showTab('create');
+showTab('pipeline');
+loadPipeline();loadExports();
 
 loadWizard();loadGenDatasets();
 load();
@@ -1522,9 +1650,10 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 <div class=steps>Pipeline: <b>1 Data</b> load it → <b>2 Create</b> discover candidates → <b>3 Test</b> verify · select · tune · match to an account → <b>4 Runs</b> review &amp; promote</div>
 <div class=tabs id=tabs>
   <button data-tab=data>1 · Data</button>
-  <button data-tab=create class=on>2 · Create</button>
-  <button data-tab=test>3 · Test</button>
-  <button data-tab=runs>4 · Runs</button>
+  <button data-tab=pipeline class=on>2 · Pijplijn</button>
+  <button data-tab=create>3 · Create</button>
+  <button data-tab=test>4 · Test</button>
+  <button data-tab=runs>5 · Runs</button>
 </div>
 
 <!-- ===================== 1 · DATA ===================== -->
@@ -1544,6 +1673,54 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 </div>
 
 <!-- ===================== 2 · CREATE ===================== -->
+
+<!-- ===================== 2 · PIJPLIJN ===================== -->
+<div class=tab id=tab-pipeline>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Het stappenplan — MEX research pipeline v7</b>
+      <span class=muted id=plHead>twaalf gated trappen</span></div>
+    <div class=hint>Een engine gaat pas naar de volgende trap als de poort van de vorige aantoonbaar
+      gehaald is. Een poort niet halen is een geldige uitkomst: leg hem vast en stop. Afdwingen staat
+      bewust <b>uit</b> — je mag elke trap draaien, maar de status van alles ervóór blijft zichtbaar,
+      zodat een resultaat dat vooruitloopt op zijn poort ook zichtbaar vooruitloopt.</div>
+    <div id=plMatrix style="margin-top:14px;overflow-x:auto"></div>
+    <div id=plRules style="margin-top:16px"></div>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Trap draaien</b><span class=muted>trap 0 en 1 zijn geïmplementeerd</span></div>
+    <div class=hint>Trap 0 stelt vast wat de data <i>is</i>. Trap 1 is de <b>harde poort</b>: de simulator
+      moet de Pine-baseline reproduceren. Zolang die niet gehaald is, is elk parameterzoekresultaat
+      eronder ongeldig (grondregel 1) — dat is geen formaliteit maar de reden waarom eerdere rankings
+      zijn vervallen.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Trap</span><select id=stStage style="min-width:230px">
+        <option value=0>0 · Data-audit</option>
+        <option value=1>1 · Pine-pariteit (harde poort)</option>
+      </select></label>
+      <label class=field><span class=fld>Engine</span><select id=stEngine style="min-width:210px"></select></label>
+      <label class=field><span class=fld>Dataset</span><select id=stDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>TV-export (trap 1)</span><select id=stExport style="min-width:200px"></select></label>
+      <button class=go id=stRun>Draai trap</button>
+    </div>
+    <div id=stOut style="display:none;margin-top:14px"></div>
+    <pre id=stLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:260px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>De vloot — v1_0_0, pijplijn-invoer</b><span class=muted id=flCount>—</span></div>
+    <div class=hint>Overgenomen uit <span class=mono>MEX_FLEET_PACKAGE_2026-08-23/01_Scripts</span>. Dit zijn
+      geen getunede waarden maar de exacte inputs van de uitgebrachte Pine-scripts — precies waarmee de
+      simulator op trap 1 pariteit moet aantonen.</div>
+    <div id=flTable style="margin-top:12px;overflow-x:auto"></div>
+  </div>
+
+</div>
+
 <div class=tab id=tab-create>
 
   <div class=panel>

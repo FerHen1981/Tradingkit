@@ -557,7 +557,16 @@ class Engine:
         # day exit conditions
         dex_trail = cfg.day_exit_mode in ("Day-trail (keep peak)", "Trail + cap")
         dex_cap = cfg.day_exit_mode in ("Day-cap (hard target)", "Trail + cap")
-        day_trail_hit = dex_trail and self.risk_day_peak > cfg.day_trail_usd and running <= self.risk_day_peak - cfg.day_trail_usd
+        # Two day-trail models (Pine parity). Legacy: one number is both the arming
+        # level and the giveback. Activation + giveback: arm at +activation, then
+        # stop the day after giving back `giveback` from the running peak.
+        if cfg.day_trail_model.startswith("Activation"):
+            armed = self.risk_day_peak >= cfg.day_trail_activation_usd
+            give = cfg.day_trail_giveback_usd
+        else:
+            armed = self.risk_day_peak > cfg.day_trail_usd
+            give = cfg.day_trail_usd
+        day_trail_hit = dex_trail and armed and running <= self.risk_day_peak - give
         day_cap_hit = dex_cap and self.risk_day_peak >= cfg.day_cap_usd
         dll_hit = (cfg.is_pa or (cfg.is_eval and cfg.dd_model == "EOD")) and running <= -cfg.acct_dll
         if not self.day_halted and (day_trail_hit or day_cap_hit or dll_hit):

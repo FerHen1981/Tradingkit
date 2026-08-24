@@ -65,6 +65,28 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - ⚠️ Deze id's zijn deels dood: *MEX Reconciliation* heeft 0 rijen (geverifieerd 19-08) —
   de laag is gebouwd maar heeft nooit geschreven. Fleet Performance en Trade Journal nog
   ongecontroleerd. Zie `docs/SPRINT.md` D-20.
+### ⚠️ Er is een tweede agent in deze workspace
+
+**LifeOS Chief of Staff** (Operating Spec v1.4, 21-08) beheert de **non-MEX** LifeOS:
+familie, gezondheid, persoonlijke financiën, huis/verbouwing, administratie, ontwikkeling,
+lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
+
+- **Van ons:** trading-executie, strategie, backtesting, MEX-development, middleware,
+  fleet-operations en de MEX technical backlog. *"These remain owned by the Claude Scrum
+  Master / El Presidente."* De CoS mag MEX-state **lezen** voor tijd-, agenda- en
+  cross-domain-afwegingen — **visibility does not imply authority**; hij herprioriteert
+  onze backlog niet en overschrijft ons niet.
+- **Van hen:** niet overnemen. Geen parallel taken-, backlog- of kennissysteem bouwen, en
+  geen non-MEX LifeOS-governance wijzigen zonder afstemming.
+- **Tasks heeft een nieuwe property `Route`** (Zelf/Aannemer/Elektricien/…). Die is voor
+  non-MEX uitvoerder-routing; **laat hem leeg op `🛠️ MEX Dev ·`-taken**.
+- **Approval Queue:** de CoS batcht beslissingen voor Ferry in de 📥 Inbox met
+  `Type = Approval`, `Status = Inbox`. Overweeg hetzelfde kanaal voor MEX-beslissingen die
+  op Ferry wachten, zodat hij één plek heeft in plaats van twee.
+- **Visuele standaard:** navy/sand/gold/azure/rose komt uit de goedgekeurde MEX
+  Traders-mockup en is nu LifeOS-breed. Relevant voor `web/**` (D-17, D-34).
+- Hun hub: *🎩 El Presidente — management & oversight* is de MEX-autoriteitspagina.
+
 - MEX Dev loopt via de bestaande LifeOS-databases — geen aparte structuur:
   **Tasks** met voorvoegsel `🛠️ MEX Dev ·`, en **Notes** `🛠️ MEX Dev — Architectuur /
   Besluitregister / Documentatieregister`. Beide gekoppeld aan Area *MEX Traders* en

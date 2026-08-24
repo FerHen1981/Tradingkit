@@ -194,3 +194,63 @@ def test_regime_and_market_match_the_source():
         ins = _pine_inputs(path)
         assert _coerce(ins["Market regime"], str) == fleet._SPEC[name][12], name
         assert fleet.market(name) in path.name, name
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_our_fvg_detection_equals_the_pine_formula(path, tmp_path):
+    """The measurement that settled where MATADOR's parity gap comes from.
+
+    All 35 unexplained missed signals had no FVG of that direction in our window.
+    That is only evidence about the DATA if our detection is provably identical
+    to Pine's — otherwise it is evidence about our code. So the Pine expression
+    is transcribed literally here and compared bar for bar."""
+    import numpy as np
+
+    from backtest import indicators as im
+    from backtest.pipeline import fleet
+
+    name = _engine_name(path)
+    cfg = fleet.engine_config(name)
+    rng = np.random.default_rng(19)
+    n = 8_000
+    px = 6000 + np.cumsum(rng.normal(0, 6.0, n))
+    high = px + np.abs(rng.normal(0, 9.0, n))
+    low = px - np.abs(rng.normal(0, 9.0, n))
+    tick = cfg.contract.mintick
+    high = np.round(high / tick) * tick
+    low = np.round(low / tick) * tick
+    close = np.clip(px, low, high)
+    open_ = np.clip(px + rng.normal(0, 2.0, n), low, high)
+
+    import pandas as pd
+
+    from backtest import data as dm
+    idx = pd.date_range("2025-09-02", periods=n, freq="1min", tz="America/New_York")
+    raw = pd.DataFrame({"DateTime": idx.strftime("%d-%m-%Y %H:%M:%S %z"),
+                        "Open": open_, "High": high, "Low": low, "Close": close,
+                        "Volume": np.full(n, 100.0), "Delta": np.zeros(n)})
+    csv = tmp_path / "fvg.csv"
+    raw.to_csv(csv, index=False)
+    df = dm.load(str(csv), cache=False)
+    high, low = df["High"].to_numpy(), df["Low"].to_numpy()
+    ind = im.compute(df, cfg)
+
+    # literal transcription of the Pine source (fvgDirection / top / bottom)
+    d = np.zeros(n, int)
+    top = np.full(n, np.nan)
+    bot = np.full(n, np.nan)
+    for i in range(2, n):
+        if low[i - 2] >= high[i]:
+            d[i], top[i], bot[i] = -1, low[i - 2], high[i]
+        elif low[i] >= high[i - 2]:
+            d[i], top[i], bot[i] = 1, low[i], high[i - 2]
+    size = np.abs(top - bot)
+    ok = (~np.isnan(size) & (size >= cfg.gap_min_ticks * tick)
+          & (size <= cfg.gap_max_ticks * tick) & (size > 0))
+
+    assert np.array_equal(np.asarray(ind["fvg_dir"]), d), f"{name}: richting wijkt af"
+    assert np.allclose(np.nan_to_num(np.asarray(ind["fvg_size"]), nan=-1),
+                       np.nan_to_num(size, nan=-1)), f"{name}: grootte wijkt af"
+    assert np.array_equal(np.asarray(ind["fvg_pass"]), ok), f"{name}: band-pass wijkt af"
+    assert ok.sum() > 20, "te weinig gaps — de vergelijking bewijst niets"

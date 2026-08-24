@@ -391,9 +391,19 @@ def cmd_stage1(args):
         pass
     elif ds_sym == twin:
         substituted = ds_sym
-        print(f"  PRIJSREEKS GELEEND: {ds_sym}-data onder de {own}-contractspec. Zelfde tick "
-              f"size, dus dezelfde trades; alleen de $-P&L schaalt. Wordt vastgelegd "
-              f"in het artefact.")
+        print(f"  PRIJSREEKS GELEEND: {ds_sym}-data onder de {own}-contractspec.")
+        if fleet.GAP_BASED:
+            print(f"    WAARSCHUWING: deze vloot handelt fair-value gaps, en een gap is een "
+                  f"liquiditeitsartefact.")
+            print(f"    {ds_sym} en {own} zijn aparte orderboeken met andere diepte, dus ze "
+                  f"gapen op andere minuten.")
+            print(f"    Gemeten op MATADOR: van de 35 gemiste signalen had er 0 een FVG in "
+                  f"ons venster, terwijl")
+            print(f"    onze detectie bit-voor-bit gelijk is aan de Pine-bron. Trap 1 kan "
+                  f"hiermee dus GEEN pariteit")
+            print(f"    aantonen — daarvoor zijn de echte {own}-bars nodig. De uitslag "
+                  f"hieronder blijft bruikbaar als")
+            print(f"    diagnose, niet als bewijs.")
     else:
         raise SystemExit(
             f"dataset {args.dataset!r} is {ds_sym}-data, maar {args.engine} handelt {own}"
@@ -504,6 +514,18 @@ def cmd_stage1(args):
     for c in cmp_["checks"]:
         print(f"    {c['name']:<18}{str(c['sim']):>14}{str(c['pine']):>14}   "
               f"{'ok' if c['ok'] else 'AFWIJKING'} — {c['detail']}")
+    # In-band gap rate: the statistic to compare directly once the real micro
+    # bars arrive. If the micro gaps materially more often than its mini, that
+    # settles the microstructure explanation with a number.
+    import numpy as _np
+    _pass = _np.asarray(ind["fvg_pass"])
+    gap_rate = round(100 * float(_pass.sum()) / max(len(_pass), 1), 3)
+    print(f"\n  FVG's binnen de band {cfg.gap_min_ticks:.0f}-{cfg.gap_max_ticks:.0f} ticks: "
+          f"{int(_pass.sum()):,} op {len(_pass):,} bars ({gap_rate}%)")
+    if substituted:
+        print(f"    vergelijk dit getal met de echte {fleet.market(args.engine)}-data zodra "
+              f"die er is — dat toetst de microstructuur-verklaring")
+
     oc = res.order_counts or {}
     if oc.get("placed"):
         print(f"\n  orderlevenscyclus: {oc['placed']} limieten geplaatst -> "
@@ -562,6 +584,7 @@ def cmd_stage1(args):
                            "costs_from_export": costs,
                            "as_tested": bool(tested_changes),
                            "paired_pct": pair_pct, "status": status,
+                           "in_band_gap_rate_pct": gap_rate,
                            "order_counts": oc,
                            "pine_only_split": {k: v for k, v in po.items()
                                                if not k.startswith("_")},

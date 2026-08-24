@@ -159,12 +159,31 @@ def summary() -> list[dict]:
 # and identical long/short split. Only the dollar P&L scales — and PF moved by
 # 0.01 purely because commission is a flat per-contract cost that does not scale.
 #
-# Stage 1 checks trade count, PF, win rate and long/short split, so a mini's
-# price history is a valid stand-in for its micro. The CONTRACT SPEC still comes
-# from the engine config; only the prices are borrowed. This is never silent —
-# the CLI says so and the artifact records it.
+# That holds for the CONTRACT SPEC. It does NOT hold for the BARS, and for this
+# fleet that distinction decides stage 1.
+#
+# MEASURED, 24-08: on ES data MATADOR matched only 46 of 121 Pine entries. Of the
+# 75 it missed, 39 were unavailable (we held a position), 1 was a limit that
+# never filled, and all 35 remaining ones had NO FVG OF THAT DIRECTION in our
+# window. Our detection is not at fault: transcribed literally from the Pine
+# source and compared over 520,861 bars it is identical — same direction, same
+# size, same band-pass, 17,417 in-band gaps on both sides.
+#
+# So Pine saw gaps where ES has none, which means the bars differ. That is not
+# noise but microstructure: a fair-value gap IS a liquidity artefact, and MES is
+# a thinner book than ES. A minute where the micro prints a 12-tick gap is a
+# minute where the mini, with far more participants, traded through every tick.
+#
+# Conclusion: the twin route is fine for stage 2+ (statistical properties) but
+# CANNOT establish stage-1 parity for a gap-based strategy. That gate needs the
+# real market's bars. The substitution stays available — it is never silent, the
+# CLI says so and the artifact records it — but stage 1 warns.
 _TWIN = {"MES": "ES", "MYM": "YM", "MNQ": "NQ", "MGC": "GC", "M2K": "RTY"}
 TWIN = {**_TWIN, **{v: k for k, v in _TWIN.items()}}
+
+
+# Signal generation that depends on gaps between bars — see the note above.
+GAP_BASED = True
 
 
 def acceptable_symbols(name: str) -> tuple[str, str | None]:

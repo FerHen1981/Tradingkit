@@ -12,38 +12,52 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
-### 16. Waarom `mw.mex-traders.com` soms niet resolvet: TTL 600 tegen acht alerts
+### 16. De DNS-fouten van 24-08 — wat het NIET is, en wat er overblijft
 **Pine Dev → Middleware App** · 2026-08-24 · status: OPEN
 
-De URL is `mw.mex-traders.com`, ongewijzigd sinds vrijdag. Gemeten vandaag:
+**Correctie op mijn eerdere verklaring.** Ik schreef de fouten toe aan het aantal alerts
+dat tegelijk vuurt. **Dat is met de log weerlegd.** Gemeten over de hele export:
 
-- `mw.mex-traders.com` → **167.233.215.60**, NOERROR, zowel via 1.1.1.1 als 8.8.8.8. Het
-  record is er en klopt.
-- **DNSSEC staat uit** (geen DS-record) — dus geen validatiefout die resolvers laat
-  SERVFAIL'en.
-- **TTL = 600 seconden**, op zowel `mw.` als `app.`.
+| dag | berichten | max in één seconde | OK | DNS-fout |
+|---|---|---|---|---|
+| 13-08 | 443 | 10 | 441 | 0 |
+| 18-08 | 320 | **12** | 320 | 0 |
+| 21-08 | 357 | 8 | 357 | 0 |
+| **24-08** | **15** | **3** | 9 | **6** |
 
-Die TTL is de enige opvallende waarde. Tien minuten betekent dat elke resolver de naam
-zes keer per uur opnieuw moet opvragen bij de gezaghebbende servers. TradingView verstuurt
-webhooks parallel over meerdere workers, elk met een eigen cache, dus het aantal
-opvragingen schaalt met het aantal alerts én met hoeveel berichten er tegelijk vuren.
+Twaalf berichten in dezelfde seconde op 18-08 werden alle twaalf geleverd. Vandaag is de
+**rustigste handelsdag in de hele log** en tegelijk de enige dag met ook maar één
+DNS-fout: 0 op 1.982 leveringen in tien dagen, daarna 6 op 15. Volume is het niet.
 
-**Wat er tussen vrijdag en vandaag veranderde is niet de URL maar het volume:** vanochtend
-zijn er acht alerts bij gekomen, waarvan meerdere op dezelfde bar meerdere berichten
-sturen. Precies op die momenten valt het om (11:36 twee van drie weg, 11:55 drie van drie);
-losse berichten kwamen aan.
+**Wat er verder afvalt, allemaal met meting:**
 
-**Observatie, geen bewijs:** een directe query vanaf deze machine naar
-`ns01/ns02.domaincontrol.com` (97.74.100.1 / 173.201.68.1) geeft **SERVFAIL**, terwijl
-publieke resolvers de naam wél oplossen. Dat past bij GoDaddy-nameservers die queries van
-bepaalde bronnen weigeren of afknijpen — maar het kan net zo goed aan de egress van deze
-sandbox liggen. Niet als vaststaand rapporteren.
+- **De URL niet:** alert `5444067748` leverde 3× wél en 5× niet, met dezelfde URL.
+- **Het domein niet:** `mw.mex-traders.com` → 167.233.215.60, NOERROR via 1.1.1.1 en
+  8.8.8.8, TTL 600, DNSSEC uit (geen DS-record), host antwoordt.
+- **Payloadgrootte niet:** een bericht van 150 bytes faalde, één van 692 bytes slaagde.
+- **Payloadtype niet:** zowel Discord- als PMT-berichten zitten in beide groepen.
+- **De .NET-receiver niet:** de fout valt vóór er een verbinding is.
 
-**Voorstel, goedkoop en zonder risico:** zet de TTL van het A-record bij GoDaddy van
-**600 naar 3600 of 86400**. Dat scheelt een factor 6 tot 144 in het aantal opvragingen. Het
-enige nadeel is dat een IP-wijziging langzamer doorwerkt, en dat IP ligt vast op een VPS.
-Werkt dat niet, dan is de volgende stap het domein bij een resolver-vriendelijkere
-DNS-provider onderbrengen.
+**Wat overblijft — hypothese, met een opvallend patroon.** Alle acht alerts zijn
+vanochtend aangemaakt. Twee ervan falen, en in beide gevallen is dat **de tweede van een
+paar voor hetzelfde script**:
+
+| script | eerst aangemaakt | daarna | resultaat |
+|---|---|---|---|
+| PAT-MGC-A | `5444047543` 10:18 | `5444067748` 10:22 | eerste OK, **tweede faalt** |
+| REY-NQ-PI | `5444078175` 10:24 | `5444083711` 10:25 | eerste OK, **tweede faalt** |
+
+Dat past bij alerts die met *kopiëren* zijn gemaakt in plaats van opnieuw opgebouwd. De
+werkende broer heeft dezelfde URL en hetzelfde script.
+
+**Voorstel, in deze volgorde:**
+1. Ferry: verwijder `5444067748` en `5444083711` en maak ze **opnieuw aan vanaf nul**
+   (niet dupliceren). Kost een minuut en toetst de hypothese meteen.
+2. Legacy/Middleware: kijk in de access-log van de receiver of er om 11:36 en 11:55
+   überhaupt requests binnenkwamen. Zo niet, dan is bevestigd dat het vóór de server
+   misging.
+3. Blijft het terugkomen na stap 1, dan is het TradingView's bezorglaag en hoort er een
+   ticket bij hen heen, met deze cijfers erbij.
 
 ---
 

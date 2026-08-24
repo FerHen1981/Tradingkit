@@ -266,8 +266,8 @@ def cmd_report(args):
 
     print(f"\n  trap 1 · laatste uitslag per engine ({len(latest)} van "
           f"{len(fleet.names())} engines gedraaid)\n")
-    hdr = (f"    {'engine':<24}{'trades':>13}{'PF':>13}{'WR':>13}"
-           f"{'gepaard':>10}{'als-getest':>12}")
+    hdr = (f"    {'engine':<22}{'trades':>11}{'PF':>12}{'gepaard':>8}"
+           f"{'a-g':>6}{'poort':>13}")
     print(hdr)
     rows = []
     for eng, f in sorted(latest.items()):
@@ -278,11 +278,13 @@ def cmd_report(args):
         m = td.get("matched")
         n = td.get("sim_trades") or sim.get("trades") or 0
         pair = f"{100*m/n:.0f}%" if m is not None and n else "—"
-        print(f"    {eng.replace('EL_',''):<24}"
-              f"{str(sim.get('trades', '?')) + '/' + str(pine.get('trades', '?')):>13}"
-              f"{str(sim.get('profit_factor', '?')) + '/' + str(pine.get('profit_factor', '?')):>13}"
-              f"{str(sim.get('win_rate_pct', '?')) + '/' + str(pine.get('win_rate_pct', '?')):>13}"
-              f"{pair:>10}{('ja' if d.get('as_tested') else 'nee'):>12}")
+        st = d.get("status") or ("passed" if d.get("pass") else "failed")
+        st_lbl = {"passed": "GEHAALD", "data_parity": "= data-par.",
+                  "inconclusive": "? inconcl.", "failed": "x gezakt"}.get(st, st)
+        print(f"    {eng.replace('EL_',''):<22}"
+              f"{str(sim.get('trades', '?')) + '/' + str(pine.get('trades', '?')):>11}"
+              f"{str(sim.get('profit_factor', '?')) + '/' + str(pine.get('profit_factor', '?')):>12}"
+              f"{pair:>8}{('ja' if d.get('as_tested') else 'nee'):>6}{st_lbl:>13}")
         rows.append((eng, d, c, td))
     print("\n    kolommen tonen simulator/pine\n")
 

@@ -152,9 +152,62 @@ def test_a_placement_older_than_the_expiry_window_does_not_count():
     assert out["we_never_placed"] == 1, "een order van 30 min eerder was al lang verlopen"
 
 
-def test_a_mixed_picture_is_reported_as_mixed():
+def test_a_near_tie_is_reported_as_mixed_not_arbitrarily_resolved():
+    """One of each is not evidence for either. A rule that just took the largest
+    count would break the tie on ordering and send the fix somewhere on nothing."""
     pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0),
                     ("2025-09-03 10:00", -1, -50.0, "SL", 99.0)])
     out = classify_pine_only([_placement("2025-09-02 09:28", 1)], pine, [], expiry_bars=6)
     assert (out["we_placed_but_never_filled"], out["we_never_placed"]) == (1, 1)
     assert "GEMENGD" in out["verdict"]
+
+
+def test_a_bare_majority_is_still_mixed():
+    """3 of 5 is a majority but not twice the runner-up (2) — not enough."""
+    rows = [(f"2025-09-0{i} 10:00", 1, 10.0, "TP", 101.0) for i in range(1, 6)]
+    placements = [_placement(f"2025-09-0{i} 09:58", 1) for i in range(1, 4)]
+    out = classify_pine_only(placements, _export(rows), [], expiry_bars=6)
+    assert (out["we_placed_but_never_filled"], out["we_never_placed"]) == (3, 2)
+    assert "GEMENGD" in out["verdict"]
+
+
+def test_a_pine_entry_inside_our_open_position_is_a_cascade_not_a_filter_gap():
+    """Neither engine can enter while holding (pyramiding 1). A pine entry that
+    lands inside one of OUR position windows was never available to us, so it is
+    a consequence of an earlier divergence — counting it as a signal failure
+    would send the fix at the filters instead of at the cause."""
+    ours = _T("2025-09-02 09:00", 1, 100.0, "TP", 101.0)      # 09:00 -> 09:30
+    pine = _export([("2025-09-02 09:15", -1, 50.0, "TP", 99.0)])
+    out = classify_pine_only([], pine, [ours], expiry_bars=6)
+    assert out["we_were_in_a_position"] == 1
+    assert out["we_never_placed"] == 0
+    assert "CASCADE" in out["verdict"]
+
+
+def test_a_pine_entry_while_we_were_flat_is_still_a_signal_gap():
+    ours = _T("2025-09-02 09:00", 1, 100.0, "TP", 101.0)      # 09:00 -> 09:30
+    pine = _export([("2025-09-02 14:00", -1, 50.0, "TP", 99.0)])
+    out = classify_pine_only([], pine, [ours], expiry_bars=6)
+    assert out["we_never_placed"] == 1 and out["we_were_in_a_position"] == 0
+    assert "SIGNALEN" in out["verdict"]
+
+
+def test_a_resting_limit_outranks_the_position_window():
+    """If we had an order there, that is the more specific fact."""
+    ours = _T("2025-09-02 09:00", 1, 100.0, "TP", 101.0)
+    pine = _export([("2025-09-02 09:15", -1, 50.0, "TP", 99.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:12", -1)], pine, [ours],
+                             expiry_bars=6)
+    assert out["we_placed_but_never_filled"] == 1
+    assert out["we_were_in_a_position"] == 0
+
+
+def test_the_three_categories_always_add_up():
+    pine = _export([("2025-09-02 09:15", -1, 50.0, "TP", 99.0),
+                    ("2025-09-02 14:00", 1, 10.0, "TP", 101.0),
+                    ("2025-09-03 11:00", 1, 20.0, "TP", 101.0)])
+    ours = _T("2025-09-02 09:00", 1, 100.0, "TP", 101.0)
+    out = classify_pine_only([_placement("2025-09-03 10:58", 1)], pine, [ours],
+                             expiry_bars=6)
+    assert (out["we_placed_but_never_filled"] + out["we_were_in_a_position"]
+            + out["we_never_placed"]) == out["pine_only"] == 3

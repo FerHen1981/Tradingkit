@@ -304,9 +304,9 @@ def cmd_report(args):
                   f"{oc.get('cancelled_flat', 0)} flat · {oc.get('cancelled_halt', 0)} halte")
         po = d.get("pine_only_split") or {}
         if po.get("pine_only"):
-            print(f"      pine-only: {po['we_placed_but_never_filled']} met een limiet die "
-                  f"niet vulde · {po['we_never_placed']} zonder order "
-                  f"({po['placed_share_pct']}% fills)")
+            print(f"      pine-only: {po['we_placed_but_never_filled']} limiet-niet-gevuld · "
+                  f"{po.get('we_were_in_a_position', 0)} wij in positie · "
+                  f"{po['we_never_placed']} geen order")
         if td:
             print(f"      gepaard {td.get('matched')}/{td.get('sim_trades')} · "
                   f"alleen-sim {td.get('sim_only')} · alleen-pine {td.get('pine_only')} · "
@@ -521,7 +521,9 @@ def cmd_stage1(args):
         print(f"\n  trades die pine deed en wij niet ({po['pine_only']}):")
         print(f"    {po['we_placed_but_never_filled']} keer lag er wél een limiet die niet "
               f"vulde ({po['placed_share_pct']}%)")
-        print(f"    {po['we_never_placed']} keer hadden we daar geen order liggen")
+        print(f"    {po['we_were_in_a_position']} keer zaten we zelf in een positie "
+              f"({po['blocked_share_pct']}%) — signaal was niet beschikbaar")
+        print(f"    {po['we_never_placed']} keer waren we vrij en hadden toch geen order")
         print(f"    -> {po['verdict']}")
     if not cmp_["pass"] or args.diff:
         print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "

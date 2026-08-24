@@ -188,7 +188,20 @@ def classify_pine_only(placements, export, sim_trades, expiry_bars: int,
             ts = ts.tz_localize(None)
         placed.append((int(ts.value // 60_000_000_000), int(p["dir"])))
 
-    got, missing = [], []
+    # Windows during which WE held a position. Neither engine can enter while in
+    # one (pyramiding 1), so a pine entry landing inside our window was never
+    # available to us — that is a CASCADE from an earlier divergence, not a
+    # filter that disagrees. Without this the two get conflated and the fix
+    # points the wrong way.
+    busy = []
+    for t in sim_trades or []:
+        if getattr(t, "exit_time", None) is None:
+            continue
+        a, b = _minutes(t.entry_time), _minutes(t.exit_time)
+        if a is not None and b is not None:
+            busy.append((a, b))
+
+    got, missing, blocked = [], [], []
     for row in _pine_rows(export):
         if any(abs(row["t"] - t) <= tol_minutes and d == row["dir"] for t, d in sim):
             continue                                   # not a pine-only trade
@@ -196,22 +209,42 @@ def classify_pine_only(placements, export, sim_trades, expiry_bars: int,
         # fill, and never after it
         hit = any(d == row["dir"] and 0 <= (row["t"] - t) <= expiry_bars + tol_minutes
                   for t, d in placed)
-        (got if hit else missing).append(row)
+        if hit:
+            got.append(row)
+        elif any(a <= row["t"] <= b for a, b in busy):
+            blocked.append(row)
+        else:
+            missing.append(row)
 
-    n = len(got) + len(missing)
+    n = len(got) + len(missing) + len(blocked)
+    # A category only "explains" the gap when it clearly dominates: more than
+    # half, and at least twice the runner-up. Otherwise say mixed — picking a
+    # winner on a near-tie would point the fix at one cause on no evidence.
+    counts = sorted(((len(got), "fills"), (len(blocked), "cascade"),
+                     (len(missing), "signals")), reverse=True)
+    (c1, top), (c2, _), _ = counts
+    if not (n and c1 > n / 2 and c1 >= 2 * c2):
+        top = "mixed"
     return {
         "pine_only": n,
         "we_placed_but_never_filled": len(got),
+        "we_were_in_a_position": len(blocked),
         "we_never_placed": len(missing),
         "placed_share_pct": round(100 * len(got) / n, 1) if n else 0.0,
+        "blocked_share_pct": round(100 * len(blocked) / n, 1) if n else 0.0,
         "first_placed_but_unfilled": got[:8],
         "first_never_placed": missing[:8],
+        "first_blocked_by_position": blocked[:8],
         "verdict": (
             "geen pine-only trades" if not n else
             "OVERWEGEND FILLS: we hadden op die momenten wél een limiet liggen die niet "
-            "vulde — dat wijst op de prijsreeks, niet op de regels" if len(got) > 2 * len(missing)
-            else "OVERWEGEND SIGNALEN: op die momenten hadden we geen order liggen — dat "
+            "vulde — dat wijst op de prijsreeks, niet op de regels" if top == "fills"
+            else "OVERWEGEND CASCADE: we zaten op die momenten zelf in een positie, dus het "
+            "signaal was voor ons niet beschikbaar. Dat is een gevolg van eerdere "
+            "afwijkingen, geen filterverschil" if top == "cascade"
+            else "OVERWEGEND SIGNALEN: we waren vrij en hadden toch geen order liggen — dat "
             "wijst op signaalgeneratie (gap-detectie, maatband, CVD-streak)"
-            if len(missing) > 2 * len(got)
-            else "GEMENGD: beide oorzaken dragen bij, geen van beide domineert"),
+            if top == "signals"
+            else "GEMENGD: geen enkele oorzaak domineert (een categorie telt pas als "
+            "verklaring bij meer dan de helft én tweemaal de eerstvolgende)"),
     }

@@ -44,7 +44,7 @@ een andere naam; **niet als bewijs citeren tot de export opnieuw gedraaid is.**
 
 | Script | Shorttitle | Markt | Export in het pakket | Status |
 |---|---|---|---|---|
-| `MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0` | `MAT-MES-P` | MES | export met `CEN-MES-P` | **afgeleid** — CENTINELA is de werknaam van dezelfde MES-engine; er is geen tweede MES-script |
+| `MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0` | `MAT-MES-P` | MES | export met `CEN-MES-P` | **afgeleid** — CENTINELA is de werknaam van dezelfde MES-engine; er is geen tweede MES-script. **Hersteld 24-08:** regel 10 droeg een tweede merkkop en is vervangen door de lineage-regel die de andere scripts ook dragen. Regels 46-47 noemen CENTINELA nog wél — dat zijn pariteits- en herkomstnotities, geen identiteitsclaim, en die blijven staan. |
 | EL REY — Production Intraday | `REY-NQ-PI` | MNQ1! | export met `TΞSORO_PI` | **afgeleid** — `_PI` = Production Intraday, en MNQ Production Intraday bestaat maar één keer in de vloot |
 | EL LEON — Production EOD | `LEO-MYM-P` | MYM1! | export met `TΞSORO_PE` | **afgeleid** — `_PE` = Production EOD, en MYM Production EOD bestaat maar één keer in de vloot |
 | overige zes scripts | — | — | geen export in het pakket | **geen bewijs** |
@@ -58,3 +58,70 @@ bewijst in plaats van dat een document hem beweert.
 Zolang een regel `afgeleid` staat, mag het getal eronder wél gebruikt worden voor
 richting en volgorde, **niet** als validatiebewijs in een rapport of in een
 go/no-go-besluit over funded kapitaal.
+
+---
+
+# EL TORO — de vier eval-scripts (24-08)
+
+`EL_TORO_NQ_ES_GC_FINAL_FRONTIER.csv` staat als `pine/validation/EL_TORO_FINAL_FRONTIER.csv`.
+De vier scripts staan in `pine/`; de v6.9.5-TORO is naar `pine/history/` verplaatst.
+
+## Koppeling script ↔ frontier-rij
+
+| Script | Shorttitle | Frontier-rij | Status |
+|---|---|---|---|
+| `MEX_EL_TORO_NQ_HF_INTRA_v1_0_0` | `TOR-NQ-HF` | `FI · NQ · Intraday · FAST` — 7 NQ · FVG4-12 · CVD3 · VWAP · SL90 · TP90 · exp9 | **bevestigd** — alle zeven waarden komen exact overeen |
+| `MEX_EL_TORO_ES_FAST_INTRA_v1_0_0` | `TOR-ES-FI` | `FI · ES · Intraday · FAST` — 6 ES · FVG2-8 · CVD OFF · VWAP OFF · SL90 · TP44 · exp18 | **bevestigd** |
+| `MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0` | `TOR-GC-SN` | `SE · GC · EOD · SNIPER` — 5 GC · FVG10-14 · CVD6 · VWAP · SL90 · TP64 · exp12 | **bevestigd** |
+| `MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0` | `TOR-NQ-SN` | **geen rij** — 7 NQ · FVG4-8 · CVD7 · SL100 · TP90 · exp6 komt in de hele CSV niet voor | **geen bewijs** |
+| *ontbreekt* | — | `FAST-EOD · GC · EOD · FAST` — 6 GC · FVG2-10 · CVD0/1 · VWAP OFF · SL120 · TP54 · exp9 | **geen script** |
+
+Twee dingen om niet over te lezen:
+
+1. **Het beste config uit de hele frontier heeft geen script.** De GC FAST-EOD-rij scoort
+   `pass_opportunity_index_per_year` **1710** — hoger dan elke andere rij, en zeventien keer
+   de GC SNIPER (50,3) die wél een script kreeg. Er is 4.011 kansen per jaar tegen 100.
+2. **`TOR-NQ-SN` draagt geen enkel bewijs.** Geen rij in de frontier heeft CVD7, SL100 of
+   expiry 6. Zolang dat zo is, is dit script een voorstel en geen gevalideerde config.
+
+De vier `2D`/`3D`-rijen (ES en GC, staged/MULTI) hebben ook geen script; die lijken buiten
+deze levering te vallen.
+
+## Herstelde naamdefecten
+
+Twee van de vier shorttitles braken het schema BRAND-MARKT-PROFIEL:
+
+| Was | Is | Waarom |
+|---|---|---|
+| `TES-FI` | `TOR-ES-FI` | `TES-` is het TESORO-voorvoegsel (`TES-MGC-C`). Een TORO-script dat zich als TESORO aandient is exact het defect uit de vorige ronde — een derde geval van dezelfde fork-fout. |
+| `TGC-SE` | `TOR-GC-SN` | droeg helemaal geen merk, alleen markt + profiel. |
+
+`TOR-NQ-HF` en `TOR-NQ-SN` waren al goed. Alle vier blijven ≤ 10 tekens.
+
+## De one-shot-economie klopt, en is opzet
+
+Alle vier zijn zo gesized dat **één winnende trade de eval haalt en één verliezende trade
+hem breekt**. Dat is geen fout maar het gebruikspatroon van EL TORO.
+
+| Script | TP netto | Doel | Marge | Volle stop | Trailing DD |
+|---|---|---|---|---|---|
+| `TOR-NQ-HF` | 90t × $5 × 7 = $3.150 − $22 = **$3.128** | $3.000 | +$128 | $3.150 | $2.500 → breach |
+| `TOR-NQ-SN` | 90t × $5 × 7 = $3.150 − $22 = **$3.128** | $3.000 | +$128 | $3.500 | breach |
+| `TOR-ES-FI` | 44t × $12,50 × 6 = $3.300 − $19 = **$3.281** | $3.000 | +$281 | $6.750 | breach |
+| `TOR-GC-SN` | 64t × $10 × 5 = $3.200 − $16 = **$3.185** | $3.000 | +$185 | $4.500 | breach |
+
+Elke TP klaart het doel met $128–$281 over; elke volle stop breekt het account. Dat de
+ES-stop $6.750 diep is terwijl de DD $2.500 bedraagt, kost niets extra — op een eval is
+gebroken gebroken en je betaalt het verschil niet. Herstel dat dus niet "voor de veiligheid";
+het zou alleen de kans op de pass verlagen.
+
+## Twee open punten op deze vier
+
+1. **De GC-commissie staat op $1,55 per contract, de registry zegt $1,75 voor GC**
+   (`backtest/config.py`; MGC is $0,52). Op de pass/fail-rekensom scheelt het $2 en dus
+   niets, maar het is een tweede bron naast de registry — dezelfde soort als D-08. **Niet
+   stilzwijgend wijzigen:** de frontier is op $1,55 gedraaid, dus het script veranderen laat
+   het van zijn eigen validatie afwijken. Eerst een besluit, dan één keer opnieuw meten.
+2. **De D-08-commissiewacht ontbreekt.** Geen van de vier draagt `SPEC_COMMISSION_SET` of
+   `f_contractSpec` — de controle die in TESORO juist deze fout zou vangen. Dat is de reden
+   dat punt 1 stil kon blijven.

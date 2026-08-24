@@ -6,8 +6,6 @@
 // ============================================================================================
 // ============================================================================================
 // ============================================================================================
-// Naming-only release: EL MATADOR | MES PROD EOD | shorttitle MAT-MES-P. Core trading logic preserved from validated lineage.
-// MES Production CVD6: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // ============================================================================================
 // ============================================================================================
 // ============================================================================================
@@ -37,27 +35,24 @@
 // --------------------------------------------------------------------------------------------
 // ============================================================================================
 //@version=6
-// FULL BUILD: original execution/alerts/account layers retained. PRODUCTION Liquidity-Core defaults mirror the calibrated simulator.
-// v6.8.14 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
-// v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
-// v6.8.16: inputs restructured + firm-preset dropdown (futures).
-// v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
-// v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
-// EL CENTINELA MES Production parity: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
-// EL CENTINELA parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
-var string currentVersion = "v1.0.0"
-strategy("MΞX EL MATADOR · MES PROD EOD · " + currentVersion, shorttitle="MAT-MES-P", overlay=true,
+// v6.8.9 (optimised): memory-safe visuals (drawLast) + recovery-trail A1 fix + FX tick-volume delta note.
+// v6.8.10: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
+// v6.8.11: inputs restructured + firm-preset dropdown (futures).
+// EL TORO FAST | NQ | HF | INTRA | one-hit / time-for-money profile.
+// Frozen EL TORO profile: ES · FAST · INTRADAY · qty6 · FVG2-8 · CVDOFF · SL90 · TP44 · expiry18.
+// Frozen eval defaults: 7 NQ · FVG4-12t · proxy-CVD3 · SL90t · TP90t · expiry9.
+// New entries blocked from 16:00 ET; force-flat window remains intact.
+// TP90 intentionally preserves >$3,000 net pass buffer under harsher execution than the 1-tick baseline.
+var string currentVersion = "v1.0.0-ES-FAST-INTRA"
+strategy("MΞX ΞL TORO · ES FAST INTRA · " + currentVersion, shorttitle="TOR-ES-FI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
      calc_on_every_tick=false,
-     calc_on_order_fills=true,
-     process_orders_on_close=false,
-     use_bar_magnifier=true,
      max_bars_back=500,
      max_boxes_count=500, max_labels_count=500,
      margin_long=0, margin_short=0,
      slippage=1,
-     commission_type=strategy.commission.cash_per_contract, commission_value=0.51)
+     commission_type=strategy.commission.cash_per_contract, commission_value=1.55)
 
 import TradingView/ta/8
 
@@ -75,18 +70,6 @@ var string GROUP_VIS   = "10 · RESEARCH — Visuals & labels"
 var string GROUP_DASH  = "11 · MONITOR — Dashboard"
 var string GROUP_EXEC  = "9 · EXECUTION — Alerts & routing"
 var string GROUP_ALRT  = GROUP_EXEC
-var string GROUP_EVT   = "8b · SIGNAL — Roll / OpEx / News factory"
-var string GROUP_MREG  = "8a · SIGNAL — Market regime gate"
-var string GROUP_STAB  = "0b · MEX — Stability presets"
-
-// === MEX STABILITY PRESET (additive; all legacy/live layers remain intact) =====
-stabilityPreset = input.string("Manual / current stability defaults", "Stability preset / lock",
-     options=["Manual / current stability defaults","Lock MGC Stability Core · 2 MGC","Lock MGC Stability Core · 3 MGC"], group=GROUP_STAB,
-     tooltip="Default = Manual: the visible inputs below are the actual values used and remain editable. Choose a Lock preset only when you intentionally want the tested stability values to override those inputs. Execution, alerts, account/fleet and event layers remain unchanged.")
-bool stabilityOn = stabilityPreset != "Manual / current stability defaults"
-
-// Regime-factory identity for THIS script (strategy · account-type · phase). The "Auto" preset resolves to this.
-var string AUTO_PRESET = "GC · Funded"
 
 // === TIMEZONE / DAY ==========================================================
 var string GROUP_ACCT = "0 · ACCOUNT — Firm & routing"
@@ -158,8 +141,6 @@ contractSize       = input.float(6, "Fixed Qty", minval=0, group=GROUP_UNIT, too
 riskValue          = input.float(250, "Risk per Trade ($ of %)", minval=0, group=GROUP_UNIT, tooltip="Risk per trade when using $-risk or %-risk sizing instead of fixed contracts.", display=display.none)
 allowFractionalQty = input.bool(false, "Allow Fractional Qty (crypto)", group=GROUP_UNIT, tooltip="Allow fractional position sizes (crypto only — futures require whole contracts).", display=display.none)
 maxQty             = input.float(100, "Max Qty Cap", minval=0, group=GROUP_UNIT, tooltip="Hard cap on position size regardless of the sizing mode.", display=display.none)
-float stabilityQty = 8.0
-float contractSizeEff = stabilityOn ? stabilityQty : contractSize
 
 atrVal = ta.atr(atrLen)
 f_distPrice(_u) =>
@@ -172,38 +153,39 @@ f_distPrice(_u) =>
 // === ENTRY & STOP ENGINE =====================================================
 entryMode = input.string("Limit @ 50% FVG", "Entry Mode", options=["Limit @ 50% FVG","Market (legacy)"], group=GROUP_ENTRY,
      tooltip="Limit: resting order at the gap retrace level; better price, no entry slippage, ~78% of signals still get filled.")
-expiryBars = input.int(6, "Limit Order Expiry (bars)", minval=1, group=GROUP_ENTRY,
+expiryBars = input.int(18, "Limit Order Expiry (bars)", minval=1, group=GROUP_ENTRY,
      tooltip="Bars a resting limit order stays valid before it is cancelled.")
 stopMode  = input.string("Fixed (legacy)", "Stop Mode", options=["Swing structure","Fixed (legacy)"], group=GROUP_ENTRY, tooltip="Swing structure: stop beyond the last confirmed pivot AND the gap edge, plus buffer. Fixed: static distance.", display=display.none)
 pivotK     = input.int(3, "Pivot Strength (bars links/rechts)", minval=1, maxval=10, group=GROUP_ENTRY,
      tooltip="A pivot is only confirmed k bars after the extreme; the script uses confirmed pivots exclusively (no repainting).", display=display.none)
 swingBufSize = input.float(2, "Stop Buffer beyond swing (units)", minval=0, group=GROUP_ENTRY, tooltip="Buffer in units beyond the swing/gap level for the stop.", display=display.none)
-// MES Production scratch parity: Distance Unit = Ticks; SL120 = 30.00 points.
-maxStopSize  = input.float(120, "Max Stop Distance (units) — else no trade", minval=1, group=GROUP_ENTRY, tooltip="Signals with a wider stop than this are skipped entirely.", display=display.none)
-slSizeLegacy = input.float(120, "Fixed Stop (units, legacy mode)", minval=0.01, group=GROUP_ENTRY, tooltip="Static stop distance, only used in Fixed stop mode.", display=display.none)
-float maxStopSizeEff = stabilityOn ? 120.0 : maxStopSize
-float slSizeLegacyEff = stabilityOn ? 120.0 : slSizeLegacy
+maxStopSize  = input.float(90, "Max Stop Distance (units) — else no trade", minval=1, group=GROUP_ENTRY, tooltip="Signals with a wider stop than this are skipped entirely.", display=display.none)
+slSizeLegacy = input.float(90, "Fixed Stop (units, legacy mode)", minval=0.01, group=GROUP_ENTRY, tooltip="Static stop distance, only used in Fixed stop mode.", display=display.none)
 
 // === TRADE MANAGEMENT ========================================================
-tpMode  = input.string("R-multiple", "Take-Profit Mode", options=["R-multiple","Swing structure","Fixed (units)"], group=GROUP_RISK,
+tpMode  = input.string("Fixed (units)", "Take-Profit Mode", options=["R-multiple","Swing structure","Fixed (units)"], group=GROUP_RISK,
      tooltip="Swing structure: target = last confirmed opposite pivot. R-multiple: target = R x stop distance. Fixed: static distance in units.", display=display.none)
-rMultIn = input.float(1.75, "R-Multiple (R-multiple mode)", minval=0.1, step=0.25, group=GROUP_RISK,
+rMultIn = input.float(2.5, "R-Multiple (R-multiple mode)", minval=0.1, step=0.5, group=GROUP_RISK,
      tooltip="Target as a multiple of the stop distance (R-multiple mode).")
-tpSize  = input.float(122, "Take Profit (units, Fixed mode)", minval=0.01, group=GROUP_RISK, tooltip="Static target distance (Fixed TP mode only).", display=display.none)
+tpSize  = input.float(44, "Take Profit (units, Fixed mode)", minval=0.01, group=GROUP_RISK, tooltip="Static target distance (Fixed TP mode only).", display=display.none)
 useBreakEven    = input.bool(false, "Enable Break-even", group=GROUP_RISK,
      tooltip="Default ON (v3.6). Optional with Swing TP (expectancy-neutral, lower DD); with R-multiple it is part of the exit engine. Live: server-side via broker bracket.", display=display.none)
-beTriggerSize   = input.float(15, "BE Trigger MFE (units)", minval=0.01, group=GROUP_RISK, tooltip="MFE required before the stop moves to break-even.", display=display.none)
-beOffsetSize    = input.float(12,  "BE Offset (units)", minval=0, group=GROUP_RISK, tooltip="Offset above/below entry for the break-even stop.", display=display.none)
+beTriggerSize   = input.float(20, "BE Trigger MFE (units)", minval=0.01, group=GROUP_RISK, tooltip="MFE required before the stop moves to break-even.", display=display.none)
+beOffsetSize    = input.float(8,  "BE Offset (units)", minval=0, group=GROUP_RISK, tooltip="Offset above/below entry for the break-even stop.", display=display.none)
 useTrail        = input.bool(false, "Enable Trailing", group=GROUP_RISK,
      tooltip="Default ON (v3.6): ESSENTIAL in R-multiple mode ($11.70 vs $6.80/trade; maxDD $4.2k vs $15.1k without). Optional with Swing TP but reduces DD.", display=display.none)
-trailStartSize  = input.float(120, "Trail Activation MFE (units)", minval=0.01, group=GROUP_RISK, tooltip="MFE required before the trailing stop activates.", display=display.none)
-trailBufferSize = input.float(16, "Trail Buffer (units)", minval=0.01, group=GROUP_RISK, tooltip="Distance the trail keeps from the running extreme.", display=display.none)
+trailStartSize  = input.float(48, "Trail Activation MFE (units)", minval=0.01, group=GROUP_RISK, tooltip="MFE required before the trailing stop activates.", display=display.none)
+trailBufferSize = input.float(24, "Trail Buffer (units)", minval=0.01, group=GROUP_RISK, tooltip="Distance the trail keeps from the running extreme.", display=display.none)
 // === v6.4.4M: HERSTEL-TRAIL (alleen trade #2 na een verlies in dezelfde eval-poging) ===
 useFillCheck    = input.bool(true, "FVG fill check (gap invalid once mid is touched)", group=GROUP_RISK,
      tooltip="Removes an FVG from the confirmation memory once price touches its mid (partially filled = invalid).")
-useRecovTrail   = false
-recovTrailStart = 40.0
-recovTrailBuf   = 16.0
+useRecovTrail   = input.bool(false, "Recovery trail on trade #2 after a loss (Eval)", group=GROUP_RISK,
+     tooltip="Eval only: on the second trade of an attempt after a first-trade loss, trail partial profit instead of running to the full target.")
+recovTrailStart = input.float(40, "Recovery trail activation (units)", minval=1, inline="rt", group=GROUP_RISK,
+     tooltip="Peak (units) at which the recovery trail arms.", display=display.none)
+recovTrailBuf   = input.float(16, "Recovery trail buffer (units)", minval=1, inline="rt", group=GROUP_RISK,
+     tooltip="Distance the recovery trail keeps from the peak.", display=display.none)
+
 string tpModeEff   = tpMode
 float  tpSizeEff   = tpSize
 bool   useBEeff    = useBreakEven
@@ -231,61 +213,33 @@ onlyFirstTrade       = false
 
 // === INTRADAY DAY-EXIT (v6.4.4i — sim-gevalideerde dagwinst-behoud) ==========
 var string GROUP_DEX = "1e · ACCOUNT — Funded: day-profit exit"
-dayExitMode = input.string("Off", "Day-profit exit mode", options=["Off","Day-trail (keep peak)","Day-cap (hard target)","Trail + cap"], group=GROUP_DEX,
-     tooltip="Off = no day-profit exit. Day-trail closes the day on a pullback from the intraday day-PnL peak. Day-cap closes the day at the hard target. Trail + cap: both.")
-dayTrailModel = input.string("Activation + giveback", "Day-trail model", options=["Legacy: activation = giveback","Activation + giveback"], group=GROUP_DEX,
-     tooltip="Legacy reproduces the old rule: the same USD value both arms the trail and is the allowed pullback. Activation + giveback separates those two concepts, e.g. arm after +$200 and allow only $100 giveback.")
-dayTrailUSD = input.float(200, "Legacy day-trail value ($)", minval=10, step=10, group=GROUP_DEX,
-     tooltip="Used only by Legacy model: arms once peak exceeds this value and closes after the same amount of giveback.")
-dayTrailActivationUSD = input.float(500, "Day-trail activation ($)", minval=0, step=10, group=GROUP_DEX,
-     tooltip="Activation + giveback model: intraday running-PnL peak required before the daily profit trail is armed.")
-dayTrailGivebackUSD = input.float(150, "Day-trail giveback ($)", minval=10, step=10, group=GROUP_DEX,
-     tooltip="Activation + giveback model: maximum allowed pullback from the intraday running-PnL peak after activation.")
-dayCapUSD   = input.float(750, "Day-cap hard target ($)", minval=50, step=25, group=GROUP_DEX,
-     tooltip="Hard day-profit target that closes the day (cap modes).")
-dailyScaleMode = input.string("Fixed USD", "Daily level scaling", options=["Fixed USD","Per contract"], group=GROUP_DEX, tooltip="Fixed USD keeps account-level daily limits unchanged when qty changes. Per contract multiplies the daily loss/trail/cap levels by effective contract quantity.")
-float dailyScaleMult = dailyScaleMode == "Per contract" ? math.max(contractSizeEff, 1.0) : 1.0
-float dayTrailUSDEff = dayTrailUSD * dailyScaleMult
-float dayTrailActivationUSDEff = dayTrailActivationUSD * dailyScaleMult
-float dayTrailGivebackUSDEff = dayTrailGivebackUSD * dailyScaleMult
-float dayCapUSDEff   = dayCapUSD * dailyScaleMult
-float dailyLossLimitEff = dailyLossLimit * dailyScaleMult
-
-
-// === ACCOUNT PHASE (Apex) ====================================================
+dayExitMode = "Off"
+dayTrailUSD = 150.0
+dayCapUSD   = 300.0
 ddModel       = input.string("Intraday", "Drawdown Model", options=["EOD","Intraday"], group=GROUP_PHASE,
      tooltip="EOD (Apex 4.0 default): trailing ratchets on the daily closing balance only; open profit peaks do not count. Intraday (legacy): ratchets in real time with the live peak.", display=display.none)
-payoutBuffer  = input.float(500, "Extra buffer above safety net ($)", step=100, group=GROUP_PHASE,
-     tooltip="Payout-ready only when realized >= safety net + this buffer + min. payout. VALIDATION (PA-phase sweep $500-12,000, 300+ fresh PAs, horizon 500 sessions): death rate is FLAT across the whole range (27-31%) because PA mortality sits pre-lock, before any buffer exists; a bigger buffer only traps money in accounts that later die — payout/PA falls monotonically from $721 (buffer $500) to $416 ($12,000). Optimum: $500-1,000. Withdraw early and often; banked money is the only money that is truly yours.", display=display.none)
-
-// === v6.4.4: WAIT-FOR-CAP PAYOUT-DISCIPLINE ================================
+payoutBuffer  = 500.0
 var string GROUP_WFC = "1c · ACCOUNT — Funded: payouts & discipline"
-useWaitForCap = input.bool(true, "Wait-for-cap: request only at full ladder cap", group=GROUP_WFC,
-     tooltip="ON: PAYOUT READY only once the balance covers the FULL ladder cap of the current payout. OFF: as soon as a withdrawal is allowed.")
-payoutNr      = input.int(1, "Next payout number (1-6)", minval=1, maxval=6, group=GROUP_WFC,
-     tooltip="Which payout you are building toward (1-6). Sets the ladder cap. Increase after each approved payout.")
-paBacktestMode = input.bool(true, "PA backtest mode (breach marks, does NOT close permanently)", group=GROUP_WFC,
-     tooltip="ON (backtest): a PA breach is counted and marked but does not halt the strategy. OFF (live): a breach truly halts the account.")
-// Historical bars: lifecycle simulation may reset after breach/payout. Realtime bars: always behave as live PA (breach halts).
-bool paBacktestModeEff = paBacktestMode and not barstate.isrealtime
-accountPhase  = input.string("Apex PA", "Account Phase", options=["Research (none)","Apex Eval","Apex PA"], group=GROUP_PHASE,
+useWaitForCap = false
+payoutNr      = 1
+paBacktestMode = true
+accountPhase  = input.string("Apex Eval", "Account Phase", options=["Research (none)","Apex Eval","Apex PA"], group=GROUP_PHASE,
      tooltip="Research: no account rules (default; backtests unchanged). Eval: goal + trailing. PA: trailing until lock, DLL, consistency/payout monitor — and the MAE guard (group 16).")
-acctTrailDD   = input.float(2000, "Trailing Drawdown ($)", step=100, group=GROUP_PHASE, tooltip="Trailing drawdown of your account plan.", display=display.none)
-acctGoal      = 3000.0
-acctDLL       = input.float(1000, "PA Daily Loss Limit ($)", step=50, group=GROUP_PHASE, tooltip="PA daily loss limit; the phase layer halts the day when hit.", display=display.none)
-consistencyPct= input.float(50, "Consistency rule (%)", minval=10, maxval=100, group=GROUP_PHASE, tooltip="Max share of total profit one day may contribute at payout request (Apex: 30-50% depending on plan).", display=display.none)
-minPayout     = input.float(500, "Min. Payout ($)", step=50, group=GROUP_PHASE, tooltip="Minimum payout amount per Apex rules.", display=display.none)
-minQualDayUSD = input.float(250, "Min. profit for qualifying day ($)", step=10, group=GROUP_PHASE, tooltip="Minimum daily profit for a day to count as qualifying toward payout.", display=display.none)
+acctTrailDD   = input.float(2500, "Trailing Drawdown ($)", step=100, group=GROUP_PHASE, tooltip="Trailing drawdown of your account plan.", display=display.none)
+acctGoal      = input.float(3000, "Eval Profit Goal ($)", step=100, group=GROUP_PHASE, tooltip="Eval profit target for the phase tracker (Apex 50k: $3,000).", display=display.none)
+acctDLL       = 1000.0
+consistencyPct= 50.0
+minPayout     = 500.0
+minQualDayUSD = 50.0
 acctPnlOffset = input.float(0, "Live sync: current account PnL vs start ($)", group=GROUP_PHASE,
      tooltip="For live use: enter the account's actual PnL so floor/goal are correct. Backtest: 0.", display=display.none)
 acctHwmOffset = input.float(0, "Live sync: current HWM vs start ($)", group=GROUP_PHASE, tooltip="For live use with EOD trailing: the account high-water mark so the floor calculates correctly. Backtest: 0.", display=display.none)
-lastPayoutTime= input.time(timestamp("2024-01-01T00:00:00"), "Last payout (consistency anchor)", group=GROUP_PHASE, tooltip="Consistency and qualifying-day counters measure from this moment. Set to your last payout date; leave at default for a fresh account.", display=display.none)
-
+lastPayoutTime= timestamp("2024-01-01T00:00:00")
 // === 0 · FIRM PRESET — auto-fills account rules from data/propfirms.json ======
 // Futures (trailing-DD) firms only. Forex/static firms run via the Python
 // backtester until the static-DD Pine engine is added. Manual inputs stay as override.
-useFirmPreset = input.bool(true, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+useFirmPreset = input.bool(false, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
+firmPreset    = input.string("apex_50k_intraday_eval", "Firm program", options=["apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
@@ -294,27 +248,19 @@ f_firmRules(string _p) =>
     float _cons = 50.0
     if _p == "apex_50k_eod_eval"
         _dd := "EOD"
-        _ml := 2000.0
+        _ml := 2500.0
         _g := 3000.0
         _dll := 1000.0
         _cons := 50.0
     else if _p == "apex_50k_eod_pa"
         _dd := "EOD"
-        _ml := 2000.0
+        _ml := 2500.0
         _g := 3000.0
         _dll := 1000.0
         _cons := 50.0
     else if _p == "apex_50k_intraday_eval"
         _dd := "Intraday"
-        _ml := 2000.0
-        _g := 3000.0
-        _dll := 0.0
-        _cons := 50.0
-    else if _p == "apex_50k_intraday_pa"
-        // Apex 50K Intraday PA (current): $2,000 real-time trailing DD,
-        // threshold locks at +$100 once HWM reaches +$2,100; tier DLL starts at $1,000.
-        _dd := "Intraday"
-        _ml := 2000.0
+        _ml := 2500.0
         _g := 3000.0
         _dll := 1000.0
         _cons := 50.0
@@ -360,14 +306,23 @@ if useFirmPreset
 // ============================================================================
 // === MEX POLICY LAYER — Fleet Config Matrix v1.1 (autogen, niet handmatig wijzigen)
 // ============================================================================
-string polPreset = input.string("Manual (inputs hieronder)", "MEX preset (Fleet Matrix v1.1)", options=["PA013 · MGC q3 · cap $750", "PA016 · MGC q3 · cap $700", "PA019 · MGC q3 · cap $650", "PA018 · RUNNER MGC q5 · cap $1500", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Matrix §2-4. Preset pint qty, max stop, harde dagcap en account phase. Kies Manual alleen voor Research/backtests.")
+string polPreset = input.string("Research · sim-only (nooit op PA)", "MEX preset (Fleet Matrix v1.1)", options=["Research · sim-only (nooit op PA)", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Matrix §2-4. Preset pint qty, max stop, harde dagcap en account phase. Kies Manual alleen voor Research/backtests.")
 f_pol(string _p) =>
-    switch _p
-        "PA013 · MGC q3 · cap $750" => ["GC", 3.0, 130.0, 750.0, "Apex PA", true]
-        "PA016 · MGC q3 · cap $700" => ["GC", 3.0, 130.0, 700.0, "Apex PA", true]
-        "PA019 · MGC q3 · cap $650" => ["GC", 3.0, 130.0, 650.0, "Apex PA", true]
-        "PA018 · RUNNER MGC q5 · cap $1500" => ["GC", 5.0, 130.0, 1500.0, "Apex PA", true]
-        => ["ANY", 0.0, 0.0, na, "", false]   // Manual: waarden ongebruikt
+    string _fam     = "ANY"
+    float  _qty     = 0.0
+    float  _maxStop = 0.0
+    float  _capUSD  = na
+    string _phase   = ""
+    bool   _live    = false
+    if _p == "Research · sim-only (nooit op PA)"
+        _fam     := "NQ"
+        _qty     := 2.0
+        _maxStop := 250.0
+        _capUSD  := na
+        _phase   := "Research (none)"
+        _live    := true
+    [_fam, _qty, _maxStop, _capUSD, _phase, _live]
+
 [polFam, polQty, polMaxStopT, polCapUSD, polPhase, polLive] = f_pol(polPreset)
 bool polOn = polPreset != "Manual (inputs hieronder)"
 string polRoot = syminfo.root != "" ? syminfo.root : str.replace(str.replace(syminfo.ticker, "1!", ""), "2!", "")
@@ -408,40 +363,27 @@ ltfBosLen     = 5
 allowScalp    = true
 vwapDistMin   = 0.05
 
-// === DELTA / CVD FILTER ======================================================
-// Canonical scratch-research default:
-// "Research OHLCV proxy" reproduces the Python/.NET multi-market proxy exactly:
-// close>open = +1, close<open = -1, doji -> previous close, unresolved -> carry polarity.
-// CVD N = N consecutive proxy-direction bars aligned with FVG direction.
-// The TradingView volume-delta engine is retained as an optional experiment only.
-useCVDFilter  = input.bool(true, "Use Delta Filter", group=GROUP_CVD,
-     tooltip="Default uses the deterministic OHLCV research proxy for Python/.NET/Pine parity. TradingView volume delta remains available as an optional experimental engine.")
-cvdEngine     = input.string("Research OHLCV proxy", "Delta engine",
-     options=["Research OHLCV proxy","TradingView volume delta"], group=GROUP_CVD,
-     tooltip="Keep Research OHLCV proxy for this MES parity test. TradingView volume delta is NOT the research baseline.")
-cvdLowerTf    = input.timeframe("1", "Lower Timeframe for Delta", group=GROUP_CVD, tooltip="Used only by the optional TradingView volume-delta engine.", display=display.none)
-deltaBorrowSym = input.symbol("", "Borrow delta from symbol (empty = chart)", group=GROUP_CVD, tooltip="Drive the delta filter from ANOTHER symbol's real volume. Example: on a spot EURUSD chart set CME_MINI:6E1! to use the Euro FX future's genuine volume delta (spot FX has no real volume of its own). Empty = use this chart's own volume. Method: request.security_lower_tf up/down volume on the borrowed symbol — an approximation of native CVD.", display=display.none)
+// === DELTA FILTER (vereenvoudigd) ===========================================
+useCVDFilter  = input.bool(false, "Use Delta Filter", group=GROUP_CVD,
+     tooltip="Requires volume data. Per-bar semantics (fixed). Mainly does selection work; the VWAP effect only existed within the delta-filtered subset. SPOT FX (EURUSD, USDJPY, ...): there is no real volume, so this AUTOMATICALLY falls back to TICK-VOLUME delta (a weaker proxy). Backtests show the 4-bar Streak adds little even on futures — on FX consider turning the Streak OFF (below), or this whole filter OFF and leaning on FVG + VWAP + time.")
+cvdLowerTf    = input.timeframe("1", "Lower Timeframe for Delta", group=GROUP_CVD, tooltip="Lower timeframe scanned to approximate the volume delta (1 = per-minute polarity, matches the research engine).", display=display.none)
+deltaBorrowSym = input.symbol("", "Borrow delta from symbol (empty = chart)", group=GROUP_CVD, tooltip="Drive the delta filter from ANOTHER symbol's real volume. Example: on a spot EURUSD chart set CME_MINI:6E1! to use the Euro FX future's genuine volume delta (spot FX has no real volume of its own). Empty = use this chart's own volume. Method: request.security_lower_tf up/down volume on the borrowed symbol — an approximation of native CVD (each sub-bar classified up/down by close vs open).", display=display.none)
 useCvdStreak  = input.bool(true, "Streak", inline="cv", group=GROUP_CVD, display=display.none)
-cvdTrendCount = input.int(6, "Count", minval=1, inline="cv", group=GROUP_CVD, tooltip="Consecutive same-direction delta bars required.")
-bool useCVDFilterEff = useCVDFilter
-int cvdTrendCountEff = cvdTrendCount
+cvdTrendCount = input.int(1, "Count", minval=1, inline="cv", group=GROUP_CVD, tooltip="Consecutive same-direction delta bars required.")
 
 // === FVG =====================================================================
 useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
-// MES Production scratch parity: FVG 10–22 ticks = 2.50–5.50 price points.
-gapMinSize   = input.float(10, "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
-gapMaxSize   = input.float(22, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
-float gapMinSizeEff = gapMinSize
-float gapMaxSizeEff = gapMaxSize
-confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
+gapMinSize   = input.float(2,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
+gapMaxSize   = input.float(8, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+confirmBarsIn = input.int(2, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 
 
 
 int confirmBars = confirmBarsIn
 // === TIME GATE (alleen Manual; in-sample modes verwijderd) ===================
-tradeSunday    = input.bool(true, "Sun", inline="wd", group=GROUP_TIME, display=display.none)
+tradeSunday    = input.bool(false, "Sun", inline="wd", group=GROUP_TIME, display=display.none)
 tradeMonday    = input.bool(true,  "Mon", inline="wd", group=GROUP_TIME, display=display.none)
 tradeTuesday   = input.bool(true,  "Tue", inline="wd", group=GROUP_TIME, display=display.none)
 tradeWednesday = input.bool(true,  "Wed", inline="wd", group=GROUP_TIME, display=display.none)
@@ -450,96 +392,15 @@ tradeFriday    = input.bool(true,  "Fri", inline="wd", group=GROUP_TIME, display
 tradeSaturday  = input.bool(false, "Sat (crypto)", inline="wd", group=GROUP_TIME, tooltip="Weekday toggles for the time gate. The Monday 00:00-02:00 filter below is separate and day-specific.", display=display.none)
 timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_TIME), timeHour01 = input.bool(true, "01", inline="h0", group=GROUP_TIME), timeHour02 = input.bool(true, "02", inline="h0", group=GROUP_TIME), timeHour03 = input.bool(true, "03", inline="h0", group=GROUP_TIME), timeHour04 = input.bool(true, "04", inline="h0", group=GROUP_TIME), timeHour05 = input.bool(true, "05", inline="h0", group=GROUP_TIME, tooltip="00.", display=display.none)
 timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_TIME), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_TIME), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_TIME), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_TIME), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_TIME), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_TIME, tooltip="06.", display=display.none)
-timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
+timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(false, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
 timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_TIME), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_TIME), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_TIME), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_TIME), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_TIME, tooltip="18.", display=display.none)
-useDirectionalHours = input.bool(false, "Directional hour map", group=GROUP_STAB, tooltip="Adds independent LONG/SHORT hour gates on top of the existing common time gate. Disable to use the legacy common hour gate only.")
-// Revalidated all-24h Stability Core defaults: LONG 09/10/11/20/21/23 · SHORT 10/11/21. All 24 switches remain user-editable.
-lHour00 = input.bool(false, "Long 00", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour01 = input.bool(false, "Long 01", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour02 = input.bool(false, "Long 02", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour03 = input.bool(false, "Long 03", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour04 = input.bool(false, "Long 04", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour05 = input.bool(false, "Long 05", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour06 = input.bool(false, "Long 06", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour07 = input.bool(false, "Long 07", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour08 = input.bool(false, "Long 08", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour09 = input.bool(true, "Long 09", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour10 = input.bool(true, "Long 10", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour11 = input.bool(true, "Long 11", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour12 = input.bool(false, "Long 12", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour13 = input.bool(false, "Long 13", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour14 = input.bool(false, "Long 14", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour15 = input.bool(false, "Long 15", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour16 = input.bool(false, "Long 16", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour17 = input.bool(false, "Long 17", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour18 = input.bool(false, "Long 18", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour19 = input.bool(false, "Long 19", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour20 = input.bool(true, "Long 20", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour21 = input.bool(true, "Long 21", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour22 = input.bool(false, "Long 22", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour23 = input.bool(true, "Long 23", inline="lh3", group=GROUP_STAB, display=display.none)
-sHour00 = input.bool(false, "Short 00", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour01 = input.bool(false, "Short 01", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour02 = input.bool(false, "Short 02", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour03 = input.bool(false, "Short 03", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour04 = input.bool(false, "Short 04", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour05 = input.bool(false, "Short 05", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour06 = input.bool(false, "Short 06", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour07 = input.bool(false, "Short 07", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour08 = input.bool(false, "Short 08", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour09 = input.bool(false, "Short 09", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour10 = input.bool(true, "Short 10", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour11 = input.bool(true, "Short 11", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour12 = input.bool(false, "Short 12", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour13 = input.bool(false, "Short 13", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour14 = input.bool(false, "Short 14", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour15 = input.bool(false, "Short 15", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour16 = input.bool(false, "Short 16", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour17 = input.bool(false, "Short 17", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour18 = input.bool(false, "Short 18", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour19 = input.bool(false, "Short 19", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour20 = input.bool(false, "Short 20", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour21 = input.bool(true, "Short 21", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour22 = input.bool(false, "Short 22", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour23 = input.bool(false, "Short 23", inline="sh3", group=GROUP_STAB, display=display.none)
-// === MARKET REGIME GATE ======================================================
-// Research-defined structural sessions; no individual hour/day cherry-picking.
-marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
-     tooltip="Liquidity Core = London 02:00-05:00 ET + US pre-cash/morning 07:00-12:00 ET + Globex reopen 18:00-19:00 ET. These windows were defined by market structure, not individual-hour optimization.")
-customLondon     = input.bool(true, "Custom · London 02:00-05:00", group=GROUP_MREG)
-customUsMorning  = input.bool(true, "Custom · US 07:00-12:00", group=GROUP_MREG)
-customGlobexOpen = input.bool(true, "Custom · Globex reopen 18:00-19:00", group=GROUP_MREG)
-customAsia       = input.bool(false, "Custom · Asia 19:00-02:00", group=GROUP_MREG)
-customLunch      = input.bool(false, "Custom · Lunch 12:00-14:00", group=GROUP_MREG)
-customPowerHour  = input.bool(false, "Custom · Power hour 15:00-16:00", group=GROUP_MREG)
-
 useAutoFlat = input.bool(true, "Force Flat Window", inline="flat", group=GROUP_TIME, display=display.none)
-skipMonEarly = input.bool(false, "Skip Monday open (no entries Mon 00:00–02:00 ET)", group=GROUP_TIME,
+skipMonEarly = input.bool(true, "Skip Monday open (no entries Mon 00:00–02:00 ET)", group=GROUP_TIME,
      tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
 flatHour    = input.int(16, "From", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
 flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, display=display.none)
 resumeHour  = input.int(18, "Until", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
 resumeMinute= input.int(0, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, tooltip="Trading resume minute.", display=display.none)
-
-// === ROLL / OPEX / NEWS FACTORY (event-regime filters) ======================
-// Validated on 3y OOS: for the mean-reversion engine the losses concentrate in the
-// quarterly roll/triple-witching window (esp. quiet, no-news days), while macro news
-// (NFP tailwind, FOMC on ES/GC) sits on the profit side. This block lets you AVOID the
-// loss-regimes per strategy / account-type / phase. Preset "Auto" = the validated default
-// for THIS script; pick another to borrow its config, or "Off / Custom" to drive the
-// toggles yourself. Survival over winning — don't fight the bull in the witching-week chaos.
-useEvtFilter = input.bool(false, "Enable roll/OpEx/news factory", group=GROUP_EVT,
-     tooltip="Master switch. Off = trade every session regardless of roll/OpEx/news regime.")
-evtPreset = input.string("Auto (this script)", "Preset (strategy · type · phase)",
-     options=["Auto (this script)","ES · Eval","ES · Funded","GC · Eval","GC · Funded","YM · any","NQ · any","Off / Custom"],
-     group=GROUP_EVT, tooltip="Auto resolves to the validated default for this script (" + AUTO_PRESET + "). Choose another strategy/account-type to borrow its regime config, or 'Off / Custom' to use the manual toggles below.")
-rgAvoidRoll    = input.bool(true,  "Custom · avoid quarterly roll window",   group=GROUP_EVT, tooltip="Used only when preset = Off / Custom. Skip entries within ± the day-window around the quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry.")
-rgRollDays     = input.int(10,     "Custom · roll window ± days", minval=0, maxval=30, group=GROUP_EVT, tooltip="Half-width of the roll window in calendar days.")
-rgRollNewsOvr  = input.bool(true,  "Custom · but trade if it IS a news day", group=GROUP_EVT, tooltip="News (FOMC/NFP) sits on the profit side — keep trading it even inside the roll window.")
-rgAvoidWitch   = input.bool(false, "Custom · avoid triple-witching week",    group=GROUP_EVT, tooltip="Skip the trading week of the quarterly expiry (the strongest loss-regime for YM).")
-rgAvoidWkAfter = input.bool(false, "Custom · avoid week AFTER monthly OpEx",  group=GROUP_EVT, tooltip="ES bleeds the week after every monthly options expiry (all 4 years <1).")
-rgBlockFOMC    = input.bool(false, "Custom · block FOMC days",               group=GROUP_EVT, tooltip="Skip FOMC decision days (a loss-regime for NQ; a profit day for ES/GC — leave off there).")
-rgBlockNFP     = input.bool(false, "Custom · block NFP days",                group=GROUP_EVT, tooltip="Skip Non-Farm-Payroll Fridays. Usually a tailwind for index strats — leave off.")
 
 // === VISUALISATION ===========================================================
 showSignals     = input.bool(true, "Show Signals", inline="v1", group=GROUP_VIS, display=display.none)
@@ -596,21 +457,17 @@ routeRithmic       = input.bool(false, "→ PMT Rithmic", group=GROUP_EXEC, tool
 routePineConnector = input.bool(false, "→ PineConnector (MT4/5)", group=GROUP_EXEC, tooltip="MT4/5 comma command (forex/CFD, e.g. FTMO on EURUSD). Needs license + symbol + risk below.")
 routeDiscord       = input.bool(false, "→ Discord", group=GROUP_EXEC, tooltip="Discord embeds (fills/exits/halts/derisk/eval/payout).")
 routeJournal       = input.bool(false, "→ Journal (CSV)", group=GROUP_EXEC, tooltip="CSV journal rows for the Notion pipeline.")
+pmtToken     = input.string("", "PMT Token", group=GROUP_EXEC, tooltip="PickMyTrade API token (Tradovate / Rithmic route). Used when → PMT Tradovate or → PMT Rithmic is on.", display=display.none)
+pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, tooltip="Your PineConnector license ID — the number your MT4/5 EA listens on. Used when → PineConnector is on.", display=display.none)
+pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
+pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size or risk units, per your EA's configuration).", display=display.none)
 usePMT       = routePMT
-pmtToken     = input.string("", "PMT Token", group=GROUP_EXEC, tooltip="PickMyTrade API token (Tradovate route).", display=display.none)
-useDiscord   = routeDiscord
 useRithmic   = routeRithmic
 usePineConnector = routePineConnector
-pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, tooltip="Your PineConnector license ID — the number your MT4/5 EA listens on. Used only when Alert destination = PineConnector.", display=display.none)
-pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
-pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size, or risk units, per your EA's configuration).", display=display.none)
-routeMiddleware = input.bool(false, "→ Middleware (fan-out)", group=GROUP_EXEC, tooltip="Send one lean signal to your middleware /webhook; it fans out to every account subscribed to this strategy. Put the webhook URL on the TradingView alert itself.")
-mwSecret   = input.string("", "Middleware secret", group=GROUP_EXEC, tooltip="Must match MIDDLEWARE_SECRET on your server.", display=display.none)
-mwStrategy = input.string("GC", "Middleware strategy key", group=GROUP_EXEC, tooltip="Strategy key the middleware maps to accounts (e.g. GC, ES, NQ). Match accounts.yaml.", display=display.none)
-useMiddleware = routeMiddleware
-botName    = input.string("MΞX ΞL TΞSORO", "Bot Name", group=GROUP_ALRT, tooltip="Display name for Discord messages.", display=display.none)
+useDiscord   = routeDiscord
+botName    = input.string("MΞX ΞL TORO", "Bot Name", group=GROUP_ALRT, tooltip="Display name for Discord messages.", display=display.none)
 lockBufTicks = input.float(4, "Lock cost buffer (ticks)", minval=0, group=GROUP_ALRT, tooltip="Extra open-profit buffer (in ticks, per contract) required above the target before the intra-trade lock closes all — covers fees & slippage.")
-lockOnCap    = input.bool(true, "Close all when payout cap is reached intra-trade", group=GROUP_ALRT, tooltip="Once projected withdrawable (incl. open PnL) covers the FULL ladder cap plus the cost buffer, close everything (PMT + Discord) and bank the payout.")
+lockOnPass   = input.bool(true, "Close all when eval passes intra-trade", group=GROUP_ALRT, tooltip="Once open+closed PnL since start covers the eval target plus the cost buffer, close everything (PMT + Discord) and bank the pass.")
 avatarURL  = ""
 titleURL  = ""
 roleID  = ""
@@ -638,19 +495,15 @@ evalStartBal    = input.float(0, "Start balance ($)", step=100, group=GROUP_EVAL
      tooltip="Balance at the start date. Use when tracking an account already underway (e.g. a PA at +$800). On day 1 = peak; floor = start - trailing DD.", display=display.none)
 evalProfitTgt   = acctGoal
 evalTrailDD     = acctTrailDD
-evalTrailEod    = input.bool(true, "EOD-trailing (uit=intraday)", group=GROUP_EVAL,
+evalTrailEod    = input.bool(false, "EOD-trailing (uit=intraday)", group=GROUP_EVAL,
      tooltip="EOD: floor follows the closed daily balance only (milder). Intraday: floor follows the live peak (stricter).", display=display.none)
 
 // === v5.4: APEX LEGACY 30% MAE-GUARD =========================================
 var string GROUP_MAE = GROUP_PHASE
-useMaeGuard  = input.bool(false, "MAE guard on (only active in Apex PA phase)", group=GROUP_MAE,
-     tooltip="Apex Legacy 30% Negative P&L (MAE) rule: open negative P&L may never exceed 30% of the profit balance at the START of the day. New/low-profit accounts: 30% of the trailing drawdown (50k: $750). Once EOD profit reaches 2x the safety net (trailing DD + $100): 50%. This guard automatically scales contracts down so stop risk fits, and only blocks a trade if even 1 contract does not fit. Active only when Account Phase (group 4b) is Apex PA, with the live-sync PnL offset filled in.", display=display.none)
-maeBasePct   = input.float(30, "Base limit (% of profit balance)", minval=5, maxval=100, step=5, group=GROUP_MAE, tooltip="Apex base MAE limit: open loss as % of start-of-day profit balance (rule: 30%).", display=display.none)
-maeGrownPct  = input.float(50, "Limit after 2x safety net (%)", minval=5, maxval=100, step=5, group=GROUP_MAE, tooltip="MAE limit once EOD profit has reached 2x the safety net (rule: 50%).", display=display.none)
-maeMarginPct = input.float(10, "Safety margin (%)", minval=0, maxval=50, step=5, group=GROUP_MAE,
-     tooltip="Extra buffer below the Apex limit for slippage and open-PnL swings. 10% means the guard uses 90% of the allowed room.", display=display.none)
-
-// === v5: CSV TRADE-JOURNAAL (Notion) =========================================
+useMaeGuard  = false
+maeBasePct   = 30.0
+maeGrownPct  = 50.0
+maeMarginPct = 10.0
 var string GROUP_JRNL = GROUP_EVAL
 useJournal   = routeJournal
 jrnlJsonWrap = true
@@ -675,17 +528,13 @@ f_autoAcctName() =>
 string jrnlAcct = str.length(jrnlAcctName) > 0 ? jrnlAcctName : f_autoAcctName()
 f_msgHead() =>
     "MPT " + currentVersion + " | " + jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz)
-bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal and not useMiddleware
-bool execInstance = usePMT or useRithmic or usePineConnector or useMiddleware
+bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal
+bool execInstance = usePMT or useRithmic or usePineConnector
 
 // ============================================================================
 // === TIME GATE ==============================================================
 // ============================================================================
 hourEnabled = array.from(timeHour00,timeHour01,timeHour02,timeHour03,timeHour04,timeHour05,timeHour06,timeHour07,timeHour08,timeHour09,timeHour10,timeHour11,timeHour12,timeHour13,timeHour14,timeHour15,timeHour16,timeHour17,timeHour18,timeHour19,timeHour20,timeHour21,timeHour22,timeHour23)
-longHourEnabled = array.from(lHour00,lHour01,lHour02,lHour03,lHour04,lHour05,lHour06,lHour07,lHour08,lHour09,lHour10,lHour11,lHour12,lHour13,lHour14,lHour15,lHour16,lHour17,lHour18,lHour19,lHour20,lHour21,lHour22,lHour23)
-shortHourEnabled = array.from(sHour00,sHour01,sHour02,sHour03,sHour04,sHour05,sHour06,sHour07,sHour08,sHour09,sHour10,sHour11,sHour12,sHour13,sHour14,sHour15,sHour16,sHour17,sHour18,sHour19,sHour20,sHour21,sHour22,sHour23)
-bool dirHourLongPass  = not useDirectionalHours or array.get(longHourEnabled, f_getHour())
-bool dirHourShortPass = not useDirectionalHours or array.get(shortHourEnabled, f_getHour())
 f_toMOD(_h,_m) => _h*60+_m
 f_inRangeMOD(_sh,_sm,_eh,_em) =>
     _cur = f_minuteOfDay()
@@ -699,14 +548,7 @@ f_isTradingDay() =>
      (tradeDOW == dayofweek.thursday and tradeThursday) or (tradeDOW == dayofweek.friday and tradeFriday) or
      (tradeDOW == dayofweek.saturday and tradeSaturday)
 monEarlyBlock = skipMonEarly and tradeDOW == dayofweek.monday and f_minuteOfDay() < 120
-bool _mregLondon = f_inRangeMOD(2, 0, 5, 0)
-bool _mregUsMorning = f_inRangeMOD(7, 0, 12, 0)
-bool _mregGlobex = f_inRangeMOD(18, 0, 19, 0)
-bool _mregAsia = f_inRangeMOD(19, 0, 2, 0)
-bool _mregLunch = f_inRangeMOD(12, 0, 14, 0)
-bool _mregPower = f_inRangeMOD(15, 0, 16, 0)
-bool marketRegimePass = marketRegimeMode == "All sessions" ? true : marketRegimeMode == "Liquidity Core" ? (_mregLondon or _mregUsMorning or _mregGlobex) : ((customLondon and _mregLondon) or (customUsMorning and _mregUsMorning) or (customGlobexOpen and _mregGlobex) or (customAsia and _mregAsia) or (customLunch and _mregLunch) or (customPowerHour and _mregPower))
-timeGatePassRaw = f_isTradingDay() and array.get(hourEnabled, f_getHour()) and not monEarlyBlock and marketRegimePass
+timeGatePassRaw = f_isTradingDay() and array.get(hourEnabled, f_getHour()) and not monEarlyBlock
 
 // === MEX OR-BREAKOUT — tracking (per sessie, repaint-vrij) ===================
 var float orHi = na
@@ -756,75 +598,6 @@ bool paFiltersOK  = relVolOK and bbwpOK and not rthOpenBlock
 timeGatePass = timeGatePassRaw and paFiltersOK
 inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
 
-// ============================================================================
-// === ROLL / OPEX / NEWS FACTORY — preset resolver + calendar gate ============
-// ============================================================================
-f_evtPreset(_p) =>
-    string _pp = _p == "Auto (this script)" ? AUTO_PRESET : _p
-    bool _ar = false
-    bool _ro = true
-    bool _aw = false
-    bool _wa = false
-    bool _bf = false
-    bool _bn = false
-    bool _cu = false
-    int  _rd = 10
-    if _pp == "ES · Eval" or _pp == "ES · Funded"
-        _ar := true
-        _wa := true
-    else if _pp == "YM · any"
-        _ar := true
-        _aw := true
-    else if _pp == "NQ · any"
-        _bf := true
-    else if _pp == "Off / Custom"
-        _cu := true
-    // "GC · Eval" / "GC · Funded" -> all-false: GC is robust across regimes, no event filter
-    [_ar, _rd, _ro, _aw, _wa, _bf, _bn, _cu]
-[epAr, epRd, epRo, epAw, epWa, epBf, epBn, epCu] = f_evtPreset(evtPreset)
-bool evtAvoidRoll  = epCu ? rgAvoidRoll    : epAr
-int  evtRollDays   = epCu ? rgRollDays     : epRd
-bool evtRollNewsOv = epCu ? rgRollNewsOvr  : epRo
-bool evtAvoidWitch = epCu ? rgAvoidWitch   : epAw
-bool evtAvoidWkAft = epCu ? rgAvoidWkAfter : epWa
-bool evtBlockFOMC  = epCu ? rgBlockFOMC    : epBf
-bool evtBlockNFP   = epCu ? rgBlockNFP     : epBn
-
-f_thirdFriDay(_y, _m) =>
-    int _wd1 = dayofweek(timestamp(activeTz, _y, _m, 1, 0, 0), activeTz)  // 1=Sun .. 7=Sat
-    int _firstFri = 1 + ((6 - _wd1 + 7) % 7)                              // Friday = 6
-    _firstFri + 14
-int _cy = year(time, activeTz)
-int _cm = month(time, activeTz)
-int _cd = dayofmonth(time, activeTz)
-// nearest quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry; signed days (>0 = after expiry)
-float _qSigned = na
-float _qAbs = 1.0e12
-for _yy = _cy - 1 to _cy + 1
-    for _qm = 3 to 12 by 3
-        float _ts = timestamp(activeTz, _yy, _qm, f_thirdFriDay(_yy, _qm), 0, 0)
-        float _dd = (time - _ts) / 86400000.0
-        if math.abs(_dd) < _qAbs
-            _qAbs := math.abs(_dd)
-            _qSigned := _dd
-// monthly OpEx (this month's 3rd Friday) — signed within-month days
-int _mRel = _cd - f_thirdFriDay(_cy, _cm)
-// NFP = 1st Friday of the month
-int _wd1m = dayofweek(timestamp(activeTz, _cy, _cm, 1, 0, 0), activeTz)
-int _firstFriDay = 1 + ((6 - _wd1m + 7) % 7)
-bool isNFP = _cd == _firstFriDay
-// FOMC decision days (US, 2022-2026; 2026 projected — update yearly)
-var int[] FOMC_YMD = array.from(20220126,20220316,20220504,20220615,20220727,20220921,20221102,20221214, 20230201,20230322,20230503,20230614,20230726,20230920,20231101,20231213, 20240131,20240320,20240501,20240612,20240731,20240918,20241107,20241218, 20250129,20250319,20250507,20250618,20250730,20250917,20251029,20251210, 20260128,20260318,20260429,20260617,20260729,20260916,20261028,20261209)
-bool isFOMC = array.includes(FOMC_YMD, _cy * 10000 + _cm * 100 + _cd)
-bool isNews = isFOMC or isNFP
-bool _blkRoll  = evtAvoidRoll  and (math.abs(_qSigned) <= evtRollDays) and not (evtRollNewsOv and isNews)
-bool _blkWitch = evtAvoidWitch and (_qSigned >= -4 and _qSigned <= 1)
-bool _blkWkAft = evtAvoidWkAft and (_mRel >= 2 and _mRel <= 8)
-bool _blkFOMC  = evtBlockFOMC  and isFOMC
-bool _blkNFP   = evtBlockNFP   and isNFP
-bool evtBlock  = useEvtFilter and (_blkRoll or _blkWitch or _blkWkAft or _blkFOMC or _blkNFP)
-bool evtGateOK = not evtBlock
-
 var bool hasTraded = false
 if not timeGatePass
     hasTraded := false
@@ -841,7 +614,7 @@ if bar_index >= 2
     fvgBottom := fvgDirection > 0 ? high[2] : fvgDirection < 0 ? high : na
 fvgSizePrice = not na(fvgTop) ? math.abs(fvgTop - fvgBottom) : na
 fvgMid = not na(fvgTop) ? (fvgTop + fvgBottom) / 2.0 : na
-fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(gapMinSizeEff) and fvgSizePrice <= f_distPrice(gapMaxSizeEff) and fvgSizePrice > 0)
+fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(gapMinSize) and fvgSizePrice <= f_distPrice(gapMaxSize) and fvgSizePrice > 0)
 bullCandle = fvgDirection == 1 and fvgPasses
 bearCandle = fvgDirection == -1 and fvgPasses
 
@@ -926,18 +699,10 @@ vetoShortOK = not useVwapVeto or close < vwapVal
 // ============================================================================
 // === DELTA / CVD FILTER — RESEARCH PARITY ====================================
 // ============================================================================
-// Canonical reconstructed OHLCV proxy used by the scratch research engine.
-// IMPORTANT: this is intentionally independent of ta.requestVolumeDelta().
-// Per 1m bar:
-//   close > open        => +1
-//   close < open        => -1
-//   doji, close > close[1] => +1
-//   doji, close < close[1] => -1
-//   unresolved doji     => carry previous polarity
-// CVD Count = consecutive proxy-direction bars aligned with FVG direction.
-
-bool hasBorrow = str.length(deltaBorrowSym) > 0
-bool useResearchProxy = cvdEngine == "Research OHLCV proxy"
+// Canonical deterministic OHLCV polarity proxy used by the NQ eval research:
+// close>open = +1; close<open = -1; doji -> compare with previous close;
+// unresolved doji -> carry previous polarity.
+// CVD Count means consecutive proxy-direction bars aligned with the FVG direction.
 
 var int proxyDir = -1
 int _proxyDirNow = close > open ? 1 :
@@ -952,39 +717,11 @@ var int proxyBearStreak = 0
 proxyBullStreak := proxyDir == 1 ? nz(proxyBullStreak[1], 0) + 1 : 0
 proxyBearStreak := proxyDir == -1 ? nz(proxyBearStreak[1], 0) + 1 : 0
 
-float perBarDelta = na
-bool bullDirOk = false
-bool bearDirOk = false
-bool bullStreakOk = false
-bool bearStreakOk = false
-int cvdBullStreakDisplay = 0
-int cvdBearStreakDisplay = 0
-bool cvdEff = useCVDFilterEff
-
-if cvdEff and useResearchProxy
-    bullDirOk := proxyDir == 1
-    bearDirOk := proxyDir == -1
-    bullStreakOk := not useCvdStreak or proxyBullStreak >= cvdTrendCountEff
-    bearStreakOk := not useCvdStreak or proxyBearStreak >= cvdTrendCountEff
-    cvdBullStreakDisplay := proxyBullStreak
-    cvdBearStreakDisplay := proxyBearStreak
-else if cvdEff
-    // Optional legacy / experimental TradingView volume-delta engine.
-    if hasBorrow
-        [_upV, _dnV] = request.security_lower_tf(deltaBorrowSym, cvdLowerTf, [close > open ? volume : 0.0, close < open ? volume : 0.0])
-        perBarDelta := array.sum(_upV) - array.sum(_dnV)
-    else
-        [vdO, vdH, vdL, vdC] = ta.requestVolumeDelta(cvdLowerTf, "1D")
-        perBarDelta := vdC - vdO
-    bullDirOk := perBarDelta > 0
-    bearDirOk := perBarDelta < 0
-    int barsSinceNotBull = ta.barssince(not bullDirOk)
-    int barsSinceNotBear = ta.barssince(not bearDirOk)
-    cvdBullStreakDisplay := nz(barsSinceNotBull, 0)
-    cvdBearStreakDisplay := nz(barsSinceNotBear, 0)
-    bullStreakOk := not useCvdStreak or nz(barsSinceNotBull, 99999) >= cvdTrendCountEff
-    bearStreakOk := not useCvdStreak or nz(barsSinceNotBear, 99999) >= cvdTrendCountEff
-
+bool cvdEff = useCVDFilter
+bool bullDirOk = proxyDir == 1
+bool bearDirOk = proxyDir == -1
+bool bullStreakOk = not useCvdStreak or proxyBullStreak >= cvdTrendCount
+bool bearStreakOk = not useCvdStreak or proxyBearStreak >= cvdTrendCount
 bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
 bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
 
@@ -1017,17 +754,15 @@ riskDayPeak := math.max(riskDayPeak, runningPnL)
 todayDD = riskDayPeak - runningPnL
 lossBasis = includeOpenInLoss ? math.min(todayRealizedPnL, runningPnL) : todayRealizedPnL
 targetHit   = enableDailyTarget and todayRealizedPnL >= dailyProfitTarget
-lossHit     = enableDailyLossLimit and lossBasis <= -dailyLossLimitEff
+lossHit     = enableDailyLossLimit and lossBasis <= -dailyLossLimit
 drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
 dllHit      = (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
 bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Trail + cap") and not (polOn and not na(polCapUSD))
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
-bool dayTrailArmed = dayTrailModel == "Legacy: activation = giveback" ? riskDayPeak > dayTrailUSDEff : riskDayPeak >= dayTrailActivationUSDEff
-float dayTrailGivebackEff = dayTrailModel == "Legacy: activation = giveback" ? dayTrailUSDEff : dayTrailGivebackUSDEff
-dayTrailHit = _dexTrailOn and dayTrailArmed and runningPnL <= riskDayPeak - dayTrailGivebackEff
-dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSDEff)
+dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dayTrailUSD
+dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSD)
 if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit)
     dayHalted := true
     haltReason := dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
@@ -1050,17 +785,15 @@ float ddRoom     = phaseOn ? acctPnL - acctFloor : na
 bool  consistencyOK = profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0
 f_ladderCap(_n) =>
     _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
-int   effPayoutNr = (isPA and paBacktestModeEff) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
+int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
 float curLadderCap = f_ladderCap(effPayoutNr)
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= 5 and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
-pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap
-pmtBlockReason := "PAYOUT CAP REACHED — request payout, then raise payout number"
 bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
 bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
 if phaseOn and not acctHalted
     if acctPnL <= acctFloor
-        if isPA and paBacktestModeEff
+        if isPA and paBacktestMode
             paBreachCount += 1
             paResetCount  += 1
             paResetPnLPrev := strategy.netprofit
@@ -1083,7 +816,7 @@ if payoutReady and not payoutAlerted
 if not payoutReady
     payoutAlerted := false
 
-if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
+if isPA and paBacktestMode and payoutReady and barstate.isconfirmed
     float _take = useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap)
     paTotalBanked += _take
     paPayoutsThisCycle += 1
@@ -1121,7 +854,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
-canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive)
+canTrade = timeGatePass and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive)
 if barstate.islast and polOn and (not polInstrOK or not polLive)
     var label _polWarn = na
     label.delete(_polWarn)
@@ -1132,7 +865,7 @@ if barstate.islast and polOn and (not polInstrOK or not polLive)
 // === SIZING =================================================================
 // ============================================================================
 f_calcQty(_slDistPrice) =>
-    float _q = polOn ? polQty : contractSizeEff
+    float _q = polOn ? polQty : contractSize
     if sizingMode != "Fixed contracts"
         float _riskUSD = sizingMode == "Fixed $ risk" ? riskValue : strategy.equity * riskValue / 100.0
         float _perUnit = _slDistPrice * syminfo.pointvalue
@@ -1146,8 +879,8 @@ f_calcQty(_slDistPrice) =>
 isFlat = strategy.position_size == 0 and strategy.opentrades == 0
 var bool posRiskOff = false
 
-bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and dirHourLongPass and barstate.isconfirmed
-bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and dirHourShortPass and barstate.isconfirmed
+bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and barstate.isconfirmed
+bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and barstate.isconfirmed
 
 // === v6.1: FVG CONFIRMATION MEMORY ==========================================
 var array<int>   memBar = array.new<int>()
@@ -1192,8 +925,8 @@ if confirmBars > 0 and barstate.isconfirmed
             int _age = bar_index - array.get(memBar, _k)
             if _age >= 1 and _age <= confirmBars
                 int _d = array.get(memDir, _k)
-                bool _ok = _d == 1 ? (bullCvdPass and canLong and vetoLongOK and sweepLongOK and orGateLong and dirHourLongPass) :
-                     (bearCvdPass and canShort and vetoShortOK and sweepShortOK and orGateShort and dirHourShortPass)
+                bool _ok = _d == 1 ? (bullCvdPass and canLong and vetoLongOK and sweepLongOK and orGateLong) :
+                     (bearCvdPass and canShort and vetoShortOK and sweepShortOK and orGateShort)
                 if _ok
                     memSigDir := _d
                     memSigMid := array.get(memMid, _k)
@@ -1221,7 +954,7 @@ float sigGapTop = (long0 or short0) ? fvgTop    : memSigTop
 float sigGapBot = (long0 or short0) ? fvgBottom : memSigBot
 
 float sigFvgTicks = not na(sigGapTop) and not na(sigGapBot) ? math.abs(sigGapTop - sigGapBot) / syminfo.mintick : na
-int   sigStreakLen = longSignal ? cvdBullStreakDisplay : shortSignal ? cvdBearStreakDisplay : 0
+int   sigStreakLen = longSignal ? nz(barsSinceNotBull, 0) : shortSignal ? nz(barsSinceNotBear, 0) : 0
 int   sigFvgAge = (long0 or short0) ? 0 : memSigAge
 string sigDiag = "FVG" + str.tostring(sigFvgTicks, "#") + "|CVD" + str.tostring(sigStreakLen) + "|AGE" + str.tostring(sigFvgAge) + "|H" + str.tostring(hour(time, activeTz)) + "|D" + str.tostring(dayofweek(time, activeTz))
 
@@ -1229,11 +962,11 @@ bool isLimitMode = entryMode == "Limit @ 50% FVG"
 float sigEntryPx = isLimitMode ? sigGapMid : close
 float sigStopPx = na
 if longSignal
-    sigStopPx := stopMode == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slSizeLegacyEff)
+    sigStopPx := stopMode == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slSizeLegacy)
 if shortSignal
-    sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slSizeLegacyEff)
+    sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slSizeLegacy)
 float sigStopDist = math.abs(sigEntryPx - sigStopPx)
-bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopSizeEff))
+bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopSize))
 float sigQty = f_calcQty(sigStopDist)
 bool qtyOk = sigQty >= (allowFractionalQty ? 1e-4 : 1.0)
 
@@ -1289,9 +1022,6 @@ f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
             float _slPx = _action == "buy" ? _price - _slD : _price + _slD
             float _tpPx = _action == "buy" ? _price + _tpD : _price - _tpD
             alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
-    if useMiddleware
-        string _mwEv = _action == "close" ? "EXIT" : "ENTRY"
-        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","
@@ -1312,7 +1042,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";stabPreset=" + stabilityPreset + ";dirHours=" + (useDirectionalHours ? "1" : "0") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1329,15 +1059,6 @@ var bool payoutDiscordSent = false
 if payoutReady and not payoutDiscordSent
     payoutDiscordSent := true
     f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", (useWaitForCap ? "FULL CAP $" + str.tostring(curLadderCap, "#") + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
-var bool capLocked = false
-if lockOnCap and isPA and useWaitForCap and not capLocked and strategy.position_size != 0
-    float _lockBufC = lockBufTicks * syminfo.mintick * syminfo.pointvalue * math.abs(strategy.position_size)
-    if (acctRealized + strategy.openprofit) - (acctTrailDD + 100) >= curLadderCap + _lockBufC
-        capLocked := true
-        exitReasonNext := "CAP-LOCK"
-        strategy.close_all(comment="CAP-LOCK")
-        f_sendExec("close", math.abs(strategy.position_size), close, 0, 0, "MKT")
-        f_sendDiscord("🔐 " + syminfo.ticker + " CAP LOCK", "Projected withdrawable covers the FULL ladder cap (+" + str.tostring(lockBufTicks, "#") + "t cost buffer). Closing all — payout secured.")
 if not payoutReady
     payoutDiscordSent := false
 
@@ -1753,6 +1474,16 @@ float evalOpenPnL = (evalStarted and strategy.position_size != 0 and strategy.op
 evalBal := evalStarted ? evalStartBal + evalClosedPnL + evalOpenPnL : na
 
 float evalGain = evalStarted ? evalClosedPnL + evalOpenPnL : na
+var bool passLocked = false
+if lockOnPass and evalTrack and evalStarted and not passLocked and strategy.position_size != 0
+    float _lockBuf = lockBufTicks * syminfo.mintick * syminfo.pointvalue * math.abs(strategy.position_size)
+    if evalClosedPnL + evalOpenPnL >= evalProfitTgt + _lockBuf
+        passLocked := true
+        exitReasonNext := "PASS-LOCK"
+        strategy.close_all(comment="PASS-LOCK")
+        f_sendExec("close", math.abs(strategy.position_size), close, 0, 0, "MKT")
+        f_sendDiscord("🔐 " + syminfo.ticker + " PASS LOCK", "Open PnL banks the eval target (+" + str.tostring(lockBufTicks, "#") + "t cost buffer). Closing all — pass secured.")
+
 
 distTarget := (evalStarted and evalProfitTgt > 0) ? evalProfitTgt - evalGain : na
 distFail   := (evalStarted and evalTrailDD > 0 and not na(evalFloor)) ? evalBal - evalFloor : na
@@ -1782,6 +1513,8 @@ if evalTrack and evalStarted and not evalPassed and not evalFailed
             f_sendDiscord("💰✨ " + syminfo.ticker + " PA THRESHOLD", "Payout threshold reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalPaThresh, "#") + " (balance $" + str.tostring(evalBal, "#") + "). 🤑")
 
 
+pmtBlock := evalTrack and evalPassed
+pmtBlockReason := "EVAL PASSED — target reached, executions stopped"
 plotshape(showSignals and shortSignal, "Short Signal", shape.triangledown, location.abovebar, color=color.new(color.red, 0), size=size.small)
 bool pendingActive = isFlat and pendDir != 0
 plot(showPending and pendingActive ? pendLimit : na, "Pending Limit", color=color.new(color.orange, 0), style=plot.style_circles, linewidth=2)
@@ -1849,9 +1582,9 @@ if showDashboard and barstate.islast
         table.cell(dash, 1, 1, "WR " + (na(wr) ? "—" : str.tostring(wr, "#.0") + "%"), text_color=txtColor, text_size=txtSize)
         table.cell(dash, 2, 1, "Entry: " + (isLimitMode ? "Limit50" : "Market") + " · TP: " + tpMode, text_color=txtColor, text_size=txtSize)
         table.cell(dash, 3, 1, "Stop: " + stopMode, text_color=txtColor, text_size=txtSize)
-        table.cell(dash, 0, 2, isPA and paBacktestModeEff ? "PAYOUTS" : "TODAY", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-        table.cell(dash, 1, 2, isPA and paBacktestModeEff ? "💰 cum $" + str.tostring(paTotalBanked, "#") : "PnL " + str.tostring(todayRealizedPnL, "#.0"), text_color=isPA and paBacktestModeEff ? vPosTxt : f_valCol(todayRealizedPnL), text_size=txtSize)
-        table.cell(dash, 2, 2, dayExitMode != "Off" and riskDayPeak > 0 ? "pk $" + str.tostring(riskDayPeak, "#") + (_dexTrailOn ? " A" + str.tostring(dayTrailModel == "Legacy: activation = giveback" ? dayTrailUSDEff : dayTrailActivationUSDEff, "#") + "/G" + str.tostring(dayTrailGivebackEff, "#") : "") : isPA and paBacktestModeEff ? "cyc " + str.tostring(paPayoutsThisCycle) + "/6" : "DD " + str.tostring(todayDD, "#.0"), text_color=txtColor, text_size=txtSize)
+        table.cell(dash, 0, 2, isPA and paBacktestMode ? "PAYOUTS" : "TODAY", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(dash, 1, 2, isPA and paBacktestMode ? "💰 cum $" + str.tostring(paTotalBanked, "#") : "PnL " + str.tostring(todayRealizedPnL, "#.0"), text_color=isPA and paBacktestMode ? vPosTxt : f_valCol(todayRealizedPnL), text_size=txtSize)
+        table.cell(dash, 2, 2, dayExitMode != "Off" and riskDayPeak > 0 ? "pk $" + str.tostring(riskDayPeak, "#") + (_dexTrailOn ? " -" + str.tostring(dayTrailUSD, "#") : "") : isPA and paBacktestMode ? "cyc " + str.tostring(paPayoutsThisCycle) + "/6" : "DD " + str.tostring(todayDD, "#.0"), text_color=txtColor, text_size=txtSize)
         table.cell(dash, 3, 2, dayHalted ? "🔒 " + haltReason : "✅ Trading", text_color=dayHalted ? vNegTxt : vPosTxt, text_size=txtSize)
         table.cell(dash, 0, 3, "ORDER/POS", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
         table.cell(dash, 1, 3, inLong ? "🟢 LONG" : inShort ? "🔴 SHORT" : pendingActive ? "🟠 PENDING " + (pendDir==1?"L":"S") : "⚪ FLAT", text_color=txtColor, text_size=txtSize)
@@ -1864,7 +1597,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 3, 4, _gateTxt, text_color=txtColor, text_size=txtSize)
         if phaseOn
             table.cell(dash, 0, 5, accountPhase, text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-            table.cell(dash, 1, 5, isPA and paBacktestModeEff ? "🧪 BT: " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×breach · $" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#"), text_color=acctHalted ? hdrTxt : ddRoom < acctTrailDD*0.25 ? vNegTxt : txtColor, text_size=txtSize)
+            table.cell(dash, 1, 5, isPA and paBacktestMode ? "🧪 BT: " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×breach · $" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#"), text_color=acctHalted ? hdrTxt : ddRoom < acctTrailDD*0.25 ? vNegTxt : txtColor, text_size=txtSize)
             table.cell(dash, 2, 5, acctLocked ? "🔓 Locked (+$100)" : "Floor " + str.tostring(acctFloor, "#"), text_color=txtColor, text_size=txtSize)
             string _payTxt = isEval ? "Goal $" + str.tostring(math.max(acctGoal - acctRealized, 0), "#") + " to go" : payoutReady ? "💰 P" + str.tostring(effPayoutNr) + " CAP $" + str.tostring(curLadderCap, "#") + " ✓" : payoutEligible and useWaitForCap ? "⏳ P" + str.tostring(effPayoutNr) + " $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#") : "Qual " + str.tostring(qualDays) + "/5 · Cons " + (profitSince > 0 ? str.tostring(100*bestDaySince/profitSince, "#") + "%" : "—")
             table.cell(dash, 3, 5, _payTxt,
@@ -1894,10 +1627,10 @@ if showDashboard and barstate.islast
         table.cell(dash, 0, 0, jrnlAcct, text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize,
              tooltip="Composed account name (same logic as the CSV journal). Compact layout: values stacked per cell for phone screens.")
         table.cell(dash, 1, 0, cPerf, text_color=f_valCol(strategy.netprofit), text_size=txtSize, text_halign=text.align_left)
-        string cToday = (isPA and paBacktestModeEff ? "💰 cum $" + str.tostring(paTotalBanked, "#") + " · cyc " + str.tostring(paPayoutsThisCycle) + "/6" : "PnL " + str.tostring(todayRealizedPnL, "#.0") + " · DD " + str.tostring(todayDD, "#.0")) +
-             "\n" + (isPA and paBacktestModeEff ? "🧪 " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×br" : dayHalted ? "🔒 " + haltReason : "✅ Trading")
-        table.cell(dash, 0, 1, isPA and paBacktestModeEff ? "PAYOUTS" : "TODAY", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
-        table.cell(dash, 1, 1, cToday, text_color=isPA and paBacktestModeEff ? vPosTxt : f_valCol(todayRealizedPnL), text_size=txtSize, text_halign=text.align_left)
+        string cToday = (isPA and paBacktestMode ? "💰 cum $" + str.tostring(paTotalBanked, "#") + " · cyc " + str.tostring(paPayoutsThisCycle) + "/6" : "PnL " + str.tostring(todayRealizedPnL, "#.0") + " · DD " + str.tostring(todayDD, "#.0")) +
+             "\n" + (isPA and paBacktestMode ? "🧪 " + str.tostring(paMilkCount) + "×melk · " + str.tostring(paBreachCount) + "×br" : dayHalted ? "🔒 " + haltReason : "✅ Trading")
+        table.cell(dash, 0, 1, isPA and paBacktestMode ? "PAYOUTS" : "TODAY", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
+        table.cell(dash, 1, 1, cToday, text_color=isPA and paBacktestMode ? vPosTxt : f_valCol(todayRealizedPnL), text_size=txtSize, text_halign=text.align_left)
         string cPos = (inLong ? "🟢 LONG" : inShort ? "🔴 SHORT" : pendingActive ? "🟠 PENDING " + (pendDir == 1 ? "L" : "S") : "⚪ FLAT") +
              "\n" + (pendingActive ? "Lim " + str.tostring(pendLimit, format.mintick) : "P/L " + str.tostring(strategy.openprofit, "#.0")) +
              (flatNow and not pendingActive ? "" : "\nSL " + str.tostring(flatNow ? pendStop : curStop, format.mintick))
@@ -1909,7 +1642,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 0, 3, "CTX", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize)
         table.cell(dash, 1, 3, cCtx, text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
         if phaseOn
-            string cPhase = (isPA and paBacktestModeEff ? "🧪 " + str.tostring(paMilkCount) + "×melk·" + str.tostring(paBreachCount) + "×br·$" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#")) +
+            string cPhase = (isPA and paBacktestMode ? "🧪 " + str.tostring(paMilkCount) + "×melk·" + str.tostring(paBreachCount) + "×br·$" + str.tostring(paTotalBanked, "#") : acctHalted ? "🏁 " + acctHaltReason : "DD room $" + str.tostring(ddRoom, "#")) +
                  "\n" + (acctLocked ? "🔓 Locked (+$100)" : "Floor " + str.tostring(acctFloor, "#")) +
                  "\n" + (isEval ? "Goal $" + str.tostring(math.max(acctGoal - acctRealized, 0), "#") + " to go" :
                  payoutReady ? "💰 P" + str.tostring(effPayoutNr) + " CAP $" + str.tostring(curLadderCap, "#") + " ✓" : payoutEligible and useWaitForCap ? "⏳ $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#") : "Qual " + str.tostring(qualDays) + "/5 · Cons " + (profitSince > 0 ? str.tostring(100 * bestDaySince / profitSince, "#") + "%" : "—"))

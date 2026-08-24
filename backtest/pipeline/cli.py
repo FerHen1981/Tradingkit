@@ -302,6 +302,11 @@ def cmd_report(args):
             print(f"      orders: {oc['placed']} geplaatst -> {oc['filled']} gevuld "
                   f"({100*oc['filled']/oc['placed']:.0f}%) · {oc['expired']} verlopen · "
                   f"{oc.get('cancelled_flat', 0)} flat · {oc.get('cancelled_halt', 0)} halte")
+        po = d.get("pine_only_split") or {}
+        if po.get("pine_only"):
+            print(f"      pine-only: {po['we_placed_but_never_filled']} met een limiet die "
+                  f"niet vulde · {po['we_never_placed']} zonder order "
+                  f"({po['placed_share_pct']}% fills)")
         if td:
             print(f"      gepaard {td.get('matched')}/{td.get('sim_trades')} · "
                   f"alleen-sim {td.get('sim_only')} · alleen-pine {td.get('pine_only')} · "
@@ -508,8 +513,16 @@ def cmd_stage1(args):
               f"toch minder trades doen,\n     dan zit het verschil in het aantal SIGNALEN, "
               f"niet in de uitvoering)")
 
-    from .tracediff import diff as trace_diff, render as trace_render
+    from .tracediff import (classify_pine_only, diff as trace_diff,
+                            render as trace_render)
     td = trace_diff(res.trades, exp)
+    po = classify_pine_only(res.placements, exp, res.trades, cfg.expiry_bars)
+    if po["pine_only"]:
+        print(f"\n  trades die pine deed en wij niet ({po['pine_only']}):")
+        print(f"    {po['we_placed_but_never_filled']} keer lag er wél een limiet die niet "
+              f"vulde ({po['placed_share_pct']}%)")
+        print(f"    {po['we_never_placed']} keer hadden we daar geen order liggen")
+        print(f"    -> {po['verdict']}")
     if not cmp_["pass"] or args.diff:
         print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "
               "her-optimaliseer niet)")
@@ -541,7 +554,7 @@ def cmd_stage1(args):
                            "costs_from_export": costs,
                            "as_tested": bool(tested_changes),
                            "paired_pct": pair_pct, "status": status,
-                           "order_counts": oc,
+                           "order_counts": oc, "pine_only_split": po,
                            "as_tested_changes": {k: [v[0], v[1]]
                                                  for k, v in tested_changes.items()},
                            "dataset": args.dataset, "dataset_symbol": ds_sym,

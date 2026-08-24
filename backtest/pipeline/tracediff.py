@@ -160,3 +160,58 @@ def render(d: dict) -> str:
             L.append(f"      {p['entry_time']}  {'long' if p['dir'] > 0 else 'short'}  "
                      f"${p['net']:,.2f}  ({p['reason'] or '?'})")
     return "\n".join(L)
+
+
+def classify_pine_only(placements, export, sim_trades, expiry_bars: int,
+                       tol_minutes: int = 2) -> dict:
+    """For every trade Pine took that we did not: did we place a limit there?
+
+    This separates two failures that aggregate counts cannot tell apart:
+
+      * WE PLACED AND IT NEVER FILLED — the signal fired, the limit rested at the
+        same moment, but our bars never traded down to it. That points at the
+        price series (a limit at 50% of a gap is decided by one tick) rather than
+        at the rules.
+      * WE NEVER PLACED — no signal at all. That points at signal generation:
+        gap detection, the size band, the CVD streak.
+
+    Without this split, "Pine took 75 trades we did not" is an observation with
+    two opposite fixes: get better bars, or fix the filters.
+    """
+    import pandas as pd
+
+    sim = {(r["t"], r["dir"]) for r in _sim_rows(sim_trades)}
+    placed = []
+    for p in placements or []:
+        ts = pd.Timestamp(p["time"])
+        if ts.tz is not None:
+            ts = ts.tz_localize(None)
+        placed.append((int(ts.value // 60_000_000_000), int(p["dir"])))
+
+    got, missing = [], []
+    for row in _pine_rows(export):
+        if any(abs(row["t"] - t) <= tol_minutes and d == row["dir"] for t, d in sim):
+            continue                                   # not a pine-only trade
+        # a resting limit could have been placed up to `expiry_bars` before the
+        # fill, and never after it
+        hit = any(d == row["dir"] and 0 <= (row["t"] - t) <= expiry_bars + tol_minutes
+                  for t, d in placed)
+        (got if hit else missing).append(row)
+
+    n = len(got) + len(missing)
+    return {
+        "pine_only": n,
+        "we_placed_but_never_filled": len(got),
+        "we_never_placed": len(missing),
+        "placed_share_pct": round(100 * len(got) / n, 1) if n else 0.0,
+        "first_placed_but_unfilled": got[:8],
+        "first_never_placed": missing[:8],
+        "verdict": (
+            "geen pine-only trades" if not n else
+            "OVERWEGEND FILLS: we hadden op die momenten wél een limiet liggen die niet "
+            "vulde — dat wijst op de prijsreeks, niet op de regels" if len(got) > 2 * len(missing)
+            else "OVERWEGEND SIGNALEN: op die momenten hadden we geen order liggen — dat "
+            "wijst op signaalgeneratie (gap-detectie, maatband, CVD-streak)"
+            if len(missing) > 2 * len(got)
+            else "GEMENGD: beide oorzaken dragen bij, geen van beide domineert"),
+    }

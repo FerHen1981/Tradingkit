@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 
 from backtest.pipeline.parity import Export
-from backtest.pipeline.tracediff import diff
+from backtest.pipeline.tracediff import classify_pine_only, diff
 
 
 class _T:
@@ -101,3 +101,60 @@ def test_open_trades_are_ignored_on_both_sides():
     sim[0].exit_time = None
     d = diff(sim, _export([]))
     assert d["sim_trades"] == 0 and d["matched"] == 0
+
+
+# --- pine-only trades: did we place a limit there or not? ----------------------
+
+def _placement(t, d, px=100.0, bar=0):
+    return {"bar": bar, "dir": d, "time": pd.Timestamp(t), "limit": px}
+
+
+def test_a_pine_only_trade_we_had_a_limit_for_counts_as_a_fill_failure():
+    """We had an order resting at that moment and our bars never reached it —
+    that points at the price series, not at the rules."""
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:27", 1)], pine, [], expiry_bars=6)
+    assert out["pine_only"] == 1
+    assert out["we_placed_but_never_filled"] == 1 and out["we_never_placed"] == 0
+    assert "FILLS" in out["verdict"]
+
+
+def test_a_pine_only_trade_without_any_order_counts_as_a_signal_failure():
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0)])
+    out = classify_pine_only([], pine, [], expiry_bars=6)
+    assert out["we_never_placed"] == 1 and out["we_placed_but_never_filled"] == 0
+    assert "SIGNALEN" in out["verdict"]
+
+
+def test_a_trade_we_actually_took_is_not_pine_only():
+    rows = [("2025-09-02 09:30", 1, 100.0, "TP", 101.0)]
+    out = classify_pine_only([_placement("2025-09-02 09:28", 1)], _export(rows),
+                             [_T(*rows[0])], expiry_bars=6)
+    assert out["pine_only"] == 0
+
+
+def test_a_placement_in_the_other_direction_does_not_count():
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:28", -1)], pine, [], expiry_bars=6)
+    assert out["we_never_placed"] == 1
+
+
+def test_a_placement_after_the_fill_does_not_count():
+    """A resting limit can only fill after it was placed."""
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:40", 1)], pine, [], expiry_bars=6)
+    assert out["we_never_placed"] == 1
+
+
+def test_a_placement_older_than_the_expiry_window_does_not_count():
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:00", 1)], pine, [], expiry_bars=6)
+    assert out["we_never_placed"] == 1, "een order van 30 min eerder was al lang verlopen"
+
+
+def test_a_mixed_picture_is_reported_as_mixed():
+    pine = _export([("2025-09-02 09:30", 1, 100.0, "TP", 101.0),
+                    ("2025-09-03 10:00", -1, -50.0, "SL", 99.0)])
+    out = classify_pine_only([_placement("2025-09-02 09:28", 1)], pine, [], expiry_bars=6)
+    assert (out["we_placed_but_never_filled"], out["we_never_placed"]) == (1, 1)
+    assert "GEMENGD" in out["verdict"]

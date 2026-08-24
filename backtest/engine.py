@@ -61,6 +61,7 @@ class Result:
     resolve_bar: int = -1                   # bar where the account halted (pass/breach), -1 = never
     veto_counts: Optional[dict] = None      # phase-2 signal-veto attribution (diag mode)
     order_counts: Optional[dict] = None     # limit-order lifecycle (always on)
+    placements: Optional[list] = None       # every limit we placed (bar, dir, time, px)
     diagnosis: Optional[dict] = None        # phase-1/2 data-derived explanation of the run
 
 
@@ -115,6 +116,10 @@ class Engine:
         # Order lifecycle. veto_counts explains why a SIGNAL never became an
         # order; this explains where an order went once placed — which is the
         # other half of "why does the simulator take fewer trades than Pine".
+        # Every placement, so a trade Pine took can be classified as "we placed
+        # a limit there and it never filled" versus "we never had a signal there".
+        # Those are different failures with different fixes.
+        self.placements = []
         self.order_counts = {"placed": 0, "replaced": 0, "filled": 0,
                              "expired": 0, "cancelled_flat": 0,
                              "cancelled_halt": 0, "open_at_end": 0}
@@ -330,6 +335,7 @@ class Engine:
         if self.pend_dir != 0:
             self.order_counts["open_at_end"] += 1
         res.order_counts = dict(self.order_counts)
+        res.placements = list(self.placements)
         res.veto_counts = self.veto_counts
         return res
 
@@ -874,6 +880,9 @@ class Engine:
         if self.pend_dir != 0:
             self.order_counts["replaced"] += 1
         self.order_counts["placed"] += 1
+        self.placements.append({"bar": i, "dir": int(d),
+                                "time": self.time[i],
+                                "limit": float(entry_px)})
         self.pend_dir = d
         self.pend_bar = i
         self.pend_limit = entry_px if cfg.entry_limit_mode else np.nan

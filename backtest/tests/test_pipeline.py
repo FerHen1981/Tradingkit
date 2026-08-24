@@ -453,3 +453,47 @@ def test_data_parity_status_satisfies_the_hard_gate_but_stays_distinct():
     assert "data_parity" in state._SATISFIES_HARD
     assert "passed" in state._SATISFIES_HARD
     assert "failed" not in state._SATISFIES_HARD
+
+
+# --- fleet runner: resolve dataset + export per engine ------------------------
+
+def test_fleet_export_matches_by_filename_convention(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    from backtest.pipeline import cli
+    # the three real exports live in validation/exports and are always present
+    assert cli._fleet_export_for("EL_MATADOR_MES_PROD_EOD") == \
+        "MATADOR_MES_PROD_EOD_MES1m_2026-08-23.xlsx"
+    assert cli._fleet_export_for("EL_LEON_MYM_PROD_EOD") == \
+        "LEON_MYM_PROD_EOD_MYM1m_2026-08-23.xlsx"
+    # a variant with no export must resolve to None, not the wrong file
+    assert cli._fleet_export_for("EL_LEON_MYM_CON_EOD_Q2") is None
+    assert cli._fleet_export_for("EL_PATRON_MGC_AGG_EOD") is None
+
+
+def _mk_ds(root, name, symbol, rows=1000):
+    import json
+    d = root / "datasets" / name
+    d.mkdir(parents=True)
+    (d / "canonical.csv").write_text("DateTime,Open,High,Low,Close,Volume,Delta\n")
+    (d / "manifest.json").write_text(json.dumps({"symbol": symbol, "rows": rows}))
+
+
+def test_fleet_dataset_prefers_the_real_micro_over_the_twin(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    _mk_ds(tmp_path, "MES_real", "MES", rows=1_000_000)
+    _mk_ds(tmp_path, "ES_twin", "ES", rows=5_000_000)
+    from backtest.pipeline import cli
+    assert cli._fleet_dataset_for("MES") == "MES_real"
+
+
+def test_fleet_dataset_falls_back_to_the_twin(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    _mk_ds(tmp_path, "GC_twin", "GC", rows=4_000_000)   # no real MGC
+    from backtest.pipeline import cli
+    assert cli._fleet_dataset_for("MGC") == "GC_twin"
+
+
+def test_fleet_dataset_is_none_when_neither_exists(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    from backtest.pipeline import cli
+    assert cli._fleet_dataset_for("MNQ") is None

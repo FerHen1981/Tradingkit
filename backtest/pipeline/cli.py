@@ -1,6 +1,7 @@
 """Run one pipeline stage, or reset the lab.
 
     python -m backtest.pipeline.cli plan
+    python -m backtest.pipeline.cli fleet --through 2   # hele vloot, alle trappen
     python -m backtest.pipeline.cli coverage    # wat kan trap 1 draaien, wat mist
     python -m backtest.pipeline.cli report      # laatste trap-1 uitslag per engine
     python -m backtest.pipeline.cli sensitivity --dataset D --engine E
@@ -20,6 +21,7 @@ for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXP
 import argparse
 import json
 import shutil
+import sys
 
 from . import fleet, state
 from .stages import STAGES
@@ -432,6 +434,90 @@ def _write_and_record_stage2(engine, dataset, k, years, status, verdict):
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 2, "kpis": k, "by_year": years,
                                       "status": status}, default=str), flush=True)
+
+
+
+def _fleet_dataset_for(market):
+    """Best dataset for a market: the real micro if present, else its twin,
+    preferring the one whose window reaches furthest."""
+    from ..lab.lab_viewer import _datasets
+    from .cli import _dt as _pdt   # noqa
+    from . import fleet as _fleet
+    twin = _fleet.TWIN.get(market)
+    cands = []
+    for d in _datasets():
+        sym = (d.get("symbol") or "").upper()
+        if sym == market:
+            cands.append((0, d))
+        elif sym == twin:
+            cands.append((1, d))
+    if not cands:
+        return None
+    cands.sort(key=lambda t: (t[0], -(t[1].get("rows") or 0)))
+    return cands[0][1]["name"]
+
+
+def _fleet_export_for(engine):
+    """Export whose filename encodes this engine (BRAND_MKT_PROFILE_<SYM>1m_date)."""
+    import re
+    from ..lab.lab_viewer import _exports
+    for nm in _exports():
+        stem = re.sub(r"_[A-Z0-9]+1m_.*$", "", nm)   # drop _MES1m_2026-08-23.xlsx
+        if "EL_" + stem == engine:
+            return nm
+    return None
+
+
+def cmd_fleet(args):
+    """Run every engine through the pipeline up to --through, in one command.
+
+    Resolves each engine's dataset (real micro, else twin) and its validation
+    export automatically, applies --as-tested (a no-op when the export already
+    matches), and prints the board at the end. Engines without an export cannot
+    clear the hard parity gate — that is stated, not hidden."""
+    import subprocess
+
+    through = args.through
+    engines = fleet.names()
+    print(f"\n  vloot-run · trap 0 t/m {through} · {len(engines)} engines\n")
+    py = sys.executable
+    base = [py, "-m", "backtest.pipeline.cli"]
+
+    def _run(stage_args, tag):
+        try:
+            r = subprocess.run(base + stage_args, capture_output=True, text=True, timeout=1800)
+        except subprocess.TimeoutExpired:
+            return "TIMEOUT"
+        line = [ln for ln in r.stdout.splitlines() if "POORT:" in ln]
+        if r.returncode != 0 and not line:
+            err = (r.stderr.strip().splitlines() or ["fout"])[-1]
+            return f"FOUT: {err[:70]}"
+        return (line[-1].split("POORT:")[-1].strip() if line else "klaar")
+
+    for eng in engines:
+        short = eng.replace("EL_", "")
+        ds = _fleet_dataset_for(fleet.market(eng))
+        exp = _fleet_export_for(eng)
+        print(f"  {short}")
+        if not ds:
+            print(f"    — geen dataset voor markt {fleet.market(eng)} · overgeslagen")
+            continue
+        r0 = _run(["stage0", "--dataset", ds, "--engine", eng], "0")
+        print(f"    trap 0  {r0}   [{ds}]")
+        if through >= 1:
+            if exp:
+                r1 = _run(["stage1", "--dataset", ds, "--engine", eng,
+                           "--export", exp, "--as-tested"], "1")
+                print(f"    trap 1  {r1}   [{exp}]")
+            else:
+                print(f"    trap 1  GEEN EXPORT — pariteit niet toetsbaar (harde poort blijft open)")
+        if through >= 2:
+            r2 = _run(["stage2", "--dataset", ds, "--engine", eng], "2")
+            print(f"    trap 2  {r2}")
+        print()
+
+    print("  ── eindstand ──")
+    subprocess.run(base + ["plan"])
 
 
 def cmd_plan(_args):
@@ -847,6 +933,9 @@ def main():
     ap = argparse.ArgumentParser(description="MEX research pipeline v7 — stage runner.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("plan").set_defaults(fn=cmd_plan)
+    pf = sub.add_parser("fleet"); pf.set_defaults(fn=cmd_fleet)
+    pf.add_argument("--through", type=int, default=2,
+                    help="hoogste trap om te draaien (default 2)")
     sub.add_parser("coverage").set_defaults(fn=cmd_coverage)
     sub.add_parser("report").set_defaults(fn=cmd_report)
     ps = sub.add_parser("sensitivity"); ps.set_defaults(fn=cmd_sensitivity)

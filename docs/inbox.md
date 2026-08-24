@@ -57,6 +57,35 @@ engine tegelijk. Dat is geen generatorklus maar een besluit, en het hoort bij D-
 registry **$0,52** MGC en **$0,37** micros · FLEET-validatie mat **$0,67**. Zolang die drie
 naast elkaar bestaan, is elke PF in dit project op een aanname gebouwd.
 
+#### Besluit Ferry 24-08 — uitgevoerd
+
+**De registry is leidend in de kosten en overruled alles.** Alle dertien scripts halen hun
+commissie nu via `tools/gen_pine_firms.py` uit `backtest/config.py`. Tien zijn veranderd:
+
+| script | markt | was | is |
+|---|---|---|---|
+| TESORO, PATRON | MGC | 0,51 | **0,52** |
+| REY ×2, MATADOR, LEON ×3, BANDIDO | MNQ/MES/MYM | 0,51 | **0,37** |
+| TORO GC SNIPER | GC | 1,55 | **1,75** |
+| TORO NQ ×2, TORO ES | NQ/ES | 1,55 | 1,55 (klopte al) |
+
+De generator draagt nu een `FLEET_ASSET`-kaart en een `patch_fleet_commission()`-stap, dus
+dit is herhaalbaar en niemand hoeft ooit nog een commissiegetal te typen. Bewust **alleen**
+de commissie: de firm-rules-regio en `firmPreset` van de v1_0_0-scripts blijven onaangeroerd,
+want die herrichten schrijft accountregels op scripts die op het punt staan live te gaan.
+
+**Gevolg dat niemand mag overslaan:** elke netto-P&L, PF en gemiddelde winnaar in
+`frozen-engines.md` is aan het oude kostenmodel gemeten. Zes engines gingen van $0,51 naar
+$0,37 en worden dus **beter**; de twee MGC's marginaal slechter; de GC SNIPER van EL TORO
+gaat van $1,55 naar $1,75 en dat **breekt de koppeling met zijn frontier-rij**, die op 1,55
+gedraaid is. De parameters blijven bevroren, de cijfers moeten opnieuw. Er staat een banner
+bovenaan `frozen-engines.md`.
+
+**PATRON's stop is 120t.** Het script had gelijk, `frozen-engines.md` niet — gecorrigeerd.
+De live LONG LIMIT van 24-08 bevestigt het: entry 4707,3 / stop 4695,3 = 120 ticks, TP
+4734,3 = 270 ticks = precies 2,25R.
+
+
 ---
 
 ### 17. Executiepoort gebouwd — geen geaccepteerde PMT-order, geen trade

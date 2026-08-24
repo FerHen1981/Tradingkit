@@ -52,7 +52,7 @@ strategy("MΞX ΞL TORO · GC SNIPER EOD · " + currentVersion, shorttitle="TOR-
      max_boxes_count=500, max_labels_count=500,
      margin_long=0, margin_short=0,
      slippage=1,
-     commission_type=strategy.commission.cash_per_contract, commission_value=1.55)
+     commission_type=strategy.commission.cash_per_contract, commission_value=1.75)
 
 import TradingView/ta/8
 

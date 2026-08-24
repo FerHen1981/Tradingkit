@@ -8,6 +8,17 @@ De getallen hieronder zijn **reproduceerbare onderzoekscheckpoints op de huidige
 datasets**, geen permanente marktwaarheden. Ze moeten opnieuw gevalideerd worden zodra
 dataset, feemodel, prop-regels, uitvoeringsaannames of implementatie wijzigen.
 
+> ⚠️ **De P&L-cijfers hieronder staan op een verouderd feemodel (24-08).** Besluit Ferry:
+> **`backtest/config.py` is leidend in de kosten** en overruled de pakketaanname van $0,51.
+> De dertien Pine-scripts dragen nu de registrywaarde — MGC **$0,52**, MNQ/MES/MYM **$0,37**,
+> NQ/ES $1,55, GC **$1,75**. Tien van de dertien zijn daarmee veranderd, dus elke netto-P&L,
+> PF en gemiddelde winnaar in dit document is aan een ander kostenmodel gemeten. De
+> **parameters** blijven bevroren; de **cijfers** moeten opnieuw. Zes van de negen engines
+> gingen van $0,51 naar $0,37 en worden dus beter, de twee MGC's marginaal slechter.
+>
+> **PATRON's stop is 120t, niet 140t** (besluit Ferry 24-08). Het script had gelijk, dit
+> document niet — de live LONG LIMIT van 24-08 bevestigt het: entry 4707,3 / stop 4695,3.
+
 ## Naamgevingsarchitectuur
 
 Merknaam = vaste strategie-persoonlijkheid. Titel en bestandsnaam coderen zichtbaar
@@ -43,7 +54,7 @@ max intrabar DD ≈ $4.907.
 ### EL MATADOR — MES Production CVD6
 6 MES · FVG 10–22t · OHLCV-proxy, Delta ON, streak ON, CVD6 · SL 120t · 1,75R ·
 expiry 6 · BE/trail OFF · daily OFF · alle sessies · EOD-preset ·
-$0,51/zijde commissie · 1 tick slippage.
+commissie uit de registry (zie kop) · 1 tick slippage.
 Pine: 121 trades, +$32.994,48, PF 1,816, WR 52,07%, gem. winnaar $1.165,19,
 gem. verliezer −$696,77, LONG PF 1,860, SHORT PF 1,785, max intrabar DD ≈ $5.784,60.
 Tick-economie: volledige stop ≈ −$913,62; volledige TP +$1.568,88.
@@ -54,7 +65,7 @@ Pine: ≈94 trades, +$16.286, PF 1,665, WR ≈72,3%, max intrabar DD ≈ $5.054.
 Rol: primaire goud-diversificatieanker.
 
 ### EL PATRON — MGC Aggressive EOD
-8 MGC · FVG 11–16 · CVD5 · SL 140t · 2,25R.
+8 MGC · FVG 11–16 · CVD5 · **SL 120t** · 2,25R.
 Pine: ≈150 trades, +$19.024, PF 1,372, WR ≈68,7%, max intrabar DD ≈ $9.343.
 Standaard alleen op volwassen EOD-accounts. **Draai geen constante 8 MGC op een
 Intraday PA met bewegende trail.**

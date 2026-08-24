@@ -58,7 +58,7 @@ strategy("MΞX EL LEON · MYM CON INTRA Q2 · " + currentVersion, shorttitle="LE
      max_boxes_count=500, max_labels_count=500,
      margin_long=0, margin_short=0,
      slippage=1,
-     commission_type=strategy.commission.cash_per_contract, commission_value=0.51)
+     commission_type=strategy.commission.cash_per_contract, commission_value=0.37)
 
 import TradingView/ta/8
 

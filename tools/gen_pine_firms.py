@@ -39,6 +39,53 @@ ASSET_DEFAULT = {
     "MEX_EL_MATADOR.pine": "NQ",    # NQ eval    -> mini
 }
 
+# The 24-08 fleet. Only the commission is generated for these: their firm-rules region and
+# firmPreset are deliberately left alone, because repointing those rewrites account rules on
+# scripts that are about to go live. Path is relative to pine/.
+# Kosten komen uit de registry -- besluit Ferry 24-08: `backtest/config.py` is leidend en
+# overruled zowel de pakketaanname ($0,51) als elk hand-getypt getal.
+FLEET_ASSET = {
+    "v1_0_0/MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "MGC",
+    "v1_0_0/MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "MGC",
+    "v1_0_0/MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "MNQ",
+    "v1_0_0/MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "MNQ",
+    "v1_0_0/MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "MES",
+    "v1_0_0/MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "MYM",
+    "v1_0_0/MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "MYM",
+    "v1_0_0/MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "MYM",
+    "v1_0_0/MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "MYM",
+    # EL TORO is eval-only and trades the full minis, not the micros.
+    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":             "NQ",
+    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":         "NQ",
+    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":           "ES",
+    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":           "GC",
+}
+
+
+def patch_fleet_commission() -> None:
+    """Write each fleet script's commission from backtest/config.py (D-08: one source)."""
+    for rel, asset in sorted(FLEET_ASSET.items()):
+        path = os.path.join(PINE, rel)
+        if not os.path.exists(path):
+            print(f"  OVERGESLAGEN {rel} — bestaat niet")
+            continue
+        if asset not in CONTRACTS:
+            raise SystemExit(f"{rel}: onbekend contract {asset} in backtest/config.py")
+        comm = float(CONTRACTS[asset].commission_per_contract)
+        lines = open(path, encoding="utf-8").read().split("\n")
+        for k, l in enumerate(lines):
+            if "commission_type=strategy.commission.cash_per_contract" in l:
+                before = re.search(r"commission_value=([0-9.]+)", l)
+                lines[k] = re.sub(r"commission_value=[0-9.]+", "commission_value=%s" % comm, l)
+                open(path, "w", encoding="utf-8").write("\n".join(lines))
+                was = before.group(1) if before else "?"
+                mark = "" if was == str(comm) else f"   <-- was {was}"
+                print(f"  {os.path.basename(rel):48} {asset:4} {comm}{mark}")
+                break
+        else:
+            print(f"  GEEN commission_value-regel in {rel}")
+
+
 OUT = os.path.join(REPO, "pine", "lib", "PropFirms.pine")
 PINE = os.path.join(REPO, "pine")
 
@@ -259,7 +306,9 @@ def main():
         f.write("\n".join(lines) + "\n")
     print(f"wrote {OUT}  ({len(progs)} presets)")
     n = patch_strategies(progs)
-    print(f"patched 8 strategy files ({n} presets in the dropdown)")
+    print(f"patched {len(STRATEGY_DEFAULT)} strategy files ({n} presets in the dropdown)")
+    print("fleet commissions from backtest/config.py:")
+    patch_fleet_commission()
 
 
 if __name__ == "__main__":

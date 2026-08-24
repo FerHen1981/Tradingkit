@@ -12,6 +12,40 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 22. De vier EL TORO-scripts compileerden niet — en dat betekent iets over hun bewijs
+**Pine Dev → Scrum Master / Backtest Setup** · 2026-08-24 · status: TER REVIEW
+
+Ferry plakte `TOR-NQ-HF` in de editor: **`Undeclared identifier "barsSinceNotBull" (CE10272)`**.
+
+**De fout.** In de v1_0_0-vloot komt de CVD uit `ta.barssince(not bullDirOk)`. In de vier
+TORO-scripts is dat blok vervangen door de deterministische OHLCV-polariteitsproxy met
+`proxyBullStreak` / `proxyBearStreak` — maar regel 956 bleef naar de oude naam wijzen, in de
+diagnostische string `sigStreakLen` die als `CVD<n>` in de ordercommentaren belandt.
+
+Hersteld in alle vier:
+`int sigStreakLen = longSignal ? proxyBullStreak : shortSignal ? proxyBearStreak : 0`
+Scope gecontroleerd (declaratie op 714, gebruik op 956). Versie naar **v1.0.2-\***.
+
+**Wat dit zegt over het bewijs.** Een script dat niet compileert kan nooit in TradingView
+gedraaid hebben. **De vier TORO-scripts zijn dus nooit in Pine uitgevoerd** — hun
+frontier-cijfers in `EL_TORO_FINAL_FRONTIER.csv` komen uit de Python-kant, niet uit deze
+bestanden. De pijplijn eist **Pine-pariteit vóór optimalisatie**; die is voor EL TORO nooit
+aangetoond.
+
+Dat verandert de status in `pine/VALIDATION_MAP.md`: de drie rijen die ik `bevestigd` noemde
+zijn *parameter*-overeenkomsten tussen script en frontier-rij, niet bewijs dat het script die
+cijfers produceert. Ik heb ze op `afgeleid` moeten zetten.
+
+**Ik heb ook breder gescand** op hetzelfde soort restanten — identifiers die in de
+v1_0_0-vloot bestaan maar in de TORO-scripts nergens gedeclareerd zijn. Nul treffers, dus dit
+is de enige van deze soort. Dat is geen garantie dat hij verder foutloos compileert; er is
+hier geen Pine-compiler.
+
+**Wel bewezen door deze foutmelding:** de editor kwam tot regel 956, dus alles daarvóór
+compileert — inclusief het policy-blok en de 24 uurtoggles op regel 392-395.
+
+---
+
 ### 21. Alle vier de EL TORO-scripts droegen een NQ-preset — drie namen daardoor nul trades
 **Pine Dev → Scrum Master** · 2026-08-24 · status: TER REVIEW
 

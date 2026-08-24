@@ -70,9 +70,9 @@ De vier scripts staan in `pine/`; de v6.9.5-TORO is naar `pine/history/` verplaa
 
 | Script | Shorttitle | Frontier-rij | Status |
 |---|---|---|---|
-| `MEX_EL_TORO_NQ_HF_INTRA_v1_0_0` | `TOR-NQ-HF` | `FI · NQ · Intraday · FAST` — 7 NQ · FVG4-12 · CVD3 · VWAP · SL90 · TP90 · exp9 | **bevestigd** — alle zeven waarden komen exact overeen |
-| `MEX_EL_TORO_ES_FAST_INTRA_v1_0_0` | `TOR-ES-FI` | `FI · ES · Intraday · FAST` — 6 ES · FVG2-8 · CVD OFF · VWAP OFF · SL90 · TP44 · exp18 | **bevestigd** |
-| `MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0` | `TOR-GC-SN` | `SE · GC · EOD · SNIPER` — 5 GC · FVG10-14 · CVD6 · VWAP · SL90 · TP64 · exp12 | **bevestigd** |
+| `MEX_EL_TORO_NQ_HF_INTRA_v1_0_0` | `TOR-NQ-HF` | `FI · NQ · Intraday · FAST` — 7 NQ · FVG4-12 · CVD3 · VWAP · SL90 · TP90 · exp9 | **afgeleid** — alle zeven parameters komen exact overeen, maar het script compileerde niet (zie inbox 22), dus deze cijfers komen niet uit dit bestand |
+| `MEX_EL_TORO_ES_FAST_INTRA_v1_0_0` | `TOR-ES-FI` | `FI · ES · Intraday · FAST` — 6 ES · FVG2-8 · CVD OFF · VWAP OFF · SL90 · TP44 · exp18 | **afgeleid** — parameters komen overeen; Pine-pariteit niet aangetoond (inbox 22) |
+| `MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0` | `TOR-GC-SN` | `SE · GC · EOD · SNIPER` — 5 GC · FVG10-14 · CVD6 · VWAP · SL90 · TP64 · exp12 | **afgeleid** — parameters komen overeen; Pine-pariteit niet aangetoond (inbox 22) |
 | `MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0` | `TOR-NQ-SN` | **geen rij** — 7 NQ · FVG4-8 · CVD7 · SL100 · TP90 · exp6 komt in de hele CSV niet voor | **geen bewijs** |
 | *ontbreekt* | — | `FAST-EOD · GC · EOD · FAST` — 6 GC · FVG2-10 · CVD0/1 · VWAP OFF · SL120 · TP54 · exp9 | **geen script** |
 

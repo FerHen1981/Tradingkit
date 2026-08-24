@@ -42,7 +42,7 @@
 // Frozen eval defaults: 7 NQ · FVG4-8t · proxy-CVD7 · SL100t · TP90t · expiry6.
 // New entries blocked from 16:00 ET; force-flat window remains intact.
 // TP90 intentionally preserves >$3,000 net pass buffer under harsher execution than the 1-tick baseline.
-var string currentVersion = "v1.0.1-NQ-SNIP-IN"
+var string currentVersion = "v1.0.2-NQ-SNIP-IN"
 strategy("MΞX ΞL TORO · NQ SNIP INTRA · " + currentVersion, shorttitle="TOR-NQ-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -953,7 +953,7 @@ float sigGapTop = (long0 or short0) ? fvgTop    : memSigTop
 float sigGapBot = (long0 or short0) ? fvgBottom : memSigBot
 
 float sigFvgTicks = not na(sigGapTop) and not na(sigGapBot) ? math.abs(sigGapTop - sigGapBot) / syminfo.mintick : na
-int   sigStreakLen = longSignal ? nz(barsSinceNotBull, 0) : shortSignal ? nz(barsSinceNotBear, 0) : 0
+int   sigStreakLen = longSignal ? proxyBullStreak : shortSignal ? proxyBearStreak : 0
 int   sigFvgAge = (long0 or short0) ? 0 : memSigAge
 string sigDiag = "FVG" + str.tostring(sigFvgTicks, "#") + "|CVD" + str.tostring(sigStreakLen) + "|AGE" + str.tostring(sigFvgAge) + "|H" + str.tostring(hour(time, activeTz)) + "|D" + str.tostring(dayofweek(time, activeTz))
 

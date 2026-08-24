@@ -1,0 +1,139 @@
+# Mex.Journal.Receiver — Fase D (de trechter)
+
+Vervangt `src/Mex.Journal.Receiver/Program.cs` op de VPS. **Fase C-gedrag blijft
+exact intact**: onbekende/eigen payloads worden nog steeds als intent opgeslagen
+en via `DiscordNotifier` gemeld. Nieuw is dat het endpoint per bericht herkent
+wat het is en het naar de juiste bestemming stuurt.
+
+| Binnenkomend | Herkenning | Actie |
+|---|---|---|
+| PMT-JSON | `multiple_accounts` of (`token` + `data`) | POST naar `MEX_PMT_URL` (of `MEX_PMT_RITHMIC_URL` als het account in `MEX_PMT_RITHMIC_ACCOUNTS` staat) |
+| Discord-embed | `embeds` of `content` | Tier A/B → PNG-kaart als bijlage; Tier C → 1:1 POST |
+| Journal | `{"type":"journal"}` / `csv` / CSV-regel | alleen opslaan |
+| PineConnector | `<license>,buy\|sell\|exit,<symbol>,…` | POST naar `MEX_PC_URL` |
+| overig | — | Fase C: intent + Discord-melding |
+
+Extra's: idempotency-dedupe (5s op body-hash), kill-switch (`POST /killswitch?token=…&armed=false`,
+exits nooit geblokkeerd), append-only audit in `routed_<datum>.jsonl`, retries op
+netwerk/5xx (niet op 4xx).
+
+## Kaarten (Discord als afbeelding)
+
+Discord-berichten van Tier A/B (zie `../CARDS.md`) worden door
+`renderer/render-signal.js` tot een PNG gerenderd en als bijlage gepost;
+Tier C (alleen nog ACCOUNT STARTED) blijft tekst. De renderer leest de
+Pine-payload zelf: titel → event, description → velden.
+
+`SIGNAL BLOCKED` valt onder geen van beide: dat beslist `BlockedGate`. Alleen een
+blokkade die de handelsdag of het account beëindigt (`Day halt: …`, `Account: …`,
+breach, eval passed) wordt een kaart, en dan één keer per symbool per categorie per
+handelsdag. Routineblokkades en herhalingen gaan niet naar Discord maar staan wel in
+`routed_<datum>.jsonl` als `blocked-notice suppressed`.
+
+Renderen duurt seconden, dus het gebeurt ná het antwoord aan TradingView
+(achtergrondtaak, max 2 Chromium-processen tegelijk). Mislukt het renderen —
+node weg, timeout, Chromium stuk — dan gaat het **originele tekstbericht**
+alsnog naar Discord. Een alert kan dus niet verdwijnen door een render-probleem.
+Staat het script niet op `MEX_RENDER_SCRIPT`, dan blijft alles tekst.
+
+## Env
+
+    MEX_WEBHOOK_SECRET=...        # bestaand
+    MEX_DISCORD_WEBHOOK=...       # bestaand
+    MEX_PMT_URL=https://api.pickmytrade.trade/v2/add-trade-data-latest?t=1162
+    MEX_PMT_RITHMIC_URL=          # alleen als je die route gebruikt
+    MEX_PMT_RITHMIC_ACCOUNTS=     # kommalijst account-id's op Rithmic
+    MEX_PC_URL=                   # PineConnector-webhook (FTMO/MT5)
+    MEX_DRY_RUN=true              # NIETS wordt doorgestuurd tot dit false is
+
+    # kaarten
+    MEX_RENDER_SCRIPT=/root/mex-renderer/render-signal.js
+    MEX_RENDER_ENABLED=           # 'false' zet kaarten uit (default: aan als het script bestaat)
+    MEX_NODE=node                 # of /usr/bin/node
+    MEX_RENDER_OUT_DIR=/tmp/mex-cards
+    MEX_RENDER_TIMEOUT_MS=30000
+    MEX_RENDER_KEEP=              # 'true' = PNG's niet opruimen (debuggen)
+    MEX_CHROMIUM_PATH=            # vaste Chromium-binary voor Playwright
+    MEX_CARD_TIER_OVERRIDES=      # bv. "AUTO FLAT=B,EXIT=C" — tier is data, geen code
+
+    # uitgaand netwerk
+    MEX_FORCE_IPV4=               # 'false' zet de IPv4-binding uit (default: aan)
+
+## Uitgaand IP — waarom dit vastzit op IPv4
+
+PickMyTrade laat alleen geregistreerde IP-adressen toe. Deze server heeft er twee
+(IPv4 en IPv6) en PMT accepteert geen IPv6 in de pool, dus zolang het verkeer via
+IPv6 uitging werd elke order geweigerd met *"valid ip not found in pool"* — en wel
+met **HTTP 200**, zodat het in het journaal als geslaagd oogde.
+
+De receiver bindt uitgaand verkeer daarom aan IPv4 (`SocketsHttpHandler.ConnectCallback`).
+Te whitelisten adres: **167.233.215.60**. Controleren wat de server werkelijk gebruikt:
+
+    curl -s ifconfig.me; echo      # zonder -4; hier hoort het IPv4-adres uit te komen
+
+Weigert een doelserver alsnog, dan staat de reden nu in het journaal:
+`GEWEIGERD 200 door doelserver: …`, met een Discord-melding "⛔ Order NIET geplaatst".
+Een `sent 200` zonder die prefix is een geaccepteerde order.
+
+## Uitrollen
+
+Twee losse onderdelen. De renderer is een los bestand dat per bericht wordt aangeroepen,
+dus die heeft géén herstart nodig — het volgende event pakt de nieuwe versie.
+
+Haal de bestanden met `git`, niet met `curl` op raw.githubusercontent: die geeft bij
+herhaald gebruik een 429, en `curl -o` schrijft rechtstreeks naar het doelbestand — een
+mislukte download laat je dan met een leeg bestand achter.
+
+    cd /tmp && rm -rf tk
+    git clone --depth 1 -b claude/legacy-accounts-scripts-analysis-ui0j6m \
+      https://github.com/FerHen1981/Tradingkit.git tk
+
+    # 1 — renderer (geen herstart nodig, wordt per bericht aangeroepen)
+    cp /root/mex-renderer/render-signal.js /root/mex-renderer/render-signal.js.bak
+    cp tk/middleware/renderer/render-signal.js /root/mex-renderer/render-signal.js
+
+    # 2 — receiver
+    cd /root/mex-middleware-b
+    cp src/Mex.Journal.Receiver/Program.cs src/Mex.Journal.Receiver/Program.cs.bak
+    cp /tmp/tk/middleware/dotnet-receiver/Program.cs src/Mex.Journal.Receiver/Program.cs
+
+    # controleer dát je de nieuwe versie hebt vóór je bouwt
+    grep -c BlockedGate src/Mex.Journal.Receiver/Program.cs      # >= 1
+    grep -c "SIGNAL_BLOCKED:" /root/mex-renderer/render-signal.js # >= 1
+
+**De receiver staat niet in `MexJournal.sln`.** Een kale `dotnet build -c Release` bouwt
+hem dus níét — dan draait je oude binary door en lijkt de deploy stil te mislukken. Bouw
+het project expliciet:
+
+    dotnet build src/Mex.Journal.Receiver -c Release
+    systemctl restart mex-receiver
+    sleep 2
+    PID=$(systemctl show -p MainPID --value mex-receiver)
+    PORT=$(ss -lntp | grep "pid=$PID," | awk '{print $4}' | sed 's/.*://' | head -1)
+    curl -s "localhost:$PORT/health"; echo    # renderEnabled + renderScript moeten kloppen
+
+Rooktest zonder op een echte trade te wachten. Het secret komt uit de procesomgeving —
+`systemctl show -p Environment` zet er `Environment=` vóór en werkt niet met een
+EnvironmentFile:
+
+    SECRET=$(tr '\0' '\n' < /proc/$PID/environ | sed -n 's/^MEX_WEBHOOK_SECRET=//p')
+    U="localhost:$PORT/signal/$SECRET"
+    H='content-type: application/json'
+    post(){ curl -s -w ' [%{http_code}]\n' -X POST "$U" -H "$H" -d "$1"; }
+
+    post '{"embeds":[{"title":"⚙️ MGC1! CONFIG","description":"ver=v6.9.2;acct=TEST;qty=4","footer":{"text":"MGC1!"}}]}'
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
+    sleep 6   # body-hash-dedupe is 5s; zonder wachten meet je die i.p.v. de poort
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Day halt: PA Daily Loss Limit","footer":{"text":"MGC1!"}}]}'
+    post '{"embeds":[{"title":"⛔ MGC1! SIGNAL BLOCKED","description":"Long setup blocked by: Stop invalid","footer":{"text":"MGC1!"}}]}'
+
+Verwacht, op volgorde: `tier B / card queued`, `tier B / card queued`, `suppressed`,
+`suppressed`. Altijd `-w '%{http_code}'` meesturen — een leeg antwoord bij `404` (fout
+secret) is anders niet te onderscheiden van een stille fout.
+
+Let op: met `MEX_DRY_RUN=true` wordt er niets gepost — de kaart rendert wel en het
+resultaat staat in het journaal, maar Discord ziet niets. Staat hij op `false`, dan komen
+deze testkaarten écht in je kanaal.
+
+Terug bij problemen: `.bak` terugzetten, `dotnet build src/Mex.Journal.Receiver -c Release`,
+`systemctl restart mex-receiver` (de renderer heeft alleen de `cp` terug nodig).

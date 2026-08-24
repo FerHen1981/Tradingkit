@@ -97,3 +97,36 @@ async def send(sig: Signal, account: dict, *, pmt_url: str, dry_run: bool,
     finally:
         if own:
             await client.aclose()
+
+
+async def forward(payload: dict, *, pmt_url: str, dry_run: bool,
+                  retry_max: int = 3, retry_backoff: float = 0.5,
+                  client: Optional[httpx.AsyncClient] = None) -> dict:
+    """Passthrough: POST a ready-made PMT payload (built by the Pine "PMT" route)
+    verbatim to PMT. Same retry semantics as send(); never raises."""
+    if dry_run:
+        return {"status": "dry_run", "would_post_to": pmt_url or "(PMT_URL unset)"}
+    if not pmt_url:
+        return {"status": "error", "reason": "PMT_URL not configured"}
+    own = client is None
+    client = client or httpx.AsyncClient(timeout=10.0)
+    last = {}
+    try:
+        for attempt in range(1, max(1, retry_max) + 1):
+            try:
+                resp = await client.post(pmt_url, json=payload)
+                if resp.status_code < 400:
+                    return {"status": "sent", "http_status": resp.status_code,
+                            "response": resp.text[:500], "attempts": attempt}
+                last = {"status": "error", "http_status": resp.status_code,
+                        "response": resp.text[:500], "attempts": attempt}
+                if resp.status_code < 500:
+                    return last  # 4xx: don't retry
+            except Exception as exc:  # network / timeout
+                last = {"status": "error", "reason": repr(exc), "attempts": attempt}
+            if attempt < retry_max:
+                await asyncio.sleep(retry_backoff * (2 ** (attempt - 1)))
+        return last
+    finally:
+        if own:
+            await client.aclose()

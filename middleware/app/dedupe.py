@@ -22,12 +22,15 @@ class Deduper:
         raw = f"{sig.strategy}|{sig.event}|{sig.action}|{sig.symbol}|{sig.price}|{sig.qty}|{sig.dollar_sl}|{sig.dollar_tp}"
         return hashlib.sha1(raw.encode()).hexdigest()
 
-    def seen_recently(self, sig: Signal, now: float | None = None) -> bool:
+    def seen_key(self, k: str, now: float | None = None) -> bool:
+        """Generic content-key dedupe (used by the /pmt passthrough)."""
         now = time.time() if now is None else now
         # prune expired
-        self._seen = {k: t for k, t in self._seen.items() if now - t < self.ttl}
-        k = self.key(sig)
+        self._seen = {k2: t for k2, t in self._seen.items() if now - t < self.ttl}
         if k in self._seen:
             return True
         self._seen[k] = now
         return False
+
+    def seen_recently(self, sig: Signal, now: float | None = None) -> bool:
+        return self.seen_key(self.key(sig), now)

@@ -577,8 +577,9 @@ public static class PostRate
         var now = DateTime.UtcNow;
         lock (Gate)
         {
-            List<DateTime> list;
-            if (!Stamps.TryGetValue(key, out list)) { list = new List<DateTime>(); Stamps[key] = list; }
+            // `out var` i.p.v. een vooraf gedeclareerde variabele: TryGetValue geeft bij een
+            // misser null terug, en dat leverde CS8600 op een non-nullable List op.
+            if (!Stamps.TryGetValue(key, out var list)) { list = new List<DateTime>(); Stamps[key] = list; }
             list.RemoveAll(t => (now - t).TotalSeconds >= 60);
             if (list.Count >= MaxPerMinute)
             {

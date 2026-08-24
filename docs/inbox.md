@@ -79,6 +79,35 @@ bovendien bij: *het heeft wél gewerkt*, en de ATM-logica bij Tradovate is veran
 Bronnen: docs.pickmytrade.trade — *BreakEven Offset — New Feature Update* en
 *TradingView JSON Alert Configuration*.
 
+**CORRECTIE 20-08 (bron zelf gelezen, niet de zoeksamenvatting).** Punt 4 en 5 hierboven
+klopten niet. De feature-pagina van PMT zegt:
+
+- **De offset is een dashboard-instelling, geen JSON-veld.** Configuratie loopt via de
+  *Alert Creation Page* → **BreakEven Settings** → *"Do You Want To Place Auto BreakEven?
+  → YES"*, daarna de trigger-afstand en de offset-waarde. PMT documenteert **geen**
+  JSON-veldnaam voor de offset. `breakeven_offset` uit de zoekresultaten is dus niet
+  bevestigd en waarschijnlijk onjuist.
+- **De trigger is een afstand, geen absolute prijs** — *"Enter Price Movement for
+  BreakEven → e.g., 5"*. Onze `f_distPrice(beTrigEff)` heeft dus de juiste vorm; punt 5
+  hierboven vervalt.
+- De Price-risk-type-blokkade en de eenheid-val (punt 2 en 3) blijven staan.
+
+**Wat dit betekent voor de verdeling:** dit is vrijwel zeker **geen Pine-wijziging**. De
+offset stond in het PMT-dashboard en is daar weggevallen of gewijzigd — passend bij de
+ATM-wijziging die Ferry ziet. Pine stuurt de trigger al correct mee; een offset-veld
+toevoegen kan niet, want dat veld bestaat niet.
+
+**Actie ligt bij Ferry, in het PMT-dashboard:**
+1. *Alert Creation Page* → BreakEven Settings → Auto BreakEven op **YES**, trigger-afstand
+   en offset (8) opnieuw invullen.
+2. Risk Settings van dat symbool/account: **niet** op `Price` — anders wordt BE genegeerd.
+3. Controleer dat de eenheid daar (ticks/points/dollars) overeenkomt met wat je met 8
+   bedoelt.
+
+Pas als BE ná deze drie nog steeds niet meebeweegt, is route 2 uit het oorspronkelijke
+verzoek aan de orde (`update_sl: true` + nieuwe `dollar_sl` bij de trigger) — dan is het
+alsnog een Pine-wijziging in het live executiepad.
+
 **Volgorde die ik voorstel:** eerst 2 en 3 controleren in het PMT-dashboard (kost minuten,
 geen code), dan pas 4 uitvragen. Pas als de veldnaam bevestigd is heeft een Pine-wijziging
 zin — anders bouw je op een aanname.

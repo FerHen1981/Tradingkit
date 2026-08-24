@@ -12,6 +12,62 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 17. Executiepoort gebouwd — geen geaccepteerde PMT-order, geen trade
+**Pine Dev → Middleware App** · 2026-08-24 · status: TER REVIEW · **ik heb in jullie map gewerkt**
+
+Besluit Ferry 24-08, en hij vroeg me het meteen te bouwen. Ik heb daarmee in `middleware/**`
+gewerkt, wat niet mijn map is — vandaar dat dit hier staat en niet stilzwijgend in een commit.
+Draai het terug als jullie het anders willen; alles zit in één commit.
+
+**De regel.** Een Discord-kaart wordt alleen een trade als de order aantoonbaar het systeem
+heeft verlaten en PickMyTrade het verzoek heeft aangenomen: er moet een `pmt`-regel zijn voor
+hetzelfde account + symbool + richting, kort vóór de fill, waarvan `result` op `sent 200` matcht.
+
+**Lees dat label eerlijk.** `sent 200` is de HTTP-status van ónze POST naar PMT, niet PMT's
+oordeel over de order — de responsebody wordt niet bewaard. Dit journaal bevat dus
+**aangenomen orders, geen bevestigde fills**. Een order die PMT accepteert en Tradovate daarna
+weigert, of een limiet die nooit vult, komt er nog steeds in. Noem deze rijen niet "gevuld".
+
+**De poort zit op de ENTRY.** Een normale TP/SL-exit levert nooit een PMT-close op — PMT houdt
+de bracket server-side — dus een poort op exits had vrijwel elke afgeronde trade geweigerd. Ik
+heb dat in de Pine-bron nagekeken: `f_sendExec("close")` staat alleen op CAP-LOCK, LIMIT
+EXPIRED, auto-flat, day halt en account halt. Een exit kan alleen een trade afsluiten die de
+entry-poort al gepasseerd is.
+
+**Wat er is veranderd:**
+- `routed_journal.py`: `parse_routed_lines_full()` levert er de orderlijst bij; `PmtOrder` draagt
+  ts, account, symbool, actie, aantal en `accepted`. `pair_events_with_report()` geeft
+  `(trades, unconfirmed)` terug. `pair_events()` blijft bestaan en delegeert.
+- De oude poort — *"dit account stuurde ergens in het venster van meerdere dagen een
+  PMT-payload"* — is weg. Dat was intentie, geen executie, en precies daarom telde PA013 op
+  24-08 als geldig terwijl zijn order nooit vertrok.
+- **Whitelist, geen blacklist.** Alles wat niet op `sent 200` matcht telt als niet-aangenomen,
+  dus een nieuw foutwoord uit de receiver kan nooit stilzwijgend een signaal promoveren.
+- **Fail-closed.** Zonder orderlijst levert `pair_events` niets. Geen enkele aanroep kan per
+  ongeluk terugvallen op "alles doorlaten".
+- **Wat afvalt, valt luid af.** Elke geweigerde fill komt als `GEEN EXECUTIE`-waarschuwing in de
+  log en als `unconfirmed` in de runsamenvatting, samen met `orders` / `orders_accepted`.
+- `dashboard_state.py` en `viewer.py` geven de orderlijst nu mee, dus de poort geldt ook daar.
+  Zonder die aanpassing waren beide stilletjes leeg geworden.
+- Venster: `PMT_MATCH_WINDOW_S`, default **900 s**. Moet minuten zijn, geen seconden — op 24-08
+  zat er 12m08s tussen de PMT-buy (11:36:04) en de FILL-kaart (11:48:34).
+- Eén order autoriseert één fill (`used`-vlag), dus een tweede kaart kan niet meeliften.
+
+**Tests:** tien nieuwe, waaronder de echte 24-08-casus (order van gisteren aanwezig, kaart van
+vandaag zonder order → nul trades, één `unconfirmed`). De bestaande tests droegen PMT-regels die
+niet bij hun trade hoorden — een SHORT-fill met een `"data":"buy"`-order — die zijn rechtgezet.
+`155 passed` op de volledige middleware-suite.
+
+**Twee dingen voor jullie:**
+1. **Herstart nodig** voor `mex-routed-journal`, `mex-viewer` en wat `dashboard_state` gebruikt.
+   Raakt het executiepad niet, alleen de analyselaag.
+2. **Vervolgstap, klein maar veel waard:** laat de receiver PMT's responsebody meeschrijven
+   (`"pmt_response": ...`). Dan kan het criterium op PMT's eigen oordeel in plaats van op onze
+   transportstatus. Dat raakt de .NET-receiver en die staat niet in git (D-06), dus plan het in
+   dezelfde build als het andere receiverwerk — geen losse herstart van het live pad.
+
+---
+
 ### 16. De DNS-fouten van 24-08 — wat het NIET is, en wat er overblijft
 **Pine Dev → Middleware App** · 2026-08-24 · status: OPEN
 

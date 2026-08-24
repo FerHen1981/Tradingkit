@@ -179,7 +179,11 @@ def test_routed_trades_after_date():
     fill = {"title": "FILL LONG MGC1!", "description": "PA018-0k-260814 | 8ct @ 4110.7 | SL 4100.0 | TP 4135.0"}
     exit_ = {"title": "EXIT MGC1!", "description": "PA018-0k-260814 | long closed @ 4114.7 | TRAIL | PnL +$320.0 | MFE 40t · MAE 3t"}
     lines = [
-        json.dumps({"kind": "pmt", "account": "PAAPEX2700250000018", "body": "{}"}),
+        # De order die deze fill autoriseert: zonder geaccepteerde PMT-order telt een kaart
+        # niet als executie (poort 24-08).
+        json.dumps({"kind": "pmt", "ts": "2026-08-14T14:49:00+00:00",
+                    "account": "PAAPEX2700250000018", "result": "sent 200 (poging 1)",
+                    "body": json.dumps({"symbol": "MGC1!", "data": "buy", "quantity": "8"})}),
         json.dumps({"kind": "discord", "ts": "2026-08-14T14:50:00+00:00", "body": json.dumps({"embeds": [fill]})}),
         json.dumps({"kind": "discord", "ts": "2026-08-14T15:20:00+00:00", "body": json.dumps({"embeds": [exit_]})}),
     ]

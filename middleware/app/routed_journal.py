@@ -17,6 +17,20 @@ This is the LIVE layer: it runs on a ~1-minute timer, needs nothing but the serv
 and can't break from a Tradovate UI change. The daily Fills-CSV pass (app.journal_sync) stays
 available only as an optional cross-check / commission backfill.
 
+EXECUTION GATE (besluit Ferry 24-08). A card is only a trade if the ORDER demonstrably left
+the system and PickMyTrade accepted the request: there must be a `pmt` record for the same
+account + symbol + direction, shortly before the fill, whose `result` reads `sent 200`.
+
+Read that label honestly. `sent 200` is the HTTP status of OUR POST to PMT, not PMT's verdict
+on the order -- PMT's response body is not stored today. So this journal holds ACCEPTED ORDERS,
+not confirmed broker fills. An order PMT accepts and Tradovate then rejects, or a limit that
+never fills, still lands here. Upgrading to PMT's own verdict needs the executor to store the
+response body; until then do not call these rows "filled".
+
+The gate sits on the ENTRY only. Normal TP/SL exits never produce a PMT close -- PickMyTrade
+holds the bracket server-side -- so requiring a close record would reject nearly every
+completed trade. An exit can only ever complete a trade whose entry already passed.
+
 DRY when NOTION_TOKEN / NOTION_JOURNAL_DB are unset (logs what it would write).
 """
 from __future__ import annotations
@@ -56,6 +70,34 @@ def _short(account_id: str) -> str:
     'PAAPEX2700250000015' -> 'PA015'; 'APEX27002500000209' -> 'AP209'."""
     a = (account_id or "").strip()
     return (a[:2] + a[-3:]).upper() if len(a) >= 5 else a.upper()
+
+
+# The executor writes e.g. "sent 200 (poging 1)". Whitelist, never blacklist: anything we do
+# not recognise counts as NOT accepted, so a new failure string can never silently promote a
+# signal to an execution.
+_PMT_ACCEPTED = re.compile(r"^\s*sent\s+200\b", re.I)
+
+# How long an accepted order may precede its fill. A limit order rests for expiryBars (12 on a
+# 1m chart), so this must be minutes, not seconds -- 2026-08-24 shows 12m08s between the PMT
+# buy and the FILL card.
+PMT_MATCH_WINDOW_S = int(os.environ.get("PMT_MATCH_WINDOW_S", "900"))
+# The fill can be logged a hair before the order record; do not reject on clock jitter.
+_CLOCK_SKEW_S = 5.0
+
+_DIR_FOR_ACTION = {"buy": "BUY", "sell": "SELL"}
+
+
+@dataclass
+class PmtOrder:
+    """One outgoing order to PickMyTrade, as the executor logged it."""
+    ts: dt.datetime
+    account_short: str
+    account_full: str
+    symbol: str
+    action: str                 # 'buy' | 'sell' | 'close'
+    qty: int = 0
+    accepted: bool = False
+    used: bool = False
 
 
 def _acct_token(desc: str) -> str:
@@ -129,10 +171,19 @@ def _parse_ts(s: str) -> dt.datetime:
 
 
 def parse_routed_lines(lines) -> tuple[list[RoutedEvent], dict[str, str]]:
-    """Return (events, short->full account map). The map is built from the pmt records,
-    which carry the full account id."""
+    """Return (events, short->full account map). Kept for callers that only need the map."""
+    events, amap, _ = parse_routed_lines_full(lines)
+    return events, amap
+
+
+def parse_routed_lines_full(lines) -> tuple[list[RoutedEvent], dict[str, str], list[PmtOrder]]:
+    """Return (events, short->full account map, outgoing PMT orders).
+
+    The map resolves short codes and is built from every pmt record, accepted or not -- it is
+    a lookup table, not the gate. The gate is the order list, which carries the acceptance."""
     events: list[RoutedEvent] = []
     amap: dict[str, str] = {}
+    orders: list[PmtOrder] = []
     for line in lines:
         line = line.strip()
         if not line:
@@ -146,6 +197,19 @@ def parse_routed_lines(lines) -> tuple[list[RoutedEvent], dict[str, str]]:
             aid = (o.get("account") or "").strip()
             if aid:
                 amap[_short(aid)] = aid
+            try:
+                pb = json.loads(o.get("body") or "{}")
+            except ValueError:
+                pb = {}
+            if aid and pb.get("symbol") and o.get("ts"):
+                try:
+                    _q = int(float(pb.get("quantity") or 0))
+                except (TypeError, ValueError):
+                    _q = 0
+                orders.append(PmtOrder(
+                    ts=_parse_ts(o["ts"]), account_short=_short(aid), account_full=aid,
+                    symbol=str(pb.get("symbol")), action=str(pb.get("data") or "").lower(),
+                    qty=_q, accepted=bool(_PMT_ACCEPTED.match(str(o.get("result") or "")))))
             try:
                 b = json.loads(o.get("body") or "{}")
                 for a in b.get("multiple_accounts", []) or []:
@@ -164,7 +228,7 @@ def parse_routed_lines(lines) -> tuple[list[RoutedEvent], dict[str, str]]:
                 ev = _event_from_embed(ts, embed)
                 if ev and ev.symbol:
                     events.append(ev)
-    return events, amap
+    return events, amap, orders
 
 
 # ---- pairing -------------------------------------------------------------------------
@@ -192,34 +256,81 @@ class RoutedTrade:
         return self.exit_ts is not None
 
 
-def pair_events(events: list[RoutedEvent], amap: dict[str, str]) -> list[RoutedTrade]:
-    """FIFO-pair FILL(entry) with EXIT per (account, symbol, direction). Fills carry the
-    intended price from the most recent LIMIT card of the same symbol+direction.
+def _accepted_entry(orders: list[PmtOrder], ev: RoutedEvent,
+                    window_s: int) -> PmtOrder | None:
+    """The accepted PMT entry order this fill belongs to, or None.
 
-    Only accounts that have at least one PMT record (present in amap) are included — a
-    Discord card without a corresponding PMT record means the alert fired but PMT was
-    disabled in Pine, so no order was placed at the broker. Showing those as real trades
-    was the PA019 phantom-trade bug.
+    Match on account + symbol + direction, with the order at or shortly before the fill. The
+    most recent candidate wins: on a symbol that is re-entered, the newest resting order is the
+    one that just filled. A matched order is consumed so two fills can never claim one order."""
+    best: PmtOrder | None = None
+    for p in orders:
+        if p.used or not p.accepted:
+            continue
+        if p.account_short != ev.account_short or p.symbol != ev.symbol:
+            continue
+        if _DIR_FOR_ACTION.get(p.action) != ev.direction:
+            continue
+        delta = (ev.ts - p.ts).total_seconds()
+        if delta < -_CLOCK_SKEW_S or delta > window_s:
+            continue
+        if best is None or p.ts > best.ts:
+            best = p
+    return best
+
+
+def pair_events(events: list[RoutedEvent], amap: dict[str, str],
+                orders: list[PmtOrder] | None = None,
+                window_s: int | None = None) -> list[RoutedTrade]:
+    """FIFO-pair FILL(entry) with EXIT per (account, symbol, direction)."""
+    return pair_events_with_report(events, amap, orders, window_s)[0]
+
+
+def pair_events_with_report(events: list[RoutedEvent], amap: dict[str, str],
+                            orders: list[PmtOrder] | None = None,
+                            window_s: int | None = None
+                            ) -> tuple[list[RoutedTrade], list[RoutedEvent]]:
+    """Return (trades, unconfirmed fills).
+
+    A fill becomes a trade only when `_accepted_entry` finds the order that produced it, so the
+    account id comes from the very record that authorises the row. Fills carry the intended
+    price from the most recent LIMIT card of the same symbol+direction.
+
+    The second list is the whole point of the gate: what it rejects must stay visible. A fill
+    without an accepted order means the strategy acted and the order did not reach the broker --
+    on 2026-08-24 that was PATRON's entry, whose PMT message never left TradingView. Dropping
+    those silently turns a broken execution path into a quiet day.
     """
+    orders = orders if orders is not None else []
+    window_s = PMT_MATCH_WINDOW_S if window_s is None else window_s
     events = sorted(events, key=lambda e: e.ts)
     last_limit: dict[tuple[str, str], float] = {}
     open_q: dict[tuple[str, str, str], deque] = defaultdict(deque)
     trades: list[RoutedTrade] = []
+    unconfirmed: list[RoutedEvent] = []
     for e in events:
         if e.typ == "limit":
             if e.price is not None:
                 last_limit[(e.symbol, e.direction)] = e.price
             continue
-        if e.account_short not in amap:
-            continue   # no PMT record → alert only, not a real execution
-        full = amap[e.account_short]
         if e.typ == "fill":
-            t = RoutedTrade(account=full, symbol=e.symbol, direction=e.direction,
+            order = _accepted_entry(orders, e, window_s)
+            if order is None:
+                unconfirmed.append(e)
+                continue
+            order.used = True
+            t = RoutedTrade(account=order.account_full, symbol=e.symbol, direction=e.direction,
                             entry_ts=e.ts, entry_price=e.price, qty=e.qty, sl=e.sl, tp=e.tp,
                             signal_price=last_limit.get((e.symbol, e.direction)))
-            open_q[(full, e.symbol, e.direction)].append(t)
+            open_q[(order.account_full, e.symbol, e.direction)].append(t)
             trades.append(t)
         elif e.typ == "exit":
+            # No gate on exits: a normal TP/SL exit never produces a PMT close, because
+            # PickMyTrade holds the bracket server-side. An exit can only ever complete a trade
+            # whose entry already passed, so `open_q` is the gate here.
+            full = amap.get(e.account_short)
+            if not full:
+                continue
             q = open_q.get((full, e.symbol, e.direction))
             if q:
                 t = q.popleft()
@@ -228,7 +339,7 @@ def pair_events(events: list[RoutedEvent], amap: dict[str, str]) -> list[RoutedT
             # else: an exit whose entry predates our window (e.g. opened the day before, before
             # the routed log for that day) — skip it. Its full trade comes from the Fills-CSV
             # reconciliation instead, so we don't write an incomplete entry-less row here.
-    return trades
+    return trades, unconfirmed
 
 
 # ---- mapping to the Notion Trade Journal ---------------------------------------------
@@ -295,8 +406,15 @@ async def run_once() -> dict:
         except OSError as exc:
             log.warning("could not read %s: %r", path, exc)
 
-    events, amap = parse_routed_lines(lines)
-    trades = pair_events(events, amap)
+    events, amap, orders = parse_routed_lines_full(lines)
+    trades, unconfirmed = pair_events_with_report(events, amap, orders)
+
+    # What the gate rejected must never be silent: a fill without an accepted PMT order means
+    # the strategy acted and the order did not reach the broker. Log one line per case, loudly.
+    for ev in unconfirmed:
+        log.warning("GEEN EXECUTIE: %s %s %s %sct @ %s — geen geaccepteerde PMT-order binnen %ss",
+                    ev.ts.isoformat(), ev.account_short, ev.direction, ev.qty, ev.price,
+                    PMT_MATCH_WINDOW_S)
 
     # incremental: skip rows already written in the same state (open->closed re-writes once)
     done: dict[str, str] = {}
@@ -336,7 +454,9 @@ async def run_once() -> dict:
             log.warning("could not write state %s: %r", state_file, exc)
 
     summary = {"files": len(files), "events": len(events), "accounts": len(amap),
-               "trades": len(trades), "new": new, "updated": updated, "skipped": skipped,
+               "orders": len(orders), "orders_accepted": sum(1 for o in orders if o.accepted),
+               "trades": len(trades), "unconfirmed": len(unconfirmed),
+               "new": new, "updated": updated, "skipped": skipped,
                "failed": failed, "dry": not journal.enabled}
     log.info("routed_journal run: %s", summary)
     return summary

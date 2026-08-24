@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .routed_journal import parse_routed_lines, pair_events
+from .routed_journal import parse_routed_lines_full, pair_events
 from .journal_sync import FRAMEWORK, _ASSET, _phase, _sym_root
 from .fills_pairing import session_date
 from .dashboard_state import command_state
@@ -75,8 +75,8 @@ def build_state() -> dict:
                 lines.extend(f)
         except OSError:
             pass
-    events, amap = parse_routed_lines(lines)
-    trades = pair_events(events, amap)
+    events, amap, orders = parse_routed_lines_full(lines)
+    trades = pair_events(events, amap, orders)
 
     as_of = max((e.ts for e in events), default=None)
     # "Today" = the CME session that is live RIGHT NOW (wall clock), not the session of the

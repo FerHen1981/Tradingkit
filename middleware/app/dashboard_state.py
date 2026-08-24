@@ -445,7 +445,7 @@ def _attention(accounts: list[dict]) -> tuple:
 def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None") -> list[dict]:
     """Recent closed trades from the executor's routed-log — used only for dates AFTER the
     last reconciled Fills date, so 'today/this week' populate live while history stays exact."""
-    from .routed_journal import parse_routed_lines, pair_events, _recent_routed_files
+    from .routed_journal import parse_routed_lines_full, pair_events, _recent_routed_files
     from .journal_sync import _sym_root
     days = int(os.environ.get("DASH_ROUTED_DAYS", "14"))
     lines: list[str] = []
@@ -457,9 +457,9 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
             pass
     if not lines:
         return []
-    events, amap = parse_routed_lines(lines)
+    events, amap, orders = parse_routed_lines_full(lines)
     out: list[dict] = []
-    for t in pair_events(events, amap):
+    for t in pair_events(events, amap, orders):
         if not t.closed or t.pnl is None or t.exit_ts is None:
             continue
         if any(s in t.account for s in skip):

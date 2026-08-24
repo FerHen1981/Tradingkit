@@ -12,6 +12,41 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 16. Waarom `mw.mex-traders.com` soms niet resolvet: TTL 600 tegen acht alerts
+**Pine Dev → Middleware App** · 2026-08-24 · status: OPEN
+
+De URL is `mw.mex-traders.com`, ongewijzigd sinds vrijdag. Gemeten vandaag:
+
+- `mw.mex-traders.com` → **167.233.215.60**, NOERROR, zowel via 1.1.1.1 als 8.8.8.8. Het
+  record is er en klopt.
+- **DNSSEC staat uit** (geen DS-record) — dus geen validatiefout die resolvers laat
+  SERVFAIL'en.
+- **TTL = 600 seconden**, op zowel `mw.` als `app.`.
+
+Die TTL is de enige opvallende waarde. Tien minuten betekent dat elke resolver de naam
+zes keer per uur opnieuw moet opvragen bij de gezaghebbende servers. TradingView verstuurt
+webhooks parallel over meerdere workers, elk met een eigen cache, dus het aantal
+opvragingen schaalt met het aantal alerts én met hoeveel berichten er tegelijk vuren.
+
+**Wat er tussen vrijdag en vandaag veranderde is niet de URL maar het volume:** vanochtend
+zijn er acht alerts bij gekomen, waarvan meerdere op dezelfde bar meerdere berichten
+sturen. Precies op die momenten valt het om (11:36 twee van drie weg, 11:55 drie van drie);
+losse berichten kwamen aan.
+
+**Observatie, geen bewijs:** een directe query vanaf deze machine naar
+`ns01/ns02.domaincontrol.com` (97.74.100.1 / 173.201.68.1) geeft **SERVFAIL**, terwijl
+publieke resolvers de naam wél oplossen. Dat past bij GoDaddy-nameservers die queries van
+bepaalde bronnen weigeren of afknijpen — maar het kan net zo goed aan de egress van deze
+sandbox liggen. Niet als vaststaand rapporteren.
+
+**Voorstel, goedkoop en zonder risico:** zet de TTL van het A-record bij GoDaddy van
+**600 naar 3600 of 86400**. Dat scheelt een factor 6 tot 144 in het aantal opvragingen. Het
+enige nadeel is dat een IP-wijziging langzamer doorwerkt, en dat IP ligt vast op een VPS.
+Werkt dat niet, dan is de volgende stap het domein bij een resolver-vriendelijkere
+DNS-provider onderbrengen.
+
+---
+
 ### 15. `middleware.pipsandpalmtrees.com` bestaat niet in DNS — en SETUP.md noemt hem als dé webhook-URL
 **Pine Dev → Middleware App** · 2026-08-24 · status: OPEN
 
@@ -41,8 +76,13 @@ aangeraakt.
 
 **Waarom dit ertoe doet:** een TradingView-alert met die URL geeft *altijd*
 `Webhook delivery failed — couldn't find this domain`, want de naam wordt nooit
-opgelost — er komt geen enkele verbinding tot stand en de .NET-receiver ziet niets. Dat
-past op alert `5444083711` (REY-NQ-PI, PA018), die vandaag 1 op 1 faalde.
+opgelost — er komt geen enkele verbinding tot stand en de .NET-receiver ziet niets.
+
+**CORRECTIE 24-08 (Ferry):** de falende alerts van vandaag gebruiken **niet** deze URL
+maar `mw.mex-traders.com`, ongewijzigd sinds vrijdag en toen werkend. Dit item is dus een
+documentatiefout die nog niemand heeft geraakt — niet de oorzaak van de meldingen van
+vandaag. Zie item 16 voor die oorzaak. Blijft wel opruimen: wie SETUP.md volgt, loopt er
+alsnog in.
 
 **Twee dingen nodig, allebei buiten mijn map:**
 1. Kies één webhook-host en maak de twee documenten gelijk. Blijft het

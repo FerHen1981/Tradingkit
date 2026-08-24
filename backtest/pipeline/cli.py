@@ -372,7 +372,12 @@ def cmd_stage1(args):
         print(f"  dekking: {100 - ov['missing_frac']*100:.1f}% van het exportvenster, "
               f"{ov['missing_days']} dag(en) ontbreken ({note})")
     print(f"\n  simulator op {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
-    res = Engine(cfg, df, im.compute(df, cfg), research_mode=True).run()
+    # research_mode=False on purpose. It disables the whole account overlay
+    # (engine.py: `if not self.research and cfg.phase_on`), so with it ON the
+    # simulator has no PA daily loss limit, no day-trail and no day-cap — while
+    # the Pine script runs all three. That turned every DLL exit into a full
+    # stop-out and was worth ~11 percentage points of the exit mix.
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
     k = kpis(res)
     cmp_ = compare(k, exp)
     print(f"\n    {'check':<18}{'simulator':>14}{'pine':>14}   ")

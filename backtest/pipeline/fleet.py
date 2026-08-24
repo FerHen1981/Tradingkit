@@ -82,6 +82,12 @@ def engine_config(name: str) -> Config:
         trade_days=((6, 0, 1, 2, 3, 4) if sunday else (0, 1, 2, 3, 4)),
         enabled_hours=frozenset(set(range(24)) - {17}),   # 17:00 ET daily break
         use_auto_flat=True, flat_from=(16, 55), flat_until=(18, 0),
+        # account layer — transcribed, and it MATTERS for the trade list: the PA
+        # daily loss limit closes an open position, so leaving it implicit turns
+        # every DLL exit into a full stop-out. Uniform across all nine.
+        acct_trail_dd=2000.0, acct_dll=1000.0, consistency_pct=50.0,
+        min_payout=500.0, payout_buffer=500.0,
+        use_wait_for_cap=True, use_mae_guard=False,
         # account model — the scripts run with "Use firm preset" ON, so the
         # drawdown model comes from the firm program, NOT from the loose input
         # (whose default is "Intraday" in all nine). See drawdown_model().

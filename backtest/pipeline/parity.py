@@ -43,9 +43,17 @@ _PROP_MAP = {
     "Day-trail activation ($)":         ("day_trail_activation_usd", float),
     "Day-trail giveback ($)":           ("day_trail_giveback_usd", float),
     "Day-cap hard target ($)":          ("day_cap_usd", float),
+    # account layer — active during the parity run, so it is compared too
+    "Trailing Drawdown ($)":            ("acct_trail_dd", float),
+    "PA Daily Loss Limit ($)":          ("acct_dll", float),
+    "Consistency rule (%)":             ("consistency_pct", float),
+    "Min. Payout ($)":                  ("min_payout", float),
+    "Extra buffer above safety net ($)": ("payout_buffer", float),
 }
 _ONOFF_EXTRA = {
     "FVG fill check (gap invalid once mid is touched)": "use_fill_check",
+    "MAE guard on (only active in Apex PA phase)": "use_mae_guard",
+    "Wait-for-cap: request only at full ladder cap": "use_wait_for_cap",
 }
 # Exported label -> (config attribute, the string that means True)
 _ENUM_AS_BOOL = {

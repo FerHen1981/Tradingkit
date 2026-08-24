@@ -226,3 +226,86 @@ def test_short_tail_tolerance_stays_under_the_stage1_trade_tolerance():
 
     trade_tol = inspect.signature(parity.compare).parameters["trade_tol"].default
     assert SHORT_TAIL_TOLERANCE < trade_tol
+
+
+# --- the account layer must be ACTIVE during a parity run ----------------------
+
+def _pa_frame(tmp_path, n=60_000, sigma=4.0, seed=7):
+    import numpy as np
+    import pandas as pd
+
+    from backtest import data as dm
+    rng = np.random.default_rng(seed)
+    px = 6000 + np.cumsum(rng.normal(0, sigma, n))
+    idx = pd.date_range("2025-09-02 00:00", periods=n, freq="1min",
+                        tz="America/New_York")
+    raw = pd.DataFrame({
+        "Open": px, "Close": px + rng.normal(0, sigma * 0.7, n),
+        "High": px + np.abs(rng.normal(0, sigma * 2, n)),
+        "Low": px - np.abs(rng.normal(0, sigma * 2, n)),
+        "Volume": rng.integers(50, 900, n).astype(float), "Delta": np.zeros(n)})
+    raw["High"] = raw[["High", "Open", "Close"]].max(axis=1)
+    raw["Low"] = raw[["Low", "Open", "Close"]].min(axis=1)
+    raw.insert(0, "DateTime", idx.strftime("%d-%m-%Y %H:%M:%S %z"))
+    csv = tmp_path / "pa.csv"
+    raw.to_csv(csv, index=False)
+    return dm.load(str(csv), cache=False)
+
+
+def test_research_mode_switches_off_the_account_layer(tmp_path):
+    """The bug behind MATADOR's exit mix: `research_mode=True` disables the whole
+    account overlay, so the PA daily loss limit never closes a position and every
+    DLL exit becomes a full stop-out instead. Stage 1 must therefore run with the
+    overlay ON, because the Pine script does."""
+    from collections import Counter
+
+    from backtest import indicators as im
+    from backtest.engine import Engine
+    from backtest.pipeline import fleet
+
+    df = _pa_frame(tmp_path)
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    assert cfg.is_pa and cfg.phase_on, "de config is geen PA-account, test bewijst niets"
+
+    def reasons(research):
+        r = Engine(cfg, df, im.compute(df, cfg), research_mode=research).run()
+        assert r.trades, "geen trades — de test bewijst niets"
+        return Counter(t.reason for t in r.trades)
+
+    off = reasons(True)
+    on = reasons(False)
+    assert off["PA Daily Loss Limit"] == 0, "research_mode zou de accountlaag uit moeten zetten"
+    assert on["PA Daily Loss Limit"] > 0, "de DLL sluit geen enkele positie met de laag AAN"
+    assert on != off, "de exit-mix veranderde niet — de laag doet niets"
+    # A DLL close REPLACES another exit rather than adding a trade, and a day
+    # halt can only block later entries. Which exit type it displaces depends on
+    # the data, so that is deliberately not asserted here.
+    assert sum(on.values()) <= sum(off.values())
+    assert sum(on.values()) - on["PA Daily Loss Limit"] < sum(off.values())
+
+
+def test_a_pa_breach_resets_instead_of_halting(tmp_path):
+    """Pine runs with "PA backtest mode (breach marks, does NOT close perma)", so
+    the simulator may not stop trading at the first trailing breach — that would
+    silently truncate the comparison window."""
+    from backtest import indicators as im
+    from backtest.engine import Engine
+    from backtest.pipeline import fleet
+
+    df = _pa_frame(tmp_path)
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
+    assert res.resolve_bar == -1, "PA-account halte permanent — mag niet in backtest mode"
+    last = max(t.exit_bar for t in res.trades)
+    assert last > 0.5 * len(df), "handel stopte in de eerste helft — waarschijnlijk gehalteerd"
+
+
+def test_the_account_inputs_are_transcribed_not_inherited():
+    """These values drive the DLL that closes positions, so they may not quietly
+    come from whatever Config's defaults happen to be."""
+    from backtest.pipeline import fleet
+    for n in fleet.names():
+        c = fleet.engine_config(n)
+        assert (c.acct_trail_dd, c.acct_dll) == (2000.0, 1000.0), n
+        assert (c.consistency_pct, c.min_payout, c.payout_buffer) == (50.0, 500.0, 500.0), n
+        assert c.use_wait_for_cap is True and c.use_mae_guard is False, n

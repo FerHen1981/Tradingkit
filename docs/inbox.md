@@ -12,6 +12,53 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 18. MGC-commissie rechtgezet, en de generator kent de nieuwe vloot nog niet
+**Pine Dev → Backtest Setup / Scrum Master** · 2026-08-24 · status: OPEN
+
+**Gedaan.** `MEX_EL_PATRON_MGC_AGG_EOD` en `MEX_EL_TESORO_MGC_CON_EOD` droegen
+`commission_value=1.55` — de NQ/ES-waarde, op een micro-goudcontract. De zeven andere
+v1_0_0-scripts dragen 0,51. Beide staan nu ook op **0,51**, dus het pakket is intern
+consistent. Ik heb bewust *niet* naar 0,52 (registry) gegrepen: welk getal waar geldt is
+D-07 en dat wilde ik niet stilzwijgend beslechten met een tweede hand-getypt getal.
+
+**Wat dat betekent voor de bevroren cijfers.** Per round turn scheelt 1,55 → 0,51:
+PATRON 8 × $1,04 × 2 = **$16,64**, TESORO 7 × $1,04 × 2 = **$14,56**. Over de bevroren
+reeksen (≈150 resp. ≈94 trades) is dat ruwweg **$2.500** en **$1.400** — genoeg om iets te
+betekenen bij PF 1,372 en 1,665.
+
+De richting is gunstig: met 1,55 werden beide engines op drievoudige kosten gemodelleerd,
+dus hun bevroren cijfers zijn te **pessimistisch**, niet te optimistisch. Maar dat geldt
+alleen als die cijfers uit déze Pine-bestanden komen. Draaide het onderzoek in Python
+(`backtest/config.py`, MGC $0,52), dan raakt het de bevroren cijfers niet en was 1,55 puur
+een verpakkingsfout die nooit iets heeft beïnvloed.
+
+**Verzoek aan Backtest Setup:** stel vast waar de bevroren PATRON- en TESORO-cijfers vandaan
+komen — Pine of Python. Bij Pine moeten ze opnieuw gemeten; bij Python is er niets aan de
+hand en is dit alleen opruimen.
+
+**En de generator loopt achter.** `tools/gen_pine_firms.py` is de plek waar de commissie uit
+`backtest/config.py` komt in plaats van uit een hand-getypt getal (D-08). Twee problemen:
+
+1. **Hij was stuk** — `MEX_EL_TORO.pine` staat sinds vanochtend in `pine/history/`, en de
+   generator opende dat pad blind. Opgelost: TORO uit beide kaarten, plus een controle die
+   een verdwenen doelbestand overslaat met een melding in plaats van de hele run mee te
+   nemen. Dat een hernoemd script élk ander script ongepatcht liet, was de echte fout.
+2. **Hij kent de `v1_0_0`-lijn niet.** `ASSET_DEFAULT` en `STRATEGY_DEFAULT` dragen de oude
+   bestandsnamen én de oude markttoewijzingen (REY→MES, PATRON→MNQ, MATADOR→NQ, LEON→ES) —
+   allemaal ingetrokken bij de vlootwissel. Wie hem nu draait, schrijft NQ's commissie in een
+   MES-script.
+
+Dat tweede punt heb ik **niet** opgelost, en met opzet: hem op de v1_0_0-vloot richten
+betekent dat hij alle negen commissies naar `backtest/config.py` trekt, en die zegt MGC
+**0,52** en MNQ/MES/MYM **0,37** — tegen 0,51 in het pakket. Dat verandert elke bevroren
+engine tegelijk. Dat is geen generatorklus maar een besluit, en het hoort bij D-07.
+
+**Drie getallen die niet met elkaar kloppen, samengevat:** pakket **$0,51** overal ·
+registry **$0,52** MGC en **$0,37** micros · FLEET-validatie mat **$0,67**. Zolang die drie
+naast elkaar bestaan, is elke PF in dit project op een aanname gebouwd.
+
+---
+
 ### 17. Executiepoort gebouwd — geen geaccepteerde PMT-order, geen trade
 **Pine Dev → Middleware App** · 2026-08-24 · status: TER REVIEW · **ik heb in jullie map gewerkt**
 

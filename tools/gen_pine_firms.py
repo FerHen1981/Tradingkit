@@ -37,7 +37,6 @@ ASSET_DEFAULT = {
     "MEX_EL_MINERO.pine":  "GC",    # GC eval    -> mini
     "MEX_EL_LEON.pine":    "ES",    # ES eval    -> mini
     "MEX_EL_MATADOR.pine": "NQ",    # NQ eval    -> mini
-    "MEX_EL_TORO.pine":    "NQ",    # NQ eval    -> mini
 }
 
 OUT = os.path.join(REPO, "pine", "lib", "PropFirms.pine")
@@ -47,6 +46,9 @@ PINE = os.path.join(REPO, "pine")
 # Before this was generated, all eight defaulted to apex_50k_eod_eval -- including the four
 # funded scripts and the two intraday ones, so switching the preset on rewrote their account
 # rules to an eval account's.
+# EL TORO staat hier NIET meer in: sinds 24-08 is hij vier v1_0_0-bestanden
+# (NQ HF/SNIPER, ES FAST, GC SNIPER) en is de v6.9.5 naar pine/history/ verhuisd. Deze
+# generator kent de v1_0_0-lijn nog niet -- zie docs/inbox.md item 18 voor wat dat kost.
 STRATEGY_DEFAULT = {
     "MEX_EL_TESORO.pine":  "apex_50k_eod_pa",        # GC funded, EOD
     "MEX_EL_REY.pine":     "apex_50k_eod_pa",        # ES funded, EOD
@@ -55,7 +57,6 @@ STRATEGY_DEFAULT = {
     "MEX_EL_MINERO.pine":  "apex_50k_eod_eval",      # GC eval, EOD
     "MEX_EL_LEON.pine":    "apex_50k_eod_eval",      # ES eval, EOD
     "MEX_EL_MATADOR.pine": "apex_50k_eod_eval",      # NQ eval, EOD
-    "MEX_EL_TORO.pine":    "apex_50k_intraday_eval", # NQ eval, intraday
 }
 
 
@@ -169,6 +170,11 @@ def patch_strategies(progs):
 
     for name, default in sorted(STRATEGY_DEFAULT.items()):
         path = os.path.join(PINE, name)
+        # A renamed or archived script must not take the generator down with it: the fleet moves
+        # faster than this map, and a hard crash here leaves every OTHER script unpatched.
+        if not os.path.exists(path):
+            print(f"  OVERGESLAGEN {name} — bestaat niet meer in pine/; werk de kaarten bij")
+            continue
         lines = open(path, encoding="utf-8").read().split("\n")
         i = next(k for k, l in enumerate(lines) if l.startswith("firmPreset    = input.string("))
         tip = lines[i].split("tooltip=", 1)[1]

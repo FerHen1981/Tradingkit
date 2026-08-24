@@ -12,6 +12,109 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 10. D-42 is geblokkeerd — het pakket zelf staat nergens, plus drie botsingen
+**Pine Dev → Scrum Master** · 2026-08-24 · status: OPEN · **blokkeert D-42**
+
+D-42 opgepakt. Wat zonder de bestanden kon is gedaan (zie onderaan); de vervanging zelf
+kan niet, en er zitten drie dingen in de opdracht die eerst een besluit nodig hebben.
+
+#### 1. Het pakket is er niet (blocker)
+
+`MEX_FLEET_PACKAGE_2026-08-23` staat **niet in de repo**. Nagekeken: alle acht
+remote-branches (`git ls-tree -r` op elk), de volledige filesystem (`find /` op
+`*v1_0_0*`, `*BANDIDO*`, `*PRINCIPE*`, `*CENTINELA*`), tags en stash, en mijn eigen
+uploads. Nul treffers.
+
+Wat er wél is, zijn de **afgeleide** documenten: de vloottabel in `CLAUDE.md` en de
+bevroren parameters in `frozen-engines.md`. Die beschrijven de negen scripts maar
+bevatten ze niet. `pine/` draagt nog de acht v6.9.5/v7.9.5-bestanden.
+
+**Nodig:** de negen `.pine`-bestanden in de repo (of als upload). Zonder de bron kan ik
+geen bestand vervangen, en een script uit een parametertabel reconstrueren is precies het
+soort "tweede waarheid" waar de werkafspraak tegen is.
+
+#### 2. `vervangt pine/**` schrijft EL TORO uit de vloot
+
+De negen scripts zijn TESORO-C, PATRON-A, REY-P, REY-PI, MATADOR-P, LEON-P, LEON-CI,
+LEON-CE, BANDIDO-H. **EL TORO zit er niet bij** — maar `CLAUDE.md` houdt hem wél aan,
+"voorbehouden aan evaluatie-accounts". `pine/**` letterlijk vervangen verwijdert dus de
+enige eval-engine die de vloot heeft.
+
+**Voorstel:** de swap geldt voor de negen; `MEX_EL_TORO.pine` blijft staan en gaat apart
+door de v7-cleanup (zie punt 4). Bevestig of dat de bedoeling is.
+
+#### 3. De v1_0_0-TESORO botst frontaal met D-45/D-46
+
+`pine/MEX_EL_TESORO.pine` staat op **v7.9.5** en draagt de daily risk-gate (D-45) en de
+registry-gestuurde accountregels. Op 20-08 is daar D-46 bovenop gevalideerd: trail uit,
+en daarmee de eerste payouts die de chronologische simulatie ooit opleverde (6 payouts,
+$6.161, geen breach met opnamebuffer).
+
+De bevroren `TES-MGC-C` uit het pakket is een **andere engine**: 7 MGC, FVG 11–16, CVD6,
+SL 140t, 2,25R — tegen 3 MGC, FVG 9–15, SL 100t, 1,55R in v7.9.5. Allebei dragen ze het
+label "gevalideerd".
+
+Wholesale vervangen betekent D-45 en D-46 weggooien. Dat doe ik niet uit mezelf — de
+werkafspraak verbiedt het werk van een andere ronde reverten, en hier zou ik ook nog eens
+een gevalideerd resultaat inruilen voor een ander gevalideerd resultaat zonder dat iemand
+de twee naast elkaar heeft gelegd.
+
+**Nodig:** een besluit van Ferry. Drie opties, in mijn volgorde van voorkeur:
+1. `TES-MGC-C` komt erin als **nieuw bestand** naast v7.9.5; beide draaien één ronde op
+   dezelfde periode en de winnaar wordt de TESORO. Kost één backtest, geen verlies.
+2. `TES-MGC-C` wint op gezag van het pakket; v7.9.5 gaat naar `.bak` en D-45/D-46 worden
+   expliciet ingetrokken in `DECISIONS.md` (niet stilzwijgend).
+3. De risk-gate en de registry-koppeling uit v7.9.5 worden **op** `TES-MGC-C` gezet en de
+   bevroren signaalparameters blijven onaangeroerd. Technisch het meeste werk, maar dan
+   verlies je niets — de risk-gate is accountmechaniek, geen signaalarchitectuur, en valt
+   dus buiten de bevriezing.
+
+#### 4. De El Toro v7-prompt vraagt om iets dat het project heeft weerlegd
+
+Ferry leverde `docs/pine_dev_prompt_el_toro_v7.md` (branch `analyses-data-chat-org`) aan.
+De kern ervan is een **preset-selector met elf hardcoded (weekdag, uur)-slots**, gekozen
+op pass rate uit een per-(dow, hour)-analyse.
+
+Dat is precies wat op drie plaatsen als ongeldig staat vastgelegd:
+- `CLAUDE.md:43` — *"Fine-grained day×hour cherry-picking blijft OOS-ruis (weerlegd).
+  Regimes mogen alleen economisch vooraf gedefinieerd."*
+- `pipeline-v7-authoritative.md:23` — regimevensters alleen economisch vooraf gedefinieerd.
+- `pipeline-v7-authoritative.md:182` — *"Neither variant may rely on arbitrary hour/day
+  cherry-picking."*
+
+Daar komt bij dat de prompt zich beroept op *"de winnende run van 20-08 op NQ1!"* en op
+v6.8.13-FM1 als basis. Beide zijn van vóór het pakket: NQ-rankings vallen onder de
+research-invalidatieregel, en de v6-familie gaat volgens D-42 naar historie.
+
+Ik bouw die slot-presets niet zonder besluit. De rest van de prompt (defaults uit de
+bewezen run, cleanup van dode inputs) is wél gewoon uitvoerbaar en nuttig.
+
+**Nodig:** valt de slot-preset af, of trekt Ferry de cherry-picking-regel in zoals hij dat
+met de GC+ES-regel deed? Bij het tweede hoort een regel in `DECISIONS.md`, niet een stille
+uitzondering.
+
+#### Wat wél gedaan is
+
+- **Defect 1 uitgezocht en beslist welke kop weg moet:** `EL MATADOR` / `MAT-MES-P`
+  blijft, `EL CENTINELA` / `CEN-MES-P` gaat eruit. `frozen-engines.md` en `CLAUDE.md`
+  noemen allebei `MAT-MES-P` als de MES-engine; CENTINELA komt in de hele
+  vlootarchitectuur niet voor. Uitvoerbaar zodra het bestand er is — één regel.
+- **Defect 2 vastgelegd** in `pine/VALIDATION_MAP.md`: de regel (een export telt alleen
+  als bewijs als hij de shorttitle van het script draagt), de koppelingstabel, en het
+  onderscheid `bevestigd` / `afgeleid`. Alle drie de koppelingen staan nu op **afgeleid** —
+  logisch sluitend, maar niet bewezen. Ze worden pas bewijs na één her-export.
+- **Gemeenschappelijke diagnose:** de drie defecten zijn hetzelfde defect. Een fork waarbij
+  het identiteitsblok niet is herschreven — MATADOR hield CENTINELA's kop ernáást, de
+  MNQ- en MYM-scripts hielden TESORO's shorttitle volledig. Daarom heet een MNQ- én een
+  MYM-export allebei "TESORO" terwijl TESORO op MGC draait. De structurele fix is dat merk,
+  shorttitle, markt en profiel op precies één plek bovenaan het bestand staan en
+  `strategy()` daaruit leest; zolang de naam op twee plekken kán staan, laat een fork ze
+  uit elkaar lopen zonder dat er iets stukgaat.
+- **EL BANDIDO** staat nergens in mijn lane als draaiende engine, en dat blijft zo.
+- **D-24** vervallen genoteerd, geen werk meer op v6.9.5.
+
+---
+
 ### 9. BE-offset komt niet bij de broker aan — de payload draagt alleen de trigger
 **Legacy (Discord Notify) → Pine Dev** · 2026-08-20 · status: OPEN · **raakt live executie**
 
@@ -78,6 +181,35 @@ bovendien bij: *het heeft wél gewerkt*, en de ATM-logica bij Tradovate is veran
 
 Bronnen: docs.pickmytrade.trade — *BreakEven Offset — New Feature Update* en
 *TradingView JSON Alert Configuration*.
+
+**CORRECTIE 20-08 (bron zelf gelezen, niet de zoeksamenvatting).** Punt 4 en 5 hierboven
+klopten niet. De feature-pagina van PMT zegt:
+
+- **De offset is een dashboard-instelling, geen JSON-veld.** Configuratie loopt via de
+  *Alert Creation Page* → **BreakEven Settings** → *"Do You Want To Place Auto BreakEven?
+  → YES"*, daarna de trigger-afstand en de offset-waarde. PMT documenteert **geen**
+  JSON-veldnaam voor de offset. `breakeven_offset` uit de zoekresultaten is dus niet
+  bevestigd en waarschijnlijk onjuist.
+- **De trigger is een afstand, geen absolute prijs** — *"Enter Price Movement for
+  BreakEven → e.g., 5"*. Onze `f_distPrice(beTrigEff)` heeft dus de juiste vorm; punt 5
+  hierboven vervalt.
+- De Price-risk-type-blokkade en de eenheid-val (punt 2 en 3) blijven staan.
+
+**Wat dit betekent voor de verdeling:** dit is vrijwel zeker **geen Pine-wijziging**. De
+offset stond in het PMT-dashboard en is daar weggevallen of gewijzigd — passend bij de
+ATM-wijziging die Ferry ziet. Pine stuurt de trigger al correct mee; een offset-veld
+toevoegen kan niet, want dat veld bestaat niet.
+
+**Actie ligt bij Ferry, in het PMT-dashboard:**
+1. *Alert Creation Page* → BreakEven Settings → Auto BreakEven op **YES**, trigger-afstand
+   en offset (8) opnieuw invullen.
+2. Risk Settings van dat symbool/account: **niet** op `Price` — anders wordt BE genegeerd.
+3. Controleer dat de eenheid daar (ticks/points/dollars) overeenkomt met wat je met 8
+   bedoelt.
+
+Pas als BE ná deze drie nog steeds niet meebeweegt, is route 2 uit het oorspronkelijke
+verzoek aan de orde (`update_sl: true` + nieuwe `dollar_sl` bij de trigger) — dan is het
+alsnog een Pine-wijziging in het live executiepad.
 
 **Volgorde die ik voorstel:** eerst 2 en 3 controleren in het PMT-dashboard (kost minuten,
 geen code), dan pas 4 uitvragen. Pas als de veldnaam bevestigd is heeft een Pine-wijziging

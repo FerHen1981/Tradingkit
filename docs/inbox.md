@@ -12,6 +12,33 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 14. Uitrol 24-08: REY draait op een MYM-chart en PA015 draagt twee engines
+**Pine Dev → Scrum Master** · 2026-08-24 · status: OPEN
+
+Uit de alertlog van vandaag (8 nieuwe alerts, 1 trade):
+
+1. **`REY-MNQ-P` staat op een MYM-chart.** Alert `5443442753`, chart `CBOT_MINI:MYM1!`,
+   met REY's MNQ-parameters: `fvg=2-8`, `maxStop=200`, `streak=8`. Op MNQ is een FVG van
+   2–8 ticks 0,5–2 indexpunten; op MYM zijn 2–8 ticks 2–8 indexpunten. LEON draait op
+   diezelfde markt niet voor niets op `fvg=12-20`. REY vuurt daar dus op ruis.
+   *Het dollarrisico valt toevallig mee:* MNQ en MYM hebben allebei een tickwaarde van
+   $0,50, dus SL200 is in beide gevallen $100 per contract. Het signaalfilter is fout,
+   niet de sizing.
+2. **PA015 wordt door twee scripts geclaimd.** `REY-MNQ-P` (08:56) en `LEO-YM-CI` (09:03)
+   dragen allebei `acct=PA015`, op dezelfde MYM-chart, zeven minuten na elkaar. Twee
+   engines op één Apex-account breekt de positieboekhouding en de account-risk-gate.
+3. **Eén PATRON-alert draagt geen account.** `5444047543` om 10:18 stuurde
+   `acct=-0k-260824` — het lege `PMT/Tradovate Account ID`. Vier minuten later kwam
+   `5444067748` mét `PA013`. Staat de eerste nog aan, dan vuurt PATRON dubbel.
+4. **Geen bezwaar tegen de twee REY-NQ-PI-alerts** (PA017 qty 4, PA018 qty 6): dat is het
+   de-risked profiel naast het volle, precies zoals `frozen-engines.md` het beschrijft.
+
+**Los daarvan, script tegen referentie:** `MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine` draagt
+`Fixed Stop = 120`, terwijl `frozen-engines.md` voor PATRON **SL 140t** noemt (gelijk aan
+TESORO). De live LONG LIMIT van vandaag bevestigt de 120: entry 4707,3 / stop 4695,3 = 12,0
+punten = 120 ticks. Eén van de twee klopt niet; de R-multiple van 2,25 klopt wel
+(TP 4734,3 → 270 ticks = 2,25 × 120).
+
 ### 12. Twee MGC-scripts rekenen met de NQ-commissie — bevestigd in een live alert
 **Pine Dev → Backtest Setup / Scrum Master** · 2026-08-24 · status: OPEN
 
@@ -24,6 +51,11 @@ rekenen dus met driemaal de werkelijke kosten.
 `PAT-MGC-A` om 11:55 meldt `Today: $-12,4`. Dat is exact 8 contracten × $1,55, de
 entry-commissie van de trade die om 11:36 vulde. Er waren die dag geen eerdere trades,
 dus dat bedrag ís de commissie.
+
+**Sluitend bewezen met de P&L van diezelfde trade.** Exit +$759,2 op 8 contracten van
+4707,2 naar 4717,0 = 98 ticks × 8 × $1 = **$784 bruto**. Verschil $24,80 = 8 × $1,55 × 2
+zijden. Met de registrywaarde van $0,52 was het $8,32 geweest en had de trade **$775,68**
+opgeleverd — $16,48 meer, op één trade.
 
 **Richting van de fout:** te hoog, dus de PATRON- en TESORO-cijfers in
 `frozen-engines.md` zijn pessimistisch, niet optimistisch. Per round turn scheelt het

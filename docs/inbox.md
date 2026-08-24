@@ -93,6 +93,61 @@ bewezen run, cleanup van dode inputs) is wél gewoon uitvoerbaar en nuttig.
 met de GC+ES-regel deed? Bij het tweede hoort een regel in `DECISIONS.md`, niet een stille
 uitzondering.
 
+
+#### Nagekomen 24-08 — besluiten van Ferry en wat er mee gedaan is
+
+- **Punt 2 (TES-MGC-C vs D-45/D-46): optie 3 akkoord.** Uitgevoerd als **TESORO
+  v7.10.0**: nieuwe groep `0B · ENGINE PROFILE` met `TES-MGC-C` als eerste profiel
+  (7 MGC, FVG 11–16, CVD-streak 6, stop 140t, 2,25R, BE/trail uit). Default blijft
+  `Manual`, dus bestaand gedrag verandert niet. De risk-gate en de registry-koppeling
+  blijven staan; het profiel raakt alleen signaal en exit. Als de acht andere engines
+  binnenkomen, worden het regels in dezelfde tabel in plaats van acht bijna-identieke
+  bestanden.
+  **Eén val gevonden en gedicht:** in `Fixed (legacy)`-modus is `sigStopDist` per
+  definitie gelijk aan de fixed stop, en `stopValid` eist `sigStopDist <= maxStop`.
+  Een profiel met stop 140t onder het bestaande filter van 130t had **élk signaal**
+  weggefilterd — nul trades, en het zou eruit hebben gezien als "de engine vindt niks".
+  Het profiel zet het filter daarom gelijk aan de eigen stop.
+  **Nog open:** *Liquidity Core* staat wel in `frozen-engines.md` bij TESORO maar zit
+  niet in dit bestand, en is niet uit een parametertabel af te leiden. Wacht op het
+  `v1_0_0`-bestand.
+- **Punt 1 (EL TORO): er komt een nieuw script.** Geen werk op v6.8.13-FM1 tot het er is.
+
+#### Punt 4 — mijn advies over de (weekdag, uur)-slots
+
+**Laat de slot-preset vervallen, en niet als compromis: de lijst is met de eigen
+cijfers niet van ruis te onderscheiden.**
+
+Het raster is 5 dagen × 24 uur = **120 cellen**, en elke cel is beoordeeld op ongeveer
+**20 evals**. Bij de gerapporteerde basis-pass-rate van 52% is de kans dat een cel puur
+door toeval op ≥ 65% uitkomt 0,174. Over 120 cellen levert toeval dus **≈ 21 GO-slots**
+op. De analyse vond er **11**. Dezelfde rekensom aan de onderkant: toeval produceert
+**≈ 16 cellen** onder de 35%, en er zijn er 14 als SKIP aangemerkt.
+
+Beide lijsten zijn dus *kleiner* dan wat een engine zonder enige tijdsafhankelijkheid
+vanzelf zou opleveren. Er is geen effect om te vinden; er is een selectie uit ruis.
+
+De verdeling bevestigt het: de elf GO-slots liggen op acht verschillende uren
+(00, 01, 03, 06, 09, 14, 20, 22), verspreid over de hele klok, zonder één aaneengesloten
+blok. Een echte tijdsedge komt uit liquiditeit en die is per definitie aaneengesloten —
+een sessie-open, een overlap, een settlement. Losse uren die niet aan elkaar grenzen zijn
+het handtekeningpatroon van multiple comparisons.
+
+**Wat ik in de plaats voorstel**, en wat de pijplijn wél toestaat: één dropdown met
+**economisch vooraf gedefinieerde vensters** — Asia, London, pre-cash, cash open,
+opening range, post-OR, lunch, power hour, settlement/rollover. Dat zijn er negen in
+plaats van 120, ze zijn vóór de meting benoemd, en elk venster krijgt daardoor een
+sample dat groot genoeg is om iets te betekenen.
+
+De concrete test is goedkoop: leg de elf GO-slots op die negen vensters. Vallen ze samen
+in één of twee ervan, dan is er een edge en is hij als sessiefilter te schrijven — OOS
+verdedigbaar. Verstrooien ze, dan is de zaak beslecht en kost het niets meer.
+
+Precedent binnen dit project: TESORO's eigen risk-gate draait op `18–23 ET`, één
+aaneengesloten blok dat samenvalt met de post-rollover/Asia-sessie. Dat is de vorm die
+werkt.
+
+
 #### Wat wél gedaan is
 
 - **Defect 1 uitgezocht en beslist welke kop weg moet:** `EL MATADOR` / `MAT-MES-P`

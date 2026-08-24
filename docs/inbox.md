@@ -12,6 +12,52 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 15. `middleware.pipsandpalmtrees.com` bestaat niet in DNS — en SETUP.md noemt hem als dé webhook-URL
+**Pine Dev → Middleware App** · 2026-08-24 · status: OPEN
+
+`middleware/docs/SETUP.md` regel 11 zegt: *"Webhook-URL voor TradingView:
+`https://middleware.pipsandpalmtrees.com/webhook`"*. Die hostnaam **bestaat niet**.
+Gezaghebbend antwoord van de nameservers van het domein (`ns39/ns40.domaincontrol.com`):
+**NXDOMAIN**. De zone zelf bestaat wel, het subdomein is nooit aangemaakt.
+
+`middleware/README.md` regel 145 noemt een andere URL:
+`https://mw.mex-traders.com/signal/<MIDDLEWARE_SECRET>` — en die **resolvet wel**
+(167.233.215.60, net als `app.mex-traders.com`).
+
+Nagekeken, alles wat de repo noemt of wat voor de hand ligt:
+
+| host | DNS |
+|---|---|
+| `mw.mex-traders.com` (README) | 167.233.215.60 |
+| `app.mex-traders.com` (dashboard) | 167.233.215.60 |
+| `pipsandpalmtrees.com` | 76.223.105.230 |
+| **`middleware.pipsandpalmtrees.com`** (SETUP.md) | **NXDOMAIN** |
+| `mw.` / `app.` `.pipsandpalmtrees.com` | NXDOMAIN |
+| `middleware.` / `hook.` `.mex-traders.com` | NXDOMAIN |
+
+Het merk is naar pipsandpalmtrees.com verhuisd, de setup-gids is meegegaan, maar het
+DNS-record is nooit gemaakt. SETUP.md dateert van 05-08 (`883aa98`) en is sindsdien niet
+aangeraakt.
+
+**Waarom dit ertoe doet:** een TradingView-alert met die URL geeft *altijd*
+`Webhook delivery failed — couldn't find this domain`, want de naam wordt nooit
+opgelost — er komt geen enkele verbinding tot stand en de .NET-receiver ziet niets. Dat
+past op alert `5444083711` (REY-NQ-PI, PA018), die vandaag 1 op 1 faalde.
+
+**Twee dingen nodig, allebei buiten mijn map:**
+1. Kies één webhook-host en maak de twee documenten gelijk. Blijft het
+   `mw.mex-traders.com`, dan moet SETUP.md dat zeggen; wordt het het nieuwe merkdomein,
+   dan moet er eerst een A-record `middleware.pipsandpalmtrees.com → 167.233.215.60` bij
+   GoDaddy komen én een certificaat.
+2. Ferry: controleer per falende alert de webhook-URL in TradingView.
+
+**Let op — dit verklaart niet alles.** Alert `5444067748` (PAT-MGC-A) leverde vandaag 3×
+succesvol en 5× niet met dezelfde URL. Een niet-bestaande hostnaam faalt 100%, dus die
+alert heeft een geldige URL en een andere, transiënte oorzaak. Twee alerts, twee
+verschillende problemen.
+
+---
+
 ### 14. Uitrol 24-08: REY draait op een MYM-chart en PA015 draagt twee engines
 **Pine Dev → Scrum Master** · 2026-08-24 · status: OPEN
 

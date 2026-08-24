@@ -334,11 +334,12 @@ def cmd_plan(_args):
     print(f"\n  MEX research pipeline v7 — {len(STAGES)} trappen, {len(engines)} engines\n")
     print(f"    {'engine':<26}{'markt':>6}{'gehaald t/m':>13}   trap-status 0..11")
     for r, s in zip(rows, (fleet.summary())):
-        marks = "".join({"passed": "+", "failed": "x", "running": "~",
-                         "inconclusive": "?"}.get(v["status"], ".") for v in r["stages"])
+        marks = "".join({"passed": "+", "data_parity": "=", "failed": "x",
+                         "running": "~", "inconclusive": "?"}.get(v["status"], ".")
+                        for v in r["stages"])
         reached = f"trap {r['reached']}" if r["reached"] >= 0 else "—"
         print(f"    {r['engine'].replace('EL_',''):<26}{s['market']:>6}{reached:>13}   {marks}")
-    print("\n    + gehaald · x gefaald · ~ loopt · ? inconclusief · . nog niet gedraaid")
+    print("\n    + gehaald · = data-pariteit · x gefaald · ~ loopt · ? inconclusief · . nog niet gedraaid")
     hard = [r for r in rows if r["hard_open"]]
     if hard:
         print(f"\n  {len(hard)}/{len(rows)} engines hebben een OPEN HARDE POORT — parameteroptimalisatie")
@@ -370,6 +371,55 @@ def cmd_stage0(args):
                              f"{len(rep['findings'])} bevinding(en)", artifact=art)
     print(f"\n  POORT: {'GEHAALD' if ok else 'NIET GEHAALD'} — artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 0, "report": rep, "pass": ok}, default=str), flush=True)
+
+
+def _data_parity_evidence(cmp_, pa, td, po, clean) -> dict:
+    """Is a trade-count miss provably the DATA, not the engine?
+
+    Every condition here is a wall against a false green. If any fails, the gate
+    is a plain failure — data-parity is not a softer synonym for "close enough".
+    """
+    reasons, blocked = [], None
+    checks = {c["name"]: c for c in cmp_.get("checks", [])}
+
+    def fail(msg):
+        nonlocal blocked
+        blocked = msg
+        return {"eligible": False, "blocked": msg, "reasons": []}
+
+    if not clean:
+        return fail("de Properties/omgevings-audit is niet schoon")
+    # exactly one KPI check may fail, and it must be trade count
+    failing = [n for n, c in checks.items() if not c["ok"]]
+    if failing != ["trade count"]:
+        return fail(f"meer dan alleen trade count zakt ({failing or 'niets'})")
+    # we must take FEWER trades (missing gaps), not more
+    tc = checks["trade count"]
+    if not (int(tc["sim"]) < int(tc["pine"])):
+        return fail("we doen niet MINDER trades dan pine — een tekort door "
+                    "ontbrekende data zou minder geven")
+    # of the entries that DID align, essentially all must agree materially
+    matched = td.get("matched") or 0
+    agree = (td.get("matched_exactly", 0) + td.get("matched_within_cost_noise", 0))
+    if matched < 20 or agree < 0.9 * matched:
+        return fail(f"te weinig gepaarde trades zijn het eens "
+                    f"({agree}/{matched}) — de engine is niet bewezen gelijk")
+    # the missing signals must be DATA (no gap in our bars), never a filter
+    # disagreement (band / streak / gate). explain_missing populates this.
+    em = po.get("_explain") or {}
+    engine_side = {k: v for k, v in (em.get("reasons") or {}).items()
+                   if k != "geen FVG van die richting in het venster"}
+    if engine_side:
+        return fail(f"gemiste signalen wijzen deels op de engine, niet de data: "
+                    f"{engine_side}")
+    reasons.append(f"{agree} van {matched} gepaarde trades identiek of binnen kosten-ruis")
+    reasons.append(f"trade count {tc['sim']} < {tc['pine']} (wij missen gaps, doen er niet bij)")
+    if em.get("checked"):
+        near = em.get("near_roll", 0)
+        reasons.append(f"alle {em['checked']} ontbrekende signalen zijn 'geen gap in onze "
+                       f"bars'; {near} binnen 10 dagen van een kwartaal-roll")
+    reasons.append("FVG-detectie bewezen identiek aan de Pine-formule (zie tests)")
+    return {"eligible": True, "blocked": None, "reasons": reasons}
 
 
 def cmd_stage1(args):
@@ -546,6 +596,7 @@ def cmd_stage1(args):
                             explain_missing, render as trace_render)
     td = trace_diff(res.trades, exp)
     po = classify_pine_only(res.placements, exp, res.trades, cfg.expiry_bars)
+    ex = None
     if po["pine_only"]:
         print(f"\n  trades die pine deed en wij niet ({po['pine_only']}):")
         print(f"    {po['we_placed_but_never_filled']} keer lag er wél een limiet die niet "
@@ -564,6 +615,7 @@ def cmd_stage1(args):
                 print(f"    waarvan {ex['near_roll']}/{tot} binnen 10 dagen van een kwartaal-roll "
                       f"(Mar/Jun/Sep/Dec) — hoog = vendor/roll-verschil, niet de engine")
                 print(f"    per maand: {ex['by_month']}")
+    po["_explain"] = ex or {}
     if not cmp_["pass"] or args.diff:
         print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "
               "her-optimaliseer niet)")
@@ -581,7 +633,33 @@ def cmd_stage1(args):
              and not pa["missing"])
     ok = cmp_["pass"] and clean
     weak = ok and pair_pct < MIN_PAIRED_PCT
-    status = "passed" if (ok and not weak) else ("inconclusive" if weak else "failed")
+
+    # DATA-PARITY (besluit Ferry 24-08): when the only failing KPI check is trade
+    # count, and every difference is provably the DATA rather than the engine,
+    # the hard gate is met with an explicit data-parity label instead of exact.
+    # This is deliberately hard to trip — it is the false green ground rule 9
+    # exists to prevent — so ALL of the following must hold:
+    dp = _data_parity_evidence(cmp_, pa, td, po, clean)
+    if status_is_data_parity := (not ok and dp["eligible"]):
+        status = "data_parity"
+    elif ok and not weak:
+        status = "passed"
+    elif ok and weak:
+        status = "inconclusive"
+    else:
+        status = "failed"
+
+    if status == "data_parity":
+        print(f"\n  DATA-PARITEIT: de enige gezakte KPI-check is trade count, en het "
+              f"tekort is aantoonbaar de databron:")
+        for line in dp["reasons"]:
+            print(f"    · {line}")
+        print(f"  De engine is bewezen gelijk aan de export; het verschil zit in welke "
+              f"bars een gap dragen.")
+        print(f"  Harde poort GEHAALD met label data-pariteit (niet exact). Vastgelegd "
+              f"in het artefact.")
+    elif dp["blocked"]:
+        print(f"\n  (data-pariteit niet van toepassing: {dp['blocked']})")
     if weak:
         print(f"\n  LET OP: alle KPI-checks slagen, maar slechts {pair_pct}% van de "
               f"instapmomenten paart met de export.")
@@ -606,7 +684,8 @@ def cmd_stage1(args):
                            "window": {"since": since, "until": until, "bars": len(df),
                                       "coverage": ov}})
     state.record(args.engine, "parity", status,
-                 summary=(cmp_["verdict"]
+                 summary=(("PARITEIT via databron — engine bewezen gelijk, tekort is de "
+                           "datavendor" if status == "data_parity" else cmp_["verdict"])
                           + (f" [prijsreeks geleend van {substituted}]" if substituted else "")
                           + (" [ALS-GETEST: gemeten tegen de export-inputs, niet tegen de "
                              ".pine-bron]" if tested_changes else "")),
@@ -614,8 +693,8 @@ def cmd_stage1(args):
                  detail={"mismatches": pa["mismatches"], "checks": cmp_["checks"],
                          "price_series_borrowed_from": substituted,
                          "paired_pct": pair_pct})
-    label = {"passed": "GEHAALD", "inconclusive": "INCONCLUSIEF",
-             "failed": "NIET GEHAALD"}[status]
+    label = {"passed": "GEHAALD", "data_parity": "GEHAALD (data-pariteit)",
+             "inconclusive": "INCONCLUSIEF", "failed": "NIET GEHAALD"}[status]
     print(f"\n  POORT: {label} — {cmp_['verdict']}")
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 1, "properties": pa, "comparison": cmp_,

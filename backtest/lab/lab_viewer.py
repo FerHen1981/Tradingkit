@@ -1628,7 +1628,8 @@ async function loadBuilder(){
 
 // ---------- 2 · Pijplijn ----------
 let PIPE=null;
-const ST_MARK={passed:['+','var(--gold)'],failed:['x','var(--rose)'],running:['~','var(--azure)'],
+const ST_MARK={passed:['+','var(--gold)'],data_parity:['=','var(--azure)'],
+               failed:['x','var(--rose)'],running:['~','var(--azure)'],
                inconclusive:['?','var(--sub)'],todo:['·','var(--dim)']};
 async function loadPipeline(){
   try{PIPE=await (await fetch('/api/pipeline')).json();}catch(e){return}

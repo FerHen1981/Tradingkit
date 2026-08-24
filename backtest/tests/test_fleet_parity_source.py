@@ -38,7 +38,6 @@ FIELDS = [
     ("Day-profit exit mode",                      lambda c: c.day_exit_mode,            str),
     ("Day-trail model",                           lambda c: c.day_trail_model,          str),
     ("Take-Profit Mode",                          lambda c: c.tp_mode,                  str),
-    ("Drawdown Model",                            lambda c: c.dd_model,                 str),
     ("Account Phase",                             lambda c: c.phase,                    str),
     ("Use Delta Filter",                          lambda c: c.use_cvd_filter,           bool),
     ("Use FVG Size Range Filter",                 lambda c: c.use_gap_filter,           bool),
@@ -118,6 +117,37 @@ def test_string_inputs_have_a_valid_default(path):
         assert _engine_name(path) in fleet.PINE_DEFECTS, (
             f"{path.name} heeft een niet-compilerende input.string en staat niet in "
             f"PINE_DEFECTS:\n  " + "\n  ".join(broken))
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_drawdown_model_comes_from_the_firm_program(path):
+    """All nine scripts ship with the firm preset ON, so the loose "Drawdown
+    Model" input is overwritten at runtime (D-20). The mirror must therefore
+    follow the firm program, not the input — reading the input would put every
+    engine on Intraday and silently mis-model the seven EOD ones."""
+    name = _engine_name(path)
+    ins = _pine_inputs(path)
+    assert _coerce(ins["Use firm preset (fills account rules below)"], bool) is True, (
+        f"{name}: firm preset staat UIT — dan is de losse input wel leidend en "
+        f"klopt de afleiding in fleet.drawdown_model() niet meer")
+    program = _coerce(ins["Firm program"], str)
+    assert program == fleet.firm_program(name), (
+        f"{name}: firm program pine={program!r} mirror={fleet.firm_program(name)!r}")
+    cfg = fleet.engine_config(name)
+    assert cfg.dd_model == fleet.drawdown_model(program), name
+    assert cfg.dd_model == ("Intraday" if "intraday" in program else "EOD"), (
+        f"{name}: {program} zou {cfg.dd_model} moeten geven")
+
+
+@needs_pine
+def test_the_registry_actually_defines_every_firm_program_used():
+    """fleet.drawdown_model() falls back to a key-name guess when the registry
+    lacks the program. That fallback must never be what we actually rely on."""
+    from backtest.firms import raw_programs
+    known = {p.get("key") for p in raw_programs()}
+    used = {fleet.firm_program(n) for n in fleet.names()}
+    assert used <= known, f"niet in data/propfirms.json: {sorted(used - known)}"
 
 
 @needs_pine

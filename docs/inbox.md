@@ -1481,3 +1481,51 @@ pivot, drawdown-model, TP-modus en de vier aan/uit-filters. Dat is geen eenmalig
 `backtest/tests/test_fleet_parity_source.py` leest `pine/v1_0_0/*.pine` bij elke testrun en
 faalt bij afwijking, plus een aparte test die élke `input.string` met een ongeldige default
 opspoort. Wijzig je een script, dan vertelt onze suite je meteen dat de mirror achterloopt.
+
+---
+
+## 19 · Backtest Setup → Scrum Master + Pine Dev — correctie op inbox 17, en twee echte bevindingen (24-08)
+
+**Twee dingen uit inbox 17 waren fout. Die trek ik hierbij in.**
+
+**(a) Het MATADOR EOD/Intraday-conflict bestaat niet.** Ik meldde het als beslissing voor Ferry.
+Alle negen scripts draaien met `Use firm preset = On`, dus `f_firmRules` overschrijft de losse
+`Drawdown Model`-input — precies zoals Pine Dev het op 20-08 (D-20) heeft vastgelegd. MATADOR's
+`apex_50k_eod_pa` levert EOD; de input-default "Intraday" wordt nooit gebruikt. **Haal dit uit de
+Approval Queue** — er valt niets te beslissen. De fout zat in mijn eigen mirror, die `Intraday`
+hard had staan voor alle negen; zeven engines stonden daardoor op het verkeerde model. Opgelost:
+afgeleid uit het firm-programma via de registry.
+
+**(b) De datavraag is veel kleiner dan ik zei.** Ik las `Start date/time (measure from) =
+Jan 1, 2025` als het testvenster; dat is een entry-onderdrukker, geen tester-range. De echte
+`Backtesting range` van alle drie de exports is **24-08-2025 → 23-08-2026**. De vraag is dus
+**1-minuut MES, MYM en MNQ over aug-2025 t/m aug-2026** — één jaar per markt. Dat is nog steeds
+het kritieke pad, maar het is een haalbare download in plaats van een archiefproject.
+`python -m backtest.pipeline.cli coverage` en het Pijplijn-tabblad tonen dit nu uit de exports
+zelf, dus niemand hoeft mijn woord ervoor aan te nemen.
+
+**Twee échte grondregel-10-afwijkingen — deze zijn wél voor Pine Dev/Ferry:**
+
+1. **`LEON_MYM_PROD_EOD` is gevalideerd onder `apex_50k_intraday_pa`**, terwijl de bron
+   `apex_50k_eod_pa` draagt. Een engine met EOD in de naam is dus onder een Intraday-drawdown
+   gevalideerd. Welke van de twee de bedoeling is, beslis ik niet.
+2. **`REY_MNQ_PROD_INTRA` is gevalideerd met dag-winstblok `Trail + cap`** (activering 750,
+   giveback 100, cap 1000), terwijl de bron dat blok `Off` heeft met 500/150/750. Vier velden
+   verschillen; dit is geen detail maar het hele dagbeheer.
+
+Beide zijn het klassieke grondregel-10-patroon: TradingView bewaarde oudere inputs, de export is
+de waarheid over wát er getest is, en de broncode-default is dat niet. **Zolang dit openstaat kan
+geen van beide engines trap 1 halen** — niet omdat de simulator faalt, maar omdat onduidelijk is
+tegen welke configuratie hij moet meten.
+
+**Losse bevinding voor D-07/D-08:** alle drie de exports draaiden **commissie 0,51**, terwijl
+`backtest/config.py CONTRACTS` per symbool iets anders draagt (MES 0,37). Kosten verschuiven PF
+direct. Volgens D-08 wordt de Pine-commissie uit `CONTRACTS` gegenereerd, dus óf de generator is
+niet opnieuw gedraaid, óf de waarde is in TradingView handmatig overschreven. Eén bron moet winnen.
+
+**Wat ik verder deed:** de drie exports staan nu in `validation/exports/` (ze bestonden alleen op
+Ferry's schijf; bewijs waaraan een harde poort meet hoort in versiebeheer), de Properties-audit
+kijkt naar 26 velden in plaats van 10 en rapporteert **dekking** — ontbrekende velden zijn nu een
+bevinding in plaats van stilte — en er is een omgevingsaudit die symbool, timeframe, tick size,
+point value, commissie, slippage, firm-programma en venster controleert. Een MES-engine tegen een
+MYM-export auditte voorheen schoon; dat kan niet meer. 175 tests groen.

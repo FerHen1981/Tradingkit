@@ -1,6 +1,7 @@
 """Run one pipeline stage, or reset the lab.
 
     python -m backtest.pipeline.cli plan
+    python -m backtest.pipeline.cli coverage    # wat kan trap 1 draaien, wat mist
     python -m backtest.pipeline.cli stage0 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD
     python -m backtest.pipeline.cli stage1 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD \
         --export path/to/TESORO_export.xlsx
@@ -28,6 +29,56 @@ def _dataset_path(name: str) -> tuple[str, str]:
         if d["name"] == name:
             return d["file"], (d.get("symbol") or "")
     raise SystemExit(f"unknown dataset {name!r} — see 1 · Data")
+
+
+def cmd_coverage(_args):
+    """What can trap 1 actually run today, and what data is missing?
+
+    Trap 1 is a hard gate, so this answers the only question that matters while
+    it is open: for each TradingView export we hold, is there a dataset of the
+    right market covering the window the export was actually tested over?"""
+    from ..lab.lab_viewer import _datasets, _export_dirs, _export_path, _exports
+    from .parity import audit_environment, export_window, read_export
+
+    dsets = []
+    for d in _datasets():
+        dsets.append({"name": d["name"], "symbol": (d.get("symbol") or "").upper(),
+                      "first": d.get("first"), "last": d.get("last")})
+    print(f"\n  trap 1 · dekking — {len(_exports())} export(s), {len(dsets)} dataset(s)")
+    print(f"  exports gezocht in: {', '.join(str(d) for d in _export_dirs()) or '(geen map)'}\n")
+    if not dsets:
+        print("  GEEN datasets geladen — upload ze onder 1 · Data.")
+
+    runnable, blocked = 0, []
+    for nm in _exports():
+        f = _export_path(nm)
+        if f is None:
+            continue
+        exp = read_export(str(f))
+        a, b = export_window(exp)
+        sym = str(exp.properties.get("Symbol") or "").split(":")[-1]
+        root = "".join(ch for ch in sym if ch.isalpha())
+        engine = next((n for n in fleet.names() if fleet.market(n) == root), None)
+        match = [d for d in dsets if d["symbol"] == root]
+        window = f"{a:%Y-%m-%d} -> {b:%Y-%m-%d}" if a and b else "onleesbaar"
+        print(f"  {nm}")
+        print(f"     markt {root} · getest {window} · {exp.n_trades} trades")
+        if not match:
+            blocked.append((root, window))
+            print(f"     GEBLOKKEERD — geen dataset voor {root}. Nodig: 1-minuut {root} "
+                  f"over {window}.")
+        else:
+            names = ", ".join(d["name"] for d in match)
+            print(f"     dataset(s) aanwezig: {names}")
+            runnable += 1
+        if engine is None:
+            print(f"     let op: geen engine in de vloot voor markt {root}")
+    print(f"\n  {runnable} van {len(_exports())} export(s) is nu te draaien op trap 1.")
+    if blocked:
+        print("\n  ONTBREKENDE DATA (dit is het kritieke pad — trap 1 is een harde poort,")
+        print("  dus trap 2 t/m 9 zijn ongeldig zolang die dichtstaat):")
+        for root, window in blocked:
+            print(f"    · 1-minuut {root}, minimaal {window}")
 
 
 def cmd_plan(_args):
@@ -86,21 +137,45 @@ def cmd_stage1(args):
 
     exp = read_export(args.export)
     pa = audit_properties(exp, cfg)
-    print(f"\n  Properties-audit (grondregel 10): {pa['mismatches']} afwijking(en)")
-    print(f"    symbool {pa['symbol']} · commissie {pa['commission']} · slippage {pa['slippage']}")
-    print(f"    venster {pa['start']} -> {pa['end']}")
+    print(f"\n  Properties-audit (grondregel 10): dekking {pa['coverage_pct']}% "
+          f"({pa['checked']} velden), {pa['mismatches']} input-afwijking(en), "
+          f"{pa['environment_mismatches']} omgevings-afwijking(en)")
+    print(f"    symbool {pa['symbol']} · {pa['timeframe']} · commissie {pa['commission']} · "
+          f"slippage {pa['slippage']} · firm {pa['firm_program']}")
+    print(f"    getest venster {pa['window_start']} -> {pa['window_end']}")
+    for r in pa["environment"]:
+        if not r["ok"]:
+            print(f"    OMGEVING  {r['label']}: export={r['export']} vs config={r['config']}"
+                  + (f"  ({r['note']})" if r["note"] else ""))
     for r in pa["rows"]:
         if not r["ok"]:
             print(f"    AFWIJKING {r['label']}: export={r['export']} vs config={r['config']}")
-    if pa["mismatches"]:
+    if pa["missing"]:
+        print(f"    NIET TE CONTROLEREN ({len(pa['missing'])} veld(en) ontbreken in de sheet): "
+              f"{', '.join(pa['missing'][:6])}{' ...' if len(pa['missing']) > 6 else ''}")
+    if pa["mismatches"] or pa["environment_mismatches"]:
         print("    De export test een ANDERE configuratie dan deze engine — de vergelijking")
         print("    hieronder is daarmee niet gezaghebbend. Los dit eerst op.")
 
     df = dm.load(path)
-    if args.since:
-        df = dm.slice_dates(df, since=args.since)
-    if args.until:
-        df = dm.slice_dates(df, until=args.until)
+    # Default the simulated window to what TradingView actually tested. Comparing
+    # a 19-year simulation against a 1-year export produces a trade-count gap that
+    # says nothing about parity, so the window is aligned unless explicitly set.
+    since, until = args.since, args.until
+    if not since and pa["window_start"]:
+        since = pa["window_start"].strftime("%Y-%m-%d")
+        print(f"\n  venster overgenomen uit de export: --since {since}")
+    if not until and pa["window_end"]:
+        until = pa["window_end"].strftime("%Y-%m-%d")
+        print(f"  venster overgenomen uit de export: --until {until}")
+    if since:
+        df = dm.slice_dates(df, since=since)
+    if until:
+        df = dm.slice_dates(df, until=until)
+    if df.empty:
+        raise SystemExit(
+            f"de dataset {args.dataset!r} bevat geen bars in het exportvenster "
+            f"{since} -> {until}. Trap 1 is niet te draaien zonder overlappende data.")
     print(f"\n  simulator op {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
     k = kpis(Engine(cfg, df, im.compute(df, cfg), research_mode=True).run())
     cmp_ = compare(k, exp)
@@ -108,7 +183,8 @@ def cmd_stage1(args):
     for c in cmp_["checks"]:
         print(f"    {c['name']:<18}{str(c['sim']):>14}{str(c['pine']):>14}   "
               f"{'ok' if c['ok'] else 'AFWIJKING'} — {c['detail']}")
-    ok = cmp_["pass"] and not pa["mismatches"]
+    ok = (cmp_["pass"] and not pa["mismatches"]
+          and not pa["environment_mismatches"] and not pa["missing"])
     art = _write_artifact(args.engine, "trap1_pariteit",
                           {"properties_audit": pa, "comparison": cmp_})
     state.record(args.engine, "parity", "passed" if ok else "failed",
@@ -157,6 +233,7 @@ def main():
     ap = argparse.ArgumentParser(description="MEX research pipeline v7 — stage runner.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("plan").set_defaults(fn=cmd_plan)
+    sub.add_parser("coverage").set_defaults(fn=cmd_coverage)
 
     p0 = sub.add_parser("stage0"); p0.set_defaults(fn=cmd_stage0)
     p0.add_argument("--dataset", required=True); p0.add_argument("--engine", default="")

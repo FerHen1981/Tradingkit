@@ -596,7 +596,35 @@ def _pipeline_view() -> dict:
         "fleet": fleet.summary(),
         "overview": state.overview(engines),
         "detail": {e: state.engine_view(e) for e in engines},
+        "coverage": _stage1_coverage(),
     }
+
+
+def _stage1_coverage() -> list[dict]:
+    """Per TradingView export: which market and window it actually tested, and
+    whether we hold a dataset that can run it. Trap 1 is a hard gate, so this is
+    the shortest honest answer to 'what is blocking the whole pipeline'."""
+    from ..pipeline.parity import export_window, read_export
+    dsets = [{"name": d["name"], "symbol": (d.get("symbol") or "").upper()}
+             for d in _datasets()]
+    out = []
+    for nm in _exports():
+        f = _export_path(nm)
+        if f is None:
+            continue
+        try:
+            exp = read_export(str(f))
+            a, b = export_window(exp)
+            root = "".join(c for c in str(exp.properties.get("Symbol") or "").split(":")[-1]
+                           if c.isalpha())
+            have = [d["name"] for d in dsets if d["symbol"] == root]
+            out.append({"export": nm, "market": root, "trades": exp.n_trades,
+                        "window": f"{a:%Y-%m-%d} → {b:%Y-%m-%d}" if a and b else "?",
+                        "datasets": have, "runnable": bool(have)})
+        except Exception as e:                       # a corrupt upload must not blank the tab
+            out.append({"export": nm, "market": "?", "trades": 0, "window": "?",
+                        "datasets": [], "runnable": False, "error": str(e)[:120]})
+    return out
 
 
 def _start_stage(q) -> tuple[dict, int]:
@@ -620,9 +648,10 @@ def _start_stage(q) -> tuple[dict, int]:
         exp = (q.get("export") or [""])[0].strip()
         if not exp:
             return {"error": "stage 1 needs a TradingView export (.xlsx) to compare against"}, 400
-        f = (lab_root() / "exports" / os.path.basename(exp)).resolve()
-        if not f.exists():
-            return {"error": f"export not found: {f.name} — upload it under 1 · Data"}, 400
+        f = _export_path(exp)
+        if f is None:
+            return {"error": f"export not found: {os.path.basename(exp)} — upload it "
+                             f"under 1 · Data of zet hem in validation/exports/"}, 400
         cmd = [sys.executable, "-m", "backtest.pipeline.cli", "stage1", "--dataset", dataset,
                "--engine", engine, "--export", str(f)]
         for name, flag in (("since", "--since"), ("until", "--until")):
@@ -633,9 +662,33 @@ def _start_stage(q) -> tuple[dict, int]:
     return {"error": f"stage {stage!r} is not implemented yet"}, 400
 
 
+def _export_dirs() -> list[Path]:
+    """Where TradingView exports may live: uploaded ones under $LAB_DIR/exports,
+    and the ones committed as evidence in validation/exports (so a clean checkout
+    can run stage 1 without anyone re-uploading them)."""
+    repo = Path(__file__).resolve().parents[2] / "validation" / "exports"
+    return [d for d in (lab_root() / "exports", repo) if d.is_dir()]
+
+
+def _export_path(name: str):
+    """Resolve an export name to a file, without letting the name escape the
+    directories we allow."""
+    base = os.path.basename(name)
+    for d in _export_dirs():
+        f = (d / base).resolve()
+        if f.is_file() and f.parent == d.resolve():
+            return f
+    return None
+
+
 def _exports() -> list[str]:
-    d = lab_root() / "exports"
-    return sorted(p.name for p in d.glob("*.xlsx")) if d.exists() else []
+    seen, out = set(), []
+    for d in _export_dirs():
+        for p in sorted(d.glob("*.xlsx")):
+            if p.name not in seen:
+                seen.add(p.name)
+                out.append(p.name)
+    return out
 
 
 def _candidates() -> dict:
@@ -1575,6 +1628,21 @@ async function loadPipeline(){
   document.querySelectorAll('#plMatrix tbody tr').forEach(tr=>tr.addEventListener('click',()=>showEngine(tr.dataset.eng)));
   $('#plRules').innerHTML='<b>Niet-onderhandelbare grondregels</b><div style="margin-top:6px">'
     +PIPE.ground_rules.map((r,i)=>`<div class=lensrow style="margin-top:3px"><span class=tag style="min-width:26px;text-align:center">${i+1}</span> ${r}</div>`).join('')+'</div>';
+  // trap 1 dekking
+  const cov=PIPE.coverage||[]; const runnable=cov.filter(c=>c.runnable).length;
+  $('#covCount').textContent=runnable+' van '+cov.length+' te draaien';
+  $('#covTable').innerHTML = cov.length ? '<table><thead><tr><th style="text-align:left">Export</th>'
+    +'<th>Markt</th><th>Trades</th><th style="text-align:left">Getest venster</th>'
+    +'<th style="text-align:left">Dataset</th></tr></thead><tbody>'
+    +cov.map(c=>`<tr><td style="text-align:left" class=mono>${c.export}</td><td>${c.market}</td>
+      <td>${c.trades}</td><td style="text-align:left">${c.window}</td>
+      <td style="text-align:left">${c.runnable
+        ? '<span style="color:var(--azure)">'+c.datasets.join(', ')+'</span>'
+        : '<span style="color:var(--rose)">ontbreekt — nodig: 1-minuut '+c.market+' over '+c.window+'</span>'}
+      </td></tr>`).join('')+'</tbody></table>'
+    : '<div class=hint>Geen exports gevonden — zet ze in <span class=mono>validation/exports/</span> '
+      +'of upload ze onder 1 · Data.</div>';
+
   // vloot
   $('#flCount').textContent=PIPE.fleet.length+' engines';
   $('#flTable').innerHTML='<table><thead><tr><th style="text-align:left">Engine</th><th>Markt</th><th>Qty</th>'
@@ -1710,6 +1778,17 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     </div>
     <div id=stOut style="display:none;margin-top:14px"></div>
     <pre id=stLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:260px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Trap 1 · dekking — kan de harde poort überhaupt draaien?</b>
+      <span class=muted id=covCount>—</span></div>
+    <div class=hint>Per TradingView-export: welke markt en welk venster er écht getest is
+      (de <span class=mono>Backtesting range</span>, niet de <span class=mono>Start date</span>-input),
+      en of we daar data voor hebben. Zolang dit rood staat is trap 1 dicht en zijn trap 2 t/m 9
+      ongeldig — grondregel 1.</div>
+    <div id=covTable style="margin-top:12px;overflow-x:auto"></div>
   </div>
 
   <div class=panel>

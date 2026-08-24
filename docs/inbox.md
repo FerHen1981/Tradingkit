@@ -97,6 +97,32 @@ gesloten is — de halt sluit via precies het bericht dat wegviel (`f_sendExec("
 Eén verloren pakketje op de verkeerde bar is het verschil tussen een gesloten dag en een
 onbewaakte positie.
 
+**Wat 07:55 concreet kost (uitgewerkt 24-08).** Op die minuut vuurde `PAT-MGC-A` drie
+berichten en gingen alle drie verloren: de PMT-`close` (qty 8 @ 4717,2), de EXIT-kaart
+(+$759,2, reden Day-cap) en de DAY HALT-kaart. De FILL-kaart van 07:48:34 kwám wél aan.
+
+Daardoor staat PATRON in **elk systeem behalve TradingView nog long 8 MGC**:
+
+- **Broker:** geen close aangekomen — maar de entry van 07:36 ook niet, dus er staat niets
+  open bij Tradovate. Netto heeft PATRON vandaag de broker niet geraakt. Te verifiëren in
+  Tradovate; de log bewijst alleen dat TradingView niet kon leveren.
+- **Journaal:** `pair_events()` koppelt FILL aan EXIT per (account, symbool, richting). De
+  FILL is binnen, de EXIT niet, dus die trade blijft met `exit_ts = None` staan — een rij
+  die nooit sluit. De phantom-guard vangt hem niet: `amap` wordt over een venster van
+  meerdere dagen opgebouwd (`_recent_routed_files(routed_dir, days)`), dus PA013 zit erin
+  van eerdere dagen. Resultaat: een permanent open trade in de Trade Journal, en de
+  **+$759,2 landt nergens** — niet in het journaal, niet in Fleet Performance.
+- **Discord:** het laatste wat je ziet is FILL LONG. Het lijkt alsof de positie loopt.
+
+Dit is precies het scenario waarvoor reconciliatie bedoeld is: één verloren bericht en
+drie systemen lopen uit de pas met de werkelijkheid.
+
+**Los daarvan, een echte fout in de halt-kaart.** `todayRealizedPnL` wordt gebouwd in
+hetzelfde blok dat `strategy.close_all()` aanroept, dus de sluitende trade zit er per
+definitie niet in. De DAY HALT-kaart rapporteert dus **altijd** de dag zonder de trade die
+hem beëindigde. Vandaag: `Today: $-12,4` op een dag die op +$759,2 sloot. En die $-12,40
+is 8 × $1,55 — de commissiefout uit item 12, één zijde.
+
 **Voorstel richting Middleware/Legacy:** dit hoort niet in Pine opgelost te worden (Pine
 kan een mislukte levering niet zien, laat staan herhalen). Twee richtingen: de kaarten en
 de orders over aparte alerts spreiden zodat een bar nooit meer dan één levering per alert

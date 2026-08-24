@@ -67,23 +67,35 @@ def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None) -> dic
     from .. import indicators as im
     from ..engine import Engine
 
-    base = Engine(cfg, df, im.compute(df, cfg), research_mode=True).run().trades
+    base_res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
+    base = base_res.trades
     base_keys = _keys(base)
+    base_oc = base_res.order_counts or {}
     base_set = set(base_keys)
     rows = []
     for i, seed in enumerate(seeds):
         if progress:
             progress(i, len(seeds))
         jdf = jitter(df, cfg.contract.mintick, prob=prob, seed=seed)
-        got = Engine(cfg, jdf, im.compute(jdf, cfg), research_mode=True).run().trades
-        got_keys = _keys(got)
+        gres = Engine(cfg, jdf, im.compute(jdf, cfg), research_mode=False).run()
+        got_keys = _keys(gres.trades)
         kept = len(base_set & set(got_keys))
+        oc = gres.order_counts or {}
         rows.append({"seed": seed, "trades": len(got_keys), "kept": kept,
                      "survival_pct": round(100 * kept / len(base_keys), 1)
-                                     if base_keys else 0.0})
+                                     if base_keys else 0.0,
+                     "placed": oc.get("placed"), "filled": oc.get("filled"),
+                     "fill_pct": round(100 * oc["filled"] / oc["placed"], 1)
+                                 if oc.get("placed") else None})
     surv = [r["survival_pct"] for r in rows]
+    fills = [r["fill_pct"] for r in rows if r["fill_pct"] is not None]
+    base_fill = (round(100 * base_oc["filled"] / base_oc["placed"], 1)
+                 if base_oc.get("placed") else None)
     return {
         "baseline_trades": len(base_keys),
+        "baseline_placed": base_oc.get("placed"),
+        "baseline_fill_pct": base_fill,
+        "fill_pct_range": [min(fills), max(fills)] if fills else None,
         "jitter_prob": prob,
         "runs": rows,
         "mean_survival_pct": round(sum(surv) / len(surv), 1) if surv else 0.0,

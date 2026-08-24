@@ -211,10 +211,19 @@ def cmd_sensitivity(args):
 
     r = survival(df, cfg, seeds=tuple(range(1, args.seeds + 1)), prob=args.prob,
                  progress=lambda i, n: print(f"  run {i+1}/{n} ...", flush=True))
-    print(f"\n  basislijn: {r['baseline_trades']} trades")
+    print(f"\n  basislijn: {r['baseline_trades']} trades"
+          + (f" uit {r['baseline_placed']} limieten ({r['baseline_fill_pct']}% gevuld)"
+             if r.get("baseline_placed") else ""))
     for run in r["runs"]:
         print(f"    seed {run['seed']}: {run['trades']} trades, {run['kept']} op dezelfde "
-              f"bar en richting -> {run['survival_pct']}% overleeft")
+              f"bar en richting -> {run['survival_pct']}% overleeft"
+              + (f" · fill {run['fill_pct']}%" if run.get("fill_pct") is not None else ""))
+    if r.get("fill_pct_range"):
+        lo, hi = r["fill_pct_range"]
+        print(f"\n  fill-ratio schommelt tussen {lo}% en {hi}% door alleen tick-ruis "
+              f"(basislijn {r['baseline_fill_pct']}%)")
+        print(f"  -> een fill-ratio-verschil binnen die bandbreedte is dataruis, "
+              f"geen engine-verschil")
     print(f"\n  gemiddeld {r['mean_survival_pct']}% overleeft (laagste {r['min_survival_pct']}%)")
     print(f"  {verdict(r)}")
     art = _write_artifact(args.engine, "tick-gevoeligheid", r)

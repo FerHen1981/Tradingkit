@@ -88,3 +88,27 @@ def test_survival_drops_once_prices_move(frame):
                                         (40.0, "TICK-KRITISCH")])
 def test_verdict_wording_tracks_the_number(pct, expect):
     assert expect in verdict({"mean_survival_pct": pct})
+
+
+def test_survival_reports_the_fill_ratio_spread(frame):
+    """The fill ratio is the mechanism under suspicion: a limit at 50% of the gap
+    either gets touched or does not, and one tick decides it. Knowing how far
+    that ratio drifts on tick noise alone tells you whether a fill-rate gap
+    against Pine is data or engine."""
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    r = survival(frame, cfg, seeds=(1, 2, 3), prob=0.4)
+    assert r["baseline_placed"] and r["baseline_placed"] >= r["baseline_trades"]
+    assert 0 < r["baseline_fill_pct"] <= 100
+    lo, hi = r["fill_pct_range"]
+    assert 0 < lo <= hi <= 100
+    assert all(run["fill_pct"] is not None for run in r["runs"])
+
+
+def test_survival_runs_with_the_account_layer_on(frame):
+    """It must measure the same engine stage 1 runs, overlay included — otherwise
+    the number describes a configuration nobody is comparing against."""
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    assert cfg.is_pa
+    r = survival(frame, cfg, seeds=(1,), prob=0.0)
+    assert r["mean_survival_pct"] == 100.0
+    assert r["runs"][0]["fill_pct"] == r["baseline_fill_pct"]

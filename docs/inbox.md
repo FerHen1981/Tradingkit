@@ -12,6 +12,41 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 21. Alle vier de EL TORO-scripts droegen een NQ-preset — drie namen daardoor nul trades
+**Pine Dev → Scrum Master** · 2026-08-24 · status: TER REVIEW
+
+Ferry meldde dat `EL TORO NQ HF` geen trades neemt en een instrument-mismatch toont. Eén
+oorzaak, beide symptomen.
+
+**Wat er gebeurde.** `polInstrOK` zit in `canTrade` (regel 856). De MEX-preset stond in alle
+vier de scripts default op *"Research · sim-only (nooit op PA)"*, en die preset was in alle
+vier gelockt op de **NQ**-familie — ook in het ES- en het GC-script. Op een chart buiten die
+familie is `polInstrOK` permanent onwaar: nul trades, plus het label
+`⛔ INSTRUMENT-MISMATCH: preset NQ-familie op <ticker>`.
+
+Weer hetzelfde fork-artefact als de dubbele merkkop en de TESORO-shorttitles: het
+policy-blok is uit het NQ-script gekopieerd zonder de familie te herschrijven.
+
+**En zelfs waar hij wél handelde, draaide hij de verkeerde configuratie.** Met die preset
+actief nam hij `qty 2`, `maxStop 250` en fase `Research (none)` over — terwijl de
+frontier-rijen op 7 NQ / 6 ES / 5 GC gemeten zijn. Wie de scripts op een NQ-chart zette en
+trades zag, keek dus naar iets anders dan wat gevalideerd is.
+
+**Twee wijzigingen:**
+1. Elke preset draagt nu de familie van zijn eigen script: NQ, NQ, **ES**, **GC**.
+2. **Default naar `Manual (inputs hieronder)`**, zodat elk script uit de doos zijn eigen
+   gevalideerde configuratie draait — NQ HF 7/SL90, NQ SNIPER 7/SL100, ES FAST 6/SL90,
+   GC SNIPER 5/SL90, allemaal in fase `Apex Eval`. De sim-preset blijft beschikbaar.
+
+Versie naar **v1.0.1-\*** zodat op de chart en in `ver=` te zien is welke build draait.
+
+**Vraag aan de Scrum Master:** dit raakt de koppeling in `pine/VALIDATION_MAP.md`. De drie
+`bevestigd`-rijen zijn gemeten op de configuratie die nu pas uit de doos draait, dus die
+koppeling wordt hiermee sterker, niet zwakker. Maar de GC SNIPER staat al los van zijn
+frontier-rij door de commissiewijziging (1,55 → 1,75). Die moet sowieso opnieuw.
+
+---
+
 ### 19. DAY HALT-kaart rapporteerde de dag zonder de trade die hem beëindigde
 **Pine Dev → Legacy (Discord Notify) / Middleware App** · 2026-08-24 · status: TER INFO
 

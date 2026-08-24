@@ -43,7 +43,7 @@
 // Frozen eval defaults: 7 NQ · FVG4-12t · proxy-CVD3 · SL90t · TP90t · expiry9.
 // New entries blocked from 16:00 ET; force-flat window remains intact.
 // TP90 intentionally preserves >$3,000 net pass buffer under harsher execution than the 1-tick baseline.
-var string currentVersion = "v1.0.0-ES-FAST-INTRA"
+var string currentVersion = "v1.0.1-ES-FAST-INTRA"
 strategy("MΞX ΞL TORO · ES FAST INTRA · " + currentVersion, shorttitle="TOR-ES-FI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -306,7 +306,7 @@ if useFirmPreset
 // ============================================================================
 // === MEX POLICY LAYER — Fleet Config Matrix v1.1 (autogen, niet handmatig wijzigen)
 // ============================================================================
-string polPreset = input.string("Research · sim-only (nooit op PA)", "MEX preset (Fleet Matrix v1.1)", options=["Research · sim-only (nooit op PA)", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Matrix §2-4. Preset pint qty, max stop, harde dagcap en account phase. Kies Manual alleen voor Research/backtests.")
+string polPreset = input.string("Manual (inputs hieronder)", "MEX preset (Fleet Matrix v1.1)", options=["Research · sim-only (nooit op PA)", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Matrix §2-4. Preset pint qty, max stop, harde dagcap en account phase. Kies Manual alleen voor Research/backtests.")
 f_pol(string _p) =>
     string _fam     = "ANY"
     float  _qty     = 0.0
@@ -315,7 +315,7 @@ f_pol(string _p) =>
     string _phase   = ""
     bool   _live    = false
     if _p == "Research · sim-only (nooit op PA)"
-        _fam     := "NQ"
+        _fam     := "ES"
         _qty     := 2.0
         _maxStop := 250.0
         _capUSD  := na

@@ -151,6 +151,43 @@ def test_the_registry_actually_defines_every_firm_program_used():
 
 
 @needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_session_window_matches_the_source(path):
+    """Day and hour toggles are trading filters, not cosmetics: inheriting
+    Config's Mon-Fri default silently drops every Sunday-Globex entry, and that
+    showed up as a 10.7% trade-count gap on MATADOR's first parity run."""
+    name, ins = _engine_name(path), _pine_inputs(path)
+    cfg = fleet.engine_config(name)
+
+    days = {"Sun": 6, "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4}
+    want = {wd for label, wd in days.items()
+            if _coerce(ins[label], bool)}
+    assert set(cfg.trade_days) == want, (
+        f"{name}: pine handelt {sorted(want)}, mirror {sorted(cfg.trade_days)}")
+    assert _coerce(ins["Sat (crypto)"], bool) is False, f"{name}: zaterdag staat aan"
+    assert fleet.trades_sunday(name) == (6 in want)
+
+    off = {int(h) for h in (f"{i:02d}" for i in range(24))
+           if h in ins and not _coerce(ins[h], bool)}
+    assert set(range(24)) - set(cfg.enabled_hours) == off, (
+        f"{name}: pine zet uren {sorted(off)} uit, mirror "
+        f"{sorted(set(range(24)) - set(cfg.enabled_hours))}")
+
+    assert _coerce(ins["Force Flat Window"], bool) == cfg.use_auto_flat, name
+
+
+@needs_pine
+def test_not_every_engine_trades_sunday():
+    """A guard that the transcription is real and not a blanket value: PATRON and
+    TESORO (both MGC) sit out the Sunday open, the other seven do not."""
+    sundays = {n: fleet.trades_sunday(n) for n in fleet.names()}
+    assert any(sundays.values()) and not all(sundays.values()), sundays
+    assert sundays["EL_PATRON_MGC_AGG_EOD"] is False
+    assert sundays["EL_TESORO_MGC_CON_EOD"] is False
+    assert sundays["EL_MATADOR_MES_PROD_EOD"] is True
+
+
+@needs_pine
 def test_regime_and_market_match_the_source():
     for path in _sources():
         name = _engine_name(path)

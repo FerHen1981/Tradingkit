@@ -313,16 +313,25 @@ def cmd_stage1(args):
         print(f"  dekking: {100 - ov['missing_frac']*100:.1f}% van het exportvenster, "
               f"{ov['missing_days']} dag(en) ontbreken ({note})")
     print(f"\n  simulator op {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
-    k = kpis(Engine(cfg, df, im.compute(df, cfg), research_mode=True).run())
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=True).run()
+    k = kpis(res)
     cmp_ = compare(k, exp)
     print(f"\n    {'check':<18}{'simulator':>14}{'pine':>14}   ")
     for c in cmp_["checks"]:
         print(f"    {c['name']:<18}{str(c['sim']):>14}{str(c['pine']):>14}   "
               f"{'ok' if c['ok'] else 'AFWIJKING'} — {c['detail']}")
+    from .tracediff import diff as trace_diff, render as trace_render
+    td = trace_diff(res.trades, exp)
+    if not cmp_["pass"] or args.diff:
+        print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "
+              "her-optimaliseer niet)")
+        print(trace_render(td))
+
     ok = (cmp_["pass"] and not pa["mismatches"]
           and not pa["environment_mismatches"] and not pa["missing"])
     art = _write_artifact(args.engine, "trap1_pariteit",
                           {"properties_audit": pa, "comparison": cmp_,
+                           "trade_diff": td,
                            "dataset": args.dataset, "dataset_symbol": ds_sym,
                            "price_series_borrowed_from": substituted,
                            "window": {"since": since, "until": until, "bars": len(df),
@@ -386,6 +395,8 @@ def main():
     p1.add_argument("--engine", required=True, choices=fleet.names())
     p1.add_argument("--export", required=True, help="TradingView .xlsx export of the same engine")
     p1.add_argument("--since"); p1.add_argument("--until")
+    p1.add_argument("--diff", action="store_true",
+                    help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)
     pr.add_argument("--yes", action="store_true")

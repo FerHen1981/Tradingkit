@@ -482,6 +482,11 @@ def cmd_fleet(args):
     print(f"\n  vloot-run · trap 0 t/m {through} · {len(engines)} engines\n")
     py = sys.executable
     base = [py, "-m", "backtest.pipeline.cli"]
+    # Common window: the micros start 2023-08-24. Aligning every engine (incl.
+    # the 14-year GC twin used for the gold engines) to the same span makes the
+    # comparison fair AND keeps the multi-run stages off the 4.29M-bar GC file
+    # that otherwise OOMs on a 2-core box.
+    window = ["--since", args.since] if args.since else ["--since", "2023-08-24"]
 
     def _run(stage_args, tag):
         try:
@@ -512,10 +517,10 @@ def cmd_fleet(args):
             else:
                 print(f"    trap 1  GEEN EXPORT — pariteit niet toetsbaar (harde poort blijft open)")
         if through >= 2:
-            r2 = _run(["stage2", "--dataset", ds, "--engine", eng], "2")
+            r2 = _run(["stage2", "--dataset", ds, "--engine", eng] + window, "2")
             print(f"    trap 2  {r2}")
         for n in range(3, min(through, 9) + 1):
-            rn = _run([f"stage{n}", "--dataset", ds, "--engine", eng], str(n))
+            rn = _run([f"stage{n}", "--dataset", ds, "--engine", eng] + window, str(n))
             print(f"    trap {n}  {rn}")
         print()
 
@@ -551,7 +556,7 @@ def _run_higher(n, args):
     print(f"  {rep['verdict']}")
     art = _write_artifact(args.engine, f"trap{n}_{stage.key}", {"dataset": args.dataset, **rep})
     _state.record(args.engine, _HIGHER_KEY[n], rep["status"], summary=rep["verdict"], artifact=art)
-    print(f"\n  POORT: {rep['status'].upper()} — trap {n}")
+    print(f"\n  POORT: {rep['status'].upper()} — {rep['verdict']}")
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": n, **rep}, default=str), flush=True)
 
@@ -981,6 +986,7 @@ def main():
     pf = sub.add_parser("fleet"); pf.set_defaults(fn=cmd_fleet)
     pf.add_argument("--through", type=int, default=2,
                     help="hoogste trap om te draaien (default 2)")
+    pf.add_argument("--since", help="gemeenschappelijk startvenster (default 2023-08-24)")
     sub.add_parser("coverage").set_defaults(fn=cmd_coverage)
     sub.add_parser("report").set_defaults(fn=cmd_report)
     ps = sub.add_parser("sensitivity"); ps.set_defaults(fn=cmd_sensitivity)

@@ -277,47 +277,85 @@ def stage6(cfg, df, engine) -> dict:
 
 def stage7(cfg, df, engine) -> dict:
     """Run the funded account under BOTH Apex 50K drawdown models — EOD and
-    Intraday. Report survival and payouts under each. (Intraday here is
-    conservative: it trails on realised P&L, not unrealised MFE — labelled.)"""
-    res = _run(cfg, df, research=False)
-    eod = _funded(res, cfg, "eod_trailing")
-    intraday = _funded(res, cfg, "intraday_trailing")
-    intended = "eod_trailing" if cfg.dd_model == "EOD" else "intraday_trailing"
-    intended_res = eod if intended == "eod_trailing" else intraday
-    survives = not intended_res["breached"] and intended_res["payouts"] > 0
-    ok = survives
-    verdict = (f"overleeft en betaalt uit onder {cfg.dd_model}: {intended_res['payouts']} "
-               f"payouts, ${intended_res['withdrawable']:,.0f} gebankt"
-               if survives else
-               f"haalt geen payout onder {cfg.dd_model}"
-               + (f" (breach: {intended_res['breach_reason']})" if intended_res["breached"] else ""))
-    return {"status": "passed" if ok else "failed", "verdict": verdict,
-            "eod": eod, "intraday": intraday, "intended_model": cfg.dd_model,
+    Intraday — AND at two sizings: the frozen contract size and 1 contract.
+
+    The two sizings separate two very different failures: a strategy whose EDGE
+    cannot fund even at 1 contract, versus one that funds at 1 contract but whose
+    FROZEN full size breaches a fresh account before the trailing floor locks
+    (the .pine scales in via its derisk logic; the frozen config does not). Both
+    are reported so the distinction is visible, not hidden behind one verdict."""
+    intended = "eod" if cfg.dd_model == "EOD" else "intraday"
+
+    def at(qty_cfg):
+        res = _run(qty_cfg, df, research=False)
+        return {"eod": _funded(res, qty_cfg, "eod_trailing"),
+                "intraday": _funded(res, qty_cfg, "intraday_trailing")}
+
+    full = at(cfg)
+    one = at(dataclasses.replace(cfg, contract_size=1.0))
+    full_ok = not full[intended]["breached"] and full[intended]["payouts"] > 0
+    one_ok = not one[intended]["breached"] and one[intended]["payouts"] > 0
+
+    if full_ok:
+        status, verdict = "passed", (
+            f"overleeft en betaalt uit onder {cfg.dd_model} op volle grootte "
+            f"({cfg.contract_size:.0f} ct): {full[intended]['payouts']} payouts, "
+            f"${full[intended]['withdrawable']:,.0f} gebankt")
+    elif one_ok:
+        status, verdict = "inconclusive", (
+            f"funderbaar op 1 contract ({one[intended]['payouts']} payouts) maar de "
+            f"BEVROREN {cfg.contract_size:.0f} ct breacht een vers account "
+            f"({full[intended]['breach_reason']}) — vraagt om contract-scaling "
+            f"(de .pine derisk-logica), niet gemodelleerd in de bevroren config")
+    else:
+        status, verdict = "failed", (
+            f"haalt geen payout onder {cfg.dd_model}, zelfs niet op 1 contract"
+            + (f" (breach: {one[intended]['breach_reason']})" if one[intended]["breached"] else ""))
+    return {"status": status, "verdict": verdict, "intended_model": cfg.dd_model,
+            "full_size": full, "one_contract": one, "frozen_qty": cfg.contract_size,
             "note": "Intraday trailt op gerealiseerde P&L, niet op ongerealiseerde MFE — "
                     "conservatief gelabeld (grondregel trap 7)"}
 
 
 def stage8(cfg, df, engine) -> dict:
-    """Time-for-money — the objective. Banked payout-$ per occupied account-day,
-    with payout-#1 conversion, P2–P6, days to P1, breach and DLL-hit counts."""
+    """Time-for-money — the objective. Banked payout-$ per occupied account-day.
+
+    Reported at the frozen size AND at 1 contract, because a config that breaches
+    at full size still has a real per-day throughput at the survivable size —
+    and banked-$/day at a size that breaches on day 20 is a mirage."""
     dd_type = "eod_trailing" if cfg.dd_model == "EOD" else "intraday_trailing"
-    res = _run(cfg, df, research=False)
-    s = _funded(res, cfg, dd_type)
-    daily = _daily(res)
-    dll = float(cfg.acct_dll or 0)
-    dll_hits = sum(1 for v in daily.values() if dll and v <= -dll)
-    per_day = s["banked_per_account_day"]
-    ok = per_day > 0 and not s["breached"]
-    verdict = (f"${per_day}/bezette account-dag gebankt · {s['payouts']} payouts "
-               f"(P1 na {s['days_to_first_payout']} handelsdagen) · {dll_hits} DLL-hits"
-               if ok else
-               (f"breach vóór payout: {s['breach_reason']}" if s["breached"]
-                else f"geen gebankte payout: ${per_day}/account-dag"))
+
+    def metrics(qty_cfg):
+        res = _run(qty_cfg, df, research=False)
+        s = _funded(res, qty_cfg, dd_type)
+        daily = _daily(res)
+        dll = float(qty_cfg.acct_dll or 0)
+        s["dll_hits"] = sum(1 for v in daily.values() if dll and v <= -dll)
+        return s
+
+    full = metrics(cfg)
+    one = metrics(dataclasses.replace(cfg, contract_size=1.0))
+    # the objective is measured at the sizing that actually survives to pay out
+    survivor = full if (not full["breached"] and full["banked_per_account_day"] > 0) else one
+    at_full = survivor is full
+    per_day = survivor["banked_per_account_day"]
+    ok = per_day > 0 and not survivor["breached"]
+    size_lbl = f"{cfg.contract_size:.0f} ct" if at_full else "1 ct (volle grootte breacht)"
+    if ok:
+        verdict = (f"${per_day}/bezette account-dag op {size_lbl} · {survivor['payouts']} payouts "
+                   f"(P1 na {survivor['days_to_first_payout']} handelsdagen) · "
+                   f"{survivor['dll_hits']} DLL-hits")
+    else:
+        verdict = (f"geen gebankte payout, ook niet op 1 contract: "
+                   + (survivor["breach_reason"] if survivor["breached"]
+                      else f"${per_day}/account-dag"))
     return {"status": "passed" if ok else "failed", "verdict": verdict,
-            "banked_per_account_day": per_day, "payouts": s["payouts"],
-            "days_to_first_payout": s["days_to_first_payout"], "dll_hits": dll_hits,
-            "trading_days": s["trading_days"], "breached": s["breached"],
-            "withdrawable": s["withdrawable"], "per_month": s["per_month"]}
+            "banked_per_account_day": per_day, "measured_at_full_size": at_full,
+            "frozen_qty": cfg.contract_size, "full_size": full, "one_contract": one,
+            "payouts": survivor["payouts"], "days_to_first_payout": survivor["days_to_first_payout"],
+            "dll_hits": survivor["dll_hits"], "trading_days": survivor["trading_days"],
+            "breached": survivor["breached"], "withdrawable": survivor["withdrawable"],
+            "per_month": survivor["per_month"]}
 
 
 # --- stage 9 · production vs harvest -----------------------------------------

@@ -653,13 +653,15 @@ def _trim_artifact(stage: str, a: dict) -> dict:
     if s == "5":
         return {k: a.get(k) for k in ("stop_usd_total", "worst_case_usd", "dll",
                 "fits_under_dll", "pf_1", "pf_n", "pf_invariant", "qty")}
-    if s in ("6", "7"):
-        return {k: a.get(k) for k in ("with_day_mgmt", "without_day_mgmt", "eod",
-                "intraday", "intended_model") if k in a}
+    if s == "6":
+        return {k: a.get(k) for k in ("with_day_mgmt", "without_day_mgmt") if k in a}
+    if s == "7":
+        return {k: a.get(k) for k in ("full_size", "one_contract", "intended_model",
+                "frozen_qty") if k in a}
     if s == "8":
-        return {k: a.get(k) for k in ("banked_per_account_day", "payouts",
-                "days_to_first_payout", "dll_hits", "trading_days", "breached",
-                "withdrawable", "per_month")}
+        return {k: a.get(k) for k in ("banked_per_account_day", "measured_at_full_size",
+                "frozen_qty", "payouts", "days_to_first_payout", "dll_hits", "trading_days",
+                "breached", "withdrawable", "per_month")}
     if s == "9":
         return {"with_filter": a.get("with_filter"), "without_filter": a.get("without_filter"),
                 "mask_contribution_pct": a.get("mask_contribution_pct")}
@@ -1828,12 +1830,19 @@ function renderArtifact(n, d){
     ['worst-case incl. kosten $',(d.worst_case_usd||0).toLocaleString()],['DLL $',(d.dll||0).toLocaleString()],
     ['past onder DLL',d.fits_under_dll?'ja':'NEE'],['PF 1 contract',d.pf_1],['PF '+d.qty+' contracten',d.pf_n],
     ['PF grootte-invariant',d.pf_invariant?'ja':'NEE']]);
-  if(n==='6'||n==='7'){const w=d.with_day_mgmt||d.eod||{},o=d.without_day_mgmt||d.intraday||{};
-    return _tbl([['','MÉT / EOD','ZONDER / Intraday'],
+  if(n==='6'){const w=d.with_day_mgmt||{},o=d.without_day_mgmt||{};
+    return _tbl([['','MÉT dagbeheer','ZONDER'],
       ['payouts',w.payouts,o.payouts],['gebankt $',(w.withdrawable||0).toLocaleString(),(o.withdrawable||0).toLocaleString()],
       ['$/account-dag',w.banked_per_account_day,o.banked_per_account_day],
       ['breach',w.breached?'ja':'nee',o.breached?'ja':'nee']]);}
+  if(n==='7'){const m=(d.intended_model==='EOD')?'eod':'intraday';
+    const f=(d.full_size||{})[m]||{},o=(d.one_contract||{})[m]||{};
+    return `<div class=muted>model ${d.intended_model} · bevroren grootte ${d.frozen_qty} ct</div>`
+      +_tbl([['',`volle (${d.frozen_qty} ct)`,'1 contract'],
+      ['payouts',f.payouts,o.payouts],['gebankt $',(f.withdrawable||0).toLocaleString(),(o.withdrawable||0).toLocaleString()],
+      ['breach',f.breached?'ja':'nee',o.breached?'ja':'nee']]);}
   if(n==='8')return _tbl([['$ per bezette account-dag',`<b style="color:var(--gold)">$${d.banked_per_account_day}</b>`],
+    ['gemeten op',d.measured_at_full_size?(d.frozen_qty+' ct (volle grootte)'):'1 ct — volle grootte breacht'],
     ['payouts',d.payouts],['dagen tot payout #1',d.days_to_first_payout??'—'],['DLL-hits',d.dll_hits],
     ['handelsdagen',d.trading_days],['gebankt totaal $',(d.withdrawable||0).toLocaleString()],
     ['per maand $',(d.per_month||0).toLocaleString()],['breach',d.breached?'ja':'nee']]);

@@ -91,18 +91,32 @@ def test_stage6_is_inconclusive_when_neither_variant_banks(frame, cfg):
         assert rep["status"] == "inconclusive"
 
 
-def test_stage7_runs_both_drawdown_models(frame, cfg):
+def test_stage7_runs_both_models_and_both_sizings(frame, cfg):
     rep = higher.stage7(cfg, frame, "EL_MATADOR_MES_PROD_EOD")
-    assert "eod" in rep and "intraday" in rep
+    assert "full_size" in rep and "one_contract" in rep
+    assert "eod" in rep["full_size"] and "intraday" in rep["full_size"]
     assert rep["intended_model"] in ("EOD", "Intraday")
     assert "conservatief" in rep["note"]
+    # a config that funds at 1ct but breaches at full size is inconclusive, not failed
+    intended = "eod" if cfg.dd_model == "EOD" else "intraday"
+    full_ok = (not rep["full_size"][intended]["breached"]
+               and rep["full_size"][intended]["payouts"] > 0)
+    one_ok = (not rep["one_contract"][intended]["breached"]
+              and rep["one_contract"][intended]["payouts"] > 0)
+    if not full_ok and one_ok:
+        assert rep["status"] == "inconclusive"
 
 
-def test_stage8_reports_the_objective_metric(frame, cfg):
+def test_stage8_reports_the_objective_at_the_surviving_size(frame, cfg):
     rep = higher.stage8(cfg, frame, "EL_MATADOR_MES_PROD_EOD")
     assert "banked_per_account_day" in rep and "dll_hits" in rep
-    assert rep["status"] == ("passed" if (rep["banked_per_account_day"] > 0
-                                          and not rep["breached"]) else rep["status"])
+    assert "measured_at_full_size" in rep
+    assert "full_size" in rep and "one_contract" in rep
+    # the reported objective is measured at the size that actually survives
+    if not rep["measured_at_full_size"]:
+        assert rep["one_contract"]["banked_per_account_day"] == rep["banked_per_account_day"]
+    if rep["status"] == "passed":
+        assert rep["banked_per_account_day"] > 0 and not rep["breached"]
 
 
 def test_stage9_neutralises_the_hour_and_day_mask(frame, cfg):

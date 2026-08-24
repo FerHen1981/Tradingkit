@@ -14,7 +14,13 @@ from datetime import datetime, timezone
 from .stages import BY_KEY, STAGES
 from ..lab.paths import lab_root
 
-_VALID = ("todo", "running", "passed", "failed", "inconclusive")
+# "data_parity": all inputs and engine logic proven equal to the export; the
+# only residual is which bars carry gaps — a data-source property, not a defect.
+# It satisfies a hard gate for progress (the engine is validated) but stays
+# visibly distinct from an exact "passed". Only cmd_stage1 may set it, and only
+# under the evidence gate documented there.
+_VALID = ("todo", "running", "passed", "data_parity", "failed", "inconclusive")
+_SATISFIES_HARD = ("passed", "data_parity")
 
 
 def _path():
@@ -64,7 +70,7 @@ def engine_view(engine: str, state: dict | None = None) -> list[dict]:
                     "summary": rec.get("summary", ""), "at": rec.get("at", ""),
                     "artifact": rec.get("artifact", ""),
                     "blocked_by": list(unmet_hard)})
-        if s.hard and status != "passed":
+        if s.hard and status not in _SATISFIES_HARD:
             unmet_hard.append(f"{s.n} · {s.title}")
     return out
 
@@ -75,17 +81,17 @@ def overview(engines: list[str]) -> list[dict]:
     rows = []
     for e in engines:
         view = engine_view(e, st)
-        passed = [v for v in view if v["status"] == "passed"]
+        passed = [v for v in view if v["status"] in _SATISFIES_HARD]
         failed = [v for v in view if v["status"] == "failed"]
         # furthest CONSECUTIVE stage reached — the honest progress number
         reached = -1
         for v in view:
-            if v["status"] == "passed":
+            if v["status"] in _SATISFIES_HARD:
                 reached = v["n"]
             else:
                 break
         rows.append({"engine": e, "reached": reached, "passed": len(passed),
                      "failed": len(failed),
-                     "hard_open": [v["title"] for v in view if v["hard"] and v["status"] != "passed"],
+                     "hard_open": [v["title"] for v in view if v["hard"] and v["status"] not in _SATISFIES_HARD],
                      "stages": [{"n": v["n"], "status": v["status"]} for v in view]})
     return rows

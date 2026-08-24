@@ -370,3 +370,86 @@ def test_order_lifecycle_is_counted_and_adds_up(tmp_path):
                 + oc["cancelled_halt"] + oc["replaced"] + oc["open_at_end"])
     assert resolved == oc["placed"], (
         f"orders lekken weg: {oc['placed']} geplaatst, {resolved} verantwoord ({oc})")
+
+
+# --- data-parity gate: a strict wall, not a softer synonym for "close" --------
+
+def _dp_inputs(**over):
+    """A baseline where data-parity SHOULD trip, plus overrides to break it."""
+    cmp_ = {"pass": False, "checks": [
+        {"name": "trade count", "sim": 103, "pine": 121, "ok": False},
+        {"name": "profit factor", "sim": 1.57, "pine": 1.82, "ok": True},
+        {"name": "win rate", "sim": 48.5, "pine": 52.1, "ok": True},
+        {"name": "long/short split", "sim": "40/63", "pine": "51/70", "ok": True}]}
+    pa = {"mismatches": 0, "environment_mismatches": 0, "missing": []}
+    td = {"matched": 56, "sim_trades": 103, "matched_exactly": 39,
+          "matched_within_cost_noise": 16}
+    po = {"_explain": {"checked": 25, "near_roll": 9, "away_from_roll": 16,
+                       "reasons": {"geen FVG van die richting in het venster": 25}}}
+    clean = True
+    d = {"cmp_": cmp_, "pa": pa, "td": td, "po": po, "clean": clean}
+    d.update(over)
+    return d
+
+
+def test_data_parity_trips_on_clean_data_source_evidence():
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], d["clean"])
+    assert out["eligible"] is True
+    assert out["blocked"] is None
+    assert any("identiek" in r for r in out["reasons"])
+
+
+def test_data_parity_refuses_when_profit_factor_also_fails():
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    d["cmp_"]["checks"][1]["ok"] = False           # PF fails too
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], d["clean"])
+    assert out["eligible"] is False
+
+
+def test_data_parity_refuses_when_we_take_more_trades():
+    """A surplus is not a missing-gap story."""
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    d["cmp_"]["checks"][0].update(sim=140, pine=121)
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], d["clean"])
+    assert out["eligible"] is False
+
+
+def test_data_parity_refuses_when_matched_trades_disagree():
+    """If the trades we DO share don't agree, the engine is not proven equal."""
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    d["td"].update(matched_exactly=10, matched_within_cost_noise=5)   # 15/56
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], d["clean"])
+    assert out["eligible"] is False
+
+
+def test_data_parity_refuses_when_a_missing_signal_is_engine_side():
+    """A band or streak disagreement is the engine, not the data — the whole
+    point of the gate is to keep those out."""
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    d["po"]["_explain"]["reasons"] = {
+        "geen FVG van die richting in het venster": 20,
+        "FVG gedetecteerd maar buiten de maatband": 5}
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], d["clean"])
+    assert out["eligible"] is False
+    assert "engine" in out["blocked"]
+
+
+def test_data_parity_refuses_on_a_dirty_audit():
+    from backtest.pipeline.cli import _data_parity_evidence
+    d = _dp_inputs()
+    out = _data_parity_evidence(d["cmp_"], d["pa"], d["td"], d["po"], clean=False)
+    assert out["eligible"] is False
+
+
+def test_data_parity_status_satisfies_the_hard_gate_but_stays_distinct():
+    from backtest.pipeline import state
+    assert "data_parity" in state._VALID
+    assert "data_parity" in state._SATISFIES_HARD
+    assert "passed" in state._SATISFIES_HARD
+    assert "failed" not in state._SATISFIES_HARD

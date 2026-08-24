@@ -80,9 +80,13 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   geen non-MEX LifeOS-governance wijzigen zonder afstemming.
 - **Tasks heeft een nieuwe property `Route`** (Zelf/Aannemer/Elektricien/…). Die is voor
   non-MEX uitvoerder-routing; **laat hem leeg op `🛠️ MEX Dev ·`-taken**.
-- **Approval Queue:** de CoS batcht beslissingen voor Ferry in de 📥 Inbox met
-  `Type = Approval`, `Status = Inbox`. Overweeg hetzelfde kanaal voor MEX-beslissingen die
-  op Ferry wachten, zodat hij één plek heeft in plaats van twee.
+- **Approval Queue — ook voor MEX** (besluit Ferry 24-08). Beslissingen die op Ferry
+  wachten gaan in de 📥 Inbox-database (`collection://d0c8311b-b464-4132-b156-836250502aab`)
+  met `Type = Approval`, `Status = Inbox` en titel `🛠️ MEX D-xx — <beslissing>`.
+  De `Notitie` draagt vast: **CONTEXT · AANBEVELING · (ALTERNATIEF) · IMPACT · NA AKKOORD**.
+  Eén wachtrij voor beide agenten. Na verwerking `Status = Verwerkt`.
+  `docs/inbox.md` blijft het kanaal *tussen chats onderling*; de Approval Queue is het
+  kanaal *naar Ferry*. Dump er geen backlog in — alleen wat echt op hem wacht.
 - **Visuele standaard:** navy/sand/gold/azure/rose komt uit de goedgekeurde MEX
   Traders-mockup en is nu LifeOS-breed. Relevant voor `web/**` (D-17, D-34).
 - Hun hub: *🎩 El Presidente — management & oversight* is de MEX-autoriteitspagina.

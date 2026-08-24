@@ -81,7 +81,7 @@
 // v7.8.0: payout gate reads the account type's OWN day counters from the registry — days with
 //         fills AND days over the qualifying amount, two counters, not one hardcoded 5. The
 //         qualifying-day minimum stops being an input: it is a firm rule, not a setting.
-var string currentVersion = "v7.9.5"
+var string currentVersion = "v7.10.0"
 strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞSORO", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -97,6 +97,7 @@ strategy("MΞX ΞL TΞSORO · FVG engine · " + currentVersion, shorttitle="TΞS
 import TradingView/ta/8
 
 // === GROUPS ==================================================================
+var string GROUP_ENG   = "0B · ENGINE PROFILE — bevroren onderzoek"
 var string GROUP_UNIT  = "2 · TRADE — Position sizing"
 var string GROUP_ENTRY = "3 · TRADE — Entry & stop"
 var string GROUP_RISK  = "4 · TRADE — Take-profit & exits"
@@ -687,6 +688,37 @@ useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
 gapMinSize   = input.float(9,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
 gapMaxSize   = input.float(15, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+// === 0B · ENGINE PROFILE — bevroren onderzoeksparameters =====================
+// Een engine, meerdere profielen. De getallen komen uit
+// .claude/skills/strategy-validation-pipeline/references/frozen-engines.md en zijn
+// BEVROREN: wijzigen is een nieuwe onderzoeksronde vanaf trap 1 van de pijplijn,
+// geen tweak. Het profiel raakt uitsluitend SIGNAAL- en exitparameters; de
+// risk-gate (1F) en de accountregels uit de registry (groep 1) staan er los van en
+// blijven gelden. Default = Manual, zodat een bestaande chart door deze toevoeging
+// niets anders doet dan gisteren.
+string engProfile = input.string("Manual (defaults van dit bestand)", "Engine profile", options=["Manual (defaults van dit bestand)", "TES-MGC-C · EL TESORO · MGC Conservative EOD"], group=GROUP_ENG, tooltip="Manual: de inputs hieronder gelden, inclusief de D-45/D-46-defaults van dit bestand. Een profiel NEEMT OVER: Fixed Qty, FVG-range, CVD-streak, Fixed Stop, Max Stop Distance, R-multiple en de BE/trail-schakelaars. Max Stop Distance wordt gelijkgezet aan de Fixed Stop -- het filter mag de eigen stop niet wegfilteren. Het dashboard toont onderaan welke bron stuurt.")
+f_engine(string _p) =>
+    switch _p
+        // markt, qty, FVG min, FVG max, CVD-streak, fixed stop (ticks), R-multiple
+        "TES-MGC-C · EL TESORO · MGC Conservative EOD" => [true,  "MGC", 7.0, 11.0, 16.0, 6.0, 140.0, 2.25]
+        => [false, "ANY", 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+[engOn, engRoot, engQty, engFvgMin, engFvgMax, engCvd, engSL, engR] = f_engine(engProfile)
+// Zelfde bescherming als de MEX-preset: een profiel is op een contractspec gekalibreerd.
+// Draait het op een andere root, dan is elk getal erin een ander dollarbedrag.
+bool engInstrOK = not engOn or engRoot == "ANY" or polRoot == engRoot
+float qtyEff     = engOn ? engQty        : contractSize
+float fvgMinEff  = engOn ? engFvgMin     : gapMinSize
+float fvgMaxEff  = engOn ? engFvgMax     : gapMaxSize
+int   cvdCntEff  = engOn ? int(engCvd)   : cvdTrendCount
+float slEff      = engOn ? engSL         : slSizeLegacy
+float maxStopEff = engOn ? engSL         : maxStopSize
+float rMultEff   = engOn ? engR          : rMultIn
+// BE en trail staan in elk bevroren profiel UIT -- dezelfde uitkomst als D-46 op de
+// validatieset. Een profiel zet ze hard uit; Manual laat de schakelaars gelden.
+if engOn
+    useBEeff    := false
+    useTrailEff := false
+
 confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 
@@ -1002,7 +1034,7 @@ if bar_index >= 2
     fvgBottom := fvgDirection > 0 ? high[2] : fvgDirection < 0 ? high : na
 fvgSizePrice = not na(fvgTop) ? math.abs(fvgTop - fvgBottom) : na
 fvgMid = not na(fvgTop) ? (fvgTop + fvgBottom) / 2.0 : na
-fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(gapMinSize) and fvgSizePrice <= f_distPrice(gapMaxSize) and fvgSizePrice > 0)
+fvgPasses = not useGapFilter or (not na(fvgSizePrice) and fvgSizePrice >= f_distPrice(fvgMinEff) and fvgSizePrice <= f_distPrice(fvgMaxEff) and fvgSizePrice > 0)
 bullCandle = fvgDirection == 1 and fvgPasses
 bearCandle = fvgDirection == -1 and fvgPasses
 
@@ -1106,8 +1138,8 @@ bullDirOk = perBarDelta > 0
 bearDirOk = perBarDelta < 0
 int barsSinceNotBull = ta.barssince(not bullDirOk)
 int barsSinceNotBear = ta.barssince(not bearDirOk)
-bullStreakOk = not streakEff or nz(barsSinceNotBull, 99999) >= cvdTrendCount
-bearStreakOk = not streakEff or nz(barsSinceNotBear, 99999) >= cvdTrendCount
+bullStreakOk = not streakEff or nz(barsSinceNotBull, 99999) >= cvdCntEff
+bearStreakOk = not streakEff or nz(barsSinceNotBear, 99999) >= cvdCntEff
 bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
 bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
 
@@ -1280,7 +1312,7 @@ if not acctStartArmed
     if _dateOK
         acctStartArmed := true
 bool preStartBlock = tradeFromStart and not acctStartArmed
-canTrade = timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive)
+canTrade = timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and engInstrOK and (not polOn or polLive)
 if barstate.islast and polOn and (not polInstrOK or not polLive)
     var label _polWarn = na
     label.delete(_polWarn)
@@ -1294,7 +1326,7 @@ if barstate.islast and polOn and (not polInstrOK or not polLive)
 // === SIZING =================================================================
 // ============================================================================
 f_calcQty(_slDistPrice) =>
-    float _q = polOn ? polQty : contractSize
+    float _q = polOn ? polQty : qtyEff
     if sizingMode != "Fixed contracts"
         float _riskUSD = sizingMode == "Fixed $ risk" ? riskValue : strategy.equity * riskValue / 100.0
         float _perUnit = _slDistPrice * syminfo.pointvalue
@@ -1401,11 +1433,11 @@ bool isLimitMode = entryMode == "Limit @ 50% FVG"
 float sigEntryPx = isLimitMode ? sigGapMid : close
 float sigStopPx = na
 if longSignal
-    sigStopPx := stopMode == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slSizeLegacy)
+    sigStopPx := stopMode == "Swing structure" ? math.min(nz(lastPivLow, sigGapBot), sigGapBot) - f_distPrice(swingBufSize) : sigEntryPx - f_distPrice(slEff)
 if shortSignal
-    sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slSizeLegacy)
+    sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slEff)
 float sigStopDist = math.abs(sigEntryPx - sigStopPx)
-bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopSize))
+bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopEff))
 float sigQty = f_calcQty(sigStopDist)
 bool qtyOk = sigQty >= (allowFractionalQty ? 1e-4 : 1.0)
 
@@ -1425,7 +1457,7 @@ float sigTpPx = na
 if longSignal or shortSignal
     int _d = longSignal ? 1 : -1
     sigTpPx := tpModeEff == "Swing structure" ? (_d == 1 ? lastPivHigh : lastPivLow) :
-         tpModeEff == "R-multiple" ? sigEntryPx + _d * rMultIn * sigStopDist :
+         tpModeEff == "R-multiple" ? sigEntryPx + _d * rMultEff * sigStopDist :
          sigEntryPx + _d * f_tpFixDist(sigQtyEff)
 bool tpValid = not na(sigTpPx) and (longSignal ? sigTpPx > sigEntryPx + syminfo.mintick : sigTpPx < sigEntryPx - syminfo.mintick)
 
@@ -1477,7 +1509,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=0" + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=off" + ";deriskPA=off" + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(qtyEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(fvgMinEff, "#") + "-" + str.tostring(fvgMaxEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultEff, "#.#") + ";goalTp=0" + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdCntEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=off" + ";deriskPA=off" + ";eng=" + (engOn ? engProfile : "manual") + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1678,7 +1710,7 @@ if newLong or newShort
     curStop  := pendStop
     float _riskFill = math.abs(entryAvg - pendStop)
     curLimit := tpModeEff == "Swing structure" ? t_tpPx :
-         tpModeEff == "R-multiple" ? (newLong ? entryAvg + rMultIn * _riskFill : entryAvg - rMultIn * _riskFill) :
+         tpModeEff == "R-multiple" ? (newLong ? entryAvg + rMultEff * _riskFill : entryAvg - rMultEff * _riskFill) :
          (newLong ? entryAvg + t_tpD : entryAvg - t_tpD)
     if newLong
         strategy.exit("XL", from_entry="Long", stop=curStop, limit=curLimit, alert_message=f_orderMsg("EXIT", 1, entryAvg, curStop, curLimit, math.abs(posSize)))
@@ -1975,9 +2007,9 @@ if showDashboard and barstate.islast
         table.cell(dash, 0, 1, "Regime", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 1, phase, text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 2, "FVG band", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, 2, str.tostring(gapMinSize, "#") + "–" + str.tostring(gapMaxSize, "#"), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
+        table.cell(dash, 1, 2, str.tostring(fvgMinEff, "#") + "–" + str.tostring(fvgMaxEff, "#"), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 3, "CVD streak", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, 3, useCVDFilter ? str.tostring(cvdTrendCount) : "uit", text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
+        table.cell(dash, 1, 3, useCVDFilter ? str.tostring(cvdCntEff) : "uit", text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 4, "VWAP", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 4, (close > vwapVal ? "above" : "below") + (useVwapVeto ? " · veto" : ""), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 4, useRiskGate ? "Risk-gate" : "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
@@ -1986,14 +2018,14 @@ if showDashboard and barstate.islast
              (str.tostring(rgLive, "#") + (rgDllOpen and strategy.position_size != 0 ? "*" : "") + (rgTrailArmed ? " · trail " + str.tostring(rgExitLvl, "#") : " · arm " + str.tostring(rgTriggerT, "#")) + " · DLL " + str.tostring(-rgDLL, "#")),
              text_color=dayHalted ? negTxt : rgTrailArmed ? C_GOLD : txtColor, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 3, phaseOn ? "DD · " + ddModelEff : "CVD streak", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, 3, not phaseOn ? (useCVDFilter ? str.tostring(cvdTrendCount) : "uit") :
+        table.cell(dash, 1, 3, not phaseOn ? (useCVDFilter ? str.tostring(cvdCntEff) : "uit") :
              ("$" + str.tostring(acctTrailEff, "#") + (useFirmRules ? " · registry" : " · manual") + (acctLocked ? " · 🔓" : "")),
              text_color=useFirmRules ? txtColor : C_GOLD, text_size=txtSize, text_halign=text.align_right)
         table.cell(dash, 0, 5, "Gate", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 5, _gateOpen ? "OPEN" : "CLOSED", text_color=_gateOpen ? C_GOLD : negTxt, text_size=txtSize, text_halign=text.align_right)
         string _srcTxt = polOn ? polPreset : "Manual"
         string _srcVal = polOn ? firmKeyEff :
-             "q" + str.tostring(contractSize, "#") + " · stop " + str.tostring(maxStopSize, "#") + "t · " + dayExitMode
+             "q" + str.tostring(qtyEff, "#") + " · stop " + str.tostring(maxStopEff, "#") + "t · " + dayExitMode
         table.cell(dash, 0, 7, "Sturing", text_color=dimTxt, text_size=txtSize, text_halign=text.align_left)
         table.cell(dash, 1, 7, _srcTxt + " · " + _srcVal, text_color=polOn ? C_GOLD : txtColor, text_size=txtSize, text_halign=text.align_right)
         if strategy.position_size != 0

@@ -1,3 +1,38 @@
+## MEX_EL_TESORO v7.10.0 — engine profile (bevroren onderzoeksparameters)
+
+Nieuwe groep **`0B · ENGINE PROFILE`**. Een dropdown zet de bevroren signaal- en
+exitparameters van een gevalideerde engine, in plaats van dat elke engine een eigen
+bestand met bijna dezelfde code krijgt. Eerste profiel: **`TES-MGC-C`** (EL TESORO,
+MGC Conservative EOD) — 7 MGC, FVG 11–16, CVD-streak 6, fixed stop 140t, 2,25R,
+BE en trail uit. Bron: `frozen-engines.md`.
+
+Waarom zo, en niet als nieuwe defaults:
+
+- **Default is `Manual`**, dus een bestaande chart doet exact wat hij gisteren deed.
+  De D-45/D-46-defaults van dit bestand blijven ongemoeid.
+- Het profiel raakt **alleen signaal en exit**. De daily risk-gate (groep 1F) en de
+  accountregels uit `data/propfirms.json` staan er los van en blijven gelden — dat is
+  precies wat optie 3 van inbox 10 vraagt: accountmechaniek op een bevroren engine
+  leggen zonder de signaalarchitectuur aan te raken.
+- **Max Stop Distance volgt de Fixed Stop.** In `Fixed (legacy)`-modus is
+  `sigStopDist` per definitie gelijk aan de fixed stop; staat het filter lager, dan
+  wordt élk signaal weggefilterd en handelt het script niet meer. Met een profiel van
+  140t en het oude filter van 130t was dat gebeurd. Het profiel zet ze daarom gelijk,
+  wat geen nieuwe vrije parameter introduceert.
+- **Instrumentbescherming** zoals bij de MEX-preset: `engInstrOK` voedt `canTrade`,
+  dus een MGC-profiel op een andere root handelt niet in plaats van stilletjes tien
+  keer zoveel dollarrisico te nemen.
+- De **CFG-regel en het dashboard tonen nu de effectieve waarden**, niet de rauwe
+  inputs, plus `eng=<profiel>`. Anders logt het journaal een configuratie die niet
+  gedraaid heeft.
+
+Onafhankelijke bevestiging: elk bevroren profiel heeft BE en trail uit — dezelfde
+uitkomst als D-46 op de validatieset, langs een andere weg gevonden.
+
+**Nog open:** `frozen-engines.md` noemt bij TESORO ook *Liquidity Core*. Die feature
+zit niet in dit bestand en is niet uit een parametertabel af te leiden; die wacht op
+het `v1_0_0`-bestand zelf.
+
 # MEX Pine scripts — optimisation changelog
 
 ## v7.7.3-MGC-PA — the dashboard says which layer is steering

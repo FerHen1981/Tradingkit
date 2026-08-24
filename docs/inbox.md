@@ -670,3 +670,67 @@ Als PMT's embed aangeeft dat een account geblokkeerd is (day cap / DLL), mag de
 receiver het signaal **niet** forwarden, ook al staat het TradingView-vinkje aan.
 Raakt `Program.cs` rond regel 158 — **plan dit in dezelfde build als D-35**, niet als
 een tweede herstart van het live executiepad.
+
+---
+
+## Scrum Master → alle chats — vlootwissel 24-08 (LEES DIT VOOR JE VERDER WERKT)
+
+Ferry leverde `MEX_FLEET_PACKAGE_2026-08-23` aan. Er verandert iets fundamenteels.
+
+### De oude funded-edge regel is INGETROKKEN
+
+`CLAUDE.md` zei tot vandaag: *funded edge = alleen GC + ES; NQ/YM eval-only, nooit
+compounden op funded*. **Die regel geldt niet meer** (besluit Ferry 24-08). Hij kwam uit
+de funnel van vóór de pariteitscorrecties en valt onder de research-invalidatieregel:
+rankings die onder een materiële pariteitsfout tot stand kwamen, vervallen.
+
+De nieuwe werkelijkheid: **EL REY draait op MNQ en is de hoogst gerangschikte engine**;
+EL LEON draait op MYM. Vier van de zes live PA-accounts staan op die twee.
+
+### Elke merknaam behalve TESORO is van markt gewisseld
+
+| Merk | Oud | Nieuw |
+|---|---|---|
+| EL REY | ES | **MNQ** |
+| EL LEON | ES | **MYM** |
+| EL MATADOR | NQ | **MES** |
+| EL PATRON | NQ | **MGC** |
+| EL MINERO | GC, live | gereserveerd, niet live |
+| EL DORADO | NQ | bestaat niet meer |
+| EL BANDIDO | — | **MYM**, nieuw, Pine-pariteit open |
+| EL PRINCIPE | — | **MNQ**, research |
+| EL TORO | NQ | **uitsluitend evaluatie-accounts** |
+
+**Gebruik geen enkele oude markt-toewijzing meer.** Sta je op het punt een getal te
+rapporteren dat op "El Rey = ES" leunt, dan rapporteer je iets over de verkeerde markt.
+
+### Wat dit voor jou betekent
+
+**Pine Dev — D-42 staat voor je klaar.** De `v1_0_0`-lijn vervangt `pine/**`. Twee dingen
+eerst herstellen: het MATADOR-script draagt twee merkkoppen (EL MATADOR én EL CENTINELA),
+en geen van de drie validatie-exports draagt de naam van het script dat het valideert.
+**D-24 is vervallen** — compile-schuld op v6.9.5 heeft geen waarde meer.
+
+**Backtest Setup — D-09 is dicht.** De canonieke onderzoeks-CVD is een deterministische
+**OHLCV-polariteitsproxy**: niet de native Delta-kolom, niet `ta.requestVolumeDelta()`.
+Daarmee was `Delta ≡ 0` in de norm-CSV's nooit een tegenspraak, want de proxy komt uit
+OHLC. Het playbook beschreef geen andere strategie. Native Delta blijft een los experiment
+dat de proxy nooit stilzwijgend mag vervangen.
+Let ook op **D-12**: het `validation/`-bewijs op de legacy-branch onderbouwt de ingetrokken
+GC+ES-conclusie. Het blijft historie, maar citeer het niet meer als geldende waarheid.
+
+**Iedereen — de pijplijn-skill is vervangen.**
+`.claude/skills/strategy-validation-pipeline/` draagt nu de twaalf-traps methodologie v7.
+Belangrijkste harde regels: **Pine-pariteit vóór optimalisatie** (parameterzoeken is
+ongeldig zonder), **geen same-bar fill leakage**, **18:00 ET daggrens**, en de
+**research-invalidatieregel**. De bevroren engineparameters staan in
+`references/frozen-engines.md` — die zijn bevroren; wijzigen is een nieuwe onderzoeksronde
+vanaf trap 1, geen tweak.
+
+### Wat het pakket NIET oplost
+
+**D-07 blijft open.** Het pakket noemt $0,51 per zijde, maar dat is een modelaanname, geen
+meting uit `Cash_History`. De repo draagt 0,52, de FLEET-validatie mat 0,67.
+
+**EL BANDIDO is niet live.** Pine-pariteit staat nog open. Tel hem niet mee als draaiende
+engine, in geen enkel rapport.

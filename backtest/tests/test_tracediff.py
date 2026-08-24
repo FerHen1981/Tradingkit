@@ -280,3 +280,17 @@ def test_explain_missing_separates_band_from_streak(tmp_path):
     for e in out["examples"]:
         if e["reason"] == "maatband":
             assert e["ons_fvg_ticks"], "onze tickgroottes worden niet gerapporteerd"
+
+
+def test_missing_signals_are_bucketed_by_roll_proximity():
+    """The residual on real MES clustered near quarterly rolls would point at
+    continuous-contract vendor differences, not the engine. The classifier must
+    split roll-near from roll-far so that story is measurable rather than
+    asserted."""
+    from backtest.pipeline.tracediff import _near_quarterly_roll
+    # third Friday of Sep 2025 is the 19th; Dec is the 19th
+    assert _near_quarterly_roll(pd.Timestamp("2025-09-19"))
+    assert _near_quarterly_roll(pd.Timestamp("2025-09-27"))       # +8d
+    assert not _near_quarterly_roll(pd.Timestamp("2025-10-14"))   # a month away
+    assert _near_quarterly_roll(pd.Timestamp("2026-03-20"))       # 3rd Fri Mar 2026
+    assert not _near_quarterly_roll(pd.Timestamp("2025-08-01"))

@@ -559,6 +559,11 @@ def cmd_stage1(args):
             print(f"\n  waarom hadden wij daar geen order ({ex['checked']} gevallen):")
             for reason, cnt in ex["reasons"].items():
                 print(f"    {cnt:>4}x  {reason}")
+            if ex.get("near_roll") is not None and (ex["near_roll"] or ex["away_from_roll"]):
+                tot = ex["near_roll"] + ex["away_from_roll"]
+                print(f"    waarvan {ex['near_roll']}/{tot} binnen 10 dagen van een kwartaal-roll "
+                      f"(Mar/Jun/Sep/Dec) — hoog = vendor/roll-verschil, niet de engine")
+                print(f"    per maand: {ex['by_month']}")
     if not cmp_["pass"] or args.diff:
         print("\n  trade-voor-trade (grondregel 1: onderzoek de afwijkingen, "
               "her-optimaliseer niet)")

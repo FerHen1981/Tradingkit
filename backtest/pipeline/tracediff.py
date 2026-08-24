@@ -309,5 +309,38 @@ def explain_missing(df, ind, cfg, rows, expiry_bars: int) -> dict:
         reasons["FVG en CVD ok — geblokkeerd door tijd/dag/halte"] += 1
         examples.append({"entry": r["entry_time"], "dir": r["dir"], "reason": "gate"})
 
+    # When "no gap in our bars" dominates, characterise WHERE those cases fall.
+    # Clustering near the quarterly roll (3rd Friday of Mar/Jun/Sep/Dec ± 10 days)
+    # points at continuous-contract splicing differing between data vendors —
+    # the expected residual once inputs and engine are proven equal. Spread
+    # evenly instead points at general bar-aggregation differences.
+    import pandas as pd
+    from collections import Counter as _C
+    by_month, roll_near, roll_far = _C(), 0, 0
+    for r in rows:
+        ts = pd.Timestamp(r["entry_time"])
+        by_month[f"{ts.year}-{ts.month:02d}"] += 1
+        if _near_quarterly_roll(ts):
+            roll_near += 1
+        else:
+            roll_far += 1
     return {"checked": len(rows), "reasons": dict(reasons.most_common()),
+            "by_month": dict(sorted(by_month.items())),
+            "near_roll": roll_near, "away_from_roll": roll_far,
             "examples": examples[:10]}
+
+
+def _near_quarterly_roll(ts, days: int = 10) -> bool:
+    """Within `days` of the 3rd Friday of Mar/Jun/Sep/Dec — the roll window the
+    Pine source itself uses (rgRollDays default 10)."""
+    import calendar
+    import datetime as _dt
+    for month in (3, 6, 9, 12):
+        for year in (ts.year - 1, ts.year, ts.year + 1):
+            c = calendar.Calendar()
+            fridays = [d for d in c.itermonthdates(year, month)
+                       if d.month == month and d.weekday() == 4]
+            third = fridays[2]
+            if abs((ts.date() - third).days) <= days:
+                return True
+    return False

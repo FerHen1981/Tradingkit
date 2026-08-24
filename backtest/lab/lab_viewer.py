@@ -693,6 +693,16 @@ def _start_stage(q) -> tuple[dict, int]:
             if v:
                 cmd += [flag, v]
         return _spawn(cmd, f"trap 2 · {engine}"), 200
+    if stage in ("3", "4", "5", "6", "7", "8", "9"):
+        if engine not in fleet.names():
+            return {"error": f"pick an engine for the stage-{stage} run"}, 400
+        cmd = [sys.executable, "-m", "backtest.pipeline.cli", f"stage{stage}",
+               "--dataset", dataset, "--engine", engine]
+        for name, flag in (("since", "--since"), ("until", "--until")):
+            v = (q.get(name) or [""])[0].strip()
+            if v:
+                cmd += [flag, v]
+        return _spawn(cmd, f"trap {stage} · {engine}"), 200
     return {"error": f"stage {stage!r} is not implemented yet"}, 400
 
 

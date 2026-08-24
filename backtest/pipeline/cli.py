@@ -514,10 +514,55 @@ def cmd_fleet(args):
         if through >= 2:
             r2 = _run(["stage2", "--dataset", ds, "--engine", eng], "2")
             print(f"    trap 2  {r2}")
+        for n in range(3, min(through, 9) + 1):
+            rn = _run([f"stage{n}", "--dataset", ds, "--engine", eng], str(n))
+            print(f"    trap {n}  {rn}")
         print()
 
     print("  ── eindstand ──")
     subprocess.run(base + ["plan"])
+
+
+
+_HIGHER_KEY = {3: "regimes", 4: "plateau", 5: "sizing", 6: "daily_mgmt",
+               7: "pa_lifecycle", 8: "time_for_money", 9: "prod_vs_harvest"}
+
+
+def _run_higher(n, args):
+    """Stages 3-9 share the same shape: load data, run the frozen engine, record."""
+    from .. import data as dm
+    from . import higher, state as _state
+    from .stages import BY_N
+    path, sym = _dataset_path(args.dataset)
+    cfg = fleet.engine_config(args.engine)
+    stage = BY_N[n]
+    print(f"trap {n} · {stage.title} · {args.engine} op {args.dataset}")
+    p1 = {v["key"]: v for v in _state.engine_view(args.engine)}.get("parity", {}).get("status", "todo")
+    if p1 not in ("passed", "data_parity"):
+        print(f"  LET OP: trap 1 staat op '{p1}' — grondregel 1: geldig pas ná pariteit "
+              f"(advies, niet blokkerend)")
+    df = dm.load(path)
+    if args.since:
+        df = dm.slice_dates(df, since=args.since)
+    if args.until:
+        df = dm.slice_dates(df, until=args.until)
+    fn = getattr(higher, f"stage{n}")
+    rep = fn(cfg, df, args.engine)
+    print(f"  {rep['verdict']}")
+    art = _write_artifact(args.engine, f"trap{n}_{stage.key}", {"dataset": args.dataset, **rep})
+    _state.record(args.engine, _HIGHER_KEY[n], rep["status"], summary=rep["verdict"], artifact=art)
+    print(f"\n  POORT: {rep['status'].upper()} — trap {n}")
+    print(f"  artefact {art}")
+    print("STAGE_JSON " + json.dumps({"stage": n, **rep}, default=str), flush=True)
+
+
+def cmd_stage3(args): _run_higher(3, args)
+def cmd_stage4(args): _run_higher(4, args)
+def cmd_stage5(args): _run_higher(5, args)
+def cmd_stage6(args): _run_higher(6, args)
+def cmd_stage7(args): _run_higher(7, args)
+def cmd_stage8(args): _run_higher(8, args)
+def cmd_stage9(args): _run_higher(9, args)
 
 
 def cmd_plan(_args):
@@ -967,6 +1012,35 @@ def main():
     p2.add_argument("--dataset", required=True)
     p2.add_argument("--engine", required=True, choices=fleet.names())
     p2.add_argument("--since"); p2.add_argument("--until")
+    _p3 = sub.add_parser("stage3"); _p3.set_defaults(fn=cmd_stage3)
+    _p3.add_argument("--dataset", required=True)
+    _p3.add_argument("--engine", required=True, choices=fleet.names())
+    _p3.add_argument("--since"); _p3.add_argument("--until")
+    _p4 = sub.add_parser("stage4"); _p4.set_defaults(fn=cmd_stage4)
+    _p4.add_argument("--dataset", required=True)
+    _p4.add_argument("--engine", required=True, choices=fleet.names())
+    _p4.add_argument("--since"); _p4.add_argument("--until")
+    _p5 = sub.add_parser("stage5"); _p5.set_defaults(fn=cmd_stage5)
+    _p5.add_argument("--dataset", required=True)
+    _p5.add_argument("--engine", required=True, choices=fleet.names())
+    _p5.add_argument("--since"); _p5.add_argument("--until")
+    _p6 = sub.add_parser("stage6"); _p6.set_defaults(fn=cmd_stage6)
+    _p6.add_argument("--dataset", required=True)
+    _p6.add_argument("--engine", required=True, choices=fleet.names())
+    _p6.add_argument("--since"); _p6.add_argument("--until")
+    _p7 = sub.add_parser("stage7"); _p7.set_defaults(fn=cmd_stage7)
+    _p7.add_argument("--dataset", required=True)
+    _p7.add_argument("--engine", required=True, choices=fleet.names())
+    _p7.add_argument("--since"); _p7.add_argument("--until")
+    _p8 = sub.add_parser("stage8"); _p8.set_defaults(fn=cmd_stage8)
+    _p8.add_argument("--dataset", required=True)
+    _p8.add_argument("--engine", required=True, choices=fleet.names())
+    _p8.add_argument("--since"); _p8.add_argument("--until")
+    _p9 = sub.add_parser("stage9"); _p9.set_defaults(fn=cmd_stage9)
+    _p9.add_argument("--dataset", required=True)
+    _p9.add_argument("--engine", required=True, choices=fleet.names())
+    _p9.add_argument("--since"); _p9.add_argument("--until")
+
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)
     pr.add_argument("--yes", action="store_true")

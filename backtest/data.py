@@ -17,6 +17,7 @@ and derive:
 from __future__ import annotations
 
 import os
+import re
 
 import pandas as pd
 
@@ -111,13 +112,7 @@ def load(csv_path: str, cache: bool = True) -> pd.DataFrame:
     if missing:
         raise ValueError(f"CSV missing required columns: {missing}")
 
-    et = pd.to_datetime(df["DateTime"], format="%d-%m-%Y %H:%M:%S %z", errors="coerce")
-    if et.isna().any():
-        # fall back to flexible parsing for other instrument exports
-        et = pd.to_datetime(df["DateTime"], errors="coerce", utc=False)
-    if et.isna().any():
-        n = int(et.isna().sum())
-        raise ValueError(f"{n} DateTime values failed to parse")
+    et = _parse_datetimes(df["DateTime"])
     if et.dt.tz is None:
         et = et.dt.tz_localize("America/New_York")
     et = et.dt.tz_convert("America/New_York")
@@ -128,6 +123,66 @@ def load(csv_path: str, cache: bool = True) -> pd.DataFrame:
     if cache:
         _write_cache(df, src)
     return df
+
+
+_OFFSET_RE = re.compile(r"(?:[+-]\d{2}:?\d{2}|Z)\s*$")
+
+
+def _has_offset(col: pd.Series) -> bool:
+    """Does this column carry UTC offsets, or is it wall-clock only?
+
+    Decides whether utc=True is safe. It is not safe on naive input: pandas would
+    read the wall clock as UTC and convert it to ET five hours off, silently
+    shifting every bar into the wrong session."""
+    for v in col.head(200):
+        if isinstance(v, str) and v.strip():
+            return bool(_OFFSET_RE.search(v.strip()))
+    return False
+
+
+def _parse_datetimes(col: pd.Series) -> pd.Series:
+    """Parse the DateTime column, tolerating a DST boundary inside the file.
+
+    Any multi-year ET export crosses one: December bars carry -05:00 and August
+    bars -04:00. pandas raises "Mixed timezones detected" for that DURING
+    parsing, before `errors="coerce"` can do anything, so the old flexible
+    fallback was unreachable — a 2011-2026 file simply blew up. Parsing such a
+    column to UTC and converting back to ET is correct and lossless, because the
+    offset in each row already pins the instant.
+
+    dayfirst matters too: without it "16-08-2026" is read as month 16 and
+    coerced to NaT, which is how a naive export used to fail for no visible
+    reason."""
+    if _has_offset(col):
+        attempts = (
+            {"format": "%d-%m-%Y %H:%M:%S %z"},        # the normalizer's own output
+            {"format": "%d-%m-%Y %H:%M:%S %z", "utc": True},   # ... across a DST boundary
+            {"dayfirst": True},                        # other platforms' exports
+            {"dayfirst": True, "utc": True},
+            {"format": "ISO8601", "utc": True},        # year-first exports
+        )
+    else:
+        # No offsets: the values are ET wall-clock and load() localizes them.
+        # utc=True is deliberately absent — it would shift every bar.
+        attempts = (
+            {"format": "%d-%m-%Y %H:%M:%S"},
+            {"dayfirst": True},
+            {"format": "ISO8601"},
+        )
+
+    last_err = None
+    for kw in attempts:
+        try:
+            et = pd.to_datetime(col, errors="coerce", **kw)
+        except (ValueError, TypeError) as e:
+            last_err = e
+            continue
+        if not et.isna().any():
+            return et
+    if last_err is not None:
+        raise ValueError(f"DateTime column could not be parsed: {last_err}")
+    n = int(pd.to_datetime(col, errors="coerce", dayfirst=True).isna().sum())
+    raise ValueError(f"{n} DateTime values failed to parse")
 
 
 def _derive(df: pd.DataFrame) -> pd.DataFrame:

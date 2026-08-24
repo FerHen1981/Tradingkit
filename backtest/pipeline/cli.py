@@ -31,6 +31,29 @@ def _dataset_path(name: str) -> tuple[str, str]:
     raise SystemExit(f"unknown dataset {name!r} — see 1 · Data")
 
 
+def _resolve_export(name: str) -> str:
+    """Accept either a path or a bare export name.
+
+    The lab UI resolves names against the export directories; the CLI used to
+    hand its argument straight to openpyxl, so `--export FOO.xlsx` failed with a
+    FileNotFoundError unless you happened to be standing in the right folder."""
+    from pathlib import Path
+
+    from ..lab.lab_viewer import _export_dirs, _export_path, _exports
+    p = Path(name).expanduser()
+    if p.is_file():
+        return str(p)
+    found = _export_path(name)
+    if found is not None:
+        return str(found)
+    known = _exports()
+    where = ", ".join(str(d) for d in _export_dirs()) or "(geen exportmap)"
+    raise SystemExit(
+        f"export {name!r} niet gevonden. Gezocht in: {where}\n"
+        + ("  beschikbaar:\n" + "\n".join(f"    {x}" for x in known) if known
+           else "  er staan daar geen .xlsx-bestanden"))
+
+
 def _dt(value):
     """Parse a manifest timestamp ('24-08-2025 18:00:00 -04:00') to a naive date."""
     from datetime import datetime
@@ -233,7 +256,7 @@ def cmd_stage1(args):
             + (f" (twin {twin} zou ook mogen)" if twin else "")
             + ". Trap 1 op de verkeerde markt meet niets.")
 
-    exp = read_export(args.export)
+    exp = read_export(_resolve_export(args.export))
     pa = audit_properties(exp, cfg)
     print(f"\n  Properties-audit (grondregel 10): dekking {pa['coverage_pct']}% "
           f"({pa['checked']} velden), {pa['mismatches']} input-afwijking(en), "

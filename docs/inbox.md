@@ -12,6 +12,71 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 12. Twee MGC-scripts rekenen met de NQ-commissie — bevestigd in een live alert
+**Pine Dev → Backtest Setup / Scrum Master** · 2026-08-24 · status: OPEN
+
+`MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine` en `MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine`
+dragen `commission_value=1.55`. De andere zeven v1_0_0-scripts dragen 0,51. De registry
+(`backtest/config.py`) zegt **MGC $0,52**; $1,55 is de NQ/ES-waarde. Beide MGC-scripts
+rekenen dus met driemaal de werkelijke kosten.
+
+**Niet theoretisch — het staat in de alertlog van vandaag.** De DAY HALT-kaart van
+`PAT-MGC-A` om 11:55 meldt `Today: $-12,4`. Dat is exact 8 contracten × $1,55, de
+entry-commissie van de trade die om 11:36 vulde. Er waren die dag geen eerdere trades,
+dus dat bedrag ís de commissie.
+
+**Richting van de fout:** te hoog, dus de PATRON- en TESORO-cijfers in
+`frozen-engines.md` zijn pessimistisch, niet optimistisch. Per round turn scheelt het
+8 × ($1,55 − $0,52) × 2 = **$16,48**; over ~150 PATRON-trades ruim $2.400. Materieel
+genoeg om de rangorde tussen twee dicht bij elkaar liggende engines om te draaien.
+
+Waarschijnlijk hetzelfde fork-artefact als de dubbele merkkop: een NQ-template die voor
+MGC is hergebruikt zonder de header te herzien. `frozen-engines.md` noemt zelf $0,51.
+
+**Verzoek:** één besluit over welk getal geldt (registry $0,52, pakketaanname $0,51, of
+de gemeten waarde die D-07 nog moet opleveren), en daarna één keer opnieuw meten. Ik pas
+het niet stilzwijgend aan — dan wijkt het script af van zijn eigen validatierun.
+
+---
+
+### 13. Alerts falen op DNS bij bursts, en de halt-close is dan weg
+**Pine Dev → Middleware App / Legacy** · 2026-08-24 · status: OPEN · **raakt live executie**
+
+Zes alerts van 24-08 kregen `Webhook delivery failed — couldn't find this domain`, op
+`PAT-MGC-A` (5×) en `REY-NQ-PI` (1×). Alle 1.991 oudere leveringen slaagden.
+
+**Het is geen verkeerde URL.** Alert `5444067748` leverde vandaag **3× succesvol en 5×
+niet**, met dezelfde URL. Een fout getypte host faalt 100%. `app.mex-traders.com`
+resolvet nu (167.233.215.60) en de host antwoordt.
+
+**Het patroon is burst.** Elke fout valt op een bar waar het script meerdere berichten
+tegelijk afvuurt: 11:36 drie berichten → 1 door, 2 weg; 11:55 drie berichten → alle drie
+weg. Losse berichten (10:22, 11:48:34) gingen door. De enige uitzondering, 10:25, valt in
+het venster waarin vier nieuwe alerts binnen vier minuten elk een CONFIG stuurden.
+
+**Wat er misging in de executie.** Om 11:36 faalde de PMT-`buy` en om 11:55 de
+PMT-`close`. Er is dus **geen enkele order** bij PMT/Tradovate aangekomen; omdat de entry
+nooit arriveerde staat er ook geen positie open. Ferry: verifieer dat in Tradovate — de
+log bewijst alleen dat TradingView niet kon leveren.
+
+**De gevaarlijke variant ligt er wel open.** Was de `buy` wél doorgekomen en de `close`
+niet, dan stond er nu een open positie bij de broker terwijl de risk-gate denkt dat hij
+gesloten is — de halt sluit via precies het bericht dat wegviel (`f_sendExec("close")`).
+Eén verloren pakketje op de verkeerde bar is het verschil tussen een gesloten dag en een
+onbewaakte positie.
+
+**Voorstel richting Middleware/Legacy:** dit hoort niet in Pine opgelost te worden (Pine
+kan een mislukte levering niet zien, laat staan herhalen). Twee richtingen: de kaarten en
+de orders over aparte alerts spreiden zodat een bar nooit meer dan één levering per alert
+veroorzaakt, óf de receiver een heartbeat/reconciliatie laten doen die een positie zonder
+bijbehorende close opmerkt. De tweede vangt ook netwerkfouten die de eerste niet dekt.
+
+**Terzijde, zodat niemand het "repareert":** dat één alert zowel PMT-JSON als
+Discord-embeds stuurt is normaal in deze opzet — 30 werkende alerts doen het al maanden.
+Dat is niet de oorzaak.
+
+---
+
 ### 11. EL TORO — twee gaten tussen de scripts en de frontier
 **Pine Dev → Scrum Master / Backtest Setup** · 2026-08-24 · status: OPEN
 

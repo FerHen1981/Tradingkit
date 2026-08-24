@@ -57,7 +57,8 @@ def _sim_rows(trades) -> list[dict]:
     return [r for r in out if r["t"] is not None]
 
 
-def diff(sim_trades, export, tol_minutes: int = 2, examples: int = 12) -> dict:
+def diff(sim_trades, export, tol_minutes: int = 2, examples: int = 12,
+         net_tol: float = 25.0) -> dict:
     """Align the two trade lists on entry time and describe the disagreement."""
     sim, pine = _sim_rows(sim_trades), _pine_rows(export)
     sim.sort(key=lambda r: r["t"])
@@ -90,8 +91,14 @@ def diff(sim_trades, export, tol_minutes: int = 2, examples: int = 12) -> dict:
         import pandas as pd
         return dict(Counter(pd.Timestamp(r["entry_time"]).hour for r in rows).most_common())
 
+    # Only MATERIAL result differences. A few dollars per trade is a cost or
+    # half-tick fill artefact, and flagging those marks every matched trade as
+    # divergent — which is exactly how a real signal (a stop that fires on a
+    # different bar) gets lost in the noise.
     exit_gap = [(s, p, g) for s, p, g in matched
-                if round(s["net"], 2) != round(p["net"], 2)]
+                if abs(s["net"] - p["net"]) > net_tol]
+    trivial = [(s, p, g) for s, p, g in matched
+               if 0.005 < abs(s["net"] - p["net"]) <= net_tol]
     off_bar = [m for m in matched if m[2] > 0]
 
     return {
@@ -99,6 +106,9 @@ def diff(sim_trades, export, tol_minutes: int = 2, examples: int = 12) -> dict:
         "matched": len(matched), "sim_only": len(sim_only), "pine_only": len(pine_only),
         "matched_on_a_different_bar": len(off_bar),
         "matched_with_a_different_result": len(exit_gap),
+        "matched_within_cost_noise": len(trivial),
+        "net_tolerance": net_tol,
+        "matched_exactly": len(matched) - len(exit_gap) - len(trivial),
         "sim_only_by_weekday": _weekday(sim_only),
         "pine_only_by_weekday": _weekday(pine_only),
         "pine_only_by_hour": _hours(pine_only),
@@ -124,8 +134,10 @@ def render(d: dict) -> str:
     L = [f"  simulator {d['sim_trades']} trades · pine {d['pine_trades']} · "
          f"{d['matched']} gepaard op instapmoment",
          f"    alleen in simulator: {d['sim_only']} · alleen in pine: {d['pine_only']}",
-         f"    gepaard maar andere bar: {d['matched_on_a_different_bar']} · "
-         f"gepaard maar andere uitkomst: {d['matched_with_a_different_result']}"]
+         f"    gepaard maar andere bar: {d['matched_on_a_different_bar']}",
+         f"    van de gepaarde: {d['matched_exactly']} identiek · "
+         f"{d['matched_within_cost_noise']} binnen kosten-ruis (<= ${d['net_tolerance']:.0f}) · "
+         f"{d['matched_with_a_different_result']} materieel anders"]
     if d["matched"]:
         L.append(f"    gemiddelde netto per gepaarde trade: simulator "
                  f"${d['avg_net_matched_sim']:,.2f} vs pine ${d['avg_net_matched_pine']:,.2f}")

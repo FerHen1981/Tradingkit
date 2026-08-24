@@ -2,6 +2,7 @@
 
     python -m backtest.pipeline.cli plan
     python -m backtest.pipeline.cli coverage    # wat kan trap 1 draaien, wat mist
+    python -m backtest.pipeline.cli sensitivity --dataset D --engine E
     python -m backtest.pipeline.cli stage0 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD
     python -m backtest.pipeline.cli stage1 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD \
         --export path/to/TESORO_export.xlsx
@@ -29,6 +30,13 @@ def _dataset_path(name: str) -> tuple[str, str]:
         if d["name"] == name:
             return d["file"], (d.get("symbol") or "")
     raise SystemExit(f"unknown dataset {name!r} — see 1 · Data")
+
+
+def _f_or_none(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
 
 
 def _resolve_export(name: str) -> str:
@@ -178,6 +186,38 @@ def cmd_coverage(_args):
             print(f"    · 1-minuut {need}, minimaal {window}  — {why}")
 
 
+def cmd_sensitivity(args):
+    """Measure how much a one-tick price difference moves this engine's trades.
+
+    Answers whether a substitute price series (a mini standing in for its micro)
+    can carry stage-1 parity at all."""
+    from .. import data as dm
+    from .sensitivity import survival, verdict
+    path, sym = _dataset_path(args.dataset)
+    cfg = fleet.engine_config(args.engine)
+    df = dm.load(path)
+    if args.since:
+        df = dm.slice_dates(df, since=args.since)
+    if args.until:
+        df = dm.slice_dates(df, until=args.until)
+    print(f"tick-gevoeligheid · {args.engine} op {args.dataset} ({sym or '?'})")
+    print(f"  {len(df):,} bars · tick {cfg.contract.mintick} · "
+          f"{int(args.prob*100)}% van de bars krijgt +/- 1 tick op O/H/L/C")
+
+    r = survival(df, cfg, seeds=tuple(range(1, args.seeds + 1)), prob=args.prob,
+                 progress=lambda i, n: print(f"  run {i+1}/{n} ...", flush=True))
+    print(f"\n  basislijn: {r['baseline_trades']} trades")
+    for run in r["runs"]:
+        print(f"    seed {run['seed']}: {run['trades']} trades, {run['kept']} op dezelfde "
+              f"bar en richting -> {run['survival_pct']}% overleeft")
+    print(f"\n  gemiddeld {r['mean_survival_pct']}% overleeft (laagste {r['min_survival_pct']}%)")
+    print(f"  {verdict(r)}")
+    art = _write_artifact(args.engine, "tick-gevoeligheid", r)
+    print(f"  artefact {art}")
+    print("STAGE_JSON " + json.dumps({"stage": "sensitivity", "report": r}, default=str),
+          flush=True)
+
+
 def cmd_plan(_args):
     engines = fleet.names()
     rows = state.overview(engines)
@@ -278,6 +318,25 @@ def cmd_stage1(args):
         print("    De export test een ANDERE configuratie dan deze engine — de vergelijking")
         print("    hieronder is daarmee niet gezaghebbend. Los dit eerst op.")
 
+    # Reproduce the export's COSTS, not our registry's. Ground rule 10 says the
+    # export is the truth about what was tested; running the same trades at a
+    # different commission builds a known difference into the comparison and
+    # leaves it there. On MATADOR that was $1.68 per trade (6 contracts x 2 sides
+    # x $0.14), which is small but shows up on every single matched trade.
+    import dataclasses as _dc
+    exp_com = _f_or_none(pa["commission"])
+    exp_slip = _f_or_none(str(pa["slippage"] or "").split()[0] if pa["slippage"] else None)
+    costs = {}
+    if exp_com is not None and abs(exp_com - cfg.contract.commission_per_contract) > 1e-9:
+        costs["commission_per_contract"] = exp_com
+    if exp_slip is not None and abs(exp_slip - cfg.contract.slippage_ticks) > 1e-9:
+        costs["slippage_ticks"] = exp_slip
+    if costs:
+        was = {k: getattr(cfg.contract, k) for k in costs}
+        cfg = _dc.replace(cfg, contract=_dc.replace(cfg.contract, **costs))
+        print(f"  KOSTEN UIT DE EXPORT overgenomen: {was} -> {costs} "
+              f"(grondregel 10 — we reproduceren die run, niet onze registry)")
+
     df = dm.load(path)
     # Default the simulated window to what TradingView actually tested. Comparing
     # a 19-year simulation against a 1-year export produces a trade-count gap that
@@ -332,6 +391,7 @@ def cmd_stage1(args):
     art = _write_artifact(args.engine, "trap1_pariteit",
                           {"properties_audit": pa, "comparison": cmp_,
                            "trade_diff": td,
+                           "costs_from_export": costs,
                            "dataset": args.dataset, "dataset_symbol": ds_sym,
                            "price_series_borrowed_from": substituted,
                            "window": {"since": since, "until": until, "bars": len(df),
@@ -386,6 +446,13 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("plan").set_defaults(fn=cmd_plan)
     sub.add_parser("coverage").set_defaults(fn=cmd_coverage)
+    ps = sub.add_parser("sensitivity"); ps.set_defaults(fn=cmd_sensitivity)
+    ps.add_argument("--dataset", required=True)
+    ps.add_argument("--engine", required=True, choices=fleet.names())
+    ps.add_argument("--since"); ps.add_argument("--until")
+    ps.add_argument("--prob", type=float, default=0.35,
+                    help="aandeel bars dat een tick verschuift (default 0.35)")
+    ps.add_argument("--seeds", type=int, default=3)
 
     p0 = sub.add_parser("stage0"); p0.set_defaults(fn=cmd_stage0)
     p0.add_argument("--dataset", required=True); p0.add_argument("--engine", default="")

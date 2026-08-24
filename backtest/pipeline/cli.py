@@ -7,6 +7,7 @@
     python -m backtest.pipeline.cli stage0 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD
     python -m backtest.pipeline.cli stage1 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD \
         --export path/to/TESORO_export.xlsx
+    python -m backtest.pipeline.cli stage2 --dataset D --engine E   # structurele edge
     python -m backtest.pipeline.cli reset --yes      # wipes results/history, KEEPS datasets
 """
 from __future__ import annotations
@@ -328,6 +329,109 @@ def cmd_report(args):
                 print(f"      exits {label}: "
                       + "  ".join(f"{k} {100*v/tot:.0f}%" for k, v in mix.most_common(5)))
         print()
+
+
+
+def cmd_stage2(args):
+    """Stage 2 — structural edge, from scratch.
+
+    Does the RAW signal mechanic (FVG + CVD + fixed stop + R-target + expiry) have
+    a positive intrinsic edge AFTER costs, on 1 contract, with NO PA sizing and NO
+    day caps? This is the question stage 1 does not answer: stage 1 proves we
+    reproduce Pine; stage 2 asks whether the thing we reproduce actually makes
+    money on its own terms before any account mechanics dress it up.
+
+    Ground rule 1: this is only meaningful once stage 1 holds. The pipeline is
+    advisory (Ferry 20-08), so an open stage-1 gate warns rather than blocks.
+    """
+    import dataclasses
+    from collections import defaultdict
+
+    from .. import data as dm, indicators as im
+    from ..engine import Engine
+    from ..metrics import kpis
+
+    path, sym = _dataset_path(args.dataset)
+    base = fleet.engine_config(args.engine)
+    own, twin = fleet.acceptable_symbols(args.engine)
+
+    # advisory stage-1 check
+    from . import state as _state
+    view = {v["key"]: v for v in _state.engine_view(args.engine)}
+    p1 = (view.get("parity") or {}).get("status", "todo")
+    print(f"trap 2 · structurele edge · {args.engine} op {args.dataset}")
+    if p1 not in ("passed", "data_parity"):
+        print(f"  LET OP: trap 1 staat op '{p1}' voor deze engine — grondregel 1 zegt dat een")
+        print(f"  edge-meting pas geldig is ná pariteit. Draai eerst stage1. (advies, niet blokkerend)")
+    else:
+        print(f"  trap 1: {p1} — edge-meting is geldig (grondregel 1).")
+
+    # 1 contract, no account overlay, no day caps: the intrinsic mechanic only.
+    cfg = dataclasses.replace(base, contract_size=1.0, day_exit_mode="Off")
+    df = dm.load(path)
+    if args.since:
+        df = dm.slice_dates(df, since=args.since)
+    if args.until:
+        df = dm.slice_dates(df, until=args.until)
+    print(f"  {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]} · 1 contract · "
+          f"geen PA-sizing, geen dagcaps · kosten AAN")
+
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=True).run()
+    k = kpis(res)
+    if not k.get("trades"):
+        print("  GEEN trades — geen edge te meten."); 
+        _write_and_record_stage2(args.engine, args.dataset, k, {}, "failed", "geen trades")
+        return
+
+    # per calendar year: an edge that lives in one year is not structural
+    by_year = defaultdict(list)
+    for t in res.trades:
+        if getattr(t, "exit_time", None) is not None:
+            by_year[t.exit_time.year].append(float(t.net))
+    years = {}
+    for y, nets in sorted(by_year.items()):
+        wins = [x for x in nets if x > 0]; gl = -sum(x for x in nets if x <= 0)
+        years[y] = {"trades": len(nets), "net": round(sum(nets), 2),
+                    "pf": round(sum(wins) / gl, 2) if gl > 0 else float("inf"),
+                    "expectancy": round(sum(nets) / len(nets), 2)}
+
+    print(f"\n  volledige periode: {k['trades']} trades · net ${k['net_profit']:,.0f} · "
+          f"PF {k['profit_factor']} · WR {k['win_rate_pct']}% · "
+          f"verwachting ${k['expectancy']}/trade (na ${k['total_commission']:,.0f} commissie)")
+    print(f"    long/short {k['longs']}/{k['shorts']} · max drawdown ${k['max_drawdown']:,.0f}")
+    print(f"\n  per kalenderjaar (edge in één jaar is geen structurele edge):")
+    for y, r in years.items():
+        flag = "" if r["expectancy"] > 0 else "   <- negatief"
+        print(f"    {y}: {r['trades']:>4} trades · net ${r['net']:>9,.0f} · PF {r['pf']:<5} · "
+              f"E ${r['expectancy']:>7}/trade{flag}")
+
+    pos_years = sum(1 for r in years.values() if r["expectancy"] > 0)
+    edge = k["expectancy"] > 0 and k["profit_factor"] > 1.0
+    robust = pos_years >= max(1, round(0.6 * len(years)))
+    status = "passed" if (edge and robust) else ("inconclusive" if edge else "failed")
+    if edge and robust:
+        verdict = (f"EDGE AANWEZIG: positieve verwachting na kosten, en positief in "
+                   f"{pos_years}/{len(years)} jaren")
+    elif edge:
+        verdict = (f"ZWAK: wél positieve verwachting over de hele periode, maar slechts "
+                   f"{pos_years}/{len(years)} jaren positief — leunt op een deel van de reeks")
+    else:
+        verdict = (f"GEEN EDGE: verwachting ${k['expectancy']}/trade, PF {k['profit_factor']} "
+                   f"— de kale mechaniek verdient na kosten niet")
+    print(f"\n  POORT: {status.upper()} — {verdict}")
+    _write_and_record_stage2(args.engine, args.dataset, k, years, status, verdict)
+
+
+def _write_and_record_stage2(engine, dataset, k, years, status, verdict):
+    from . import state as _state
+    art = _write_artifact(engine, "trap2_structurele-edge",
+                          {"dataset": dataset, "kpis": k,
+                           "by_year": {str(y): r for y, r in years.items()},
+                           "status": status, "verdict": verdict})
+    _state.record(engine, "structural_edge", status, summary=verdict, artifact=art)
+    print(f"  artefact {art}")
+    print("STAGE_JSON " + json.dumps({"stage": 2, "kpis": k, "by_year": years,
+                                      "status": status}, default=str), flush=True)
 
 
 def cmd_plan(_args):
@@ -697,7 +801,10 @@ def cmd_stage1(args):
                          "paired_pct": pair_pct})
     label = {"passed": "GEHAALD", "data_parity": "GEHAALD (data-pariteit)",
              "inconclusive": "INCONCLUSIEF", "failed": "NIET GEHAALD"}[status]
-    print(f"\n  POORT: {label} — {cmp_['verdict']}")
+    verdict_line = ("engine bewezen gelijk aan de export; het resterende trade-count-tekort "
+                    "is de databron (zie de bewijsregels hierboven), niet de engine — trap 2 "
+                    "is hiermee geldig" if status == "data_parity" else cmp_["verdict"])
+    print(f"\n  POORT: {label} — {verdict_line}")
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 1, "properties": pa, "comparison": cmp_,
                                       "pass": ok}, default=str), flush=True)
@@ -766,6 +873,11 @@ def main():
                          "zodat de engine meetbaar wordt (grondregel 10 blijft gemeld)")
     p1.add_argument("--diff", action="store_true",
                     help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
+
+    p2 = sub.add_parser("stage2"); p2.set_defaults(fn=cmd_stage2)
+    p2.add_argument("--dataset", required=True)
+    p2.add_argument("--engine", required=True, choices=fleet.names())
+    p2.add_argument("--since"); p2.add_argument("--until")
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)
     pr.add_argument("--yes", action="store_true")

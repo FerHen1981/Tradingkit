@@ -31,23 +31,47 @@ def _dataset_path(name: str) -> tuple[str, str]:
     raise SystemExit(f"unknown dataset {name!r} — see 1 · Data")
 
 
+def _dt(value):
+    """Parse a manifest timestamp ('24-08-2025 18:00:00 -04:00') to a naive date."""
+    from datetime import datetime
+    txt = str(value or "").strip()
+    for fmt in ("%d-%m-%Y %H:%M:%S %z", "%d-%m-%Y %H:%M:%S", "%Y-%m-%d %H:%M:%S%z",
+                "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(txt, fmt).replace(tzinfo=None)
+        except ValueError:
+            continue
+    return None
+
+
 def cmd_coverage(_args):
     """What can trap 1 actually run today, and what data is missing?
 
     Trap 1 is a hard gate, so this answers the only question that matters while
-    it is open: for each TradingView export we hold, is there a dataset of the
-    right market covering the window the export was actually tested over?"""
-    from ..lab.lab_viewer import _datasets, _export_dirs, _export_path, _exports
-    from .parity import audit_environment, export_window, read_export
+    it is open: for each TradingView export we hold, is there a dataset that
+    covers the market AND the window the export was actually tested over?
 
-    dsets = []
-    for d in _datasets():
-        dsets.append({"name": d["name"], "symbol": (d.get("symbol") or "").upper(),
-                      "first": d.get("first"), "last": d.get("last")})
+    A mini's price history counts for its micro (see fleet.TWIN) — same ticks,
+    same trade sequence — but only if it reaches far enough. A 20-year file that
+    stops before the export's end date is the failure mode this catches."""
+    from ..lab.lab_viewer import _datasets, _export_dirs, _export_path, _exports
+    from .parity import export_window, read_export
+
+    dsets = [{"name": d["name"], "symbol": (d.get("symbol") or "").upper(),
+              "first": _dt(d.get("first")), "last": _dt(d.get("last")),
+              "rows": d.get("rows")} for d in _datasets()]
     print(f"\n  trap 1 · dekking — {len(_exports())} export(s), {len(dsets)} dataset(s)")
     print(f"  exports gezocht in: {', '.join(str(d) for d in _export_dirs()) or '(geen map)'}\n")
-    if not dsets:
-        print("  GEEN datasets geladen — upload ze onder 1 · Data.")
+    if dsets:
+        print("  aanwezige datasets:")
+        for d in dsets:
+            span = (f"{d['first']:%Y-%m-%d} -> {d['last']:%Y-%m-%d}"
+                    if d["first"] and d["last"] else "venster onbekend")
+            print(f"    {d['name']:<28} {d['symbol']:<5} {span}"
+                  f"{'  ' + format(d['rows'], ',') + ' bars' if d['rows'] else ''}")
+        print()
+    else:
+        print("  GEEN datasets geladen — upload ze onder 1 · Data.\n")
 
     runnable, blocked = 0, []
     for nm in _exports():
@@ -56,29 +80,46 @@ def cmd_coverage(_args):
             continue
         exp = read_export(str(f))
         a, b = export_window(exp)
-        sym = str(exp.properties.get("Symbol") or "").split(":")[-1]
-        root = "".join(ch for ch in sym if ch.isalpha())
-        engine = next((n for n in fleet.names() if fleet.market(n) == root), None)
-        match = [d for d in dsets if d["symbol"] == root]
+        root = "".join(c for c in str(exp.properties.get("Symbol") or "").split(":")[-1]
+                       if c.isalpha())
+        twin = fleet.TWIN.get(root)
         window = f"{a:%Y-%m-%d} -> {b:%Y-%m-%d}" if a and b else "onleesbaar"
         print(f"  {nm}")
         print(f"     markt {root} · getest {window} · {exp.n_trades} trades")
-        if not match:
-            blocked.append((root, window))
-            print(f"     GEBLOKKEERD — geen dataset voor {root}. Nodig: 1-minuut {root} "
-                  f"over {window}.")
-        else:
-            names = ", ".join(d["name"] for d in match)
-            print(f"     dataset(s) aanwezig: {names}")
+
+        exact = [d for d in dsets if d["symbol"] == root]
+        twins = [d for d in dsets if twin and d["symbol"] == twin]
+        usable, short = [], []
+        for d in exact + twins:
+            covers = (a is None or b is None or
+                      (d["first"] is not None and d["last"] is not None
+                       and d["first"] <= a and d["last"] >= b))
+            (usable if covers else short).append(d)
+
+        if usable:
             runnable += 1
-        if engine is None:
-            print(f"     let op: geen engine in de vloot voor markt {root}")
+            for d in usable:
+                via = "" if d["symbol"] == root else f" (via twin {d['symbol']} — zelfde ticks)"
+                print(f"     BRUIKBAAR: {d['name']}{via}")
+        for d in short:
+            end = f"{d['last']:%Y-%m-%d}" if d["last"] else "?"
+            via = "" if d["symbol"] == root else f" (twin {d['symbol']})"
+            print(f"     TE KORT: {d['name']}{via} loopt tot {end}, export vraagt tot "
+                  f"{b:%Y-%m-%d}" if b else f"     TE KORT: {d['name']}{via}")
+        if not usable:
+            blocked.append((root, twin, window, bool(short)))
+            if not short:
+                need = f"{root}" + (f" of {twin}" if twin else "")
+                print(f"     GEBLOKKEERD — geen dataset voor {need}.")
+
     print(f"\n  {runnable} van {len(_exports())} export(s) is nu te draaien op trap 1.")
     if blocked:
-        print("\n  ONTBREKENDE DATA (dit is het kritieke pad — trap 1 is een harde poort,")
-        print("  dus trap 2 t/m 9 zijn ongeldig zolang die dichtstaat):")
-        for root, window in blocked:
-            print(f"    · 1-minuut {root}, minimaal {window}")
+        print("\n  ONTBREKENDE DATA (kritiek pad — trap 1 is een harde poort, dus trap 2")
+        print("  t/m 9 zijn ongeldig zolang die dichtstaat):")
+        for root, twin, window, only_short in blocked:
+            need = root + (f" (of {twin}: zelfde tick size, zelfde trades)" if twin else "")
+            why = "bestaande dataset loopt niet ver genoeg door" if only_short else "geen dataset"
+            print(f"    · 1-minuut {need}, minimaal {window}  — {why}")
 
 
 def cmd_plan(_args):
@@ -135,6 +176,30 @@ def cmd_stage1(args):
     print(f"trap 1 · Pine-pariteit · {args.engine} op {args.dataset}")
     print("  POORT: bijna gelijk aantal trades + materieel vergelijkbare WR/PF. HARDE POORT.")
 
+    # The dataset supplies PRICES; the contract spec comes from the engine config.
+    # A mini's history is therefore a valid stand-in for its micro (same tick
+    # size, same trade sequence) — but never silently: running MGC prices under a
+    # MES engine would be nonsense, and a substitution that is not recorded is
+    # exactly what ground rule 4 forbids.
+    own, twin = fleet.acceptable_symbols(args.engine)
+    ds_sym = (sym or "").upper()
+    substituted = None
+    if not ds_sym:
+        print(f"  LET OP: dataset {args.dataset!r} heeft geen symbool in zijn manifest — "
+              f"kan niet controleren of dit {own}-data is.")
+    elif ds_sym == own:
+        pass
+    elif ds_sym == twin:
+        substituted = ds_sym
+        print(f"  PRIJSREEKS GELEEND: {ds_sym}-data onder de {own}-contractspec. Zelfde tick "
+              f"size, dus dezelfde trades; alleen de $-P&L schaalt. Wordt vastgelegd "
+              f"in het artefact.")
+    else:
+        raise SystemExit(
+            f"dataset {args.dataset!r} is {ds_sym}-data, maar {args.engine} handelt {own}"
+            + (f" (twin {twin} zou ook mogen)" if twin else "")
+            + ". Trap 1 op de verkeerde markt meet niets.")
+
     exp = read_export(args.export)
     pa = audit_properties(exp, cfg)
     print(f"\n  Properties-audit (grondregel 10): dekking {pa['coverage_pct']}% "
@@ -186,10 +251,16 @@ def cmd_stage1(args):
     ok = (cmp_["pass"] and not pa["mismatches"]
           and not pa["environment_mismatches"] and not pa["missing"])
     art = _write_artifact(args.engine, "trap1_pariteit",
-                          {"properties_audit": pa, "comparison": cmp_})
+                          {"properties_audit": pa, "comparison": cmp_,
+                           "dataset": args.dataset, "dataset_symbol": ds_sym,
+                           "price_series_borrowed_from": substituted,
+                           "window": {"since": since, "until": until, "bars": len(df)}})
     state.record(args.engine, "parity", "passed" if ok else "failed",
-                 summary=cmp_["verdict"], artifact=art,
-                 detail={"mismatches": pa["mismatches"], "checks": cmp_["checks"]})
+                 summary=cmp_["verdict"] + (f" [prijsreeks geleend van {substituted}]"
+                                            if substituted else ""),
+                 artifact=art,
+                 detail={"mismatches": pa["mismatches"], "checks": cmp_["checks"],
+                         "price_series_borrowed_from": substituted})
     print(f"\n  POORT: {'GEHAALD' if ok else 'NIET GEHAALD'} — {cmp_['verdict']}")
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 1, "properties": pa, "comparison": cmp_,

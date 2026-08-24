@@ -114,3 +114,74 @@ def test_stage1_fails_on_a_materially_different_trade_count():
     assert not out["pass"]
     assert not [c for c in out["checks"] if c["name"] == "trade count"][0]["ok"]
     assert "NOT at parity" in out["verdict"]
+
+
+# --- price-series substitution (mini stands in for its micro) -------------------
+
+def test_every_fleet_market_has_a_known_twin():
+    from backtest.pipeline import fleet
+    for n in fleet.names():
+        own, twin = fleet.acceptable_symbols(n)
+        assert twin, f"{n}: markt {own} heeft geen twin — trap 1 verliest die route"
+        assert fleet.TWIN[twin] == own, "twin-map is niet symmetrisch"
+
+
+def test_twin_shares_tick_size_but_not_point_value():
+    """The whole substitution rests on this: same ticks (so identical FVG bands,
+    stops and R-targets) but a different dollar multiplier."""
+    from backtest.config import CONTRACTS
+    from backtest.pipeline import fleet
+    for micro, mini in fleet.TWIN.items():
+        a, b = CONTRACTS.get(micro), CONTRACTS.get(mini)
+        if not a or not b:
+            continue
+        assert a.mintick == b.mintick, f"{micro}/{mini}: tick size verschilt"
+        assert a.pointvalue != b.pointvalue, f"{micro}/{mini}: geen twin maar hetzelfde contract"
+
+
+def test_a_micro_and_its_mini_produce_the_same_trade_sequence(tmp_path):
+    """The measured claim behind fleet.TWIN. Point value scales the dollars; it
+    must not move the trade count, win rate or long/short split — those are the
+    checks stage 1 gates on."""
+    import dataclasses
+
+    import numpy as np
+    import pandas as pd
+
+    from backtest import data as dm, indicators as im
+    from backtest.config import contract
+    from backtest.engine import Engine
+    from backtest.metrics import kpis
+    from backtest.pipeline import fleet
+
+    # volatile enough that FVGs land inside MATADOR's 10-22 tick band; a quiet
+    # random walk produces zero trades and would make this test vacuous.
+    rng = np.random.default_rng(7)
+    n, sigma = 60_000, 4.0
+    px = 6000 + np.cumsum(rng.normal(0, sigma, n))
+    idx = pd.date_range("2025-09-02 00:00", periods=n, freq="1min", tz="America/New_York")
+    raw = pd.DataFrame({
+        "Open": px, "Close": px + rng.normal(0, sigma * 0.7, n),
+        "High": px + np.abs(rng.normal(0, sigma * 2, n)),
+        "Low": px - np.abs(rng.normal(0, sigma * 2, n)),
+        "Volume": rng.integers(50, 900, n).astype(float),
+        "Delta": np.zeros(n),
+    })
+    raw["High"] = raw[["High", "Open", "Close"]].max(axis=1)
+    raw["Low"] = raw[["Low", "Open", "Close"]].min(axis=1)
+    raw.insert(0, "DateTime", idx.strftime("%d-%m-%Y %H:%M:%S %z"))
+    csv = tmp_path / "twin.csv"
+    raw.to_csv(csv, index=False)
+    df = dm.load(str(csv), cache=False)
+
+    base = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    out = {}
+    for sym in ("MES", "ES"):
+        cfg = dataclasses.replace(base, contract=contract(sym))
+        out[sym] = kpis(Engine(cfg, df, im.compute(df, cfg), research_mode=True).run())
+
+    assert out["MES"]["trades"] >= 10, "te weinig trades — de test bewijst dan niets"
+    for key in ("trades", "win_rate_pct", "longs", "shorts"):
+        assert out["MES"][key] == out["ES"][key], (
+            f"{key} verschilt tussen micro en mini: "
+            f"{out['MES'][key]} vs {out['ES'][key]}")

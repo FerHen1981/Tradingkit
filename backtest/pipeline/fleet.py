@@ -131,3 +131,25 @@ def summary() -> list[dict]:
                     "parity_pending": n in PARITY_PENDING,
                     "pine_defect": PINE_DEFECTS.get(n, "")})
     return out
+
+
+# --- price-series substitution -------------------------------------------------
+# A micro and its mini share a tick size and differ only by point value (exactly
+# 10x for ES/NQ/YM/GC). Every distance the fleet uses is in TICKS and the target
+# is an R-multiple, so the two produce the SAME trade sequence on the same prices:
+# measured on 1,051,200 bars, MES and ES gave 295/295 trades, identical win rate
+# and identical long/short split. Only the dollar P&L scales — and PF moved by
+# 0.01 purely because commission is a flat per-contract cost that does not scale.
+#
+# Stage 1 checks trade count, PF, win rate and long/short split, so a mini's
+# price history is a valid stand-in for its micro. The CONTRACT SPEC still comes
+# from the engine config; only the prices are borrowed. This is never silent —
+# the CLI says so and the artifact records it.
+_TWIN = {"MES": "ES", "MYM": "YM", "MNQ": "NQ", "MGC": "GC", "M2K": "RTY"}
+TWIN = {**_TWIN, **{v: k for k, v in _TWIN.items()}}
+
+
+def acceptable_symbols(name: str) -> tuple[str, str | None]:
+    """(the engine's own market, its price-series twin or None)."""
+    m = market(name)
+    return m, TWIN.get(m)

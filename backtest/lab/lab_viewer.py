@@ -102,15 +102,17 @@ def _datasets() -> list[dict]:
         f = canon if canon.exists() else (raw if raw.exists() else None)
         if not f:
             continue
-        sym, rows = "", None
+        sym, rows, first, last = "", None, None, None
         man = sub / "manifest.json"
         if man.exists():
             try:
                 m = json.loads(man.read_text())
                 sym, rows = m.get("symbol", ""), m.get("rows")
+                first, last = m.get("first_dt"), m.get("last_dt")
             except Exception:
                 pass
-        out.append({"name": sub.name, "file": str(f), "symbol": sym, "rows": rows})
+        out.append({"name": sub.name, "file": str(f), "symbol": sym, "rows": rows,
+                    "first": first, "last": last})
     return out
 
 
@@ -605,7 +607,8 @@ def _stage1_coverage() -> list[dict]:
     whether we hold a dataset that can run it. Trap 1 is a hard gate, so this is
     the shortest honest answer to 'what is blocking the whole pipeline'."""
     from ..pipeline.parity import export_window, read_export
-    dsets = [{"name": d["name"], "symbol": (d.get("symbol") or "").upper()}
+    dsets = [{"name": d["name"], "symbol": (d.get("symbol") or "").upper(),
+              "first": d.get("first"), "last": d.get("last")}
              for d in _datasets()]
     out = []
     for nm in _exports():
@@ -613,17 +616,31 @@ def _stage1_coverage() -> list[dict]:
         if f is None:
             continue
         try:
+            from ..pipeline import fleet
+            from ..pipeline.cli import _dt
             exp = read_export(str(f))
             a, b = export_window(exp)
             root = "".join(c for c in str(exp.properties.get("Symbol") or "").split(":")[-1]
                            if c.isalpha())
-            have = [d["name"] for d in dsets if d["symbol"] == root]
-            out.append({"export": nm, "market": root, "trades": exp.n_trades,
+            twin = fleet.TWIN.get(root)
+            usable, short = [], []
+            for d in dsets:
+                if d["symbol"] not in (root, twin) or not d["symbol"]:
+                    continue
+                lo, hi = _dt(d.get("first")), _dt(d.get("last"))
+                covers = (a is None or b is None or
+                          (lo is not None and hi is not None and lo <= a and hi >= b))
+                label = d["name"] + ("" if d["symbol"] == root else f" (twin {d['symbol']})")
+                (usable if covers else short).append(
+                    label if covers else
+                    f"{label} loopt tot {hi:%Y-%m-%d}" if hi else label)
+            out.append({"export": nm, "market": root, "twin": twin, "trades": exp.n_trades,
                         "window": f"{a:%Y-%m-%d} → {b:%Y-%m-%d}" if a and b else "?",
-                        "datasets": have, "runnable": bool(have)})
+                        "datasets": usable, "too_short": short, "runnable": bool(usable)})
         except Exception as e:                       # a corrupt upload must not blank the tab
-            out.append({"export": nm, "market": "?", "trades": 0, "window": "?",
-                        "datasets": [], "runnable": False, "error": str(e)[:120]})
+            out.append({"export": nm, "market": "?", "twin": None, "trades": 0,
+                        "window": "?", "datasets": [], "too_short": [],
+                        "runnable": False, "error": str(e)[:120]})
     return out
 
 
@@ -1638,7 +1655,11 @@ async function loadPipeline(){
       <td>${c.trades}</td><td style="text-align:left">${c.window}</td>
       <td style="text-align:left">${c.runnable
         ? '<span style="color:var(--azure)">'+c.datasets.join(', ')+'</span>'
-        : '<span style="color:var(--rose)">ontbreekt — nodig: 1-minuut '+c.market+' over '+c.window+'</span>'}
+        : '<span style="color:var(--rose)">'
+          +((c.too_short||[]).length
+            ? 'te kort — '+c.too_short.join(', ')+'; export vraagt tot '+(c.window.split('→')[1]||'').trim()
+            : 'ontbreekt — nodig: 1-minuut '+c.market+(c.twin?' of '+c.twin:'')+' over '+c.window)
+          +'</span>'}
       </td></tr>`).join('')+'</tbody></table>'
     : '<div class=hint>Geen exports gevonden — zet ze in <span class=mono>validation/exports/</span> '
       +'of upload ze onder 1 · Data.</div>';

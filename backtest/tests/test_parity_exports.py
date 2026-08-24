@@ -119,3 +119,48 @@ def test_matador_export_matches_its_engine_inputs():
     assert a["mismatches"] == 0, [r for r in a["rows"] if not r["ok"]]
     dd = next(r for r in a["rows"] if r["label"] == "Drawdown Model")
     assert dd["export"] == dd["config"] == "EOD"
+
+
+# --- coverage: does the cockpit tell the truth about what can run? --------------
+
+def _fake_dataset(root, name, symbol, first, last, rows=1000):
+    """A dataset dir the lab will list: a canonical.csv plus a manifest."""
+    import json
+    d = root / "datasets" / name
+    d.mkdir(parents=True)
+    (d / "canonical.csv").write_text("DateTime,Open,High,Low,Close,Volume,Delta\n")
+    (d / "manifest.json").write_text(json.dumps(
+        {"symbol": symbol, "rows": rows, "first_dt": first, "last_dt": last}))
+
+
+def test_coverage_accepts_a_twin_but_only_when_the_window_reaches(tmp_path, monkeypatch):
+    """Three cases at once: an exact-market dataset that covers, a twin that
+    covers, and a twin that stops short. The last one is the failure this guards
+    — a 20-year file that ends before the export's end date is NOT usable, and
+    reporting it as usable would send someone into a meaningless parity run."""
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    _fake_dataset(tmp_path, "ES_20y", "ES", "02-01-2006 00:00:00 -05:00",
+                  "23-08-2026 20:00:00 -04:00")           # twin for MES, reaches
+    _fake_dataset(tmp_path, "YM_20y", "YM", "02-01-2006 00:00:00 -05:00",
+                  "31-12-2025 17:00:00 -05:00")           # twin for MYM, too short
+    _fake_dataset(tmp_path, "MNQ_now", "MNQ", "01-08-2025 00:00:00 -04:00",
+                  "23-08-2026 20:00:00 -04:00")           # exact market, reaches
+
+    from backtest.lab import lab_viewer as lv
+    cov = {c["market"]: c for c in lv._stage1_coverage()}
+
+    assert cov["MES"]["runnable"] is True
+    assert any("ES_20y" in x for x in cov["MES"]["datasets"])
+    assert cov["MNQ"]["runnable"] is True
+    assert cov["MNQ"]["datasets"] == ["MNQ_now"]
+    assert cov["MYM"]["runnable"] is False, "een te korte twin mag niet bruikbaar heten"
+    assert any("YM_20y" in x for x in cov["MYM"]["too_short"])
+
+
+def test_coverage_reports_nothing_runnable_without_datasets(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    from backtest.lab import lab_viewer as lv
+    cov = lv._stage1_coverage()
+    assert len(cov) == 3
+    assert not any(c["runnable"] for c in cov)
+    assert all(c["twin"] for c in cov), "elke vlootmarkt hoort een twin-route te hebben"

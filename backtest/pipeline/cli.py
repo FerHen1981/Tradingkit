@@ -314,9 +314,21 @@ def cmd_stage1(args):
     if pa["missing"]:
         print(f"    NIET TE CONTROLEREN ({len(pa['missing'])} veld(en) ontbreken in de sheet): "
               f"{', '.join(pa['missing'][:6])}{' ...' if len(pa['missing']) > 6 else ''}")
-    if pa["mismatches"] or pa["environment_mismatches"]:
+    tested_changes = {}
+    if pa["mismatches"] and args.as_tested:
+        from .parity import as_tested
+        cfg, tested_changes = as_tested(cfg, pa)
+        print("    ALS-GETEST: de export-waarden zijn overgenomen zodat de ENGINE meetbaar")
+        print("    wordt. Een geslaagde poort betekent dan pariteit met DEZE EXPORT, niet")
+        print("    met de vrijgegeven .pine — welke van de twee de bedoeling is, blijft open.")
+        for attr, (was, now) in sorted(tested_changes.items()):
+            print(f"      {attr}: {was!r} -> {now!r}")
+        pa = audit_properties(exp, cfg)
+        print(f"    na overname: {pa['mismatches']} input-afwijking(en)")
+    elif pa["mismatches"] or pa["environment_mismatches"]:
         print("    De export test een ANDERE configuratie dan deze engine — de vergelijking")
-        print("    hieronder is daarmee niet gezaghebbend. Los dit eerst op.")
+        print("    hieronder is daarmee niet gezaghebbend. Draai met --as-tested om de")
+        print("    engine tóch te meten tegen wat er werkelijk getest is.")
 
     # Reproduce the export's COSTS, not our registry's. Ground rule 10 says the
     # export is the truth about what was tested; running the same trades at a
@@ -397,13 +409,18 @@ def cmd_stage1(args):
                           {"properties_audit": pa, "comparison": cmp_,
                            "trade_diff": td,
                            "costs_from_export": costs,
+                           "as_tested": bool(tested_changes),
+                           "as_tested_changes": {k: [v[0], v[1]]
+                                                 for k, v in tested_changes.items()},
                            "dataset": args.dataset, "dataset_symbol": ds_sym,
                            "price_series_borrowed_from": substituted,
                            "window": {"since": since, "until": until, "bars": len(df),
                                       "coverage": ov}})
     state.record(args.engine, "parity", "passed" if ok else "failed",
-                 summary=cmp_["verdict"] + (f" [prijsreeks geleend van {substituted}]"
-                                            if substituted else ""),
+                 summary=(cmp_["verdict"]
+                          + (f" [prijsreeks geleend van {substituted}]" if substituted else "")
+                          + (" [ALS-GETEST: gemeten tegen de export-inputs, niet tegen de "
+                             ".pine-bron]" if tested_changes else "")),
                  artifact=art,
                  detail={"mismatches": pa["mismatches"], "checks": cmp_["checks"],
                          "price_series_borrowed_from": substituted})
@@ -467,6 +484,9 @@ def main():
     p1.add_argument("--engine", required=True, choices=fleet.names())
     p1.add_argument("--export", required=True, help="TradingView .xlsx export of the same engine")
     p1.add_argument("--since"); p1.add_argument("--until")
+    p1.add_argument("--as-tested", action="store_true",
+                    help="neem de export-inputs over waar ze van de .pine-bron afwijken, "
+                         "zodat de engine meetbaar wordt (grondregel 10 blijft gemeld)")
     p1.add_argument("--diff", action="store_true",
                     help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
 

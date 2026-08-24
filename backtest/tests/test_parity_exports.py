@@ -184,3 +184,58 @@ def test_coverage_reports_nothing_runnable_without_datasets(tmp_path, monkeypatc
     assert len(cov) == 3
     assert not any(c["runnable"] for c in cov)
     assert all(c["twin"] for c in cov), "elke vlootmarkt hoort een twin-route te hebben"
+
+
+# --- --as-tested: measure the engine even when the export ran other inputs -----
+
+def test_as_tested_is_a_no_op_when_nothing_differs():
+    """MATADOR agrees with its export on every input, so there is nothing to
+    adopt — and adopting nothing must not quietly rewrite the config."""
+    from backtest.pipeline.parity import as_tested
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    a = audit_properties(_load("MATADOR_MES_PROD_EOD_MES1m_2026-08-23.xlsx"), cfg)
+    out, changes = as_tested(cfg, a)
+    assert changes == {}
+    assert out is cfg
+
+
+def test_as_tested_adopts_the_leon_drawdown_model():
+    from backtest.pipeline.parity import as_tested
+    cfg = fleet.engine_config("EL_LEON_MYM_PROD_EOD")
+    e = _load("LEON_MYM_PROD_EOD_MYM1m_2026-08-23.xlsx")
+    out, changes = as_tested(cfg, audit_properties(e, cfg))
+    assert changes["dd_model"] == ("EOD", "Intraday")
+    assert out.dd_model == "Intraday"
+    assert cfg.dd_model == "EOD", "de oorspronkelijke config is gemuteerd"
+    assert audit_properties(e, out)["mismatches"] == 0
+
+
+def test_as_tested_adopts_the_whole_rey_day_profit_block_with_types_intact():
+    from backtest.pipeline.parity import as_tested
+    cfg = fleet.engine_config("EL_REY_MNQ_PROD_INTRA")
+    e = _load("REY_MNQ_PROD_INTRA_MNQ1m_2026-08-23.xlsx")
+    out, changes = as_tested(cfg, audit_properties(e, cfg))
+    assert set(changes) == {"day_exit_mode", "day_trail_activation_usd",
+                            "day_trail_giveback_usd", "day_cap_usd"}
+    assert out.day_exit_mode == "Trail + cap"
+    for attr, want in (("day_trail_activation_usd", 750.0),
+                       ("day_trail_giveback_usd", 100.0),
+                       ("day_cap_usd", 1000.0)):
+        got = getattr(out, attr)
+        assert got == want and isinstance(got, float), (attr, got)
+    assert audit_properties(e, out)["mismatches"] == 0
+
+
+def test_as_tested_keeps_booleans_boolean():
+    """The audit renders enum-as-bool rows as "Limit @ 50% FVG -> True", so the
+    adoption has to parse that back rather than store the label as a string."""
+    import dataclasses
+
+    from backtest.pipeline.parity import as_tested
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    flipped = dataclasses.replace(cfg, entry_limit_mode=False, use_breakeven=True)
+    e = _load("MATADOR_MES_PROD_EOD_MES1m_2026-08-23.xlsx")
+    out, changes = as_tested(flipped, audit_properties(e, flipped))
+    assert changes["entry_limit_mode"] == (False, True)
+    assert out.entry_limit_mode is True and isinstance(out.entry_limit_mode, bool)
+    assert out.use_breakeven is False and isinstance(out.use_breakeven, bool)

@@ -235,6 +235,40 @@ def audit_environment(export: Export, cfg) -> list[dict]:
     return rows
 
 
+def as_tested(cfg, audit: dict):
+    """A copy of `cfg` carrying the values the export was ACTUALLY run with.
+
+    Ground rule 10 cuts both ways. The audit's job is to say the export tests a
+    different configuration than the released source — but once that is said and
+    recorded, refusing to run leaves the engine itself unmeasured. This adopts
+    the export's values so stage 1 can answer the question it exists for: given
+    the same inputs, does the Python engine reproduce the Pine engine?
+
+    A pass under these values is parity with THE EXPORT, not with the released
+    .pine. The caller must record which it was — they are different claims, and
+    the difference is exactly what Pine Dev has to decide."""
+    import dataclasses
+    changes = {}
+    for r in audit["rows"]:
+        if r["ok"]:
+            continue
+        attr, want = r["attr"], r["export"]
+        if isinstance(want, str) and "->" in want:      # "Limit @ 50% FVG -> True"
+            want = want.rsplit("->", 1)[1].strip() == "True"
+        cur = getattr(cfg, attr, None)
+        if isinstance(cur, bool):
+            want = bool(want)
+        elif isinstance(cur, int) and not isinstance(cur, bool):
+            want = int(float(want))
+        elif isinstance(cur, float):
+            want = float(want)
+        changes[attr] = (cur, want)
+    if not changes:
+        return cfg, {}
+    return (dataclasses.replace(cfg, **{k: v[1] for k, v in changes.items()}),
+            changes)
+
+
 def audit_properties(export: Export, cfg) -> dict:
     """Ground rule 10 — does the export actually test the config we think it does?
 

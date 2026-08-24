@@ -230,6 +230,12 @@ def cmd_sensitivity(args):
                 print(f"  LET OP: het aantal plaatsingen verschuift zelf {drift*100:.0f}%, dus de")
                 print(f"  fill-ratio-band meet deels het instrument. Lees hem niet als een "
                       f"symmetrische ruisband.")
+    if r.get("trade_count_range"):
+        lo, hi = r["trade_count_range"]
+        print(f"\n  aantal trades door tick-ruis: {lo}-{hi} "
+              f"(spreiding {r['trade_count_spread_pct']}% van de basislijn)")
+        print(f"  -> ligt de trade-count-afwijking met pine binnen deze spreiding, dan is "
+              f"die dataruis, geen engine-fout")
     print(f"\n  gemiddeld {r['mean_survival_pct']}% overleeft (laagste {r['min_survival_pct']}%)")
     print(f"  {verdict(r)}")
     art = _write_artifact(args.engine, "tick-gevoeligheid", r)

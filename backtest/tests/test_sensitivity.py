@@ -172,3 +172,14 @@ def test_shift_mode_keeps_the_placement_count_centred(frame):
     assert abs(mid - base) <= tol, (
         f"plaatsingen drijven weg: basis {base}, jitter {lo}-{hi}, "
         f"toegestaan +/-{tol:.1f}")
+
+
+def test_survival_reports_the_trade_count_spread(frame):
+    """The number that makes the trade-count gate readable: if a one-tick jitter
+    on the instrument's own bars already moves the count by more than the gate's
+    10%, a count difference within that spread is data, not an engine defect."""
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    r = survival(frame, cfg, seeds=(1, 2, 3), prob=0.35)
+    lo, hi = r["trade_count_range"]
+    assert 0 < lo <= hi
+    assert r["trade_count_spread_pct"] is not None and r["trade_count_spread_pct"] >= 0

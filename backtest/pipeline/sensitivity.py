@@ -110,11 +110,16 @@ def survival(df, cfg, seeds=(1, 2, 3), prob: float = 0.35, progress=None,
                      "fill_pct": round(100 * oc["filled"] / oc["placed"], 1)
                                  if oc.get("placed") else None})
     surv = [r["survival_pct"] for r in rows]
+    counts = [r["trades"] for r in rows]
     fills = [r["fill_pct"] for r in rows if r["fill_pct"] is not None]
     base_fill = (round(100 * base_oc["filled"] / base_oc["placed"], 1)
                  if base_oc.get("placed") else None)
     return {
         "baseline_trades": len(base_keys),
+        "trade_count_range": [min(counts), max(counts)] if counts else None,
+        "trade_count_spread_pct": (round(100 * (max(counts) - min(counts))
+                                         / max(len(base_keys), 1), 1)
+                                   if counts else None),
         "baseline_placed": base_oc.get("placed"),
         "baseline_fill_pct": base_fill,
         "fill_pct_range": [min(fills), max(fills)] if fills else None,

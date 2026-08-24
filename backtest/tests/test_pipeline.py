@@ -309,3 +309,44 @@ def test_the_account_inputs_are_transcribed_not_inherited():
         assert (c.acct_trail_dd, c.acct_dll) == (2000.0, 1000.0), n
         assert (c.consistency_pct, c.min_payout, c.payout_buffer) == (50.0, 500.0, 500.0), n
         assert c.use_wait_for_cap is True and c.use_mae_guard is False, n
+
+
+def test_report_reads_stage1_artifacts_back(tmp_path, monkeypatch, capsys):
+    """Ground rule 11 says every stage leaves an artifact; this checks the
+    evidence is actually answerable afterwards, without re-simulating."""
+    import json
+
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    art = tmp_path / "artifacts"
+    art.mkdir()
+    (art / "EL_MATADOR_MES_PROD_EOD_trap1_pariteit_20260824.json").write_text(json.dumps({
+        "dataset": "ES_20y_1m_CVD", "price_series_borrowed_from": "ES",
+        "as_tested": False, "as_tested_changes": {},
+        "window": {"bars": 515101, "coverage": {"missing_frac": 0.022}},
+        "comparison": {"sim": {"trades": 120, "profit_factor": 1.4, "win_rate_pct": 43.3},
+                       "pine": {"trades": 121, "profit_factor": 1.82, "win_rate_pct": 52.1},
+                       "checks": [{"name": "trade count", "sim": 120, "pine": 121,
+                                   "ok": True, "detail": "0.8% apart"},
+                                  {"name": "profit factor", "sim": 1.4, "pine": 1.82,
+                                   "ok": False, "detail": "23.1% apart"}]},
+        "trade_diff": {"matched": 46, "sim_trades": 109, "sim_only": 63, "pine_only": 75,
+                       "matched_with_a_different_result": 1,
+                       "sim_exit_reasons": {"SL": 47, "TP": 32},
+                       "pine_exit_reasons": {"SL|MFE1t": 20, "SL|MFE2t": 19, "TP|MFE9t": 37}}},
+        default=str))
+
+    from backtest.pipeline.cli import cmd_report
+    cmd_report(None)
+    out = capsys.readouterr().out
+    assert "MATADOR_MES_PROD_EOD" in out
+    assert "120/121" in out and "1.4/1.82" in out
+    assert "42%" in out, "gepaard-percentage ontbreekt (46/109)"
+    assert "prijsreeks geleend van ES" in out
+    assert "SL 59%" in out, "pine-exits moeten op hoofdreden samengevoegd worden"
+
+
+def test_report_says_so_when_there_is_nothing_to_report(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LAB_DIR", str(tmp_path))
+    from backtest.pipeline.cli import cmd_report
+    cmd_report(None)
+    assert "geen trap-1 artefacten" in capsys.readouterr().out

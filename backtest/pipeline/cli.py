@@ -2,6 +2,7 @@
 
     python -m backtest.pipeline.cli plan
     python -m backtest.pipeline.cli coverage    # wat kan trap 1 draaien, wat mist
+    python -m backtest.pipeline.cli report      # laatste trap-1 uitslag per engine
     python -m backtest.pipeline.cli sensitivity --dataset D --engine E
     python -m backtest.pipeline.cli stage0 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD
     python -m backtest.pipeline.cli stage1 --dataset MGC_20y_1m --engine EL_TESORO_MGC_CON_EOD \
@@ -216,6 +217,80 @@ def cmd_sensitivity(args):
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": "sensitivity", "report": r}, default=str),
           flush=True)
+
+
+def cmd_report(args):
+    """Cross-engine view of the latest stage-1 result, read back from artifacts.
+
+    `plan` says WHICH gates are open; this says HOW far off each engine is, on
+    one screen, without re-running anything. Reading the stored artifacts rather
+    than re-simulating is the point: ground rule 11 says every stage leaves one,
+    so the evidence should be answerable after the fact."""
+    import glob
+    from collections import Counter
+
+    root = lab_root() / "artifacts"
+    files = sorted(glob.glob(str(root / "*_trap1_pariteit_*.json")))
+    latest = {}
+    for f in files:
+        eng = os.path.basename(f).split("_trap1_pariteit_")[0]
+        latest[eng] = f                      # sorted by name -> newest date last
+    if not latest:
+        print(f"\n  geen trap-1 artefacten in {root}")
+        return
+
+    print(f"\n  trap 1 · laatste uitslag per engine ({len(latest)} van "
+          f"{len(fleet.names())} engines gedraaid)\n")
+    hdr = (f"    {'engine':<24}{'trades':>13}{'PF':>13}{'WR':>13}"
+           f"{'gepaard':>10}{'als-getest':>12}")
+    print(hdr)
+    rows = []
+    for eng, f in sorted(latest.items()):
+        d = json.loads(open(f).read())
+        c = d.get("comparison") or {}
+        sim, pine = c.get("sim") or {}, c.get("pine") or {}
+        td = d.get("trade_diff") or {}
+        m = td.get("matched")
+        n = td.get("sim_trades") or sim.get("trades") or 0
+        pair = f"{100*m/n:.0f}%" if m is not None and n else "—"
+        print(f"    {eng.replace('EL_',''):<24}"
+              f"{str(sim.get('trades', '?')) + '/' + str(pine.get('trades', '?')):>13}"
+              f"{str(sim.get('profit_factor', '?')) + '/' + str(pine.get('profit_factor', '?')):>13}"
+              f"{str(sim.get('win_rate_pct', '?')) + '/' + str(pine.get('win_rate_pct', '?')):>13}"
+              f"{pair:>10}{('ja' if d.get('as_tested') else 'nee'):>12}")
+        rows.append((eng, d, c, td))
+    print("\n    kolommen tonen simulator/pine\n")
+
+    for eng, d, c, td in rows:
+        print(f"  {eng.replace('EL_','')}")
+        w = d.get("window") or {}
+        cov = w.get("coverage") or {}
+        src = d.get("price_series_borrowed_from")
+        print(f"    dataset {d.get('dataset')}"
+              + (f" (prijsreeks geleend van {src})" if src else "")
+              + f" · {w.get('bars', '?'):,} bars"
+              + (f" · dekking {100-(cov.get('missing_frac') or 0)*100:.1f}%" if cov else ""))
+        if d.get("as_tested_changes"):
+            print(f"    als-getest overgenomen: "
+                  + ", ".join(f"{k} {v[0]!r}->{v[1]!r}"
+                              for k, v in sorted(d["as_tested_changes"].items())))
+        for chk in c.get("checks") or []:
+            mark = "ok " if chk["ok"] else "XX "
+            print(f"      {mark}{chk['name']:<18}{str(chk['sim']):>12} vs "
+                  f"{str(chk['pine']):>12}   {chk['detail']}")
+        if td:
+            print(f"      gepaard {td.get('matched')}/{td.get('sim_trades')} · "
+                  f"alleen-sim {td.get('sim_only')} · alleen-pine {td.get('pine_only')} · "
+                  f"materieel anders {td.get('matched_with_a_different_result')}")
+            for side in ("sim_exit_reasons", "pine_exit_reasons"):
+                mix = Counter()
+                for k, v in (td.get(side) or {}).items():
+                    mix[k.split("|")[0].strip() if "|" in k else k] += v
+                tot = sum(mix.values()) or 1
+                label = "simulator" if side.startswith("sim") else "pine     "
+                print(f"      exits {label}: "
+                      + "  ".join(f"{k} {100*v/tot:.0f}%" for k, v in mix.most_common(5)))
+        print()
 
 
 def cmd_plan(_args):
@@ -468,6 +543,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("plan").set_defaults(fn=cmd_plan)
     sub.add_parser("coverage").set_defaults(fn=cmd_coverage)
+    sub.add_parser("report").set_defaults(fn=cmd_report)
     ps = sub.add_parser("sensitivity"); ps.set_defaults(fn=cmd_sensitivity)
     ps.add_argument("--dataset", required=True)
     ps.add_argument("--engine", required=True, choices=fleet.names())

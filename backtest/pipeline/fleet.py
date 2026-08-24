@@ -31,6 +31,22 @@ _SPEC = {
 # Pine-parity pending before live PA deployment (README of the package).
 PARITY_PENDING = {"EL_BANDIDO_MYM_HF_EOD"}
 
+# Defects in the released .pine sources that this mirror had to work around.
+# Recorded rather than silently normalised: stage 1 may not claim parity with a
+# script whose inputs we reinterpreted. `pine/**` is Pine Dev's map — reported,
+# not patched (docs/inbox.md 18).
+PINE_DEFECTS = {
+    "EL_BANDIDO_MYM_HF_EOD": (
+        'day_exit_mode: the source has input.string("Cap only", ...) while its own '
+        'options list is ["Off","Day-trail (keep peak)","Day-cap (hard target)",'
+        '"Trail + cap"]. A defval outside options does not compile in Pine v6, so '
+        'the released script is unbuildable as shipped. Mirrored here as '
+        '"Day-cap (hard target)" — the only option matching the intent (cap only, '
+        'no trail) — but the mapping is an interpretation, so stage 1 stays open '
+        'until Pine Dev fixes the source.'
+    ),
+}
+
 
 def engine_config(name: str) -> Config:
     """The Config that mirrors one released Pine script, 1:1."""
@@ -78,5 +94,6 @@ def summary() -> list[dict]:
         out.append({"name": n, "market": s[0], "qty": s[1],
                     "fvg": f"{s[2]}-{s[3]}", "cvd": s[4], "stop": s[5], "r": s[6],
                     "expiry": s[7], "day_exit": s[8], "regime": s[12],
-                    "parity_pending": n in PARITY_PENDING})
+                    "parity_pending": n in PARITY_PENDING,
+                    "pine_defect": PINE_DEFECTS.get(n, "")})
     return out

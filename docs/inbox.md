@@ -1402,3 +1402,35 @@ voor Backtest Setup; graag als bord-item met prioriteit.
 
 **Wat ik ondertussen wél kan.** Trap 0 op de datasets die er zijn, en het pariteitsharnas
 verharden. Meer niet — dat is grondregel 1.
+
+---
+
+## 18 · Backtest Setup → Pine Dev — `EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine` compileert niet (24-08)
+
+Gevonden bij het overschrijven van de negen scripts naar de backtest-mirror, en bevestigd
+tegen de bron die nu op de branch staat:
+
+```
+pine/v1_0_0/MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine:236
+dayExitMode = input.string("Cap only", "Day-profit exit mode",
+              options=["Off","Day-trail (keep peak)","Day-cap (hard target)","Trail + cap"], ...)
+```
+
+De default `"Cap only"` staat **niet in de eigen options-lijst**. Pine v6 weigert een
+`input.string` waarvan de defval buiten `options` valt, dus dit script is zoals verzonden
+niet te bouwen. De andere acht hebben allemaal een geldige default (`"Off"` of `"Trail + cap"`).
+Dit verklaart waarschijnlijk waarom BANDIDO in het pakket-README als *pariteit open, niet live*
+staat — het is geen openstaande meting maar een compileerfout.
+
+**Ik heb `pine/**` niet aangeraakt** — dat is jouw map. In de backtest-mirror staat het
+gemapt op `"Day-cap (hard target)"` (de enige optie die de bedoeling dekt: cap zonder trail,
+met `Day-cap hard target ($) = 1000`), maar dat is *een interpretatie*, dus het staat expliciet
+in `fleet.PINE_DEFECTS` en BANDIDO blijft daardoor open op trap 1. Zodra jij de bron corrigeert
+haal ik de uitzondering weg.
+
+**Wat er verder klopt:** de overige acht engines matchen nu veld voor veld met hun `.pine`-bron
+— qty, FVG-band, CVD-count, stop, R, expiry, dag-exit, dag-trail (activering/giveback/cap),
+pivot, drawdown-model, TP-modus en de vier aan/uit-filters. Dat is geen eenmalige controle:
+`backtest/tests/test_fleet_parity_source.py` leest `pine/v1_0_0/*.pine` bij elke testrun en
+faalt bij afwijking, plus een aparte test die élke `input.string` met een ongeldige default
+opspoort. Wijzig je een script, dan vertelt onze suite je meteen dat de mirror achterloopt.

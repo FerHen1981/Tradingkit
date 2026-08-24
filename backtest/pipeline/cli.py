@@ -45,6 +45,8 @@ def cmd_plan(_args):
     if hard:
         print(f"\n  {len(hard)}/{len(rows)} engines hebben een OPEN HARDE POORT — parameteroptimalisatie")
         print("  daaronder is ongeldig (grondregel 1).")
+    for n, why in sorted(fleet.PINE_DEFECTS.items()):
+        print(f"\n  ! BRONDEFECT {n.replace('EL_','')} — {why}")
 
 
 def cmd_stage0(args):

@@ -1583,7 +1583,9 @@ async function loadPipeline(){
     +PIPE.fleet.map(f=>`<tr><td style="text-align:left">${f.name.replace('EL_','')}${f.parity_pending?' <span class=tag style="color:var(--rose);border-color:var(--rose)">pariteit open</span>':''}</td>
       <td>${f.market}</td><td>${f.qty}</td><td>${f.fvg}</td><td>${f.cvd}</td><td>${f.stop}</td>
       <td>${f.r}</td><td>${f.expiry}</td><td style="text-align:left">${f.day_exit}</td>
-      <td style="text-align:left">${f.regime}</td></tr>`).join('')+'</tbody></table>';
+      <td style="text-align:left">${f.regime}</td></tr>`
+     +(f.pine_defect?`<tr><td colspan=10 style="text-align:left;color:var(--rose);font-size:12px;padding:2px 6px 8px">
+       <b>! brondefect</b> — ${f.pine_defect.replace(/</g,'&lt;')}</td></tr>`:'')).join('')+'</tbody></table>';
   const es=$('#stEngine'); if(es) es.innerHTML=PIPE.fleet.map(f=>`<option value="${f.name}">${f.name.replace('EL_','')}</option>`).join('');
 }
 function showEngine(name){

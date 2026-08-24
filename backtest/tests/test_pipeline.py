@@ -350,3 +350,23 @@ def test_report_says_so_when_there_is_nothing_to_report(tmp_path, monkeypatch, c
     from backtest.pipeline.cli import cmd_report
     cmd_report(None)
     assert "geen trap-1 artefacten" in capsys.readouterr().out
+
+
+def test_order_lifecycle_is_counted_and_adds_up(tmp_path):
+    """Where an order went once placed — the other half of "why fewer trades
+    than Pine". veto_counts explains why a signal never became an order; without
+    this the two halves cannot be told apart."""
+    from backtest import indicators as im
+    from backtest.engine import Engine
+    from backtest.pipeline import fleet
+
+    df = _pa_frame(tmp_path)
+    cfg = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
+    oc = res.order_counts
+    assert oc is not None and oc["placed"] > 0, "geen orders — de test bewijst niets"
+    assert oc["filled"] == len(res.trades), "gevulde orders != trades"
+    resolved = (oc["filled"] + oc["expired"] + oc["cancelled_flat"]
+                + oc["cancelled_halt"] + oc["replaced"] + oc["open_at_end"])
+    assert resolved == oc["placed"], (
+        f"orders lekken weg: {oc['placed']} geplaatst, {resolved} verantwoord ({oc})")

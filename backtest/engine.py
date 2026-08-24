@@ -60,6 +60,7 @@ class Result:
     last_time: Optional[pd.Timestamp] = None
     resolve_bar: int = -1                   # bar where the account halted (pass/breach), -1 = never
     veto_counts: Optional[dict] = None      # phase-2 signal-veto attribution (diag mode)
+    order_counts: Optional[dict] = None     # limit-order lifecycle (always on)
     diagnosis: Optional[dict] = None        # phase-1/2 data-derived explanation of the run
 
 
@@ -111,6 +112,12 @@ class Engine:
         # Opt-in signal-veto attribution (phase 2). Off by default so the mill's
         # parallel workers keep the zero-overhead hot path.
         self.diag = diag
+        # Order lifecycle. veto_counts explains why a SIGNAL never became an
+        # order; this explains where an order went once placed — which is the
+        # other half of "why does the simulator take fewer trades than Pine".
+        self.order_counts = {"placed": 0, "replaced": 0, "filled": 0,
+                             "expired": 0, "cancelled_flat": 0,
+                             "cancelled_halt": 0, "open_at_end": 0}
         self.veto_counts = {"primary": 0, "cvd": 0, "vwap": 0, "regime": 0,
                             "time": 0, "confluence": 0, "passed": 0} if diag else None
 
@@ -320,6 +327,9 @@ class Engine:
         res.first_time = pd.Timestamp(self.time[self.start_bar])
         res.last_time = pd.Timestamp(self.time[min(end - 1, self.n - 1)])
         res.resolve_bar = i if self.acct_halted else -1
+        if self.pend_dir != 0:
+            self.order_counts["open_at_end"] += 1
+        res.order_counts = dict(self.order_counts)
         res.veto_counts = self.veto_counts
         return res
 
@@ -341,6 +351,7 @@ class Engine:
             self._check_bracket(i)
 
     def _fill_entry(self, i: int, px: float):
+        self.order_counts["filled"] += 1
         self.pos = self.pend_dir * self.pend_qty
         self.entry_avg = px
         self.entry_bar = i
@@ -501,7 +512,10 @@ class Engine:
 
         # --- pending expiry ---
         if self.pos == 0 and self.pend_dir != 0 and not placed:
-            if (i - self.pend_bar > cfg.expiry_bars) or flat_win or day_halted:
+            aged = (i - self.pend_bar) > cfg.expiry_bars
+            if aged or flat_win or day_halted:
+                self.order_counts["expired" if aged else
+                                  ("cancelled_flat" if flat_win else "cancelled_halt")] += 1
                 self.pend_dir = 0
                 self.pend_limit = np.nan
                 self.pend_stop = np.nan
@@ -857,6 +871,9 @@ class Engine:
         if np.isnan(tp_px) or (is_long and tp_px <= entry_px + self.c.mintick) or (not is_long and tp_px >= entry_px - self.c.mintick):
             return False
 
+        if self.pend_dir != 0:
+            self.order_counts["replaced"] += 1
+        self.order_counts["placed"] += 1
         self.pend_dir = d
         self.pend_bar = i
         self.pend_limit = entry_px if cfg.entry_limit_mode else np.nan

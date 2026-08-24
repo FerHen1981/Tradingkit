@@ -82,6 +82,10 @@ def _dt(value):
 # comparison stops being about engine semantics and starts being about missing bars.
 SHORT_TAIL_TOLERANCE = 0.05
 
+# Below this share of entries aligning with the export, matching KPIs are not
+# evidence of the same engine — see the note at the gate in cmd_stage1.
+MIN_PAIRED_PCT = 70.0
+
 
 def window_overlap(ds_first, ds_last, exp_start, exp_end) -> dict:
     """How much of the export's window a dataset actually covers."""
@@ -278,6 +282,11 @@ def cmd_report(args):
             mark = "ok " if chk["ok"] else "XX "
             print(f"      {mark}{chk['name']:<18}{str(chk['sim']):>12} vs "
                   f"{str(chk['pine']):>12}   {chk['detail']}")
+        oc = d.get("order_counts") or {}
+        if oc.get("placed"):
+            print(f"      orders: {oc['placed']} geplaatst -> {oc['filled']} gevuld "
+                  f"({100*oc['filled']/oc['placed']:.0f}%) · {oc['expired']} verlopen · "
+                  f"{oc.get('cancelled_flat', 0)} flat · {oc.get('cancelled_halt', 0)} halte")
         if td:
             print(f"      gepaard {td.get('matched')}/{td.get('sim_trades')} · "
                   f"alleen-sim {td.get('sim_only')} · alleen-pine {td.get('pine_only')} · "
@@ -423,6 +432,9 @@ def cmd_stage1(args):
         cfg = _dc.replace(cfg, contract=_dc.replace(cfg.contract, **costs))
         print(f"  KOSTEN UIT DE EXPORT overgenomen: {was} -> {costs} "
               f"(grondregel 10 — we reproduceren die run, niet onze registry)")
+        # Re-audit against the adopted costs. Without this the gate keeps failing
+        # on the very difference we just removed.
+        pa = audit_properties(exp, cfg)
 
     df = dm.load(path)
     # Default the simulated window to what TradingView actually tested. Comparing
@@ -471,6 +483,16 @@ def cmd_stage1(args):
     for c in cmp_["checks"]:
         print(f"    {c['name']:<18}{str(c['sim']):>14}{str(c['pine']):>14}   "
               f"{'ok' if c['ok'] else 'AFWIJKING'} — {c['detail']}")
+    oc = res.order_counts or {}
+    if oc.get("placed"):
+        print(f"\n  orderlevenscyclus: {oc['placed']} limieten geplaatst -> "
+              f"{oc['filled']} gevuld ({100*oc['filled']/oc['placed']:.1f}%), "
+              f"{oc['expired']} verlopen, {oc['cancelled_flat']} geannuleerd door het "
+              f"flat-venster, {oc['cancelled_halt']} door een daghalte")
+        print(f"    (pine deed {exp.n_trades} trades; als onze fill-ratio hoog is en we "
+              f"toch minder trades doen,\n     dan zit het verschil in het aantal SIGNALEN, "
+              f"niet in de uitvoering)")
+
     from .tracediff import diff as trace_diff, render as trace_render
     td = trace_diff(res.trades, exp)
     if not cmp_["pass"] or args.diff:
@@ -478,28 +500,51 @@ def cmd_stage1(args):
               "her-optimaliseer niet)")
         print(trace_render(td))
 
-    ok = (cmp_["pass"] and not pa["mismatches"]
-          and not pa["environment_mismatches"] and not pa["missing"])
+    # Aggregate agreement is necessary, not sufficient. Two engines can land on
+    # the same trade count, PF and win rate while taking largely different
+    # trades — on a borrowed price series that is even likely. Calling that
+    # "parity" is the false green ground rule 9 exists to prevent, so a KPI pass
+    # with weak trade-level overlap is recorded as INCONCLUSIVE, not passed.
+    paired = td.get("matched") or 0
+    n_sim = td.get("sim_trades") or 0
+    pair_pct = round(100 * paired / n_sim, 1) if n_sim else 0.0
+    clean = (not pa["mismatches"] and not pa["environment_mismatches"]
+             and not pa["missing"])
+    ok = cmp_["pass"] and clean
+    weak = ok and pair_pct < MIN_PAIRED_PCT
+    status = "passed" if (ok and not weak) else ("inconclusive" if weak else "failed")
+    if weak:
+        print(f"\n  LET OP: alle KPI-checks slagen, maar slechts {pair_pct}% van de "
+              f"instapmomenten paart met de export.")
+        print(f"  Dezelfde totalen uit grotendeels ándere trades is geen pariteit — "
+              f"gemarkeerd als INCONCLUSIEF,")
+        print(f"  niet als gehaald. Op een geleende prijsreeks is dit te verwachten; "
+              f"met de echte bars hoort dit boven {MIN_PAIRED_PCT}% te komen.")
     art = _write_artifact(args.engine, "trap1_pariteit",
                           {"properties_audit": pa, "comparison": cmp_,
                            "trade_diff": td,
                            "costs_from_export": costs,
                            "as_tested": bool(tested_changes),
+                           "paired_pct": pair_pct, "status": status,
+                           "order_counts": oc,
                            "as_tested_changes": {k: [v[0], v[1]]
                                                  for k, v in tested_changes.items()},
                            "dataset": args.dataset, "dataset_symbol": ds_sym,
                            "price_series_borrowed_from": substituted,
                            "window": {"since": since, "until": until, "bars": len(df),
                                       "coverage": ov}})
-    state.record(args.engine, "parity", "passed" if ok else "failed",
+    state.record(args.engine, "parity", status,
                  summary=(cmp_["verdict"]
                           + (f" [prijsreeks geleend van {substituted}]" if substituted else "")
                           + (" [ALS-GETEST: gemeten tegen de export-inputs, niet tegen de "
                              ".pine-bron]" if tested_changes else "")),
                  artifact=art,
                  detail={"mismatches": pa["mismatches"], "checks": cmp_["checks"],
-                         "price_series_borrowed_from": substituted})
-    print(f"\n  POORT: {'GEHAALD' if ok else 'NIET GEHAALD'} — {cmp_['verdict']}")
+                         "price_series_borrowed_from": substituted,
+                         "paired_pct": pair_pct})
+    label = {"passed": "GEHAALD", "inconclusive": "INCONCLUSIEF",
+             "failed": "NIET GEHAALD"}[status]
+    print(f"\n  POORT: {label} — {cmp_['verdict']}")
     print(f"  artefact {art}")
     print("STAGE_JSON " + json.dumps({"stage": 1, "properties": pa, "comparison": cmp_,
                                       "pass": ok}, default=str), flush=True)

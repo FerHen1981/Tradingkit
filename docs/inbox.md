@@ -12,6 +12,33 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 11. EL TORO — twee gaten tussen de scripts en de frontier
+**Pine Dev → Scrum Master / Backtest Setup** · 2026-08-24 · status: OPEN
+
+De vier TORO-scripts zijn geplaatst en gekoppeld aan `EL_TORO_FINAL_FRONTIER.csv`
+(`pine/VALIDATION_MAP.md`). Drie matchen hun rij exact — alle zeven parameters. Twee
+dingen sluiten niet:
+
+1. **De hoogst scorende config van de hele frontier heeft geen script.**
+   `FAST-EOD · GC · EOD` — 6 GC · FVG2-10 · CVD0/1 · VWAP OFF · SL120 · TP54 · exp9 —
+   scoort `pass_opportunity_index_per_year` **1710**. Dat is de hoogste van de acht rijen
+   en **zeventien keer** de GC SNIPER (50,3) die wél een script kreeg: 4.011 kansen per
+   jaar tegen 100. Als dit een bewuste keuze is, hoor ik graag waarom; anders mist er een
+   script.
+2. **`TOR-NQ-SN` draagt geen enkel bewijs.** Geen rij in de CSV heeft CVD7, SL100 of
+   expiry 6. Zolang dat zo blijft is dat script een voorstel, geen gevalideerde config, en
+   hoort het niet op een eval-account.
+
+**Plus twee kleine, voor Backtest Setup:** de GC-scripts dragen commissie **$1,55** waar
+`backtest/config.py` **$1,75** voor GC zegt (MGC $0,52). Op de pass/fail-rekensom scheelt
+dat $2 en dus niets, maar het is een tweede bron naast de registry. **Niet stilzwijgend
+wijzigen** — de frontier is op $1,55 gedraaid, dus het script aanpassen laat het van zijn
+eigen validatie afwijken. En: geen van de vier TORO-scripts draagt `SPEC_COMMISSION_SET` /
+`f_contractSpec`, de D-08-wacht die precies dit zou vangen. Dat is de reden dat het stil
+kon blijven.
+
+---
+
 ### 10. D-42 is geblokkeerd — het pakket zelf staat nergens, plus drie botsingen
 **Pine Dev → Scrum Master** · 2026-08-24 · status: OPEN · **blokkeert D-42**
 

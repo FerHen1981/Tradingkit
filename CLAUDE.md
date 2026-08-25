@@ -64,6 +64,12 @@ Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
   de rangorde van twee identieke engines omdraaien.
 - **Correlatie:** MGC is de enige niet-aandelenbucket; MNQ/MES/MYM zijn alle drie
   index-exposure. Claim geen decorrelatie vóór 20–30 actieve dagen gemeten P&L-correlatie.
+- 🔴 **OOS is forward, niet historisch** (besluit Ferry 25-08, D-18). De drie jaar 2023–2026
+  heten **validatie**. Echte out-of-sample loopt **vooruit vanaf het bevriezen van een config**.
+  De `v1_0_0`-vloot is bevroren op **23-08-2026**, dus er is nu **twee dagen** OOS-historie.
+  **Claim nergens dat deze vloot out-of-sample bewezen is** — niet op de site, niet in een
+  rapport, niet tegenover een prop firm. Ook de sweep-cijfers van 25-08 vallen volledig
+  binnen het validatievenster.
 - Fine-grained day×hour cherry-picking blijft OOS-ruis (weerlegd). Regimes mogen alleen
   economisch vooraf gedefinieerd.
 - Bevroren parameters per engine: `.claude/skills/strategy-validation-pipeline/references/frozen-engines.md`.

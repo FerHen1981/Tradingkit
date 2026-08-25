@@ -102,6 +102,94 @@ def _ma(x: np.ndarray, length: int, kind: str = "EMA") -> np.ndarray:
     return _ema(x, n)
 
 
+def _wma(x: np.ndarray, length: int) -> np.ndarray:
+    """Linearly weighted MA (Pine ta.wma): weights 1..n, newest heaviest. NaN
+    until the window fills."""
+    n = max(int(length), 1)
+    w = np.arange(1, n + 1, dtype=float)
+    w /= w.sum()
+    out = np.full(len(x), np.nan)
+    for i in range(n - 1, len(x)):
+        out[i] = float(np.dot(x[i - n + 1:i + 1], w))
+    return out
+
+
+def _hma(x: np.ndarray, length: int) -> np.ndarray:
+    """Hull MA (Pine ta.hma): wma(2*wma(n/2) - wma(n), sqrt(n)). The inner short-
+    window NaNs are zero-filled so the outer WMA can seed (matches the nz() the
+    source feeds the smoother)."""
+    n = max(int(length), 1)
+    half = max(n // 2, 1)
+    sq = max(int(np.sqrt(n)), 1)
+    raw = 2.0 * _wma(x, half) - _wma(x, n)
+    return _wma(np.nan_to_num(raw, nan=0.0), sq)
+
+
+def _vwma(x: np.ndarray, vol: np.ndarray, length: int) -> np.ndarray:
+    """Volume-weighted MA (Pine ta.vwma): sum(x*vol)/sum(vol) over the window."""
+    n = max(int(length), 1)
+    pv = pd.Series(x * vol).rolling(n, min_periods=n).sum().to_numpy()
+    vv = pd.Series(vol).rolling(n, min_periods=n).sum().to_numpy()
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(vv > 0, pv / vv, np.nan)
+
+
+def _roll_pop_std(x: np.ndarray, length: int) -> np.ndarray:
+    """Rolling population standard deviation (ddof=0) — matches Pine ta.stdev."""
+    n = max(int(length), 1)
+    return pd.Series(x).rolling(n, min_periods=n).std(ddof=0).to_numpy()
+
+
+def _bbwp(close: np.ndarray, vol: np.ndarray, length: int, lookback: int,
+          basis_type: str) -> np.ndarray:
+    """Bollinger band-width percentile — REPAINT-FREE. Band width = 2*stdev/basis;
+    ranked against the prior `lookback` CLOSED bars only. Faithful to the source
+    f_bbwp: population stdev, fixed-lookback denominator, and pre-history (missing
+    width, nz->0) counts as narrower than any real width. Returns 0..100, NaN where
+    the basis is undefined (gate treats NaN as fail downstream)."""
+    if basis_type == "EMA":
+        basis = _ema(close, length)
+    elif basis_type == "VWMA":
+        basis = _vwma(close, vol, length)
+    else:
+        basis = _ma(close, length, "SMA")
+    dev = _roll_pop_std(close, length)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        bbw = np.where((basis == 0) | np.isnan(basis), np.nan, 2.0 * dev / basis)
+    n = len(close)
+    out = np.full(n, np.nan)
+    lb = max(int(lookback), 1)
+    b0 = np.nan_to_num(bbw, nan=0.0)          # nz(): missing width -> 0 (narrowest)
+    for i in range(n):
+        if np.isnan(bbw[i]):
+            continue
+        past = b0[max(0, i - lb):i]           # up to `lookback` prior closed bars
+        cnt = int(np.count_nonzero(past <= b0[i])) + (lb - past.size)
+        out[i] = 100.0 * cnt / lb
+    return out
+
+
+def _mfi_side(open_: np.ndarray, high: np.ndarray, low: np.ndarray,
+              close: np.ndarray, period: int) -> np.ndarray:
+    """Candle-value money flow, HMA-smoothed and sign-flipped (source * -1). >0
+    favours longs, <0 favours shorts. All inputs are same-bar or prior-bar closed
+    values — no look-ahead."""
+    n = len(close)
+    o4 = (open_ + high + low + close) / 4.0
+    hi = np.maximum.reduce([high, open_, close])
+    lo = np.minimum.reduce([low, open_, close])
+    prev_c = np.empty(n); prev_c[0] = close[0]; prev_c[1:] = close[:-1]
+    prev_o = np.empty(n); prev_o[0] = open_[0]; prev_o[1:] = open_[:-1]
+    mid = (prev_c + prev_o) / 2.0
+    rng = hi - lo
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cv = np.where(rng == 0, np.nan, (mid - o4) / rng)
+    prev_cv = np.empty(n); prev_cv[0] = np.nan; prev_cv[1:] = cv[:-1]
+    filled = np.where(~np.isnan(cv), cv,                       # nz(cv, nz(cv[1], 0))
+                      np.where(~np.isnan(prev_cv), prev_cv, 0.0))
+    return _hma(filled, period) * -1.0
+
+
 def _rsi(close: np.ndarray, length: int) -> np.ndarray:
     """Wilder RSI (0-100), seeded on the first diff. NaN at bar 0."""
     n = len(close)
@@ -558,6 +646,27 @@ def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
     else:
         out["veto_long"] = True
         out["veto_short"] = True
+
+    # --- BBWP band-width gate (symmetric volatility band-pass) -----------------
+    # Optional research filter (default off). Same posture as the VWAP/CVD vetoes:
+    # an all-True array when off, so every existing preset is byte-identical.
+    if getattr(cfg, "use_bbwp_filter", False):
+        bbwp = _bbwp(close, vol, cfg.bbwp_len, cfg.bbwp_lookback, cfg.bbwp_basis)
+        out["bbwp_pass"] = ((~np.isnan(bbwp)) & (bbwp >= cfg.bbwp_min)
+                            & (bbwp <= cfg.bbwp_max))
+    else:
+        out["bbwp_pass"] = np.ones(n, dtype=bool)
+
+    # --- MFI side gate (candle money-flow, HMA-smoothed) -----------------------
+    # Directional research filter (default off): longs only while the flow is
+    # positive, shorts only while negative.
+    if getattr(cfg, "use_mfi_filter", False):
+        mfi = _mfi_side(open_, high, low, close, cfg.mfi_period)
+        out["mfi_long"] = mfi > 0
+        out["mfi_short"] = mfi < 0
+    else:
+        out["mfi_long"] = np.ones(n, dtype=bool)
+        out["mfi_short"] = np.ones(n, dtype=bool)
 
     # --- EMA crossover entry (Level B generator) ------------------------------
     if cfg.use_ema_cross:

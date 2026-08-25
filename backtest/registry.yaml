@@ -403,6 +403,34 @@ classic:
       atr_length: {default: 10,  min: 7,   max: 20,  step: 1,   type: opt}
       multiplier: {default: 3.0, min: 1.5, max: 4.0, step: 0.5, type: opt}
 
+  bbwp:
+    desc: "Bollinger band-width percentile — a volatility band-pass gate (symmetric, both sides)."
+    layer: L7   # volatility regime gate
+    role: volatility
+    info_category: volatility
+    price_action: false
+    provenance: sourced
+    engine: implemented   # wired Fase 6: symmetric veto; the ta.vwma basis option lives here
+    optimize: thresholds
+    params:
+      length:   {default: 20,  min: 10, max: 50,  step: 5, type: opt}
+      lookback: {default: 255, min: 50, max: 500, step: 5, type: fixed}
+      basis:    {default: SMA, options: [SMA, EMA, VWMA],   type: opt}
+      min:      {default: 0,   min: 0,  max: 100, step: 5, type: opt}
+      max:      {default: 100, min: 0,  max: 100, step: 5, type: opt}
+
+  mfi:
+    desc: "Candle money-flow side (HMA-smoothed): longs while positive, shorts while negative."
+    layer: L6
+    role: momentum
+    info_category: momentum
+    price_action: false
+    provenance: sourced
+    engine: implemented   # wired Fase 6: directional veto; the ta.hma smoother lives here
+    optimize: none
+    params:
+      period: {default: 60, min: 10, max: 120, step: 5, type: opt}
+
   donchian:
     desc: "Highest-high/lowest-low breakout channel. Turtle 20/55. Presence enables the channel-break entry."
     layer: L3   # breakout is the trigger

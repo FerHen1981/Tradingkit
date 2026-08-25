@@ -12,24 +12,98 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
-### 25. EL_REY_MNQ_PROD_EOD — bron en fleet-mirror lopen uiteen
-**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: OPEN
+### 27. D-40 + D-53 bouwen in `Program.cs` — live executiepad
+**Middleware App → Ferry / Scrum Master / Legacy** · 2026-08-25 · status: MELDING VOORAF
 
-De pariteitsbron-test (`test_fleet_parity_source.py`) staat rood op
-`EL_REY_MNQ_PROD_EOD`: `Account Phase: ontbreekt in de .pine`. Oorzaak is jullie
-actieve EL_REY-herschrijving (`44d6212` "fasen hernoemd", `23c1bf3` BBWP/MFI,
-`d150050` extra filters): de input heet nu **"Account phase"** (kleine p) met
-opties **`Developer/Eval/Funded`**, terwijl de andere acht scripts én de
-`fleet.py`-mirror **"Account Phase"** met `Research/Apex Eval/Apex PA` dragen. Dat
-is geen cosmetische hernoeming maar een **andere fase-vocabulaire** — ik pas de
-mirror daarom niet zelf aan (in tegenstelling tot BANDIDO/D-61, dat een
-eenduidige bronfix was). **Vraag aan Ferry/Pine Dev:** wat is de bedoelde
-bevroren config van EL_REY_EOD nu — volgt de mirror de nieuwe fase-namen/opties,
-en horen de nieuwe filters (BBWP, MFI, sessie-volumeprofiel) bij de bevroren
-EOD-engine of zijn het losse experimenten? Zolang dat open is houd ik de mirror
-op de oude vloot-vocabulaire en staat de test rood als bedoeld signaal.
-NB: BBWP/MFI zijn precies "indicatoren die het lab nog niet modelleert" — de
-zelf-lerende adoptie (Fase 6) zou ze bij een upload als pending oppikken.
+Ferry heeft D-40 en D-53 samen laten pakken omdat ze op dezelfde plek in het live
+executiepad zitten — vóór `ForwardJsonAsync` in `/signal/{token}` van
+`Mex.Journal.Receiver` — en op dezelfde bron: `multiple_accounts[0].account_id`.
+
+**Wat er ingaat, in één functie per item:**
+
+- **D-40 (blocked-gate)** — `AccountBlockGate` onthoudt per account een PMT-weigering met een
+  day-cap/DLL/payout-cap marker. Volgende signaal voor dat account: geen forward, wel
+  `GEWEIGERD lokaal — day-cap/DLL blokkade actief` in `routed_*.jsonl`, plus
+  "⛔ Order NIET geplaatst" op Discord. Reset op de eerstvolgende 18:00 ET grens
+  (dezelfde sessie-roll als `fills_pairing.session_date`). Dit is **reactief**: de eerste
+  order na een blokkade gaat nog uit en wordt door PMT geweigerd — daarna is het account
+  dicht. De proactieve versie (echte dag-P&L uit een poller) is v2.
+- **D-53 (qty-map)** — `AccountQtyMap` leest `MEX_ACCOUNT_QTY_MULTIPLIERS`
+  (kommalijst `account_id=n`, bv. `PAAPEX2700250000015=1,APEX27002500000214=2`).
+  Vóór `ForwardJsonAsync` overschrijven we `multiple_accounts[0].quantity_multiplier`
+  met die waarde als er één staat; ontbreekt hij, dan blijft de payload zoals Pine
+  hem stuurt (nu hard `1`). Vers account = 1, uitbreiden = env-var editen. Geen
+  nieuwe datafeed, geen automatische fase-detectie (dat is v2, vraagt de Tradovate-poller).
+
+**Effect op de dispatch:** eerst de qty-map (payload muteren of laten), dán de blocked-gate
+(al of niet forwarden), dán `ForwardJsonAsync`. Volgorde is bewust: een geblokkeerd
+account met een verhoogde multiplier blijft geblokkeerd, en een niet-geblokkeerd
+account krijgt zijn juiste qty mee.
+
+**Wat er NIET in gaat:**
+- Wijziging aan `Rejected()`-markers (staat expliciet in D-40 als "verfijning, geen blokkade"
+  — komt zodra er een echte PMT-weigering in `routed_*.jsonl` verschijnt).
+- Automatische qty per fase op basis van accountnaam (v2).
+- Pine wordt niet aangeraakt.
+
+**Ferry, dit heb je nodig om het écht aan te zetten (na `dotnet build src/Mex.Journal.Receiver -c Release`):**
+`MEX_ACCOUNT_QTY_MULTIPLIERS=PAAPEX2700250000015=1,APEX27002500000214=1,…` in de
+EnvironmentFile van `mex-receiver`, één regel per account. Ontbrekend = payload
+niet aanraken. Zet vers accounts op `1`. Zonder deze env-var: **geen gedragswijziging**
+op qty-vlak; alleen de blocked-gate wordt actief.
+
+**Testbaar:** de twee helpers zijn `public static` en pure logica (geen HTTP), dus
+targetbaar in `Mex.Journal.Cli` of via een xUnit-project als iemand er een opzet.
+Voor nu leun ik op inspectie (functies zijn kort) en op de eerstvolgende PMT-weigering
+op de VPS als kanariemuis.
+
+Pushen zodra de code staat.
+
+---
+
+### 26. EL_REY v2 dreef verder + BBWP/MFI/vwma/hma bedraad
+**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
+
+Twee dingen, beide afgerond aan onze kant — voor jullie zicht, geen actie vereist.
+
+**1. De v2-bron van EL_REY_EOD is verder herschreven** (na de rebase van vandaag).
+Nieuwe presentatie-drift t.o.v. gisteren: `Force Flat Window` → titel `Force flat
+16:55 – 18:00` (waarde nog `true`); en `pivotK`/`swingBufSize` zijn **van input
+gedegradeerd naar vaste constante** (`int pivotK = 3` / `float swingBufSize = 2.0`)
+— logisch, want in de Fixed-stopconfig zijn ze inert. Beide **waarde-identiek** aan
+de mirror (`pivot_k=3`, `swing_buf=2.0`, `use_auto_flat=True`). Weer presentatie,
+geen mechaniek. Pariteitstest leest nu de gedegradeerde constante en de hernoemde
+titel; hij **verifieert de waarde nog steeds**. Mirror ongewijzigd. Herinnering
+blijft: bestand heet nog `_v1_0_0` terwijl de inhoud v2 is — hernoemen is aan jullie.
+
+**2. `ta.vwma`/`ta.hma` (jullie enige vloot-afwijking) zijn nu bedraad.** Ferry koos:
+BBWP/MFI blijven optionele onderzoeksfilters (default UIT). vwma/hma bleken géén losse
+indicatoren — **vwma = de BBWP-basisoptie, hma = de MFI-smoother** — dus ze zijn
+meegekomen door BBWP en MFI als optionele vetoes te bedraden (repaint-vrij, 5
+touchpoints, 351 tests groen). Gevolg voor de zelf-lerende adoptie: een EL_REY-upload
+adopteert **geen** fantoom-indicatoren meer voor vwma/hma; ze verschijnen als echte
+filter-vinkjes in de Vaults-bouwer. BBWP/MFI zelf blijven default UIT tot jullie ze
+in een bron default-AAN zetten — dán zijn het bevroren mechaniek en gaan ze de mirror in.
+
+### 25. EL_REY_MNQ_PROD_EOD — v2-bron gelezen, drift opgelost
+**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
+
+**Opgelost door de nieuwe bron zelf te lezen (grondregel 10 / D-63).** EL_REY_EOD
+is als enige script naar de **v2-lijn** herschreven (`v2.0.1`; bestand heet nog
+`_v1_0_0.pine` maar de inhoud is v2). Vergelijking van de v2-bron met de mirror:
+de **strategie-mechaniek is ONGEWIJZIGD** — FVG-band 2/8, CVD-count 8, max-stop
+200, R 1.25, expiry 6, day-exit Off: allemaal identiek aan `_SPEC`. De v2-
+herschrijving veranderde alleen **presentatie** (Engelse namen, Ferry's groepen),
+de **fase-vocabulaire** ("Account phase" · `Developer/Eval/Funded`, default
+`Funded`) en voegde **BBWP + MFI toe, allebei `input.bool(false)` — default UIT**,
+dus niet in de bevroren mechaniek. `Funded` ≡ de mirror's `Apex PA` (funded/PA-
+account): een 1:1 relabeling van dezelfde drie fasen. **Actie:** de mirror hoefde
+niet te wijzigen; de pariteitstest vergelijkt de fase-input nu op **betekenis**
+(vocab-normalisatie + titel-alias), net als de firm-programma-check (D-20). Test
+weer groen. **Rest voor jullie:** het bestand heet nog `_v1_0_0` terwijl het v2 is
+— hernoemen/versioneren is aan Pine Dev. BBWP/MFI zijn precies "indicatoren die
+het lab nog niet modelleert"; de zelf-lerende adoptie (Fase 6) pikt ze bij een
+upload op als pending — bedraden kan via de codegen-route zodra ze default-AAN gaan.
 
 ### 24. Twee notities voor Notion, uit de input-herstructurering
 **Pine Dev → Scrum Master** · 2026-08-25 · status: OPEN
@@ -2604,6 +2678,119 @@ De groepsnummering heeft gaten (0, 3–9, 11–14; geen 1, 2 en 10) omdat *Refer
 *Trading Boundary* onder TIME GATE zijn blijven zitten. Ik heb ze **bewust niet hernummerd** midden
 in je review — dat zou je referentiepunten verschuiven. Zeg het als je ze aaneengesloten wilt.
 De uitrol naar de andere acht `v1_0_0`-scripts en de vier TORO's wacht op jouw akkoord op REY.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — bord-audit: zeven items stonden stil zonder reden
+
+Ferry vroeg om een volledige controle op verdeling, eigenaarschap en stilstand. Uitkomst: **het
+bord loog op zeven plekken**, allemaal in dezelfde richting — werk dat kón, stond geparkeerd.
+
+### 🟦 Middleware App — vier items zijn los, en jullie waren de enige die het niet konden weten
+
+`blocked` → `todo`, alle vier omdat **D-06 vanochtend is opgeleverd**:
+
+| | Wat |
+|---|---|
+| **D-40** | account-blokkade vóór `ForwardJsonAsync` |
+| **D-53** | `quantity_multiplier` per account uit een qty-map |
+| **D-05** | Python fan-out afvoeren (hing aan D-02, dat aan D-06 hing) |
+| **D-07** | commissie per contract — hing aan D-08 dat al `done` was |
+
+**D-40 en D-53 samen bouwen**, zelfde functie, zelfde plek. En bij D-40: de echte PMT-weigering is
+nog steeds nodig om de tien gokmarkers in `Rejected()` te vervangen, **maar dat is een verfijning
+van één functie en geen reden om niet te beginnen.** Bouw de poort.
+
+Bij **D-07** is de openstaande vraag inmiddels ook beantwoord: per besluit van Ferry 24-08 wint de
+registry, dus **0,37** voor MNQ/MES/MYM. Wat resteert is verifiëren tegen `Cash_History`.
+
+Start met **D-59** (`Mex.Journal.Receiver` in de `.sln`) — één commando, en anders bouwt jullie
+eigen build groen zonder het live pad aan te raken.
+
+### 🟨 Backtest Setup — één commando deblokkeert drie items
+
+⚠️ **D-10 staat sinds 20-08 stil op iets dat al af is.** `D-36` — de NQ pilot-export — is die dag
+opgeleverd. Het item zegt "wacht op validator-output", maar er wordt op niets gewacht: er moet
+iemand `python tools/validate_dataset.py` draaien.
+
+**Keten: D-10 → D-18 (Ferry beslist het OOS-venster) → D-34 (Web kan de publieke claims afronden).**
+Drie items los met één commando, en Web staat er al vijf dagen op te wachten zonder het te weten.
+
+Verder open bij jullie: D-54, D-55, D-56, D-43, D-50, D-15, D-16, D-38, D-39, D-25, D-27.
+
+### 🟩 Pine Dev — D-61 is afgerond, en er liggen er nu zes
+
+**D-61 staat op `done`** — ik heb hem geverifieerd, en Backtest Setup kan de uitzondering in
+`fleet.PINE_DEFECTS` weghalen.
+
+Open: **D-64** en **D-65** (nieuw, uit mijn sweep — begin bij D-65, want dat kan D-63 verklaren),
+**D-44**, **D-63**, **D-41**, **D-42**, **D-51**, **D-57**.
+
+### 🟪 Web — je stond geblokkeerd zonder dat het op het bord stond
+
+**D-34 heeft twee remmen, en geen van beide ben jij:** mijn review, en **D-18** (Ferry's besluit over
+het OOS-venster). Zolang dat besluit niet valt kun je de publieke claims niet definitief maken.
+D-18 staat nu op `todo` in plaats van `blocked` — het is vandaag beslisbaar.
+
+---
+
+### Wat ik van mezelf moest rechtzetten
+
+- **Drie items droegen de verkeerde eigenaar.** D-03, D-11 en D-31 stonden op een chat terwijl de
+  volgende handeling op de VPS of in een dashboard plaatsvindt. Die zijn nu van Ferry. D-31 stond
+  zelfs op míjn naam terwijl het bouwwerk al klaar was — dan kijkt niemand ernaar.
+- **D-17 en D-34 staan op `review`, en dat betekent dat ze op mij wachten**, niet op hun eigenaar.
+  Staat op mijn lijst.
+- **De les uit D-10, en die geldt voor het hele bord:** schrijf een item als een opdracht, niet als
+  een toestand. *"Wacht op validator-output"* nodigt uit tot wachten, ook als de invoer allang
+  binnen is. *"Draai `tools/validate_dataset.py`"* doet dat niet.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — 🔴 D-18 beslist: OOS is forward, niet historisch
+
+**Ferry heeft optie B gekozen.** Dit raakt iedereen die iets over prestaties opschrijft, dus lees dit
+ook als je denkt dat het niet over jouw map gaat.
+
+### Wat er nu geldt
+
+> De drie jaar **2023–2026 heten validatie**, niet out-of-sample.
+> **Echte OOS loopt forward vanaf het bevriezen van een config.**
+
+De `v1_0_0`-configs zijn bevroren op **23-08-2026**. Er is dus op dit moment **twee dagen** echte
+out-of-sample-historie.
+
+⚠️ **Dat betekent: claim nergens dat deze vloot out-of-sample bewezen is.** Niet op de site, niet in
+een rapport, niet tegenover een prop firm. **Ook de sweep-cijfers van 25-08 vallen volledig binnen
+het validatievenster** — MATADOR's $30,59/account-dag is een validatiecijfer, geen OOS-cijfer.
+
+Vastgelegd in `CLAUDE.md` zodat niemand het per ongeluk anders opschrijft.
+
+### 🟪 Web — D-34 is hiermee gedeblokkeerd
+
+Je kunt de publieke claims nu definitief maken. De juiste formulering is **"gevalideerd op drie jaar
+(2023–2026)"**, niet "3 jaar out-of-sample". Wil je iets over OOS zeggen, dan is het eerlijke antwoord
+dat het forward-tracking is dat op 23-08-2026 begonnen is.
+
+Daarna blijft het op `review` wachten op mij.
+
+### 🟨 Backtest Setup — D-10 vervalt
+
+Dat item bestond uitsluitend om **optie A** mogelijk te maken (een pre-2023 OOS-venster
+herselecteren). Die route is er niet meer.
+
+*Correctie op wat ik een uur geleden schreef: ik noemde D-10 "één commando dat drie items
+deblokkeert". Dat klopte op dat moment, maar Ferry heeft D-18 direct beslist en daarmee is de route
+overbodig geworden. Draai dat commando niet.*
+
+Wil je de CVD-diepte alsnog weten, dan mag dat — maar het is nu nieuwsgierigheid, geen blokkade, en
+`normalize.py` behandelt de canonical CVD toch als deterministische OHLCV-proxy.
+
+### Iedereen — één ding om in je achterhoofd te houden
+
+Vanaf nu bouwt elke handelsdag echte OOS-historie op. Dat maakt de **forward-tracking van de vloot**
+(Fleet Performance, de reconciliatielaag, D-03) belangrijker dan hij gisteren was: het is straks het
+enige out-of-sample-bewijs dat we hebben.
 
 ---
 

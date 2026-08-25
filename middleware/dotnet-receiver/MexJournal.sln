@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mex.Journal", "src\Mex.Jour
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mex.Journal.Cli", "src\Mex.Journal.Cli\Mex.Journal.Cli.csproj", "{0B3D933B-E9B1-4548-9A6A-D958FB058CCD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mex.Journal.Receiver", "src\Mex.Journal.Receiver\Mex.Journal.Receiver.csproj", "{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -26,9 +28,14 @@ Global
 		{0B3D933B-E9B1-4548-9A6A-D958FB058CCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0B3D933B-E9B1-4548-9A6A-D958FB058CCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0B3D933B-E9B1-4548-9A6A-D958FB058CCD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{CD7F4BDA-134E-4593-8AE2-A29D7AB45F6A} = {4FCD51B9-985D-4E55-8FB1-AB1035042DFD}
 		{0B3D933B-E9B1-4548-9A6A-D958FB058CCD} = {4FCD51B9-985D-4E55-8FB1-AB1035042DFD}
+		{7C9E8A1F-4B2D-4E5A-9F1C-3D8B5E7A2F4C} = {4FCD51B9-985D-4E55-8FB1-AB1035042DFD}
 	EndGlobalSection
 EndGlobal

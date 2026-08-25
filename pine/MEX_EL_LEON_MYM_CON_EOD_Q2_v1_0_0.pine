@@ -68,6 +68,14 @@
 //   Wel nieuw in de dropdown: de vier legacy-programma's. Consistency op eval-programma's
 //   gaat van 50 naar 0: dat is een PA-regel, een eval heeft hem niet, en in dit script komt
 //   consistencyPct alleen binnen via payoutEligible dat isPA eist - dus zonder gevolg.
+// v2.3.2 (25-08, D-44): f_pmtJSON stuurt nu OOK breakeven_offset mee. Het veld bestaat in
+//   PMT (bevestigd met Ferry's eigen alert-template) en wij stuurden het niet, terwijl
+//   beOffEff intern al gebruikt werd om de stop te verzetten. Gevolg tot nu: Pine legde zijn
+//   eigen stop op entry+offset, PMT legde hem op entry - een pariteitsgat op elke BE-trade.
+//   Zelfde guard en zelfde f_distPrice()-transform als het breakeven-veld, dus de eenheid
+//   volgt automatisch uit unitMode. LET OP: staat het risk type van dat symbool/account in
+//   PMT op "Price", dan past PMT breakeven en offset helemaal niet toe - controleer dat
+//   voor je de fix test, anders test je in het donker.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -75,7 +83,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON EOD Q2"
-var string currentVersion = "v2.3.1"
+var string currentVersion = "v2.3.2"
 strategy("MΞX EL LEON · MYM CON EOD Q2 · " + currentVersion, shorttitle="LEO-YM-CE", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1674,7 +1682,7 @@ bool ddGuardOK = not phaseOn or not useDDGuard or (not na(ddRoom) and ddRoom >= 
 // ============================================================================
 f_trailOn(_slD) => useTrailEff and _slD > 0
 f_pmtJSON(_action, _qty, _price, _slD, _tpD, _ordType) =>
-    "{" + "\"symbol\":\"" + syminfo.ticker + "\",\"date\":\"" + str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "\",\"data\":\"" + _action + "\",\"quantity\":\"" + str.tostring(_qty) + "\",\"risk_percentage\":0,\"price\":\"" + str.tostring(_price) + "\",\"tp\":0,\"percentage_tp\":0,\"dollar_tp\":" + str.tostring(_tpD) + ",\"sl\":0,\"dollar_sl\":" + str.tostring(_slD) + ",\"percentage_sl\":0,\"trail\":" + (f_trailOn(_slD) ? "1" : "0") + ",\"trail_stop\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trBufEff) : 0) + ",\"trail_trigger\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trStartEff) : 0) + ",\"trail_freq\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0) + ",\"update_tp\":false,\"update_sl\":false,\"breakeven\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beTrigEff)) : "0") + ",\"token\":\"" + pmtToken + "\",\"pyramid\":false,\"reverse_order_close\":true,\"order_type\":\"" + _ordType + "\",\"multiple_accounts\":[{\"token\":\"" + pmtToken + "\",\"account_id\":\"" + accountID + "\",\"risk_percentage\":0,\"quantity_multiplier\":1}]}"
+    "{" + "\"symbol\":\"" + syminfo.ticker + "\",\"date\":\"" + str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "\",\"data\":\"" + _action + "\",\"quantity\":\"" + str.tostring(_qty) + "\",\"risk_percentage\":0,\"price\":\"" + str.tostring(_price) + "\",\"tp\":0,\"percentage_tp\":0,\"dollar_tp\":" + str.tostring(_tpD) + ",\"sl\":0,\"dollar_sl\":" + str.tostring(_slD) + ",\"percentage_sl\":0,\"trail\":" + (f_trailOn(_slD) ? "1" : "0") + ",\"trail_stop\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trBufEff) : 0) + ",\"trail_trigger\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trStartEff) : 0) + ",\"trail_freq\":" + str.tostring(f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0) + ",\"update_tp\":false,\"update_sl\":false,\"breakeven\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beTrigEff)) : "0") + ",\"breakeven_offset\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beOffEff)) : "0") + ",\"token\":\"" + pmtToken + "\",\"pyramid\":false,\"reverse_order_close\":true,\"order_type\":\"" + _ordType + "\",\"multiple_accounts\":[{\"token\":\"" + pmtToken + "\",\"account_id\":\"" + accountID + "\",\"risk_percentage\":0,\"quantity_multiplier\":1}]}"
 f_pcSym() => str.length(pcSymbol) > 0 ? pcSymbol : syminfo.ticker
 f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
     bool _pmtRoute = usePMT or useRithmic

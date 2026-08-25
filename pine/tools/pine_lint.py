@@ -124,6 +124,42 @@ def check(path):
     return findings
 
 
+# Blokken die in de hele vloot letterlijk gelijk horen te zijn. Zodra er twee versies
+# van bestaan is dat stille drift in het live executiepad -- precies de klasse fout die
+# D-44 zichtbaar maakte (breakeven_offset ontbrak, in alle scripts tegelijk, jarenlang).
+# Deze check is het goedkope deel van D-51: de duplicatie blijft, maar hij kan niet meer
+# ongemerkt uiteenlopen.
+SHARED_BLOCKS = {
+    "f_pmtJSON": ("f_pmtJSON(", "multiple_accounts"),
+    "middleware-alert": ('    if useMiddleware', '}", alert.freq_once_per_bar)'),
+}
+
+
+def check_shared(paths):
+    """Meld elk gedeeld blok dat niet in alle bestanden dezelfde checksum heeft."""
+    import hashlib
+    findings = []
+    for label, (start, end) in SHARED_BLOCKS.items():
+        buckets = {}
+        for p in paths:
+            s = open(p).read()
+            try:
+                a = s.index(start)
+                b = s.index("\n", s.index(end, a))
+            except ValueError:
+                buckets.setdefault("ONTBREEKT", []).append(p)
+                continue
+            buckets.setdefault(hashlib.md5(s[a:b].encode()).hexdigest()[:10], []).append(p)
+        if len(buckets) > 1:
+            findings.append(f"{label}: {len(buckets)} varianten -> " + " | ".join(
+                f"{h} ({len(v)}x: {', '.join(x.split('/')[-1] for x in sorted(v)[:3])}"
+                + (", ..." if len(v) > 3 else "") + ")" for h, v in sorted(buckets.items())))
+        else:
+            h = next(iter(buckets))
+            print(f"gedeeld {label:18} {h}  identiek in {len(paths)} bestanden")
+    return findings
+
+
 def main(argv):
     paths = []
     for a in argv or ['pine/**/*.pine']:
@@ -131,6 +167,10 @@ def main(argv):
     if not paths:
         print("geen bestanden"); return 1
     bad = 0
+    shared = check_shared(paths) if len(paths) > 1 else []
+    for f in shared:
+        bad += 1
+        print(f"FOUT  gedeeld blok\n        {f}")
     for p in paths:
         f = check(p)
         if f:

@@ -2180,3 +2180,44 @@ account, D-53 overschrijft `quantity_multiplier` uit een qty-map. Daarna **D-02*
 ⚠️ D-40 wacht nog op één ding dat niet bij jullie ligt: **een echte PMT-weigering**, zodat de tien
 gokmarkers in `Rejected()` (regel 286) vervangen kunnen worden door het echte antwoordformaat. De
 body-check draait sinds vannacht live, dus die weigering komt nu vanzelf voorbij.
+
+---
+
+## 20 · Backtest Setup → Scrum Master — SYSTEEMBEVINDING uit de eerste volledige vloot-sweep: sizing blokkeert live (25-08)
+
+**Context.** De backtester is opnieuw opgezet rond de twaalf-traps pijplijn v7 (trap 0 t/m 9 draaien;
+`backtest/pipeline/`). Eerste volledige sweep over alle negen engines is klaar. Details en rangorde
+in `docs/DECISIONS.md` (25-08). Eén bevinding is groter dan Backtest Setup en moet naar Ferry én
+raakt twee andere chats — vandaar dit item.
+
+**De bevinding.** Op trap 7 (PA-lifecycle) en trap 8 (payout/account-dag) breacht **élke** engine op
+**volle bevroren grootte**. Geen backtest-fout — geverifieerd dat research-mode aan/uit dezelfde
+funded-uitkomst geeft, dus niets wordt dubbel geteld. De oorzaak is scherp en economisch:
+
+> **De $1.000 PA daily-loss-limit begrenst de contractgrootte.** Bij MATADOR op 6 MES-contracten
+> overschrijdt één slechte dag al de DLL: *"daily loss −$1.033 exceeded DLL $1.000"*. Elke engine
+> fundeert wél op **1 contract**, maar de bevroren volle grootte (MATADOR 6, REY 6, LEON 2–3)
+> breacht een vers 50K-account vóórdat de trailing-buffer de floor vergrendelt.
+
+De `.pine`-bron schaalt contracten in via de `derisk`/`deriskPA`-logica; onze bevroren config draait
+een vaste qty vanaf dag 1 en modelleert die scaling niet. **Dit is geen bug maar een openstaande
+ontwerpkeuze die live-gang blokkeert.**
+
+**Wat dit raakt (twee chats):**
+- **Pine Dev** — is de `derisk`/`deriskPA`-scaling de bedoelde live-sizing (start klein, schaal op
+  naarmate de buffer groeit), of hoort er een vaste kleinere qty per accountfase? De bevroren
+  frozen-engines dragen nu de volle qty; als scaling het antwoord is, moet die in de trap-7/8-meting
+  gemodelleerd worden (nu meet ik 1 ct als de overlevende ondergrens).
+- **Middleware App** — per-account volume is al een control-plane-instelling (D-53 qty-map). De
+  vraag is of de qty-per-account daar dynamisch met de accountbuffer meebeweegt, of statisch is.
+
+**Wat Backtest Setup nu meet (indicatief, want alleen MATADOR heeft een gesloten pariteitspoort):**
+payout-$/bezette account-dag op de overlevende grootte (1 ct): **MATADOR $30,59 › LEON $17,48 ›
+REY $13,21**; BANDIDO/PATRON/TESORO funderen niet. Zodra de sizing-vraag beslist is, herdraai ik
+trap 7/8 op de bedoelde scaling en wordt het cijfer hard.
+
+**Gevraagd:** een D-nummer voor deze bevinding, en routing naar Pine Dev + Middleware. Ik heb geen
+actie op het live executiepad — dit is een research- en ontwerpvraag.
+
+**Losse D-nummers die nog openstaan uit deze sweep** (graag ook nummeren): de nieuwe pijplijn-basis
+(inbox 17), de brondefect-melding BANDIDO (inbox 18), de correcties + LEON/REY-pariteit (inbox 19).

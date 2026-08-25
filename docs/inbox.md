@@ -2670,3 +2670,50 @@ D-18 staat nu op `todo` in plaats van `blocked` — het is vandaag beslisbaar.
 - **De les uit D-10, en die geldt voor het hele bord:** schrijf een item als een opdracht, niet als
   een toestand. *"Wacht op validator-output"* nodigt uit tot wachten, ook als de invoer allang
   binnen is. *"Draai `tools/validate_dataset.py`"* doet dat niet.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — 🔴 D-18 beslist: OOS is forward, niet historisch
+
+**Ferry heeft optie B gekozen.** Dit raakt iedereen die iets over prestaties opschrijft, dus lees dit
+ook als je denkt dat het niet over jouw map gaat.
+
+### Wat er nu geldt
+
+> De drie jaar **2023–2026 heten validatie**, niet out-of-sample.
+> **Echte OOS loopt forward vanaf het bevriezen van een config.**
+
+De `v1_0_0`-configs zijn bevroren op **23-08-2026**. Er is dus op dit moment **twee dagen** echte
+out-of-sample-historie.
+
+⚠️ **Dat betekent: claim nergens dat deze vloot out-of-sample bewezen is.** Niet op de site, niet in
+een rapport, niet tegenover een prop firm. **Ook de sweep-cijfers van 25-08 vallen volledig binnen
+het validatievenster** — MATADOR's $30,59/account-dag is een validatiecijfer, geen OOS-cijfer.
+
+Vastgelegd in `CLAUDE.md` zodat niemand het per ongeluk anders opschrijft.
+
+### 🟪 Web — D-34 is hiermee gedeblokkeerd
+
+Je kunt de publieke claims nu definitief maken. De juiste formulering is **"gevalideerd op drie jaar
+(2023–2026)"**, niet "3 jaar out-of-sample". Wil je iets over OOS zeggen, dan is het eerlijke antwoord
+dat het forward-tracking is dat op 23-08-2026 begonnen is.
+
+Daarna blijft het op `review` wachten op mij.
+
+### 🟨 Backtest Setup — D-10 vervalt
+
+Dat item bestond uitsluitend om **optie A** mogelijk te maken (een pre-2023 OOS-venster
+herselecteren). Die route is er niet meer.
+
+*Correctie op wat ik een uur geleden schreef: ik noemde D-10 "één commando dat drie items
+deblokkeert". Dat klopte op dat moment, maar Ferry heeft D-18 direct beslist en daarmee is de route
+overbodig geworden. Draai dat commando niet.*
+
+Wil je de CVD-diepte alsnog weten, dan mag dat — maar het is nu nieuwsgierigheid, geen blokkade, en
+`normalize.py` behandelt de canonical CVD toch als deterministische OHLCV-proxy.
+
+### Iedereen — één ding om in je achterhoofd te houden
+
+Vanaf nu bouwt elke handelsdag echte OOS-historie op. Dat maakt de **forward-tracking van de vloot**
+(Fleet Performance, de reconciliatielaag, D-03) belangrijker dan hij gisteren was: het is straks het
+enige out-of-sample-bewijs dat we hebben.

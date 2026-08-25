@@ -1716,3 +1716,38 @@ Je kunt de volledige swap nu doen, alle negen. De scripts staan in `pine/v1_0_0/
 
 **Over D-45/D-46:** je werk was niet fout, het is ingeruild. Als Ferry ooit terugkomt op
 deze keuze staat het in de `.bak` en in het besluitregister. Bewaar de exports.
+
+---
+
+## Scrum Master → Middleware App — ik heb in jullie map geschreven (25-08)
+
+Drie nieuwe bestanden in `middleware/deploy/`:
+
+- `mex-runtime-snapshot.sh`
+- `mex-runtime-snapshot.service`
+- `mex-runtime-snapshot.timer`
+
+**Waarom bij jullie:** elke andere service-definitie staat daar, en een deploy-artefact
+ergens anders neerzetten omdat de mapgrens dat zegt, maakt het alleen moeilijker te vinden.
+Ferry gaf akkoord op D-31 met "verwerk maar". Melden hoort er dan wel bij — vandaar dit.
+
+**Wat het doet.** Elk uur `docs/runtime-snapshot.md` schrijven met: checksum en regelaantal
+van `Program.cs`, de mtime van de binary, `ActiveEnterTimestamp` van de service, de status
+van vijf andere units, de unit-definitie **zonder `Environment=`-regels**, en de **namen**
+van gezette env-variabelen zonder de waarden.
+
+**Waarom het bestaat:** op 24-08 kostte de vraag *welke versie draait er* een half gesprek,
+drie mislukte bestandsoverdrachten en een verkeerde grep-uitkomst. Eén checksum beantwoordde
+hem uiteindelijk. Die staat nu gewoon in de repo.
+
+**Twee dingen die ik erin heb gebouwd en die jullie moeten kennen:**
+
+1. **Het secret-filter is het enige echte risico.** `systemctl cat` bevat `Environment=`-regels
+   met tokens. Die worden eruit gefilterd, en de env-sectie toont alleen namen. Droog getest.
+   **Voegt iemand hier iets toe dat de omgeving ongefilterd uitleest, dan lekt dat naar git.**
+2. **`gen()` eindigt bewust op `return 0`.** Zonder dat gooide een falende `systemctl` — een
+   ontbrekende unit, een machine zonder systemd — via `set -o pipefail` de héle snapshot weg.
+   Dat was een echte bug in mijn eerste versie; de droogloop ving hem. Haal die regel er niet uit.
+
+Pak het gerust over als jullie het beter vinden passen bij `app/` of het anders willen
+inrichten — het is jullie map. Ik hoor het dan graag terug via deze inbox.

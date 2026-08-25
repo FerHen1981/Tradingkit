@@ -105,9 +105,15 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   eigen branch blijft staan bereikt niemand, en dat is precies hoe de analyses-chat dagen op een
   ingetrokken aanname doorwerkte. Do not create PRs unless asked. (`claude/mcp-trader-dev-sse-ibl64y`
   is dood — volledig opgenomen in de werkbranch, liep 186 commits achter.)
-- Ownership: `backtest/**` Backtest Setup · `pine/**` + `tools/gen_pine_firms.py` Pine Dev ·
-  `middleware/**` Middleware App · `data/propfirms.json` gedeeld. Buiten je eigen map:
-  niet muteren, maar melden in `docs/inbox.md`.
+- **Eigenaarstabel** (compleet sinds D-19/D-29, besluit Ferry 25-08):
+  `backtest/**` Backtest Setup · `pine/**` Pine Dev · `middleware/**` Middleware App ·
+  `web/**` Web · **`docs/**` Scrum Master** · **`tools/**` Backtest Setup** ·
+  **`validation/**` Backtest Setup** · `data/propfirms.json` gedeeld.
+  Uitzondering: `tools/gen_pine_firms.py` blijft bij **Pine Dev** — dat bestand genereert Pine.
+  **`validation/` is append-only:** bewijs wordt nooit herschreven als een conclusie vervalt,
+  het krijgt een notitie dat het ingetrokken is. Zo bleef het GC+ES-bewijs bruikbaar als
+  historie toen de conclusie eronder wegviel (23-08).
+  Buiten je eigen map: niet muteren, maar melden in `docs/inbox.md`.
 - **`middleware/app/main.py`, `router.py` en `brokers/` draaien NIET live.** Het live
   executiepad is `mex-receiver` (.NET). Verifieer met `systemctl cat` vóór je aanneemt
   dat een wijziging de executie raakt.
@@ -115,5 +121,10 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   losse commit) — dat is het slot dat dubbel werk voorkomt. Beslissing die een ander
   raakt? Eén regel in `docs/DECISIONS.md`.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
+- **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
+  `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
+  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. **Kijk daar
+  eerst** voor je iemand vraagt iets op de VPS na te kijken. Is de tabel oud, dan draait de
+  timer niet — en dat is zelf ook informatie.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

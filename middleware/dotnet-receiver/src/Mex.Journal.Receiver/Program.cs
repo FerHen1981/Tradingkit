@@ -357,20 +357,35 @@ static string Excerpt(string s)
     return s.Length <= 200 ? s : s[..200] + "…";
 }
 
-// Bewust conservatief: liever een geplaatste order die onterecht als verdacht wordt
-// gemarkeerd, dan een geweigerde order die als geslaagd wegschrijft. Het volledige
-// antwoord staat hoe dan ook in het journaal, dus deze lijst is aan te scherpen zodra
-// we het echte antwoordformaat van PMT hebben gezien.
+// Aangescherpt 25-08 op basis van een écht PMT-antwoord: een geslaagde order
+// levert `{"res":"Successfully send","error":false}` — het VELD `error` bestaat
+// altijd, met false erin. De oude marker `"\"error\""` matchte óók dat succes-
+// antwoord en zette geslaagde orders als GEWEIGERD in het journaal. Gevolg: de
+// executiepoort van routed_journal (D-46b) zag geen `sent 200` en verborg de
+// bijbehorende fill in het dashboard, ook al liep de trade bij de broker.
+// De patronen hieronder eisen daarom expliciet `error:true` / een non-lege
+// error-string / `success:false` / `status:false`. `{ }`-whitespace tolerant.
 static bool Rejected(string reply)
 {
     if (string.IsNullOrWhiteSpace(reply)) return false;
     var r = reply.ToLowerInvariant();
-    string[] markers =
+
+    // Tekstuele markers: fouten waar PMT / de proxy vaak in natuurlijke taal over praat.
+    string[] textMarkers =
     {
         "not found in pool", "cannot place", "invalid ip", "unauthorized", "forbidden",
-        "\"error\"", "\"success\":false", "\"status\":false", "not allowed", "rejected",
+        "not allowed", "rejected",
     };
-    return markers.Any(m => r.Contains(m));
+    if (textMarkers.Any(m => r.Contains(m))) return true;
+
+    // JSON-veldmarkers: alleen als het veld écht een fout signaleert. `"error":false`
+    // is succes en mag NOOIT als weigering worden gelezen.
+    if (System.Text.RegularExpressions.Regex.IsMatch(r,
+            "\"error\"\\s*:\\s*(true|\"[^\"]+\")")) return true;
+    if (System.Text.RegularExpressions.Regex.IsMatch(r,
+            "\"(success|status)\"\\s*:\\s*false")) return true;
+
+    return false;
 }
 
 static async Task<string> ForwardJsonAsync(HttpClient http, string url, string json, bool dryRun)

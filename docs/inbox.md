@@ -12,6 +12,60 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 29. Bug in `Rejected()` — succesvolle PMT-orders worden als GEWEIGERD gelogd
+**Middleware App → Ferry / Scrum Master** · 2026-08-25 · status: FIX GEPUSHT, WACHT OP BOUW
+
+Bewezen 25-08 op de PA015- en PA021-log: PMT antwoordt op een geslaagde order met
+`{"res":"Successfully send","error":false}`. De oude marker `"\"error\""` in
+`Rejected()` (regel 371 vóór de fix) matchte dat óók — dus élke geslaagde order
+met een `error`-veld werd `GEWEIGERD 200 door doelserver` in `routed_*.jsonl`.
+D-46b's executiepoort leest dan geen `sent 200` en houdt de fill uit het
+dashboard. Vandaar Ferry's melding "015/021 zijn niet doorgekomen maar hebben
+wel gehandeld".
+
+Bewijs (uit `routed_20260825.jsonl`):
+
+```
+PA015  10:45:07  MYM1! sell → GEWEIGERD 200: {"res":"Successfully send","error":false}
+       10:46:48  FILL SHORT 2ct @ 53708      ← de order LIEP dus
+       20:56:01  EXIT +$64,96                 ← en werd normaal gesloten
+PA021  10:45:01  MYM1! sell → GEWEIGERD 200: {"res":"Successfully send","error":false}
+       10:46:48  FILL SHORT 2ct @ 53708      ← idem
+       (nog geen exit — positie kan nog open staan of vandaag flatten)
+```
+
+**Fix (gepusht):** `Rejected()` in `src/Mex.Journal.Receiver/Program.cs`
+gebruikt nu twee regexen die alleen op ECHTE foutindicatoren matchen —
+`"error":true` / een non-lege error-string / `"success":false` / `"status":false`
+— naast de bestaande tekstuele markers (`not found in pool`, `rejected`, etc.).
+`error:false` = succes en wordt niet meer als weigering gelezen. Whitespace-
+tolerant.
+
+Dit is de "verfijning van de tien gokmarkers" die D-40 al voorzag. Ik zet er
+geen apart D-nummer voor op — laat de Scrum Master beslissen of dit onder D-40
+valt of een eigen nummer krijgt. Ik houd de melding hier tot het uitgegeven is.
+
+**Voor Ferry op de VPS (dit is de tweede reden om te builden):**
+```
+dotnet build src/Mex.Journal.Receiver -c Release
+sudo systemctl restart mex-receiver
+```
+Dezelfde build brengt ook D-40/D-53/D-02/D-05-stap-2 live. **Zonder deze build
+blijven vandaag geplaatste orders als GEWEIGERD in het journaal staan en missen
+ze in het dashboard, ook al liepen ze in werkelijkheid gewoon.**
+
+**Wat er GEEN wijziging aan hoeft:** de bestaande GEWEIGERDE regels in
+`routed_20260825.jsonl` blijven staan als historie. Het dashboard zal ze pas na
+een nieuw event of een handmatige re-parse tonen — dat is D-46b's ontwerp
+(fail-closed, whitelist). Als je die trades vandaag terug wilt zien, is de
+snelste route: de reconcile-runner op basis van Fills-CSV pakt ze wel op (die
+kijkt naar broker-fills, niet naar onze GEWEIGERD-labels).
+
+**PA016 = los issue:** heeft 0 records vandaag (geen PMT, geen FILL). Alert
+staat waarschijnlijk uit of chart draait niet. Check in TradingView.
+
+---
+
 ### 28. D-02 + D-05 bouwen — risk-gate naar .NET + Python fan-out verwijderen
 **Middleware App → Ferry / Scrum Master / Legacy** · 2026-08-25 · status: MELDING VOORAF
 

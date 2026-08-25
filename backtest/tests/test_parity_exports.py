@@ -268,3 +268,32 @@ def test_artifact_detail_trims_each_stage_to_its_key_numbers(tmp_path, monkeypat
     # a stage with no artifact returns found=False, does not raise
     assert lv._artifact_detail("EL_MATADOR_MES_PROD_EOD", "5")["found"] is False
     assert lv._artifact_detail("EL_NOPE", "8")["found"] is False
+
+
+def test_firm_program_label_does_not_block_when_the_drawdown_model_matches():
+    """LEON_PROD's export ran apex_50k_intraday_pa while its frozen program is
+    apex_50k_eod_pa. --as-tested adopts the dd_model (EOD->Intraday), which is
+    the material effect; the program LABEL still differs but the behaviour
+    matches. That cosmetic label may not keep the environment audit dirty and so
+    must not, on its own, block data-parity."""
+    import dataclasses
+
+    from backtest.pipeline import fleet
+    from backtest.pipeline.parity import as_tested, audit_environment, audit_properties
+
+    cfg = fleet.engine_config("EL_LEON_MYM_PROD_EOD")
+    assert fleet.firm_program("EL_LEON_MYM_PROD_EOD") == "apex_50k_eod_pa"
+    e = _load("LEON_MYM_PROD_EOD_MYM1m_2026-08-23.xlsx")
+
+    # before as-tested: dd_model differs (EOD vs Intraday) -> firm program flagged
+    env0 = {r["label"]: r for r in audit_environment(e, cfg)}
+    assert env0["Firm program"]["ok"] is False
+
+    # after adopting costs + as-tested inputs, the dd_model matches -> firm
+    # program reconciled, environment clean
+    cfg = dataclasses.replace(cfg, contract=dataclasses.replace(
+        cfg.contract, commission_per_contract=0.51))
+    cfg2, _ = as_tested(cfg, audit_properties(e, cfg))
+    a2 = audit_properties(e, cfg2)
+    assert a2["environment_mismatches"] == 0, [r for r in a2["environment"] if not r["ok"]]
+    assert a2["mismatches"] == 0 and a2["missing"] == []

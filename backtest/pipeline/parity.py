@@ -244,7 +244,13 @@ def audit_environment(export: Export, cfg) -> list[dict]:
     if prog is not None:
         from . import fleet
         want = fleet.firm_program(cfg.name) if cfg.name in fleet.names() else None
-        chk("Firm program", prog, want, want is None or str(prog) == want,
+        # What matters is the drawdown model the program IMPLIES, not the label:
+        # after --as-tested adopts the dd_model, an engine whose frozen program is
+        # eod_pa but was run Intraday matches the export's intraday_pa in behaviour
+        # even though the label still reads eod_pa. Compare the material effect.
+        same_label = want is None or str(prog) == want
+        same_model = fleet.drawdown_model(str(prog)) == getattr(cfg, "dd_model", None)
+        chk("Firm program", prog, want, same_label or same_model,
             "bepaalt het drawdown-model (D-20)")
 
     a, b = export_window(export)

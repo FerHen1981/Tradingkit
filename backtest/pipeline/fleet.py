@@ -35,18 +35,14 @@ PARITY_PENDING = {"EL_BANDIDO_MYM_HF_EOD"}
 # Defects in the released .pine sources that this mirror had to work around.
 # Recorded rather than silently normalised: stage 1 may not claim parity with a
 # script whose inputs we reinterpreted. `pine/**` is Pine Dev's map — reported,
-# not patched (docs/inbox.md 18).
-PINE_DEFECTS = {
-    "EL_BANDIDO_MYM_HF_EOD": (
-        'day_exit_mode: the source has input.string("Cap only", ...) while its own '
-        'options list is ["Off","Day-trail (keep peak)","Day-cap (hard target)",'
-        '"Trail + cap"]. A defval outside options does not compile in Pine v6, so '
-        'the released script is unbuildable as shipped. Mirrored here as '
-        '"Day-cap (hard target)" — the only option matching the intent (cap only, '
-        'no trail) — but the mapping is an interpretation, so stage 1 stays open '
-        'until Pine Dev fixes the source.'
-    ),
-}
+# not patched (docs/inbox.md 18). The mechanism is kept for future defects.
+#
+# BANDIDO's day_exit_mode defect is CLOSED (D-61, Pine Dev 25-08): the released
+# script had input.string("Cap only", ...) — a defval outside its own options list,
+# which does not compile in Pine v6. Pine Dev fixed the source to a valid
+# "Day-cap (hard target)", exactly the value this mirror already carried, so the
+# interpretation is no longer an interpretation and the exception is removed.
+PINE_DEFECTS: dict[str, str] = {}
 
 
 def engine_config(name: str) -> Config:

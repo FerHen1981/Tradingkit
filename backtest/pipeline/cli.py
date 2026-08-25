@@ -436,6 +436,63 @@ def _write_and_record_stage2(engine, dataset, k, years, status, verdict):
                                       "status": status}, default=str), flush=True)
 
 
+def cmd_scorecard(args):
+    """Rich performance scorecard for one engine on one dataset — the Analysis view.
+
+    Not a pipeline gate: it does not judge pass/fail, it MEASURES. Runs the engine
+    once and reports the full performance picture (equity curve, streaks, best/worst,
+    per-side split, MFE/MAE, hold time, exit-reason edge). Default posture is
+    DEPLOYMENT (research_mode=False — the engine as it runs live, account overlay on);
+    --raw strips to the 1-contract intrinsic mechanic (no PA sizing, no day caps),
+    the same view stage 2 uses."""
+    import dataclasses
+    from .. import data as dm, indicators as im
+    from ..engine import Engine
+    from . import scorecard as sc
+
+    path, sym = _dataset_path(args.dataset)
+    base = fleet.engine_config(args.engine)
+    posture = "raw (1 contract, geen overlay)" if args.raw else "deployment (overlay aan)"
+    print(f"scorecard · {args.engine} op {args.dataset} · {posture}")
+
+    cfg = (dataclasses.replace(base, contract_size=1.0, day_exit_mode="Off")
+           if args.raw else base)
+    df = dm.load(path)
+    if args.since:
+        df = dm.slice_dates(df, since=args.since)
+    if args.until:
+        df = dm.slice_dates(df, until=args.until)
+    if df.empty:
+        raise SystemExit(f"dataset {args.dataset!r} bevat geen bars in het gevraagde venster.")
+    print(f"  {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=not args.raw).run()
+    card = sc.scorecard(res)
+    card["engine"], card["dataset"], card["posture"] = args.engine, args.dataset, \
+        ("raw" if args.raw else "deploy")
+    card["window"] = {"since": args.since, "until": args.until, "bars": len(df)}
+
+    k = card["kpis"]
+    if not k.get("trades"):
+        print("  GEEN trades — niets te scoren.")
+    else:
+        bd = card["by_direction"]
+        print(f"\n  {k['trades']} trades · net ${k['net_profit']:,.0f} · PF {k['profit_factor']} · "
+              f"WR {k['win_rate_pct']}% · E ${k['expectancy']}/trade · maxDD ${k['max_drawdown']:,.0f}")
+        print(f"    long {bd['long']['trades']} (net ${bd['long']['net']:,.0f}, PF {bd['long']['pf']}) · "
+              f"short {bd['short']['trades']} (net ${bd['short']['net']:,.0f}, PF {bd['short']['pf']})")
+        st = card["streaks"]
+        print(f"    langste win-reeks {st['longest_win']} · verlies-reeks {st['longest_loss']}")
+        ex = card["excursion"]
+        print(f"    MFE ø {ex['avg_mfe_ticks']}t · MAE ø {ex['avg_mae_ticks']}t · "
+              f"hold ø {card['hold_time_bars']['avg']} bars")
+        print(f"    exit-redenen: " + ", ".join(f"{r['reason']} {r['trades']}"
+                                                 for r in card["exit_reason_edge"][:6]))
+
+    art = _write_artifact(args.engine, "scorecard", card)
+    print(f"  artefact {art}")
+    print("SCORECARD_JSON " + json.dumps(card, default=str), flush=True)
+
 
 def _fleet_dataset_for(market):
     """Best dataset for a market: the real micro if present, else its twin,
@@ -664,15 +721,23 @@ def _data_parity_evidence(cmp_, pa, td, po, clean) -> dict:
     return {"eligible": True, "blocked": None, "reasons": reasons}
 
 
-def cmd_stage1(args):
-    from .. import data as dm, indicators as im
-    from ..engine import Engine
-    from ..metrics import kpis
-    from .parity import audit_properties, compare, read_export
+def _prepare_export_run(args, *, header):
+    """Shared front-matter for the two export-comparison gates (trap 1 & trap 10).
+
+    Resolve the dataset + engine config, verify the price series is an acceptable
+    symbol (own or twin, never silently), read and audit the export against the
+    config (ground rule 10), optionally adopt the export's inputs (--as-tested)
+    and its costs, and trim the dataset to the window TradingView actually tested.
+    Both gates rest on exactly this being done the same way — the re-audit after
+    cost/input adoption in particular is a correctness requirement, not a nicety,
+    so it lives in one place. Returns everything either gate needs to run and
+    judge the engine against the export."""
+    from .. import data as dm
+    from .parity import audit_properties, read_export
     path, sym = _dataset_path(args.dataset)
     cfg = fleet.engine_config(args.engine)
-    print(f"trap 1 · Pine-pariteit · {args.engine} op {args.dataset}")
-    print("  POORT: bijna gelijk aantal trades + materieel vergelijkbare WR/PF. HARDE POORT.")
+    for line in header:
+        print(line)
 
     # The dataset supplies PRICES; the contract spec comes from the engine config.
     # A mini's history is therefore a valid stand-in for its micro (same tick
@@ -798,6 +863,24 @@ def cmd_stage1(args):
                      "over de engine")
         print(f"  dekking: {100 - ov['missing_frac']*100:.1f}% van het exportvenster, "
               f"{ov['missing_days']} dag(en) ontbreken ({note})")
+    return {"cfg": cfg, "df": df, "exp": exp, "pa": pa, "since": since,
+            "until": until, "ov": ov, "substituted": substituted, "own": own,
+            "ds_sym": ds_sym, "tested_changes": tested_changes, "costs": costs}
+
+
+def cmd_stage1(args):
+    from .. import indicators as im
+    from ..engine import Engine
+    from ..metrics import kpis
+    from .parity import compare
+    prep = _prepare_export_run(args, header=[
+        f"trap 1 · Pine-pariteit · {args.engine} op {args.dataset}",
+        "  POORT: bijna gelijk aantal trades + materieel vergelijkbare WR/PF. HARDE POORT."])
+    cfg, df, exp, pa = prep["cfg"], prep["df"], prep["exp"], prep["pa"]
+    since, until, ov = prep["since"], prep["until"], prep["ov"]
+    substituted, tested_changes, costs = prep["substituted"], prep["tested_changes"], prep["costs"]
+    ds_sym = prep["ds_sym"]
+
     print(f"\n  simulator op {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
     # research_mode=False on purpose. It disables the whole account overlay
     # (engine.py: `if not self.research and cfg.phase_on`), so with it ON the
@@ -946,6 +1029,105 @@ def cmd_stage1(args):
                                       "pass": ok}, default=str), flush=True)
 
 
+def cmd_stage10(args):
+    """Trap 10 — TradingView-validatie, de laatste harde poort vóór live.
+
+    Draait de bevroren engine in DEPLOYMENT-houding (account-overlay aan, precies
+    zoals hij live gaat) tegen de export en poort op de dimensies die trap 1 wel
+    toont maar niet afdwingt: de exit-reden-verdeling en de MFE/MAE per trade —
+    de account-overlay-fideliteit en het intrabar-pad die live geld kosten of
+    bankieren."""
+    from .. import indicators as im
+    from ..engine import Engine
+    from ..metrics import kpis
+    from .parity import compare
+    from .tracediff import classify_pine_only, diff as trace_diff, explain_missing
+    from . import tvvalidate
+    prep = _prepare_export_run(args, header=[
+        f"trap 10 · TradingView-validatie · {args.engine} op {args.dataset}",
+        "  POORT: trades, timing, exit-redenen, MFE/MAE en PF komen overeen. "
+        "HARDE DEPLOYMENT-POORT."])
+    cfg, df, exp, pa = prep["cfg"], prep["df"], prep["exp"], prep["pa"]
+    since, until, ov = prep["since"], prep["until"], prep["ov"]
+    substituted = prep["substituted"]
+    tested_changes, costs = prep["tested_changes"], prep["costs"]
+
+    print(f"\n  simulator (deployment-houding, account-overlay AAN) op {len(df):,} bars "
+          f"{df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    # research_mode=False: the per-day PA rules (Auto Flat, DLL, day cap) run, and
+    # for a PA production account the engine RESETS on a trailing breach instead of
+    # terminating (engine.py `_account`) — exactly as the Pine strategy keeps
+    # trading across the whole window. The account lifecycle lives in stages 6-8.
+    ind = im.compute(df, cfg)
+    res = Engine(cfg, df, ind, research_mode=False).run()
+    k = kpis(res)
+    cmp_ = compare(k, exp)
+
+    # Trade-level pieces for the shared data-parity evidence (same as stage 1): a
+    # trade-count residual is only forgiven when it is provably the vendor.
+    td = trace_diff(res.trades, exp)
+    po = classify_pine_only(res.placements, exp, res.trades, cfg.expiry_bars)
+    if po.get("we_never_placed") and po.get("_never_placed_all"):
+        po["_explain"] = explain_missing(df, ind, cfg, po["_never_placed_all"], cfg.expiry_bars)
+    else:
+        po["_explain"] = {}
+    clean = (not pa["mismatches"] and not pa["environment_mismatches"] and not pa["missing"])
+    dp = _data_parity_evidence(cmp_, pa, td, po, clean)
+
+    ev = tvvalidate.evaluate(res.trades, cfg, exp, cmp_, td, dp)
+
+    print(f"\n    {'dimensie':<16}{'status':>10}")
+    for name, d in ev["dimensions"].items():
+        print(f"    {name:<16}{('ok' if d['ok'] else 'AFWIJKING'):>10}   {d['detail']}")
+
+    print("\n  exit-redenen (categorie · simulator vs pine):")
+    for r in ev["exit_reasons"]["rows"]:
+        flag = "" if r["gap_pp"] <= ev["exit_reasons"]["tol_pp"] else "  <- afwijking"
+        print(f"    {r['category']:<11} {r['sim_n']:>4} ({r['sim_pct']:>5.1f}%) vs "
+              f"{r['pine_n']:>4} ({r['pine_pct']:>5.1f}%)  d{r['gap_pp']:>4.1f}pp{flag}")
+
+    exc = ev["excursion"]
+    if exc.get("paired"):
+        print(f"\n  MFE/MAE op {exc['paired']} gepaarde trades: mediane afwijking "
+              f"MFE {exc['median_mfe_diff_ticks']}t · MAE {exc['median_mae_diff_ticks']}t "
+              f"(limiet {exc['tol_ticks']:.0f}t); {exc['within_tol_pct']}% binnen tolerantie")
+    else:
+        print(f"\n  MFE/MAE: {exc.get('reason', 'geen gepaarde trades')}")
+
+    if ev["status"] == "data_parity":
+        print(f"\n  DATA-PARITEIT: exit-mix en MFE/MAE komen overeen op de gedeelde trades; "
+              f"het enige verschil is de databron.")
+
+    status = ev["status"]
+    art = _write_artifact(args.engine, "trap10_tv-validatie", {
+        "comparison": cmp_, "dimensions": ev["dimensions"],
+        "exit_reasons": ev["exit_reasons"], "excursion": ev["excursion"],
+        "trade_diff": td, "status": status,
+        "matched_pct": ev["matched_pct"], "same_bar_pct": ev["same_bar_pct"],
+        "as_tested": bool(tested_changes), "costs_from_export": costs,
+        "as_tested_changes": {k2: [v[0], v[1]] for k2, v in tested_changes.items()},
+        "dataset": args.dataset, "price_series_borrowed_from": substituted,
+        "window": {"since": since, "until": until, "bars": len(df), "coverage": ov}})
+    state.record(args.engine, "tv_validation", status,
+                 summary=ev["verdict"]
+                 + (f" [prijsreeks geleend van {substituted}]" if substituted else "")
+                 + (" [ALS-GETEST: gemeten tegen de export-inputs]" if tested_changes else ""),
+                 artifact=art,
+                 detail={"dimensions": {k2: v["ok"] for k2, v in ev["dimensions"].items()},
+                         "price_series_borrowed_from": substituted})
+    label = {"passed": "GEHAALD", "data_parity": "GEHAALD (data-pariteit)",
+             "failed": "NIET GEHAALD"}[status]
+    print(f"\n  POORT: {label} — {ev['verdict']}")
+    if substituted:
+        print(f"  LET OP: prijsreeks geleend van {substituted} — een deployment-poort hoort "
+              f"op de echte {prep['own']}-bars te draaien; dit is diagnose, geen vrijgave.")
+    print(f"  artefact {art}")
+    print("STAGE_JSON " + json.dumps(
+        {"stage": 10, "dimensions": ev["dimensions"], "exit_reasons": ev["exit_reasons"],
+         "excursion": ev["excursion"], "status": status,
+         "pass": status in ("passed", "data_parity")}, default=str), flush=True)
+
+
 def _write_artifact(engine: str, tag: str, payload: dict) -> str:
     """Ground rule 11 — every stage leaves an artifact."""
     from datetime import datetime
@@ -1046,6 +1228,25 @@ def main():
     _p9.add_argument("--dataset", required=True)
     _p9.add_argument("--engine", required=True, choices=fleet.names())
     _p9.add_argument("--since"); _p9.add_argument("--until")
+
+    p10 = sub.add_parser("stage10"); p10.set_defaults(fn=cmd_stage10)
+    p10.add_argument("--dataset", required=True)
+    p10.add_argument("--engine", required=True, choices=fleet.names())
+    p10.add_argument("--export", required=True, help="TradingView .xlsx export of the same engine")
+    p10.add_argument("--since"); p10.add_argument("--until")
+    p10.add_argument("--as-tested", action="store_true",
+                     help="neem de export-inputs over waar ze van de .pine-bron afwijken "
+                          "(grondregel 10 blijft gemeld)")
+    p10.add_argument("--diff", action="store_true",
+                     help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
+
+    psc = sub.add_parser("scorecard"); psc.set_defaults(fn=cmd_scorecard)
+    psc.add_argument("--dataset", required=True)
+    psc.add_argument("--engine", required=True, choices=fleet.names())
+    psc.add_argument("--since"); psc.add_argument("--until")
+    psc.add_argument("--raw", action="store_true",
+                     help="1 contract, geen account-overlay/dagcaps — de intrinsieke mechaniek "
+                          "(default is deployment-houding, overlay aan)")
 
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)

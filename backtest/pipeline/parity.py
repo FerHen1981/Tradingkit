@@ -138,6 +138,15 @@ def read_export(path: str) -> Export:
                 "signal": str(get(entry, "Signal") or ""),
                 **_sigdiag(str(get(entry, "Signal") or "")),
                 "exit_reason": str(get(exit_, "Signal") or ""),
+                # Excursion (MFE/MAE) and duration — the dimensions trap 10 gates
+                # on that trap 1 does not. TradingView writes the excursion USD on
+                # both legs; the exit-leg Signal ALSO embeds the tick excursion for
+                # TP/SL exits ("TP|MFE198t|MAE28t"), which is our engine's own unit,
+                # so no USD->tick conversion error creeps into that comparison.
+                "mfe_usd": _f(get(exit_, "Favorable excursion USD")),
+                "mae_usd": abs(_f(get(exit_, "Adverse excursion USD"))),
+                "dur_bars": _f(get(exit_, "Duration (bars)")),
+                **_exit_sigdiag(str(get(exit_, "Signal") or "")),
             })
         trades.sort(key=lambda t: t["n"])
 
@@ -166,6 +175,22 @@ def _sigdiag(signal: str) -> dict:
     return {"pine_fvg_ticks": int(m.group(1)), "pine_cvd_streak": int(m.group(2)),
             "pine_fvg_age": int(m.group(3)), "pine_hour": int(m.group(4)),
             "pine_dow": int(m.group(5))}
+
+
+_EXIT_SIGDIAG = __import__("re").compile(r"\b(TP|SL)\|MFE(\d+)t\|MAE(\d+)t")
+
+
+def _exit_sigdiag(signal: str) -> dict:
+    """Pine embeds the realised excursion in the exit comment for stop/target
+    exits: "TP|MFE198t|MAE28t" / "SL|MFE31t|MAE119t" — MFE/MAE in ticks, the same
+    unit the Python engine tracks (`Trade.mfe_ticks`). Force-flat / DLL / CAP-LOCK
+    exits carry no such fingerprint, so trap 10 falls back to the excursion USD
+    columns for those."""
+    m = _EXIT_SIGDIAG.search(signal or "")
+    if not m:
+        return {}
+    return {"pine_exit_mfe_ticks": int(m.group(2)),
+            "pine_exit_mae_ticks": int(m.group(3))}
 
 
 def _f(x, d=0.0):

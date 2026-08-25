@@ -47,7 +47,9 @@ FIELDS = [
 ]
 
 _INPUT = re.compile(
-    r'input\.(?:int|float|bool|string)\(\s*([^,()]+?)\s*,\s*(?:title\s*=\s*)?"([^"]+)"')
+    # first arg is either a quoted string (which may itself contain parentheses,
+    # e.g. "Day-cap (hard target)") or a bare token (500, true, MY_CONST)
+    r'input\.(?:int|float|bool|string)\(\s*("[^"]*"|[^,()]+?)\s*,\s*(?:title\s*=\s*)?"([^"]+)"')
 
 
 def _pine_inputs(path: Path) -> dict[str, str]:

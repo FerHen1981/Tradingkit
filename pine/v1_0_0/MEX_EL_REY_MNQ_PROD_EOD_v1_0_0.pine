@@ -46,6 +46,7 @@
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
+var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
 var string currentVersion = "v1.0.1"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
@@ -267,7 +268,7 @@ paBacktestMode = input.bool(true, "PA backtest mode (breach marks, does NOT clos
      tooltip="ON (backtest): a PA breach is counted and marked but does not halt the strategy. OFF (live): a breach truly halts the account.")
 // Historical bars: lifecycle simulation may reset after breach/payout. Realtime bars: always behave as live PA (breach halts).
 bool paBacktestModeEff = paBacktestMode and not barstate.isrealtime
-accountPhase  = input.string("Apex PA", "Account Phase", options=["Research (none)","Apex Eval","Apex PA"], group=GROUP_PHASE,
+accountPhase  = input.string("Funded", "Account phase", options=["Developer","Eval","Funded"], group=GROUP_PHASE,
      tooltip="Research: no account rules (default; backtests unchanged). Eval: goal + trailing. PA: trailing until lock, DLL, consistency/payout monitor — and the MAE guard (group 16).")
 acctTrailDD   = input.float(2000, "Trailing Drawdown ($)", step=100, group=GROUP_PHASE, tooltip="Trailing drawdown of your account plan.", display=display.none)
 acctGoal      = 3000.0
@@ -363,14 +364,14 @@ if useFirmPreset
 // onwaar en elke tak hieronder viel al naar de handmatige inputs. Het firm program onder
 // ACCOUNT - Guard doet nu wat deze laag deed.
 string phaseEff = accountPhase
-bool isEval = phaseEff == "Apex Eval"
+bool isEval = phaseEff == "Eval"
 guardMult     = 1.25
 var bool   pmtBlock = false
 var bool   posTrailOn = false
 var bool   posRecovOn = false
 var string exitReasonNext = ""
 var string pmtBlockReason = ""
-bool isPA   = phaseEff == "Apex PA"
+bool isPA   = phaseEff == "Funded"
 useDDGuard = (isPA and guardPA) or (isEval and guardEval)
 bool phaseOn = isEval or isPA
 var bool  acctHalted = false
@@ -478,12 +479,19 @@ timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 =
 // Research-defined structural sessions; no individual hour/day cherry-picking.
 marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
      tooltip="Liquidity Core = London 02:00-05:00 ET + US pre-cash/morning 07:00-12:00 ET + Globex reopen 18:00-19:00 ET. These windows were defined by market structure, not individual-hour optimization.")
-customLondon     = input.bool(true, "Custom · London 02:00-05:00", group=GROUP_MREG)
-customUsMorning  = input.bool(true, "Custom · US 07:00-12:00", group=GROUP_MREG)
-customGlobexOpen = input.bool(true, "Custom · Globex reopen 18:00-19:00", group=GROUP_MREG)
-customAsia       = input.bool(false, "Custom · Asia 19:00-02:00", group=GROUP_MREG)
-customLunch      = input.bool(false, "Custom · Lunch 12:00-14:00", group=GROUP_MREG)
-customPowerHour  = input.bool(false, "Custom · Power hour 15:00-16:00", group=GROUP_MREG)
+// Negen economisch vooraf gedefinieerde vensters, tijden in de referentie-timezone.
+// De eerste drie zijn samen "Liquidity Core" en zijn NIET aangepast: die definitie zit
+// onder alles wat er tot nu toe op gemeten is.
+customGlobexOpen = input.bool(true,  "Globex reopen 18:00-19:00", inline="mr1", group=GROUP_MREG)
+customAsia       = input.bool(false, "Asia 19:00-02:00",          inline="mr1", group=GROUP_MREG)
+customLondon     = input.bool(true,  "London 02:00-05:00",        inline="mr2", group=GROUP_MREG)
+customUsMorning  = input.bool(true,  "US 07:00-12:00",            inline="mr2", group=GROUP_MREG)
+customInitBal    = input.bool(false, "Initial balance 09:30-10:30", inline="mr3", group=GROUP_MREG)
+customNyAm       = input.bool(false, "NY AM 09:30-11:30",         inline="mr3", group=GROUP_MREG)
+customLunch      = input.bool(false, "Lunch 11:30-13:00",         inline="mr4", group=GROUP_MREG)
+customNyPm       = input.bool(false, "NY PM 13:00-15:00",         inline="mr4", group=GROUP_MREG)
+customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", group=GROUP_MREG,
+     tooltip="US overlaps Initial Balance, NY AM and Lunch on purpose: the windows are OR-ed, so a coarse block can sit next to finer ones.")
 
 useAutoFlat = input.bool(true, "Force Flat Window", inline="flat", group=GROUP_TIME, display=display.none)
      tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
@@ -568,7 +576,9 @@ routeMiddleware = input.bool(false, "→ Middleware (fan-out)", group=GROUP_EXEC
 mwSecret   = input.string("", "Middleware secret", group=GROUP_EXEC, tooltip="Must match MIDDLEWARE_SECRET on your server.", display=display.none)
 mwStrategy = input.string("GC", "Middleware strategy key", group=GROUP_EXEC, tooltip="Strategy key the middleware maps to accounts (e.g. GC, ES, NQ). Match accounts.yaml.", display=display.none)
 useMiddleware = routeMiddleware
-botName    = input.string("MΞX ΞL TΞSORO", "Bot Name", group=GROUP_ALRT, tooltip="Display name for Discord messages.", display=display.none)
+// Stond in alle negen scripts op "MΞX ΞL TΞSORO", dus elke Discord-kaart van de hele
+// vloot kwam binnen onder de naam TESORO. Leeg laten = de naam van dit script.
+botName    = input.string("", "Bot name (empty = script name)", group=GROUP_ALRT, tooltip="Display name on Discord cards. Leave empty and it follows the script title.", display=display.none)
 lockBufTicks = input.float(4, "Lock cost buffer (ticks)", minval=0, group=GROUP_ALRT, tooltip="Extra open-profit buffer (in ticks, per contract) required above the target before the intra-trade lock closes all — covers fees & slippage.")
 lockOnCap    = input.bool(true, "Close all when payout cap is reached intra-trade", group=GROUP_ALRT, tooltip="Once projected withdrawable (incl. open PnL) covers the FULL ladder cap plus the cost buffer, close everything (PMT + Discord) and bank the payout.")
 avatarURL  = ""
@@ -664,9 +674,12 @@ bool _mregLondon = f_inRangeMOD(2, 0, 5, 0)
 bool _mregUsMorning = f_inRangeMOD(7, 0, 12, 0)
 bool _mregGlobex = f_inRangeMOD(18, 0, 19, 0)
 bool _mregAsia = f_inRangeMOD(19, 0, 2, 0)
-bool _mregLunch = f_inRangeMOD(12, 0, 14, 0)
+bool _mregLunch = f_inRangeMOD(11, 30, 13, 0)   // was 12:00-14:00; had geen schakelaar, dus dit verandert niets aan bestaand gedrag
+bool _mregInitBal = f_inRangeMOD(9, 30, 10, 30)
+bool _mregNyAm = f_inRangeMOD(9, 30, 11, 30)
+bool _mregNyPm = f_inRangeMOD(13, 0, 15, 0)
 bool _mregPower = f_inRangeMOD(15, 0, 16, 0)
-bool marketRegimePass = marketRegimeMode == "All sessions" ? true : marketRegimeMode == "Liquidity Core" ? (_mregLondon or _mregUsMorning or _mregGlobex) : ((customLondon and _mregLondon) or (customUsMorning and _mregUsMorning) or (customGlobexOpen and _mregGlobex) or (customAsia and _mregAsia) or (customLunch and _mregLunch) or (customPowerHour and _mregPower))
+bool marketRegimePass = marketRegimeMode == "All sessions" ? true : marketRegimeMode == "Liquidity Core" ? (_mregLondon or _mregUsMorning or _mregGlobex) : ((customLondon and _mregLondon) or (customUsMorning and _mregUsMorning) or (customGlobexOpen and _mregGlobex) or (customAsia and _mregAsia) or (customLunch and _mregLunch) or (customPowerHour and _mregPower) or (customInitBal and _mregInitBal) or (customNyAm and _mregNyAm) or (customNyPm and _mregNyPm))
 timeGatePassRaw = f_isTradingDay() and array.get(hourEnabled, f_getHour()) and not monEarlyBlock and marketRegimePass
 
 // === MEX OR-BREAKOUT — tracking (per sessie, repaint-vrij) ===================
@@ -1330,7 +1343,7 @@ f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","
 
-        _user = botName == "" ? "" : "\"username\":\"" + botName + "\","
+        _user = "\"username\":\"" + (botName == "" ? SCRIPT_NAME : botName) + "\","
         _ava  = avatarURL == "" ? "" : "\"avatar_url\":\"" + avatarURL + "\","
         _url  = titleURL == "" ? "" : "\"url\":\"" + titleURL + "\","
         alert("{" + _user + _ava + _tag + "\"embeds\":[{\"title\":\"" + _title + "\"," + _url + "\"color\":3447003,\"description\":\"" + _desc + "\",\"footer\":{\"text\":\"" + syminfo.ticker + "\"}}]}", alert.freq_once_per_bar)

@@ -81,13 +81,11 @@ var string GROUP_MREG  = "8a · SIGNAL — Market regime gate"
 var string GROUP_STAB  = "0b · MEX — Stability presets"
 
 // === MEX STABILITY PRESET (additive; all legacy/live layers remain intact) =====
-stabilityPreset = input.string("Manual / current stability defaults", "Stability preset / lock",
-     options=["Manual / current stability defaults","Lock MGC Stability Core · 2 MGC","Lock MGC Stability Core · 3 MGC"], group=GROUP_STAB,
      tooltip="Default = Manual: the visible inputs below are the actual values used and remain editable. Choose a Lock preset only when you intentionally want the tested stability values to override those inputs. Execution, alerts, account/fleet and event layers remain unchanged.")
-bool stabilityOn = stabilityPreset != "Manual / current stability defaults"
+// stability-preset verwijderd 25-08. Hij stond op Manual, dus deze drie waarden vielen al
+// door naar de gewone inputs -- de gecompileerde beslissing is identiek.
 
 // Regime-factory identity for THIS script (strategy · account-type · phase). The "Auto" preset resolves to this.
-var string AUTO_PRESET = "GC · Funded"
 
 // === TIMEZONE / DAY ==========================================================
 var string GROUP_ACCT = "0 · ACCOUNT — Firm & routing"
@@ -159,8 +157,7 @@ contractSize       = input.float(6, "Fixed Qty", minval=0, group=GROUP_UNIT, too
 riskValue          = input.float(250, "Risk per Trade ($ of %)", minval=0, group=GROUP_UNIT, tooltip="Risk per trade when using $-risk or %-risk sizing instead of fixed contracts.", display=display.none)
 allowFractionalQty = input.bool(false, "Allow Fractional Qty (crypto)", group=GROUP_UNIT, tooltip="Allow fractional position sizes (crypto only — futures require whole contracts).", display=display.none)
 maxQty             = input.float(100, "Max Qty Cap", minval=0, group=GROUP_UNIT, tooltip="Hard cap on position size regardless of the sizing mode.", display=display.none)
-float stabilityQty = 8.0
-float contractSizeEff = stabilityOn ? stabilityQty : contractSize
+float contractSizeEff = contractSize
 
 atrVal = ta.atr(atrLen)
 f_distPrice(_u) =>
@@ -182,8 +179,8 @@ swingBufSize = input.float(2, "Stop Buffer beyond swing (units)", minval=0, grou
 // MNQ Production scratch parity: Distance Unit = Ticks; SL200 = 50.00 points = $100 gross risk per 1 MNQ.
 maxStopSize  = input.float(200, "Max Stop Distance (units) — else no trade", minval=1, group=GROUP_ENTRY, tooltip="Signals with a wider stop than this are skipped entirely.", display=display.none)
 slSizeLegacy = input.float(200, "Fixed Stop (units, legacy mode)", minval=0.01, group=GROUP_ENTRY, tooltip="Static stop distance, only used in Fixed stop mode.", display=display.none)
-float maxStopSizeEff = stabilityOn ? 120.0 : maxStopSize
-float slSizeLegacyEff = stabilityOn ? 120.0 : slSizeLegacy
+float maxStopSizeEff = maxStopSize
+float slSizeLegacyEff = slSizeLegacy
 
 // === TRADE MANAGEMENT ========================================================
 tpMode  = input.string("R-multiple", "Take-Profit Mode", options=["R-multiple","Swing structure","Fixed (units)"], group=GROUP_RISK,
@@ -361,19 +358,10 @@ if useFirmPreset
 // ============================================================================
 // === MEX POLICY LAYER — Fleet Config Matrix v1.1 (autogen, niet handmatig wijzigen)
 // ============================================================================
-string polPreset = input.string("Manual (inputs hieronder)", "MEX preset (Fleet Matrix v1.1)", options=["PA013 · MGC q3 · cap $750", "PA016 · MGC q3 · cap $700", "PA019 · MGC q3 · cap $650", "PA018 · RUNNER MGC q5 · cap $1500", "Manual (inputs hieronder)"], group="0· MEX POLICY", tooltip="Matrix §2-4. Preset pint qty, max stop, harde dagcap en account phase. Kies Manual alleen voor Research/backtests.")
-f_pol(string _p) =>
-    switch _p
-        "PA013 · MGC q3 · cap $750" => ["GC", 3.0, 130.0, 750.0, "Apex PA", true]
-        "PA016 · MGC q3 · cap $700" => ["GC", 3.0, 130.0, 700.0, "Apex PA", true]
-        "PA019 · MGC q3 · cap $650" => ["GC", 3.0, 130.0, 650.0, "Apex PA", true]
-        "PA018 · RUNNER MGC q5 · cap $1500" => ["GC", 5.0, 130.0, 1500.0, "Apex PA", true]
-        => ["ANY", 0.0, 0.0, na, "", false]   // Manual: waarden ongebruikt
-[polFam, polQty, polMaxStopT, polCapUSD, polPhase, polLive] = f_pol(polPreset)
-bool polOn = polPreset != "Manual (inputs hieronder)"
-string polRoot = syminfo.root != "" ? syminfo.root : str.replace(str.replace(syminfo.ticker, "1!", ""), "2!", "")
-bool polInstrOK = not polOn or (polFam == "GC" and (polRoot == "GC" or polRoot == "MGC")) or (polFam == "ES" and (polRoot == "ES" or polRoot == "MES")) or (polFam == "NQ" and (polRoot == "NQ" or polRoot == "MNQ")) or polFam == "ANY"
-string phaseEff = polOn ? polPhase : accountPhase
+// MEX Policy-laag (Fleet Matrix) verwijderd 25-08. Hij stond op "Manual", dus polOn was
+// onwaar en elke tak hieronder viel al naar de handmatige inputs. Het firm program onder
+// ACCOUNT - Guard doet nu wat deze laag deed.
+string phaseEff = accountPhase
 bool isEval = phaseEff == "Apex Eval"
 guardMult     = 1.25
 var bool   pmtBlock = false
@@ -453,56 +441,7 @@ timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_TIME), timeHour01 =
 timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_TIME), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_TIME), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_TIME), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_TIME), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_TIME), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_TIME, tooltip="06.", display=display.none)
 timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
 timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_TIME), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_TIME), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_TIME), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_TIME), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_TIME, tooltip="18.", display=display.none)
-useDirectionalHours = input.bool(false, "Directional hour map", group=GROUP_STAB, tooltip="Adds independent LONG/SHORT hour gates on top of the existing common time gate. Disable to use the legacy common hour gate only.")
 // Revalidated all-24h Stability Core defaults: LONG 09/10/11/20/21/23 · SHORT 10/11/21. All 24 switches remain user-editable.
-lHour00 = input.bool(false, "Long 00", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour01 = input.bool(false, "Long 01", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour02 = input.bool(false, "Long 02", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour03 = input.bool(false, "Long 03", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour04 = input.bool(false, "Long 04", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour05 = input.bool(false, "Long 05", inline="lh0", group=GROUP_STAB, display=display.none)
-lHour06 = input.bool(false, "Long 06", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour07 = input.bool(false, "Long 07", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour08 = input.bool(false, "Long 08", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour09 = input.bool(true, "Long 09", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour10 = input.bool(true, "Long 10", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour11 = input.bool(true, "Long 11", inline="lh1", group=GROUP_STAB, display=display.none)
-lHour12 = input.bool(false, "Long 12", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour13 = input.bool(false, "Long 13", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour14 = input.bool(false, "Long 14", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour15 = input.bool(false, "Long 15", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour16 = input.bool(false, "Long 16", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour17 = input.bool(false, "Long 17", inline="lh2", group=GROUP_STAB, display=display.none)
-lHour18 = input.bool(false, "Long 18", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour19 = input.bool(false, "Long 19", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour20 = input.bool(true, "Long 20", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour21 = input.bool(true, "Long 21", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour22 = input.bool(false, "Long 22", inline="lh3", group=GROUP_STAB, display=display.none)
-lHour23 = input.bool(true, "Long 23", inline="lh3", group=GROUP_STAB, display=display.none)
-sHour00 = input.bool(false, "Short 00", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour01 = input.bool(false, "Short 01", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour02 = input.bool(false, "Short 02", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour03 = input.bool(false, "Short 03", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour04 = input.bool(false, "Short 04", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour05 = input.bool(false, "Short 05", inline="sh0", group=GROUP_STAB, display=display.none)
-sHour06 = input.bool(false, "Short 06", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour07 = input.bool(false, "Short 07", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour08 = input.bool(false, "Short 08", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour09 = input.bool(false, "Short 09", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour10 = input.bool(true, "Short 10", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour11 = input.bool(true, "Short 11", inline="sh1", group=GROUP_STAB, display=display.none)
-sHour12 = input.bool(false, "Short 12", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour13 = input.bool(false, "Short 13", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour14 = input.bool(false, "Short 14", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour15 = input.bool(false, "Short 15", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour16 = input.bool(false, "Short 16", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour17 = input.bool(false, "Short 17", inline="sh2", group=GROUP_STAB, display=display.none)
-sHour18 = input.bool(false, "Short 18", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour19 = input.bool(false, "Short 19", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour20 = input.bool(false, "Short 20", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour21 = input.bool(true, "Short 21", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour22 = input.bool(false, "Short 22", inline="sh3", group=GROUP_STAB, display=display.none)
-sHour23 = input.bool(false, "Short 23", inline="sh3", group=GROUP_STAB, display=display.none)
 // === MARKET REGIME GATE ======================================================
 // Research-defined structural sessions; no individual hour/day cherry-picking.
 marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
@@ -515,7 +454,6 @@ customLunch      = input.bool(false, "Custom · Lunch 12:00-14:00", group=GROUP_
 customPowerHour  = input.bool(false, "Custom · Power hour 15:00-16:00", group=GROUP_MREG)
 
 useAutoFlat = input.bool(true, "Force Flat Window", inline="flat", group=GROUP_TIME, display=display.none)
-skipMonEarly = input.bool(false, "Skip Monday open (no entries Mon 00:00–02:00 ET)", group=GROUP_TIME,
      tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
 flatHour    = input.int(16, "From", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
 flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, display=display.none)
@@ -529,19 +467,8 @@ resumeMinute= input.int(0, ":", minval=0, maxval=59, inline="flat", group=GROUP_
 // loss-regimes per strategy / account-type / phase. Preset "Auto" = the validated default
 // for THIS script; pick another to borrow its config, or "Off / Custom" to drive the
 // toggles yourself. Survival over winning — don't fight the bull in the witching-week chaos.
-useEvtFilter = input.bool(false, "Enable roll/OpEx/news factory", group=GROUP_EVT,
-     tooltip="Master switch. Off = trade every session regardless of roll/OpEx/news regime.")
-evtPreset = input.string("Auto (this script)", "Preset (strategy · type · phase)",
-     options=["Auto (this script)","ES · Eval","ES · Funded","GC · Eval","GC · Funded","YM · any","NQ · any","Off / Custom"],
-     group=GROUP_EVT, tooltip="Auto resolves to the validated default for this script (" + AUTO_PRESET + "). Choose another strategy/account-type to borrow its regime config, or 'Off / Custom' to use the manual toggles below.")
-rgAvoidRoll    = input.bool(true,  "Custom · avoid quarterly roll window",   group=GROUP_EVT, tooltip="Used only when preset = Off / Custom. Skip entries within ± the day-window around the quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry.")
-rgRollDays     = input.int(10,     "Custom · roll window ± days", minval=0, maxval=30, group=GROUP_EVT, tooltip="Half-width of the roll window in calendar days.")
-rgRollNewsOvr  = input.bool(true,  "Custom · but trade if it IS a news day", group=GROUP_EVT, tooltip="News (FOMC/NFP) sits on the profit side — keep trading it even inside the roll window.")
-rgAvoidWitch   = input.bool(false, "Custom · avoid triple-witching week",    group=GROUP_EVT, tooltip="Skip the trading week of the quarterly expiry (the strongest loss-regime for YM).")
-rgAvoidWkAfter = input.bool(false, "Custom · avoid week AFTER monthly OpEx",  group=GROUP_EVT, tooltip="ES bleeds the week after every monthly options expiry (all 4 years <1).")
-rgBlockFOMC    = input.bool(false, "Custom · block FOMC days",               group=GROUP_EVT, tooltip="Skip FOMC decision days (a loss-regime for NQ; a profit day for ES/GC — leave off there).")
-rgBlockNFP     = input.bool(false, "Custom · block NFP days",                group=GROUP_EVT, tooltip="Skip Non-Farm-Payroll Fridays. Usually a tailwind for index strats — leave off.")
-
+// Roll/OpEx/news-factory verwijderd 25-08 (besluit Ferry). De master stond op false, dus
+// evtBlock was altijd onwaar en de poort altijd open.
 // === VISUALISATION ===========================================================
 showSignals     = input.bool(true, "Show Signals", inline="v1", group=GROUP_VIS, display=display.none)
 showTradeLevels = input.bool(true, "Show SL/TP Levels", inline="v1", group=GROUP_VIS, display=display.none)
@@ -627,7 +554,11 @@ notifyBlocked = input.bool(true, "Alert: signal blocked by non-strategy rule", g
 
 // === v5: EVAL / PA TRACKING ==================================================
 var string GROUP_EVAL = "1d · ACCOUNT — Eval / research tracking"
-evalTrack       = input.bool(false, "Eval tracking on (NOT together with group 4b)", group=GROUP_EVAL, tooltip="Lightweight alternative to the full Apex phase layer (group 4b). Use ONE of the two — never both (duplicate PASSED/FAILED messages).", display=display.none)
+// Eval-tracking verwijderd als knop 25-08 (besluit Ferry: onduidelijk wat het doet, en
+// Phase=Custom dekt hetzelfde). De motor eronder staat achter een constante false en is
+// daarmee dood; hij wordt in een aparte ronde gestript zodra niets hem meer leest.
+bool evalTrack    = false
+bool evalTrailEod = true
 tradeFromStart  = input.bool(true, "No entries before start date", group=GROUP_EVAL, tooltip="Gates ENTRIES on the same start date below: before that moment the strategy takes no trades, so the backtester, dashboard and TV key stats reflect ONLY this account. Indicators still warm up on full history. Turn OFF on research charts where you want the full-history backtest. With the default (past) date this toggle has no effect.", display=display.none)
 evalStartTime   = input.time(timestamp("01 Jan 2025 00:00 -0400"), "Start date/time (measure from)", group=GROUP_EVAL,
      tooltip="Measurement starts here. PnL from before this moment does NOT count. The date picker interprets in your chart/exchange timezone. NOTE: this is the lightweight tracker (use either this or group 4b, not both).", display=display.none)
@@ -639,7 +570,6 @@ evalStartBal    = input.float(0, "Start balance ($)", step=100, group=GROUP_EVAL
      tooltip="Balance at the start date. Use when tracking an account already underway (e.g. a PA at +$800). On day 1 = peak; floor = start - trailing DD.", display=display.none)
 evalProfitTgt   = acctGoal
 evalTrailDD     = acctTrailDD
-evalTrailEod    = input.bool(true, "EOD-trailing (uit=intraday)", group=GROUP_EVAL,
      tooltip="EOD: floor follows the closed daily balance only (milder). Intraday: floor follows the live peak (stricter).", display=display.none)
 
 // === v5.4: APEX LEGACY 30% MAE-GUARD =========================================
@@ -683,10 +613,8 @@ bool execInstance = usePMT or useRithmic or usePineConnector or useMiddleware
 // === TIME GATE ==============================================================
 // ============================================================================
 hourEnabled = array.from(timeHour00,timeHour01,timeHour02,timeHour03,timeHour04,timeHour05,timeHour06,timeHour07,timeHour08,timeHour09,timeHour10,timeHour11,timeHour12,timeHour13,timeHour14,timeHour15,timeHour16,timeHour17,timeHour18,timeHour19,timeHour20,timeHour21,timeHour22,timeHour23)
-longHourEnabled = array.from(lHour00,lHour01,lHour02,lHour03,lHour04,lHour05,lHour06,lHour07,lHour08,lHour09,lHour10,lHour11,lHour12,lHour13,lHour14,lHour15,lHour16,lHour17,lHour18,lHour19,lHour20,lHour21,lHour22,lHour23)
-shortHourEnabled = array.from(sHour00,sHour01,sHour02,sHour03,sHour04,sHour05,sHour06,sHour07,sHour08,sHour09,sHour10,sHour11,sHour12,sHour13,sHour14,sHour15,sHour16,sHour17,sHour18,sHour19,sHour20,sHour21,sHour22,sHour23)
-bool dirHourLongPass  = not useDirectionalHours or array.get(longHourEnabled, f_getHour())
-bool dirHourShortPass = not useDirectionalHours or array.get(shortHourEnabled, f_getHour())
+bool dirHourLongPass  = true    // richtings-uurmap verwijderd 25-08; stand was UIT, dus identiek
+bool dirHourShortPass = true    // idem
 f_toMOD(_h,_m) => _h*60+_m
 f_inRangeMOD(_sh,_sm,_eh,_em) =>
     _cur = f_minuteOfDay()
@@ -699,7 +627,7 @@ f_isTradingDay() =>
      (tradeDOW == dayofweek.tuesday and tradeTuesday) or (tradeDOW == dayofweek.wednesday and tradeWednesday) or
      (tradeDOW == dayofweek.thursday and tradeThursday) or (tradeDOW == dayofweek.friday and tradeFriday) or
      (tradeDOW == dayofweek.saturday and tradeSaturday)
-monEarlyBlock = skipMonEarly and tradeDOW == dayofweek.monday and f_minuteOfDay() < 120
+monEarlyBlock = false   // Skip-Monday verwijderd 25-08: oude aanname, de statistiek bepaalt dit zelf
 bool _mregLondon = f_inRangeMOD(2, 0, 5, 0)
 bool _mregUsMorning = f_inRangeMOD(7, 0, 12, 0)
 bool _mregGlobex = f_inRangeMOD(18, 0, 19, 0)
@@ -757,74 +685,9 @@ bool paFiltersOK  = relVolOK and bbwpOK and not rthOpenBlock
 timeGatePass = timeGatePassRaw and paFiltersOK
 inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
 
-// ============================================================================
-// === ROLL / OPEX / NEWS FACTORY — preset resolver + calendar gate ============
-// ============================================================================
-f_evtPreset(_p) =>
-    string _pp = _p == "Auto (this script)" ? AUTO_PRESET : _p
-    bool _ar = false
-    bool _ro = true
-    bool _aw = false
-    bool _wa = false
-    bool _bf = false
-    bool _bn = false
-    bool _cu = false
-    int  _rd = 10
-    if _pp == "ES · Eval" or _pp == "ES · Funded"
-        _ar := true
-        _wa := true
-    else if _pp == "YM · any"
-        _ar := true
-        _aw := true
-    else if _pp == "NQ · any"
-        _bf := true
-    else if _pp == "Off / Custom"
-        _cu := true
-    // "GC · Eval" / "GC · Funded" -> all-false: GC is robust across regimes, no event filter
-    [_ar, _rd, _ro, _aw, _wa, _bf, _bn, _cu]
-[epAr, epRd, epRo, epAw, epWa, epBf, epBn, epCu] = f_evtPreset(evtPreset)
-bool evtAvoidRoll  = epCu ? rgAvoidRoll    : epAr
-int  evtRollDays   = epCu ? rgRollDays     : epRd
-bool evtRollNewsOv = epCu ? rgRollNewsOvr  : epRo
-bool evtAvoidWitch = epCu ? rgAvoidWitch   : epAw
-bool evtAvoidWkAft = epCu ? rgAvoidWkAfter : epWa
-bool evtBlockFOMC  = epCu ? rgBlockFOMC    : epBf
-bool evtBlockNFP   = epCu ? rgBlockNFP     : epBn
-
-f_thirdFriDay(_y, _m) =>
-    int _wd1 = dayofweek(timestamp(activeTz, _y, _m, 1, 0, 0), activeTz)  // 1=Sun .. 7=Sat
-    int _firstFri = 1 + ((6 - _wd1 + 7) % 7)                              // Friday = 6
-    _firstFri + 14
-int _cy = year(time, activeTz)
-int _cm = month(time, activeTz)
-int _cd = dayofmonth(time, activeTz)
-// nearest quarterly (Mar/Jun/Sep/Dec) 3rd-Friday expiry; signed days (>0 = after expiry)
-float _qSigned = na
-float _qAbs = 1.0e12
-for _yy = _cy - 1 to _cy + 1
-    for _qm = 3 to 12 by 3
-        float _ts = timestamp(activeTz, _yy, _qm, f_thirdFriDay(_yy, _qm), 0, 0)
-        float _dd = (time - _ts) / 86400000.0
-        if math.abs(_dd) < _qAbs
-            _qAbs := math.abs(_dd)
-            _qSigned := _dd
-// monthly OpEx (this month's 3rd Friday) — signed within-month days
-int _mRel = _cd - f_thirdFriDay(_cy, _cm)
-// NFP = 1st Friday of the month
-int _wd1m = dayofweek(timestamp(activeTz, _cy, _cm, 1, 0, 0), activeTz)
-int _firstFriDay = 1 + ((6 - _wd1m + 7) % 7)
-bool isNFP = _cd == _firstFriDay
-// FOMC decision days (US, 2022-2026; 2026 projected — update yearly)
-var int[] FOMC_YMD = array.from(20220126,20220316,20220504,20220615,20220727,20220921,20221102,20221214, 20230201,20230322,20230503,20230614,20230726,20230920,20231101,20231213, 20240131,20240320,20240501,20240612,20240731,20240918,20241107,20241218, 20250129,20250319,20250507,20250618,20250730,20250917,20251029,20251210, 20260128,20260318,20260429,20260617,20260729,20260916,20261028,20261209)
-bool isFOMC = array.includes(FOMC_YMD, _cy * 10000 + _cm * 100 + _cd)
-bool isNews = isFOMC or isNFP
-bool _blkRoll  = evtAvoidRoll  and (math.abs(_qSigned) <= evtRollDays) and not (evtRollNewsOv and isNews)
-bool _blkWitch = evtAvoidWitch and (_qSigned >= -4 and _qSigned <= 1)
-bool _blkWkAft = evtAvoidWkAft and (_mRel >= 2 and _mRel <= 8)
-bool _blkFOMC  = evtBlockFOMC  and isFOMC
-bool _blkNFP   = evtBlockNFP   and isNFP
-bool evtBlock  = useEvtFilter and (_blkRoll or _blkWitch or _blkWkAft or _blkFOMC or _blkNFP)
-bool evtGateOK = not evtBlock
+// De hele event-kalender (roll / triple witching / OpEx / FOMC / NFP) is 25-08 verwijderd
+// samen met zijn poort: de master stond op false, dus geen enkele tak kon ooit blokkeren.
+bool evtGateOK = true
 
 var bool hasTraded = false
 if not timeGatePass
@@ -1023,12 +886,12 @@ drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
 dllHit      = (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
-bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Trail + cap") and not (polOn and not na(polCapUSD))
+bool _dexTrailOn = dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Trail + cap"
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
 bool dayTrailArmed = dayTrailModel == "Legacy: activation = giveback" ? riskDayPeak > dayTrailUSDEff : riskDayPeak >= dayTrailActivationUSDEff
 float dayTrailGivebackEff = dayTrailModel == "Legacy: activation = giveback" ? dayTrailUSDEff : dayTrailGivebackUSDEff
 dayTrailHit = _dexTrailOn and dayTrailArmed and runningPnL <= riskDayPeak - dayTrailGivebackEff
-dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSDEff)
+dayCapHit   = _dexCapOn and riskDayPeak >= dayCapUSDEff
 if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit)
     dayHalted := true
     haltReason := dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
@@ -1122,18 +985,14 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
-canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive)
-if barstate.islast and polOn and (not polInstrOK or not polLive)
-    var label _polWarn = na
-    label.delete(_polWarn)
-    _polWarn := label.new(bar_index, high, not polLive ? "⛔ PRESET GEPARKEERD — geen trades" : "⛔ INSTRUMENT-MISMATCH: preset " + polFam + "-familie op " + syminfo.ticker, style=label.style_label_down, color=color.new(color.red, 10), textcolor=color.white)
+canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
 
 
 // ============================================================================
 // === SIZING =================================================================
 // ============================================================================
 f_calcQty(_slDistPrice) =>
-    float _q = polOn ? polQty : contractSizeEff
+    float _q = contractSizeEff
     if sizingMode != "Fixed contracts"
         float _riskUSD = sizingMode == "Fixed $ risk" ? riskValue : strategy.equity * riskValue / 100.0
         float _perUnit = _slDistPrice * syminfo.pointvalue
@@ -1234,7 +1093,7 @@ if longSignal
 if shortSignal
     sigStopPx := stopMode == "Swing structure" ? math.max(nz(lastPivHigh, sigGapTop), sigGapTop) + f_distPrice(swingBufSize) : sigEntryPx + f_distPrice(slSizeLegacyEff)
 float sigStopDist = math.abs(sigEntryPx - sigStopPx)
-bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= (polOn ? polMaxStopT * syminfo.mintick : f_distPrice(maxStopSizeEff))
+bool stopValid = not na(sigStopPx) and sigStopDist > syminfo.mintick and sigStopDist <= f_distPrice(maxStopSizeEff)
 float sigQty = f_calcQty(sigStopDist)
 bool qtyOk = sigQty >= (allowFractionalQty ? 1e-4 : 1.0)
 
@@ -1313,7 +1172,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";monFilter=" + (skipMonEarly ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";stabPreset=" + stabilityPreset + ";dirHours=" + (useDirectionalHours ? "1" : "0") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent

@@ -181,12 +181,18 @@ default $1.000) is actief en voedt dezelfde `dayHalted`. MATADOR staat dus niet 
    nul keer voor; die zit alleen in `pine/MEX_EL_TESORO.pine` (v7.10.0). De vloot draait dus
    op de oude machinerie: de PA-DLL en, waar aangezet, het dagwinst-exit. Zes van de negen
    hebben `dayExitMode = "Off"`, dus daar kan een goede dag volledig teruggegeven worden.
-3. **De registry-koppeling uit v7.9.5 ontbreekt ook.** `ddModelEff` / `acctTrailEff` /
-   `acctDllEff` komen nul keer voor in de negen: `dllHit` rekent op de handmatige `acctDLL`,
-   niet op wat het gekozen firm program zegt. Een Intraday-programma wordt daar nog steeds
-   als EOD gerekend — precies de bug die D-45 in TESORO dichtte.
+3. ~~**De registry-koppeling uit v7.9.5 ontbreekt ook.**~~ **INGETROKKEN 25-08 — dit was
+   fout van mij.** Ik concludeerde dat de koppeling ontbrak omdat `ddModelEff` /
+   `acctTrailEff` / `acctDllEff` nul keer voorkomen. Die namen bestaan hier inderdaad niet,
+   maar de koppeling zelf **is aanwezig**, alleen anders gebouwd: onder `if useFirmPreset`
+   (default aan) worden `ddModel`, `acctTrailDD`, `acctGoal`, `acctDLL` en `consistencyPct`
+   rechtstreeks overschreven met de registrywaarden. `dllHit` leest `acctDLL` nádat die
+   overschreven is, dus een Intraday-programma wordt wél als intraday gerekend.
+   Er blijft één schoonheidsfout: het paneel toont de handmatige waarde terwijl de code met
+   de registrywaarde rekent. Dat hoort zichtbaar te worden onder ACCOUNT — Guard, niet
+   gerepareerd te worden.
 
-Punt 2 en 3 zijn geen losse reparaties maar het overzetten van v7.9.3–v7.10.0 naar de vloot.
+Punt 2 is geen losse reparatie maar het overzetten van v7.9.3–v7.10.0 naar de vloot.
 Dat is een ronde werk met compile-risico op negen bestanden, en het raakt accountmechaniek op
 scripts die op het punt staan live te gaan. **Ik doe dat niet ongevraagd** — graag een
 D-nummer en een volgorde.

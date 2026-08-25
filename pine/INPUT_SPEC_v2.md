@@ -74,10 +74,12 @@ Dit is de reden dat de scripts sowieso aangepast moesten worden, en hij gaat mee
 
 1. **De daily risk-gate uit D-45** (DLL + trail op sessie-P&L, venster, reset op de CME-roll)
    zit alleen in `pine/MEX_EL_TESORO.pine`. Komt nu in alle scripts, onder ACCOUNT — Guard.
-2. **De registry-koppeling uit v7.9.5.** `f_firmRules` levert `_fkDD` / `_fkMax` / `_fkDLL`
-   maar niemand leest ze, dus `dllHit` rekent op de handmatige `acctDLL` en een
-   Intraday-programma wordt als EOD gerekend. Wordt `ddModelEff` / `acctTrailEff` /
-   `acctDllEff`, precies zoals in TESORO v7.9.5.
+2. ~~De registry-koppeling uit v7.9.5.~~ **Vervalt — die bestaat hier al.** Onder
+   `if useFirmPreset` worden `ddModel`, `acctTrailDD`, `acctGoal`, `acctDLL` en
+   `consistencyPct` rechtstreeks met de registrywaarden overschreven. Alleen de *namen*
+   `ddModelEff`/`acctDllEff` ontbreken; de werking niet. Wat blijft: het paneel toont de
+   handmatige waarde terwijl de code de registrywaarde gebruikt — dat maken we zichtbaar
+   onder ACCOUNT — Guard.
 
 ### En één defect dat besluit 6 meteen dicht
 

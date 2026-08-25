@@ -2335,3 +2335,48 @@ ruim en te duur.
 
 Aanlevering gaat via `python -m backtest.lab.ingest <bestand.csv> --symbol MNQ` op de VPS. Niets
 hoeft naar mij toe.
+
+---
+
+## 25-08 · Scrum Master → Backtest Setup — mijn fout: D-60 en D-62 ingetrokken
+
+Ferry wees me erop dat de datasets al geleverd zijn. Hij heeft gelijk, en jullie hadden het ook al
+gemeld. **Ik heb inbox 17 verwerkt zonder inbox 19 te lezen — het item dat er direct onder staat en
+letterlijk "correctie op inbox 17" heet.** Daardoor gaf ik twee nummers uit die niet hadden mogen
+bestaan:
+
+- **D-60** (data ontbreekt) — de data is twee keer geleverd: de 20y-twins tot 16-08-2026 (8 dagen
+  staart, 2,2%, ruim binnen jullie 10%-tolerantie) én de échte micro-bars `MES/MNQ/MYM 3y 1m
+  tick_cvd` tot 21-08-2026. En het venster is `24-08-2025 → 23-08-2026`, niet "jan 2025 →" — dat
+  laatste was de entry-onderdrukker, zoals jullie zelf schreven.
+- **D-62** (MATADOR EOD/Intraday) — door jullie al teruggenomen, met zoveel woorden: *"er valt niets
+  te beslissen."* Ik gaf het alsnog uit als taak, inclusief in Notion. Daar ook verwijderd.
+
+Dat is een procesfout aan mijn kant, niet aan die van jullie. De les staat in `DECISIONS.md`: een
+correctie staat per definitie ná het item dat hij corrigeert, dus een inbox-reeks moet tot het eind
+gelezen worden vóór er nummers uitgaan.
+
+### Wat er wél uit inbox 19 komt en nu genummerd is
+
+**D-63 — en dit is de echte blokkade onder D-54.** Jullie twee grondregel-10-afwijkingen:
+
+1. `LEON_MYM_PROD_EOD` gevalideerd onder `apex_50k_intraday_pa` terwijl de bron `apex_50k_eod_pa`
+   draagt — een engine met EOD in de naam, gevalideerd onder een Intraday-drawdown.
+2. `REY_MNQ_PROD_INTRA` gevalideerd met dag-winstblok `Trail + cap` (750/100/1000) terwijl de bron
+   `Off` heeft met 500/150/750. Vier velden, dus het hele dagbeheer.
+
+Jullie eigen formulering is de scherpste en die heb ik overgenomen: *"Zolang dit openstaat kan geen
+van beide engines trap 1 halen — niet omdat de simulator faalt, maar omdat onduidelijk is tegen
+welke configuratie hij moet meten."* Dat zijn precies de twee engines met een open harde poort, en
+dus precies waarom er geen geldige vlootrangorde is. Gaat naar Ferry als beslissing per engine.
+
+**D-07 aangevuld** met jullie commissie-bevinding: de exports draaiden 0,51 terwijl `CONTRACTS` voor
+MES 0,37 draagt. Dat raakt elk PF-cijfer uit de sweep. Per besluit van 24-08 wint de registry.
+
+### Twee dingen die ik van jullie nodig heb
+
+1. **Bevestig dat de dekking klopt** met `python -m backtest.pipeline.cli coverage` — dan staat het
+   met een commando in plaats van met mijn woord, en kan D-60 definitief dicht.
+2. **Inbox 6 en 7 wachten nog steeds op een nummer.** Die staan al sinds vóór 24-08 open. Als jullie
+   me in één regel per stuk zeggen waar ze over gaan, nummer ik ze in de volgende ronde — dan is de
+   achterstand aan mijn kant weg.

@@ -1,0 +1,351 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT CVD v6.1 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  Shows the exact CVD state the strategy filters on, in its own pane. Two engines:
+//
+//  - RESEARCH OHLCV PROXY (default, and what the fleet actually trades): deterministic
+//    polarity per bar — close>open = +1, close<open = -1, doji falls back to close vs
+//    previous close, unresolved doji carries the previous polarity. Session CVD is the
+//    running sum of polarity x volume. No lower-timeframe request, so no repainting and
+//    no vendor dependency. This is the canonical engine per D-09.
+//  - TRADINGVIEW VOLUME DELTA: ta.requestVolumeDelta anchored "1D" — on futures the daily
+//    anchor rolls at the 18:00 ET session open, the same anchor as the strategy.
+//
+//  Defaults follow EL REY MNQ PROD EOD: proxy engine, streak threshold 8.
+//
+//  ONE table, never two. Pine draws every table at its own position, so a second table in
+//  the same corner sits ON TOP of the first — that cannot be tuned away. Both blocks
+//  therefore live in a single table and can never overlap.
+// ============================================================================================
+indicator("MPT CVD v6.1", "MPT CVD", format=format.volume, max_lines_count=500, max_boxes_count=500, overlay=false)
+
+import TradingView/ta/8
+
+// === INPUTS =================================================================
+var string GROUP_ENG  = "1 · ENGINE"
+var string GROUP_GATE = "2 · STRATEGY GATE"
+var string GROUP_TBL  = "3 · TABLE"
+var string GROUP_PLOT = "4 · PLOT"
+var string GROUP_THEME = "5 · THEME"
+
+cvdEngine    = input.string("Research OHLCV proxy", "Delta engine", options=["Research OHLCV proxy", "TradingView volume delta", "Both (compare)"], group=GROUP_ENG,
+     tooltip="Research OHLCV proxy is what the fleet trades and is deterministic. TradingView volume delta scans a lower timeframe and depends on the data vendor. Both shows the two side by side, which is how you check parity.")
+useCustomTf  = input.bool(false, "Custom lower timeframe", inline="ltf", group=GROUP_ENG,
+     tooltip="Only used by the TradingView engine. Chosen automatically by default; 1 = per-minute polarity.")
+lowerTfIn    = input.timeframe("1", "", inline="ltf", group=GROUP_ENG)
+
+streakN      = input.int(8, "Streak threshold", minval=1, maxval=20, inline="gate", group=GROUP_GATE,
+     tooltip="Same value as the CVD streak count in the strategy — EL REY runs 8. The gate turns green once the streak reaches this AND direction and session CVD point the same way.")
+showGate     = input.bool(true, "Gate block", inline="gate", group=GROUP_GATE)
+showGateBg   = input.bool(true, "Pane tint", inline="bg", group=GROUP_GATE,
+     tooltip="Tints this pane on bars where the strategy CVD gate stood open. Historical and live.")
+gateBgTransp = input.int(88, "transp.", minval=70, maxval=98, inline="bg", group=GROUP_GATE)
+
+showTable    = input.bool(true, "Delta history", inline="tbl", group=GROUP_TBL)
+histLen      = input.int(12, "bars", minval=4, maxval=20, inline="tbl", group=GROUP_TBL)
+showTime     = input.bool(true, "Time (ET)", inline="rows", group=GROUP_TBL)
+showDeltaAbs = input.bool(true, "Δ", inline="rows", group=GROUP_TBL)
+showDeltaPct = input.bool(true, "Δ%", inline="rows", group=GROUP_TBL)
+showCVD      = input.bool(true, "CVD", inline="rows", group=GROUP_TBL,
+     tooltip="Row toggles: bar time (ET), per-bar delta, delta as % of session CVD at bar open, and cumulative session CVD.")
+panelPosIn   = input.string("Bottom right", "Panel position", options=["Bottom left", "Bottom center", "Bottom right", "Middle left", "Middle right", "Top left", "Top center", "Top right"], group=GROUP_TBL,
+     tooltip="One table holds both blocks, so they align as a single rectangle and can never overlap.")
+gateSideIn   = input.string("Left", "Gate block on", options=["Left", "Right"], group=GROUP_TBL,
+     tooltip="Left = gate first (reading order). Right = delta history anchored in the corner.")
+textSizeIn   = input.string("Small", "Text size", options=["Tiny", "Small", "Normal", "Large"], group=GROUP_TBL)
+
+cvdDisplay   = input.string("CVD (Line)", "Plot", options=["Candles (Delta)", "CVD (Line)", "None"], group=GROUP_PLOT,
+     tooltip="Candles are only available on the TradingView engine — the proxy has no per-bar OHLC delta. On the proxy the plot falls back to the line.")
+themeIn      = input.string("Auto", "Theme", options=["Auto", "Dark", "Light"], group=GROUP_THEME,
+     tooltip="Auto reads the chart background. Override only if detection fails.")
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+var lowerTimeframe = switch
+    useCustomTf          => lowerTfIn
+    timeframe.isseconds  => "1S"
+    timeframe.isintraday => "1"
+    timeframe.isdaily    => "5"
+    => "60"
+
+bool engProxy = cvdEngine == "Research OHLCV proxy"
+bool engTv    = cvdEngine == "TradingView volume delta"
+bool engBoth  = cvdEngine == "Both (compare)"
+
+// === THEME PALETTE ==========================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pPosTxt = isDark ? #ECECEC : #056656
+color pNegTxt = isDark ? #ECECEC : #B22833
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pTimeBg    = isDark ? color.new(#2A2E39, 65) : color.new(#F0F3FA, 25)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+color pLive      = isDark ? color.new(#F7C948, 20) : #8F6400
+
+// === ENGINE A — RESEARCH OHLCV PROXY ========================================
+// Identiek aan de strategie: polariteit per bar, doji valt terug op close vs vorige close,
+// onbesliste doji draagt de vorige polariteit door.
+var int proxyDir = -1
+int _proxyDirNow = close > open ? 1 :
+     close < open ? -1 :
+     (not na(close[1]) and close > close[1]) ? 1 :
+     (not na(close[1]) and close < close[1]) ? -1 :
+     nz(proxyDir[1], -1)
+proxyDir := _proxyDirNow
+
+var int proxyBull = 0
+var int proxyBear = 0
+proxyBull := proxyDir == 1 ? nz(proxyBull[1], 0) + 1 : 0
+proxyBear := proxyDir == -1 ? nz(proxyBear[1], 0) + 1 : 0
+
+// Sessie-CVD van de proxy: polariteit x volume, reset op dezelfde daggrens als de
+// "1D"-anker van de TradingView-engine, zodat de twee vergelijkbaar zijn.
+bool newSess = timeframe.change("1D")
+var float proxyCvd = 0.0
+var float proxyCvdOpen = 0.0
+float _prevCvd = newSess ? 0.0 : nz(proxyCvd[1])
+proxyCvdOpen := _prevCvd                       // stand bij bar-open, voor de delta%-kolom
+proxyCvd     := _prevCvd + proxyDir * nz(volume)
+float proxyBarDelta = proxyDir * nz(volume)
+
+// === ENGINE B — TRADINGVIEW VOLUME DELTA ====================================
+[tvOpen, tvMax, tvMin, tvLast] = ta.requestVolumeDelta(lowerTimeframe, "1D")
+float tvBarDelta = tvLast - tvOpen
+float tvCvd      = tvLast
+
+// === ACTIVE ENGINE ==========================================================
+float barDelta   = engTv ? tvBarDelta : proxyBarDelta
+float sessCvd    = engTv ? tvCvd      : proxyCvd
+float openVolume = engTv ? tvOpen     : proxyCvdOpen
+float prevSess   = nz(sessCvd[1])
+
+// === STRATEGY STATE (confirmed bars, as the strategy decides) ===============
+var int   tvBull = 0
+var int   tvBear = 0
+var float confDelta = na
+var bool  confCumUp = false
+var bool  confCumDn = false
+if barstate.isconfirmed
+    if tvBarDelta > 0
+        tvBull += 1
+        tvBear := 0
+    else if tvBarDelta < 0
+        tvBear += 1
+        tvBull := 0
+    else
+        tvBull := 0
+        tvBear := 0
+    confDelta := barDelta
+    confCumUp := sessCvd > prevSess
+    confCumDn := sessCvd < prevSess
+
+int bullStreak = engTv ? tvBull : proxyBull
+int bearStreak = engTv ? tvBear : proxyBear
+bool bullPass = confDelta > 0 and confCumUp and bullStreak >= streakN
+bool bearPass = confDelta < 0 and confCumDn and bearStreak >= streakN
+
+// verdict van de NIET-actieve engine, voor de vergelijkstand
+int  otherBull = engTv ? proxyBull : tvBull
+int  otherBear = engTv ? proxyBear : tvBear
+float otherDelta = engTv ? proxyBarDelta : tvBarDelta
+bool otherBullPass = otherDelta > 0 and otherBull >= streakN
+bool otherBearPass = otherDelta < 0 and otherBear >= streakN
+
+// === TABLE BUFFERS ==========================================================
+var float[] deltaArr    = array.new_float()
+var float[] deltaPctArr = array.new_float()
+var float[] cvdArr      = array.new_float()
+var int[]   timeArr     = array.new_int()
+if barstate.isconfirmed
+    array.push(deltaArr, barDelta)
+    array.push(deltaPctArr, openVolume != 0 ? (barDelta / math.abs(openVolume)) * 100 : 0)
+    array.push(cvdArr, sessCvd)
+    array.push(timeArr, time)
+    if array.size(deltaArr) > histLen
+        array.shift(deltaArr)
+        array.shift(deltaPctArr)
+        array.shift(cvdArr)
+        array.shift(timeArr)
+
+// === HELPERS ================================================================
+formatVolume(val) =>
+    absVal = math.abs(val)
+    sign = val < 0 ? "-" : ""
+    absVal >= 1e6 ? sign + str.tostring(absVal / 1e6, "#.##") + "M" :
+     absVal >= 1e3 ? sign + str.tostring(absVal / 1e3, "#.#") + "k" :
+     sign + str.tostring(absVal, "#")
+
+f_cellBg(float v, float maxAbs) =>
+    float frac = maxAbs > 0 ? math.min(1.0, math.abs(v) / maxAbs) : 0.0
+    int transp = isDark ? int(78 - 38 * frac) : int(90 - 22 * frac)
+    color.new(v >= 0 ? POS : NEG, transp)
+
+f_cellTxt(float v) =>
+    v >= 0 ? pPosTxt : pNegTxt
+
+// === ONE COMBINED PANEL =====================================================
+// Twee tabellen op dezelfde position stapelen in Pine over elkaar heen; dat is niet weg te
+// stellen. Beide blokken zitten daarom in één tabel en kunnen per constructie niet botsen.
+int  nRows     = (showTime ? 1 : 0) + (showDeltaAbs ? 1 : 0) + (showDeltaPct ? 1 : 0) + (showCVD ? 1 : 0)
+bool wantTable = showTable and nRows > 0
+bool wantGate  = showGate
+bool gateLeft  = gateSideIn == "Left"
+int  gateRows  = engBoth ? 5 : 4
+
+int tblCols   = wantTable ? histLen + 2 : 0
+int gateCols  = wantGate ? (wantTable ? 3 : 2) : 0
+int totalCols = tblCols + gateCols
+int totalRows = math.max(wantTable ? nRows : 0, wantGate ? gateRows : 0)
+
+int tblOffset  = 0
+int gateLabCol = 0
+int spacerCol  = -1
+if wantGate and wantTable
+    if gateLeft
+        gateLabCol := 0
+        spacerCol  := 2
+        tblOffset  := 3
+    else
+        spacerCol  := tblCols
+        gateLabCol := tblCols + 1
+int gateValCol = gateLabCol + 1
+
+var table panel = na
+if barstate.islast and totalCols > 0 and totalRows > 0
+    panel := table.new(panelPos, totalCols, totalRows, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+
+    if spacerCol >= 0
+        table.cell(panel, spacerCol, 0, " ", bgcolor=na, text_size=textSize)
+
+    if wantTable
+        int nHist = array.size(deltaArr)
+        float maxAbs = 0.0
+        if nHist > 0
+            for i = 0 to nHist - 1
+                maxAbs := math.max(maxAbs, math.abs(array.get(deltaArr, i)))
+        maxAbs := math.max(maxAbs, math.abs(barDelta))
+
+        int r = 0
+        if showTime
+            table.cell(panel, tblOffset, r, "ET", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            r += 1
+        if showDeltaAbs
+            table.cell(panel, tblOffset, r, "Δ", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            r += 1
+        if showDeltaPct
+            table.cell(panel, tblOffset, r, "Δ%", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            r += 1
+        if showCVD
+            table.cell(panel, tblOffset, r, "CVD", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+
+        if nHist > 0
+            for i = 0 to nHist - 1
+                int c = tblOffset + i + 1
+                r := 0
+                if showTime
+                    table.cell(panel, c, r, str.format_time(array.get(timeArr, i), "HH:mm", "America/New_York"), text_color=pMuted, bgcolor=pTimeBg, text_size=textSize, text_halign=text.align_center)
+                    r += 1
+                if showDeltaAbs
+                    float d = array.get(deltaArr, i)
+                    table.cell(panel, c, r, formatVolume(d), text_color=f_cellTxt(d), bgcolor=f_cellBg(d, maxAbs), text_size=textSize, text_halign=text.align_center)
+                    r += 1
+                if showDeltaPct
+                    float _pv = array.get(deltaPctArr, i)
+                    table.cell(panel, c, r, str.tostring(_pv, "#.#") + "%", text_color=f_cellTxt(_pv), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+                    r += 1
+                if showCVD
+                    float cv = array.get(cvdArr, i)
+                    table.cell(panel, c, r, formatVolume(cv), text_color=f_cellTxt(cv), bgcolor=f_cellBg(cv, math.max(maxAbs, math.abs(cv))), text_size=textSize, text_halign=text.align_center)
+
+        if barstate.isrealtime
+            int c = tblOffset + nHist + 1
+            float liveDelta = barDelta
+            float livePct = openVolume != 0 ? (liveDelta / math.abs(openVolume)) * 100 : 0
+            r := 0
+            if showTime
+                table.cell(panel, c, r, "▸ live", text_color=pLive, bgcolor=pTimeBg, text_size=textSize, text_halign=text.align_center)
+                r += 1
+            if showDeltaAbs
+                table.cell(panel, c, r, formatVolume(liveDelta), text_color=f_cellTxt(liveDelta), bgcolor=f_cellBg(liveDelta, maxAbs), text_size=textSize, text_halign=text.align_center)
+                r += 1
+            if showDeltaPct
+                table.cell(panel, c, r, str.tostring(livePct, "#.#") + "%", text_color=f_cellTxt(livePct), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+                r += 1
+            if showCVD
+                table.cell(panel, c, r, formatVolume(sessCvd), text_color=f_cellTxt(sessCvd), bgcolor=f_cellBg(sessCvd, math.max(maxAbs, math.abs(sessCvd))), text_size=textSize, text_halign=text.align_center)
+
+    if wantGate
+        color posSoft = f_cellBg(1, 1)
+        color negSoft = f_cellBg(-1, 1)
+
+        table.cell(panel, gateLabCol, 0, engTv ? "Δ direction (TV)" : "Δ direction (proxy)", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, gateValCol, 0, confDelta > 0 ? "▲ buying" : confDelta < 0 ? "▼ selling" : "—", text_color=confDelta != 0 ? f_cellTxt(confDelta) : pMuted, bgcolor=confDelta > 0 ? posSoft : confDelta < 0 ? negSoft : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+
+        table.cell(panel, gateLabCol, 1, "Session CVD", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, gateValCol, 1, formatVolume(sessCvd) + (confCumUp ? " ↑" : confCumDn ? " ↓" : ""), text_color=f_cellTxt(sessCvd), bgcolor=sessCvd >= 0 ? posSoft : negSoft, text_size=textSize, text_halign=text.align_center)
+
+        table.cell(panel, gateLabCol, 2, "Streak", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        int stk = math.max(bullStreak, bearStreak)
+        bool stkOk = stk >= streakN
+        bool stkBull = bullStreak >= bearStreak
+        table.cell(panel, gateValCol, 2, (stkBull ? "▲ " : "▼ ") + str.tostring(stk) + "/" + str.tostring(streakN), text_color=stkOk ? f_cellTxt(stkBull ? 1 : -1) : pText, bgcolor=stkOk ? (stkBull ? posSoft : negSoft) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+
+        table.cell(panel, gateLabCol, 3, "Strategy gate", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        string gateTxt = bullPass ? "LONG OK" : bearPass ? "SHORT OK" : "closed"
+        color gateBg = bullPass ? color.new(POS, 15) : bearPass ? color.new(NEG, 15) : pNeutralBg
+        table.cell(panel, gateValCol, 3, gateTxt, text_color=bullPass or bearPass ? color.white : pText, bgcolor=gateBg, text_size=textSize, text_halign=text.align_center)
+
+        // vergelijkstand: wat zegt de ANDERE engine op dezelfde bar
+        if engBoth
+            table.cell(panel, gateLabCol, 4, "TradingView engine", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            string othTxt = otherBullPass ? "LONG OK" : otherBearPass ? "SHORT OK" : "closed"
+            bool agree = othTxt == gateTxt
+            table.cell(panel, gateValCol, 4, othTxt + (agree ? "  =" : "  ≠"), text_color=agree ? pText : pNegTxt, bgcolor=agree ? pNeutralBg : color.new(NEG, 60), text_size=textSize, text_halign=text.align_center)
+
+// === GATE BACKGROUND ========================================================
+bgcolor(showGateBg ? (bullPass ? color.new(POS, gateBgTransp) : bearPass ? color.new(NEG, gateBgTransp) : na) : na, title="CVD-gate open")
+
+// === PLOT ===================================================================
+// Candles bestaan alleen op de TradingView-engine: de proxy heeft geen delta-OHLC per bar.
+bool plotCandles = cvdDisplay == "Candles (Delta)" and engTv
+bool plotLine    = cvdDisplay == "CVD (Line)" or (cvdDisplay == "Candles (Delta)" and not engTv)
+color col = tvLast >= tvOpen ? color.teal : color.red
+
+plot(na(volume) ? na : 0, display=display.none)
+plotcandle(plotCandles ? tvOpen : na, plotCandles ? tvMax : na, plotCandles ? tvMin : na, plotCandles ? tvLast : na, title="CVD Candles", color=col, bordercolor=col, wickcolor=col)
+plot(plotLine ? sessCvd : na, title="CVD Line", color=sessCvd >= 0 ? color.teal : color.red, linewidth=2)
+plot(engBoth ? tvCvd : na, title="TradingView CVD (compare)", color=color.new(color.gray, 30), linewidth=1)
+hline(0, "Zero", color=color.new(color.gray, 70), linestyle=hline.style_dotted)
+
+// === DATA CHECK =============================================================
+var float cumVol = 0.0
+cumVol += nz(volume)
+if barstate.islast and cumVol == 0
+    runtime.error("The data vendor does not provide volume data for this symbol.")

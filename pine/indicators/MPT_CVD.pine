@@ -3,7 +3,7 @@
 
 //@version=6
 // ============================================================================================
-//  MPT CVD v6.2 — companion indicator to the MEX fleet strategies
+//  MPT CVD v6.3 — companion indicator to the MEX fleet strategies
 // ============================================================================================
 //  Shows the exact CVD state the strategy filters on, in its own pane. Two engines:
 //
@@ -21,7 +21,7 @@
 //  the same corner sits ON TOP of the first — that cannot be tuned away. Both blocks
 //  therefore live in a single table and can never overlap.
 // ============================================================================================
-indicator("MPT CVD v6.2", "MPT CVD", format=format.volume, max_lines_count=500, max_boxes_count=500, overlay=false)
+indicator("MPT CVD v6.3", "MPT CVD", format=format.volume, max_lines_count=500, max_boxes_count=500, overlay=false)
 
 import TradingView/ta/8
 
@@ -59,7 +59,7 @@ gateSideIn   = input.string("Left", "Gate block on", options=["Left", "Right"], 
 textSizeIn   = input.string("Small", "Text size", options=["Tiny", "Small", "Normal", "Large"], group=GROUP_TBL)
 
 cvdDisplay   = input.string("CVD (Line)", "Plot", options=["Candles (Delta)", "CVD (Line)", "None"], group=GROUP_PLOT,
-     tooltip="Candles are only available on the TradingView engine — the proxy has no per-bar OHLC delta. On the proxy the plot falls back to the line.")
+     tooltip="Candles follow the active engine. On the proxy a candle runs from the session CVD at bar open to its value at bar close; the proxy measures per bar, not inside it, so those candles have no wicks.")
 themeIn      = input.string("Auto", "Theme", options=["Auto", "Dark", "Light"], group=GROUP_THEME,
      tooltip="Auto reads the chart background. Override only if detection fails.")
 
@@ -134,6 +134,11 @@ float _prevCvd = newSess ? 0.0 : nz(proxyCvd[1])
 proxyCvdOpen := _prevCvd                       // stand bij bar-open, voor de delta%-kolom
 proxyCvd     := _prevCvd + proxyDir * nz(volume)
 float proxyBarDelta = proxyDir * nz(volume)
+// Delta-candle voor de proxy: open = stand bij bar-open, close = stand na deze bar. De
+// proxy kent geen intrabar-extremen, dus high/low zijn de uiteinden en er zijn geen wicks.
+// Dat is geen tekortkoming maar de eerlijke weergave: de proxy meet per bar, niet erbinnen.
+float proxyMax = math.max(proxyCvdOpen, proxyCvd)
+float proxyMin = math.min(proxyCvdOpen, proxyCvd)
 
 // === ENGINE B — TRADINGVIEW VOLUME DELTA ====================================
 [tvOpen, tvMax, tvMin, tvLast] = ta.requestVolumeDelta(lowerTimeframe, "1D")
@@ -172,11 +177,19 @@ bool bullPass = confDelta > 0 and confCumUp and bullStreak >= streakN
 bool bearPass = confDelta < 0 and confCumDn and bearStreak >= streakN
 
 // verdict van de NIET-actieve engine, voor de vergelijkstand
-int  otherBull = engTv ? proxyBull : tvBull
-int  otherBear = engTv ? proxyBear : tvBear
+int   otherBull  = engTv ? proxyBull : tvBull
+int   otherBear  = engTv ? proxyBear : tvBear
 float otherDelta = engTv ? proxyBarDelta : tvBarDelta
-bool otherBullPass = otherDelta > 0 and otherBull >= streakN
-bool otherBearPass = otherDelta < 0 and otherBear >= streakN
+float otherCvd   = engTv ? proxyCvd : tvCvd
+// Dezelfde DRIE voorwaarden als de actieve engine. Eerder ontbrak de cumulatieve richting
+// hier, waardoor de vergelijking twee verschillende regels naast elkaar zette.
+var bool otherCumUp = false
+var bool otherCumDn = false
+if barstate.isconfirmed
+    otherCumUp := otherCvd > nz(otherCvd[1])
+    otherCumDn := otherCvd < nz(otherCvd[1])
+bool otherBullPass = otherDelta > 0 and otherCumUp and otherBull >= streakN
+bool otherBearPass = otherDelta < 0 and otherCumDn and otherBear >= streakN
 
 // === TABLE BUFFERS ==========================================================
 var float[] deltaArr    = array.new_float()
@@ -354,16 +367,24 @@ if barstate.islast and totalCols > 0 and totalRows > 0
 bgcolor(showGateBg ? (bullPass ? color.new(POS, gateBgTransp) : bearPass ? color.new(NEG, gateBgTransp) : na) : na, title="CVD-gate open")
 
 // === PLOT ===================================================================
-// Candles bestaan alleen op de TradingView-engine: de proxy heeft geen delta-OHLC per bar.
-bool plotCandles = cvdDisplay == "Candles (Delta)" and engTv
-bool plotLine    = cvdDisplay == "CVD (Line)" or (cvdDisplay == "Candles (Delta)" and not engTv)
-color col = tvLast >= tvOpen ? color.teal : color.red
+// Candles werken op BEIDE engines. Ze volgen de actieve engine, dus 'Candles' geeft nooit
+// stilzwijgend een lijn terug omdat de verkeerde engine aanstaat.
+bool plotCandles = cvdDisplay == "Candles (Delta)"
+bool plotLine    = cvdDisplay == "CVD (Line)"
+
+float cO = engTv ? tvOpen : proxyCvdOpen
+float cH = engTv ? tvMax  : proxyMax
+float cL = engTv ? tvMin  : proxyMin
+float cC = engTv ? tvLast : proxyCvd
+// Dezelfde POS/NEG uit het themapalet als de tabel, niet color.teal/color.red - anders
+// draagt het paneel twee kleurstellingen door elkaar.
+color col = cC >= cO ? POS : NEG
 
 plot(na(volume) ? na : 0, display=display.none)
-plotcandle(plotCandles ? tvOpen : na, plotCandles ? tvMax : na, plotCandles ? tvMin : na, plotCandles ? tvLast : na, title="CVD Candles", color=col, bordercolor=col, wickcolor=col)
-plot(plotLine ? sessCvd : na, title="CVD Line", color=sessCvd >= 0 ? color.teal : color.red, linewidth=2)
-plot(engBoth ? tvCvd : na, title="TradingView CVD (compare)", color=color.new(color.gray, 30), linewidth=1)
-hline(0, "Zero", color=color.new(color.gray, 70), linestyle=hline.style_dotted)
+plotcandle(plotCandles ? cO : na, plotCandles ? cH : na, plotCandles ? cL : na, plotCandles ? cC : na, title="CVD Candles", color=col, bordercolor=col, wickcolor=col)
+plot(plotLine ? sessCvd : na, title="CVD Line", color=sessCvd >= 0 ? POS : NEG, linewidth=2)
+plot(engBoth ? tvCvd : na, title="TradingView CVD (compare)", color=pMuted, linewidth=1)
+hline(0, "Zero", color=pBorder, linestyle=hline.style_dotted)
 
 // === DATA CHECK =============================================================
 var float cumVol = 0.0

@@ -9,6 +9,10 @@
 
 ---
 
+- 2026-08-25 · D-60 · **CORRECTIE op D-54: het knelpunt is data, niet exports** — de TradingView-exports bestaan; wat ontbreekt is lokale 1-minuutdata voor **MNQ en MYM** over het exportvenster (jan 2025 →) om ze tegen af te zetten · trap 1 is een harde poort, dus zolang die data ontbreekt is alles eronder ongeldig · MATADOR (MES) kwam 25-08 wél op `data_parity`, wat precies op dit patroon past · **goedkoopste onderzoeksinvestering op het bord: één dataset opent drie trappen voor twee engines** · raakt: D-54, D-57, de hele vlootrangorde
+- 2026-08-25 · D-61 · **BANDIDO's "pariteit open" is een compileerfout, geen openstaande meting** — `dayExitMode` op regel 236 heeft defval `"Cap only"` die niet in de eigen `options`-lijst staat, en Pine v6 weigert dat · raakt: pine/**, BANDIDO
+- 2026-08-25 · D-00 · **Drie inbox-meldingen van Backtest Setup van 24-08 zijn pas 25-08 genummerd** (inbox 17 → D-60/D-62, inbox 18 → D-61) — inbox 6 en 7 wachten er nog steeds op · dat is toezichtvertraging aan mijn kant, niet aan die van hen · raakt: bordproces
+
 - 2026-08-25 · D-06 · **De .NET-solution staat compleet in git en is geverifieerd** (`810728e`) — geen secrets, `Caddyfile` bevestigt `mw.mex-traders.com` (onderbouwt D-49), en `nuget.config` met `<clear/>` is veilig omdat geen enkel project een `PackageReference` heeft · **deblokkeert D-40, D-53, D-02 en D-05** · restpunt: `Mex.Journal.Receiver` ontbreekt in de `.sln` → **D-59** · raakt: middleware, vier borditems
 
 - 2026-08-25 · D-06 · **NEAR-MISS: mijn rsync-instructie was te breed** — de kopieeractie zette `notion-sync-config.json` (plus twee `.save`-kopieën), `fleet-config.json` en de systemd-unit met `MEX_WEBHOOK_SECRET`/`MEX_DISCORD_WEBHOOK` klaar om gecommit te worden; de commit strandde toevallig op een ontbrekende git-identiteit · **les: kopieer bij zo'n overdracht alleen wat het doel nodig heeft** (hier: `.sln`, `.csproj`, `src/`), nooit een hele boom · `.gitignore` vangt deze bestanden nu af · raakt: repo-hygiëne, D-11

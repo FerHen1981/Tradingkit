@@ -813,6 +813,9 @@ def _start_scorecard(q) -> tuple[dict, int]:
            "--dataset", dataset, "--engine", engine]
     if (q.get("posture") or [""])[0] == "raw":
         cmd.append("--raw")
+    hold = (q.get("holdout_days") or ["0"])[0].strip()
+    if hold.isdigit() and int(hold) > 0:
+        cmd += ["--holdout-days", hold]
     for name, flag in (("since", "--since"), ("until", "--until")):
         v = (q.get(name) or [""])[0].strip()
         if v:
@@ -2002,11 +2005,39 @@ function renderScorecard(card){
     +`<div style="margin-top:14px"><div class=muted style="font-size:11px">exit-redenen (aantal · net)</div>${
         _tbl((card.exit_reason_edge||[]).map(r=>[r.reason,r.trades,money(r.net)]))}</div>`;
 }
+function _isoosKpi(c){
+  const k=(c&&c.kpis)||{};
+  if(!k.trades) return '<span class=muted>geen trades</span>';
+  const m=v=>'$'+Math.round(v).toLocaleString();
+  return `${k.trades} tr · net <b style="color:${k.net_profit>=0?'var(--azure)':'var(--rose)'}">${m(k.net_profit)}</b> · PF ${k.profit_factor} · WR ${k.win_rate_pct}% · E $${k.expectancy} · maxDD ${m(k.max_drawdown)}`;
+}
+function renderIsOos(p){
+  const box=$('#scOut'); box.style.display='block';
+  $('#scMeta').textContent=(p.engine||'').replace('EL_','')+' · '+p.dataset+' · '+p.posture+' · holdout '+p.holdout_days+'d';
+  const vc=p.holds?'var(--azure)':'var(--rose)';
+  box.innerHTML=
+    `<div style="border-left:3px solid ${vc};padding:6px 12px;margin-bottom:12px">
+       <b style="color:${vc}">${p.holds?'✓ edge houdt stand out-of-sample':'✗ overfit-risico'}</b>
+       <span class=muted style="margin-left:8px">retain ${p.retain} (OOS PF ÷ IS PF, drempel 0.60)</span></div>`
+    +`<table style="font-size:12.5px;width:100%"><tbody>
+        <tr><td style="padding:4px 10px 4px 0;color:var(--gold)">in-sample</td><td style="text-align:left">${_isoosKpi(p.is)}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:var(--gold)">out-of-sample</td><td style="text-align:left">${_isoosKpi(p.oos)}</td></tr>
+      </tbody></table>`
+    +`<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:12px">
+        <div style="flex:1;min-width:280px"><div class=muted style="font-size:11px;margin-bottom:3px">IS equity</div>${_svgEquity(p.is.equity_curve)}</div>
+        <div style="flex:1;min-width:280px"><div class=muted style="font-size:11px;margin-bottom:3px">OOS equity</div>${_svgEquity(p.oos.equity_curve)}</div>
+      </div>`
+    +`<div class=muted style="font-size:11.5px;margin-top:8px">${p.verdict} · cutoff ${(''+p.cutoff).slice(0,10)}</div>`;
+}
 $('#scRun')&&$('#scRun').addEventListener('click',()=>{
   const eng=$('#scEngine').value, ds=$('#scDs').value;
   if(!eng||!ds){$('#scLog').style.display='block';$('#scLog').textContent='Kies een engine én dataset.';return}
-  const qs='engine='+encodeURIComponent(eng)+'&dataset='+encodeURIComponent(ds)+'&posture='+encodeURIComponent($('#scPosture').value);
+  const hold=parseInt($('#scHold').value||'0',10)||0;
+  const qs='engine='+encodeURIComponent(eng)+'&dataset='+encodeURIComponent(ds)
+    +'&posture='+encodeURIComponent($('#scPosture').value)+'&holdout_days='+hold;
   postJob('/api/scorecard',qs,'#scLog','#scRun',(j)=>{
+    const iso=(j.log||[]).find(l=>l.startsWith('ISOOS_JSON '));
+    if(iso){try{renderIsOos(JSON.parse(iso.slice(11)));return;}catch(e){}}
     const line=(j.log||[]).find(l=>l.startsWith('SCORECARD_JSON '));
     if(line){try{renderScorecard(JSON.parse(line.slice(15)));}catch(e){$('#scOut').style.display='block';$('#scOut').innerHTML='<div class=muted>kon scorecard niet lezen</div>';}}
   });
@@ -2340,7 +2371,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>3.4 · Eval spectrum — which account, how fast</b>
+      <b class=sub>Eval-spectrum — welk account, hoe snel</b>
       <span class=muted>every firm sells a different bargain</span></div>
     <div class=hint>Runs a <b>fresh eval</b> every N sessions against <b>each program in the registry</b>
       and reports pass rate and median <b>trading days</b> to pass. The task differs sharply per program —
@@ -2362,7 +2393,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>3.5 · Run a backtest — validate the pick</b><span class=muted>test a strategy toward a goal</span></div>
+      <b class=sub>Backtest draaien — een strategie doormeten</b><span class=muted>test a strategy toward a goal</span></div>
     <div class=hint>Pick a strategy and dataset, choose the goal (lens), and run. Classic = raw edge · Eval = prop-firm pass-rate · Funded = payout simulation.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=wSpec style="min-width:200px"></select></label>
@@ -2399,6 +2430,7 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <label class=field><span class=fld>Houding</span><select id=scPosture>
         <option value=deploy>Deployment (overlay aan)</option>
         <option value=raw>Raw (kale mechaniek)</option></select></label>
+      <label class=field><span class=fld>Holdout (d)</span><input id=scHold value=0 style="width:80px" title="0 = geen split; N = laatste N dagen als out-of-sample"></label>
       <button class=go id=scRun>Scorecard</button>
     </div>
     <div id=scOut style="display:none;margin-top:14px"></div>

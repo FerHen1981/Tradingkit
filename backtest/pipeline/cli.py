@@ -464,31 +464,65 @@ def cmd_scorecard(args):
         df = dm.slice_dates(df, until=args.until)
     if df.empty:
         raise SystemExit(f"dataset {args.dataset!r} bevat geen bars in het gevraagde venster.")
-    print(f"  {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
-    res = Engine(cfg, df, im.compute(df, cfg), research_mode=not args.raw).run()
-    card = sc.scorecard(res)
-    card["engine"], card["dataset"], card["posture"] = args.engine, args.dataset, \
-        ("raw" if args.raw else "deploy")
-    card["window"] = {"since": args.since, "until": args.until, "bars": len(df)}
+    def _card(frame):
+        res = Engine(cfg, frame, im.compute(frame, cfg), research_mode=not args.raw).run()
+        c = sc.scorecard(res)
+        c["engine"], c["dataset"] = args.engine, args.dataset
+        c["posture"] = "raw" if args.raw else "deploy"
+        c["window_bars"] = len(frame)
+        return c
 
-    k = card["kpis"]
-    if not k.get("trades"):
-        print("  GEEN trades — niets te scoren.")
-    else:
-        bd = card["by_direction"]
-        print(f"\n  {k['trades']} trades · net ${k['net_profit']:,.0f} · PF {k['profit_factor']} · "
+    def _summary(tag, c):
+        k = c["kpis"]
+        if not k.get("trades"):
+            print(f"  [{tag}] GEEN trades"); return
+        print(f"  [{tag}] {k['trades']} trades · net ${k['net_profit']:,.0f} · PF {k['profit_factor']} · "
               f"WR {k['win_rate_pct']}% · E ${k['expectancy']}/trade · maxDD ${k['max_drawdown']:,.0f}")
+
+    # ---- IS / OOS split (overfit view) ----
+    if args.holdout_days:
+        is_df, oos_df, cutoff = dm.holdout_split(df, args.holdout_days)
+        if is_df.empty or oos_df.empty:
+            raise SystemExit(f"holdout van {args.holdout_days} dagen laat geen in-sample "
+                             f"óf out-of-sample bars over op dit venster.")
+        print(f"  IS/OOS-split op {cutoff} · in-sample {len(is_df):,} bars · "
+              f"out-of-sample {len(oos_df):,} bars (laatste {args.holdout_days} dagen)")
+        is_c, oos_c = _card(is_df), _card(oos_df)
+        _summary("IS ", is_c); _summary("OOS", oos_c)
+        is_pf = float(is_c["kpis"].get("profit_factor") or 0)
+        oos_pf = float(oos_c["kpis"].get("profit_factor") or 0)
+        retain = round(oos_pf / is_pf, 2) if is_pf > 0 else 0.0
+        # The overfit gate, same threshold verify.py uses: the edge must survive
+        # unseen data, not just look good where it was measured.
+        holds = (oos_c["kpis"].get("trades", 0) >= 10 and oos_pf >= 1.0 and retain >= 0.6)
+        verdict = (f"edge houdt stand out-of-sample: OOS PF {oos_pf} is {int(retain*100)}% "
+                   f"van IS PF {is_pf}" if holds else
+                   f"edge verzwakt out-of-sample: OOS PF {oos_pf} vs IS PF {is_pf} "
+                   f"(retain {retain}, drempel 0.60) — overfit-risico")
+        print(f"\n  OVERFIT-CHECK: {'✓' if holds else '✗'} {verdict}")
+        payload = {"is": is_c, "oos": oos_c, "cutoff": str(cutoff),
+                   "holdout_days": args.holdout_days, "retain": retain,
+                   "holds": holds, "verdict": verdict,
+                   "engine": args.engine, "dataset": args.dataset,
+                   "posture": is_c["posture"]}
+        art = _write_artifact(args.engine, "scorecard_isoos", payload)
+        print(f"  artefact {art}")
+        print("ISOOS_JSON " + json.dumps(payload, default=str), flush=True)
+        return
+
+    print(f"  {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    card = _card(df)
+    card["window"] = {"since": args.since, "until": args.until, "bars": len(df)}
+    _summary("", card)
+    if card.get("trades"):
+        bd = card["by_direction"]
         print(f"    long {bd['long']['trades']} (net ${bd['long']['net']:,.0f}, PF {bd['long']['pf']}) · "
               f"short {bd['short']['trades']} (net ${bd['short']['net']:,.0f}, PF {bd['short']['pf']})")
-        st = card["streaks"]
-        print(f"    langste win-reeks {st['longest_win']} · verlies-reeks {st['longest_loss']}")
         ex = card["excursion"]
         print(f"    MFE ø {ex['avg_mfe_ticks']}t · MAE ø {ex['avg_mae_ticks']}t · "
-              f"hold ø {card['hold_time_bars']['avg']} bars")
-        print(f"    exit-redenen: " + ", ".join(f"{r['reason']} {r['trades']}"
-                                                 for r in card["exit_reason_edge"][:6]))
-
+              f"hold ø {card['hold_time_bars']['avg']} bars · "
+              f"streak +{card['streaks']['longest_win']}/-{card['streaks']['longest_loss']}")
     art = _write_artifact(args.engine, "scorecard", card)
     print(f"  artefact {art}")
     print("SCORECARD_JSON " + json.dumps(card, default=str), flush=True)
@@ -1247,6 +1281,9 @@ def main():
     psc.add_argument("--raw", action="store_true",
                      help="1 contract, geen account-overlay/dagcaps — de intrinsieke mechaniek "
                           "(default is deployment-houding, overlay aan)")
+    psc.add_argument("--holdout-days", type=int, default=0,
+                     help="splits in in-sample + laatste N dagen out-of-sample en meet beide "
+                          "(overfit-check met retain-ratio)")
 
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)

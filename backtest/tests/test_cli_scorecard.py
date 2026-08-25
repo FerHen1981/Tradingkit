@@ -43,10 +43,10 @@ def _isolate(tmp_path, monkeypatch, dataset_csv):
     monkeypatch.setattr(cli, "_dataset_path", lambda name: (dataset_csv, "MES"))
 
 
-def _args(raw=False):
+def _args(raw=False, holdout_days=0):
     return types.SimpleNamespace(
         dataset="MES_sc", engine="EL_MATADOR_MES_PROD_EOD",
-        since="2025-01-02", until="2025-01-25", raw=raw)
+        since="2025-01-02", until="2025-01-25", raw=raw, holdout_days=holdout_days)
 
 
 def _card(capsys) -> dict:
@@ -70,3 +70,13 @@ def test_scorecard_raw_posture_runs(capsys):
     card = _card(capsys)
     assert card["posture"] == "raw"
     assert "kpis" in card
+
+
+def test_scorecard_holdout_emits_is_and_oos(capsys):
+    cli.cmd_scorecard(_args(holdout_days=7))
+    line = [ln for ln in capsys.readouterr().out.splitlines()
+            if ln.startswith("ISOOS_JSON ")][-1]
+    payload = json.loads(line[len("ISOOS_JSON "):])
+    assert "is" in payload and "oos" in payload
+    assert "retain" in payload and isinstance(payload["holds"], bool)
+    assert payload["is"]["window_bars"] > 0 and payload["oos"]["window_bars"] > 0

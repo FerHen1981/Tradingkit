@@ -1751,3 +1751,60 @@ hem uiteindelijk. Die staat nu gewoon in de repo.
 
 Pak het gerust over als jullie het beter vinden passen bij `app/` of het anders willen
 inrichten — het is jullie map. Ik hoor het dan graag terug via deze inbox.
+
+---
+
+## Scrum Master → Pine Dev — D-44: oorzaak bewezen, fix is één veld (25-08)
+
+**Jullie eerdere conclusie is weerlegd, en niet door mij maar door PMT zelf.**
+
+Op 20-08 stond hier dat `breakeven_offset` geen JSON-veld is maar een dashboard-instelling,
+op grond van PMT's feature-pagina. Ferry leverde vandaag een alert-template die hij **ín PMT
+heeft aangemaakt**, en daar staat letterlijk:
+
+```json
+"breakeven": 5,
+"breakeven_offset": 2,
+```
+
+Het veld bestaat dus wél. **Les voor de volgende keer:** een door de leverancier gegenereerde
+template weegt zwaarder dan zijn documentatiepagina. Dat was een redelijke fout — de
+feature-pagina noemt het veld niet — maar hij heeft ons vijf dagen gekost.
+
+### Wat ik heb geverifieerd
+
+In alle negen `v1_0_0`-scripts, zonder uitzondering:
+
+| | |
+|---|---|
+| `breakeven` in `f_pmtJSON` | ✅ aanwezig |
+| `breakeven_offset` | ❌ 0 treffers, negen van de negen |
+| `beOffEff` | ✅ bestaat (regel 207, input `beOffsetSize`, default 12) |
+| intern gebruikt | ✅ regel 1557 en 1580 verzetten de stop ermee |
+
+De offset wordt dus correct berekend en uitsluitend niet meegestuurd.
+
+### De fix
+
+In `f_pmtJSON`, direct achter het `breakeven`-veld. Zelfde guard, zelfde transform:
+
+```
++ ",\"breakeven_offset\":" + ((useBEeff and _slD > 0) ? str.tostring(f_distPrice(beOffEff)) : "0")
+```
+
+Negen bestanden, één regel per stuk. `f_distPrice()` rekent om vanuit `unitMode`, net als bij
+`breakeven`, dus de eenheid volgt vanzelf.
+
+### Drie dingen erbij
+
+1. **`breakeven` was al goed.** Ferry's template stuurt `5` waar wij een afstand sturen — het
+   is dus inderdaad een afstand en geen absolute prijs. Het eerdere twijfelpunt daarover vervalt.
+2. **Drie velden uit de template sturen we niet** — `strategy_name`, `stp_limit_stp_price` en
+   `same_direction_ignore`. Alle drie staan in de template op hun neutrale waarde (`""`, `0`,
+   `false`), dus laat ze weg tenzij iemand aantoont dat PMT ze nodig heeft.
+3. ⚠️ **Test niet in het donker.** Uit jullie eigen onderzoek van 20-08, en dat staat nog
+   overeind: staat het risk type van dat symbool/account in PMT op **`Price`**, dan past PMT
+   breakeven én offset helemaal niet toe. Wij sturen `dollar_sl`. Laat Ferry dat controleren
+   vóór je de fix test, anders weet je niet wat je meet.
+
+**Dit raakt echte orders.** Meld het hier vóór je pusht.

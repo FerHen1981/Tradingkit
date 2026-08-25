@@ -406,7 +406,7 @@ public static class CardTier
     static readonly (string Needle, char Tier)[] Table =
     {
         ("CONFIG",         'B'),   // 1x per sessie-start — administratief maar leesbaar als kaart
-        ("ACCOUNT STARTED",'C'),
+        ("ACCOUNT STARTED",'B'),   // 1x per sessie — account, fase en eerste order in beeld
         ("LIMIT EXPIRED",  'B'),   // per niet-gevulde limit — de reden dat een setup niets werd
         ("SIGNAL BLOCKED", 'C'),   // poort in BlockedGate promoveert de terminale melding naar B
         ("AUTO FLAT",      'B'),   // 1x per dag — het einde van de sessie is een moment

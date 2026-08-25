@@ -32,12 +32,12 @@ Payload komt als JSON op stdin; output via $MEX_SIGNAL_OUT.
 | CONFIG | "CONFIG" | dim — instellingen bij sessie-start, `k=v`-rijen |
 | AUTO FLAT | "AUTO FLAT" | dim — sessievenster dicht, prijs waarop is platgemaakt |
 | LIMIT EXPIRED | "LIMIT EXPIRED" | dim — richting + limietprijs die nooit geraakt werd |
+| ACCOUNT STARTED | "ACCOUNT STARTED" | goud — account, fase en de eerste order |
 
-## Tier C — tekst-embed (geen kaart; ops/ruis — blijft fallback-pad)
-ACCOUNT STARTED
-Ratio: puur administratief; de CONFIG-kaart die er direct achteraan komt zegt
-hetzelfde met meer inhoud. Discord-rate-limit (30/min/webhook) blijft de reden om
-niet álles te promoveren.
+## Tier C — tekst-embed (geen kaart)
+Leeg sinds 25-08: elk Pine-event dat een kaart kan dragen, krijgt er een. De
+Discord-rate-limit (30/min/webhook) wordt nu bewaakt door de rate-limit in
+`PostRate` in plaats van door events op tekst te laten staan.
 
 ## SIGNAL BLOCKED — gepoort, niet getierd
 Staat een account op halt, dan wordt élk geldig setup-signaal geblokkeerd: hetzelfde

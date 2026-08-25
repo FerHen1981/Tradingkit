@@ -1,5 +1,26 @@
 ## MEX_EL_TESORO v7.10.0 — engine profile (bevroren onderzoeksparameters)
 
+## 2026-08-25 — D-42: de v1_0_0-vloot vervangt `pine/**`
+
+De acht v6.9.5-scripts zijn naar `pine/history/` gegaan; `MEX_EL_TESORO.pine` is
+gearchiveerd als `MEX_EL_TESORO.v7.10.0.bak` (de back-up die bij de keuze bedongen is —
+onder het versienummer dat er werkelijk in stond, niet de v7.9.5 uit de besluittekst).
+De dertien actieve scripts staan op **v2.3.0**.
+
+**D-45 en D-46 blijven ingetrokken** als resultaat — dat was de voorwaarde bij deze keuze.
+Het *mechanisme* van D-45 (daily risk-gate, DLL + trail op gerealiseerde sessie-P&L) zit
+sinds 25-08 wél in alle dertien scripts, default UIT, op los verzoek van Ferry via
+`INPUT_SPEC_v2.md`. Dat is een nieuwe uitrol, geen herleving van de meting: de cijfers van
+D-45/D-46 blijven vervallen.
+
+**Niet gedaan, en waarom:** de negen bestanden staan nog in `pine/v1_0_0/` in plaats van in
+`pine/`. Backtest Setup heeft er vandaag een pariteitspoort tegenaan gebouwd met een
+hard-gecodeerd `PINE_DIR = pine/v1_0_0`, en de skip-conditie is *leeg glob*. Verplaatsen
+maakt 49 groene tests stil tot 49 skips — een poort die groen blijft en niets meer bewaakt.
+Dat is een hand-off, geen blokkade: zodra `test_fleet_parity_source.py` meebeweegt gaat de
+map om.
+
+
 Nieuwe groep **`0B · ENGINE PROFILE`**. Een dropdown zet de bevroren signaal- en
 exitparameters van een gevalideerde engine, in plaats van dat elke engine een eigen
 bestand met bijna dezelfde code krijgt. Eerste profiel: **`TES-MGC-C`** (EL TESORO,

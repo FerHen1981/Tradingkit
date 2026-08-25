@@ -3230,3 +3230,74 @@ lopende alert plus de Discord-webhooks voor nodig — dat is Ferry's kant, niet 
 forceer één guard-kaart — de makkelijkste is `Send CONFIG message on first live bar` (groep 10),
 die vuurt bij het starten van de alert. Landt hij op het funded- of eval-kanaal in plaats van
 het globale, dan mag D-41 dicht en is **D-28/2 daarmee ook pas echt werkend**.
+
+---
+
+## 28 — Pine Dev → Backtest Setup + Ferry · D-42 grotendeels af, en een verschil van $500 dat niemand mag negeren
+
+D-41 staat op **done** (Ferry heeft het live geverifieerd: kaart komt door op PMT,
+PineConnector, Discord en Journal — daarmee is **D-28/2 ook pas nu echt werkend**).
+D-42 staat op **review**: alles gedaan behalve één stap, en die stap is van jullie afhankelijk.
+
+### 🔴 Voor Backtest Setup, punt 1 — de mapverhuizing zou jullie pariteitspoort stilzetten
+
+Ik heb `pine/v1_0_0/*` **niet** naar `pine/` verplaatst, terwijl D-42 dat wel vraagt.
+
+`backtest/tests/test_fleet_parity_source.py:21` heeft `PINE_DIR = .../pine/v1_0_0`, en
+regel 104 is `skipif(not _sources())` waarbij `_sources()` een lege lijst geeft als de map
+weg is. Verplaatsen levert dus geen rode test op maar **49 skips** — een poort die groen
+blijft en niets meer bewaakt. Ik heb hem hier gedraaid: **49 passed**, dus hij bewaakt op
+dit moment echt iets, ook tegen mijn v2-herstructurering.
+
+Let op: een enkele padwijziging is niet genoeg. `test_every_released_script_has_a_mirror`
+eist dat de set scripts exact `fleet.names()` is — wijst `PINE_DIR` straks naar `pine/`,
+dan komen de vier EL TORO's erbij en valt die assert om. Zeg maar wanneer het jullie
+uitkomt, dan doe ik de verhuizing in dezelfde ronde.
+
+### 🔴 Voor Backtest Setup, punt 2 — script en registry zijn het op tien waarden oneens
+
+Dit is de belangrijkste vondst van vandaag. Ik wilde D-65 oplossen door de vloot in
+`STRATEGY_DEFAULT` te zetten zodat `f_firmRules` uit `data/propfirms.json` komt in plaats
+van met de hand. De proefrun schreef dit:
+
+| programma | veld | script | registry |
+|---|---|---|---|
+| `apex_50k_eod_pa` | trailing DD | **2000** | **2500** |
+| `apex_50k_intraday_pa` | trailing DD | **2000** | **2500** |
+| `apex_50k_eod_eval` | trailing DD · consistency | 2000 · 50 | 2500 · 0 |
+| `apex_50k_intraday_eval` | trailing DD · DLL · consistency | 2000 · 0 · 50 | 2500 · 1000 · 0 |
+| `mffu_50k_eval` · `takeprofittrader_50k_eval` · `topstep_50k_eval` | consistency | 50 | 0 |
+
+Plus vier legacy-Apex-programma's die alleen in de registry bestaan.
+
+**De consistency-verschillen zijn een script-fout en de registry heeft gelijk** —
+`firms.py:256` legt het uit: consistency is een funded-regel, een eval heeft er geen, dus
+50 zetten legt een plafond op dat de firma nooit gesteld heeft. Idem de ontbrekende DLL.
+
+**Maar de trailing drawdown is de andere kant op, en dat is $500 per account.** De vloot
+draait op `apex_50k_eod_pa` en `apex_50k_intraday_pa`. `CLAUDE.md` houdt **$2.000** aan
+("de **$2.000 trailing drawdown** van een vers account", en de hele mechanisme-analyse van
+de sweep hangt eraan). De registry zegt **$2.500** met lock op $2.600.
+
+> ⚠️ Als $2.000 klopt, dan heeft **elke backtest die de registry-overlay gebruikt $500 meer
+> drawdown-ruimte gehad dan het echte account**. Dat is precies de richting die
+> overlevingskansen te rooskleurig maakt — en de sweep van 25-08 is een overlevingsmeting.
+> Als $2.500 klopt, dan zijn de dertien scripts te streng en halten ze te vroeg.
+> Eén van de twee is fout en het is geen detail.
+
+Ik heb de generatorwijziging **teruggedraaid**; de vloot blijft met de hand tot dit beslecht
+is. `tools/gen_pine_firms.py` draagt nu een `STRATEGY_DEFAULT` die leeg is met de reden
+erbij, zodat de volgende die hem opent niet dezelfde val in loopt. De commissie loopt wél
+via de registry (`FLEET_ASSET`) — dat is D-08 en daar is geen twijfel over.
+
+### Wat wel af is
+
+Back-up `pine/history/MEX_EL_TESORO.v7.10.0.bak` — let op het versienummer: de besluittekst
+zei v7.9.5 (3 MGC, SL 100t, 1,55R), maar de werkboom droeg **v7.10.0 met 6 MGC, maxStop 130,
+CVD4**. Ik archiveer onder wat er stond. De zeven oude scripts staan in `pine/history/`;
+DORADO en MINERO hebben géén opvolger (DORADO staat niet in de vloottabel, MINERO is een
+gereserveerd merk), dus die zijn verplaatst en niet verwijderd.
+
+`VALIDATION_MAP.md` legt nu ook vast dat **de exports van zes scripts hun script niet meer
+beschrijven**: sinds Skip Monday eruit is handelt maandag 00:00–02:00 ET mee in PATRON,
+TESORO en de vier TORO's. Die exports mogen niet als validatie van v2.3.0 gelden.

@@ -125,3 +125,41 @@ het zou alleen de kans op de pass verlagen.
 2. **De D-08-commissiewacht ontbreekt.** Geen van de vier draagt `SPEC_COMMISSION_SET` of
    `f_contractSpec` — de controle die in TESORO juist deze fout zou vangen. Dat is de reden
    dat punt 1 stil kon blijven.
+
+
+---
+
+# 25-08 · D-42 uitgevoerd, en wat dat voor de koppeling betekent
+
+## De acht v6.9.5-scripts staan niet meer in `pine/`
+
+Verplaatst naar `pine/history/`, niet verwijderd — git houdt ze sowieso, maar ze moeten
+leesbaar blijven zolang oude exports ernaar verwijzen:
+
+| Gearchiveerd | Opvolger |
+|---|---|
+| `MEX_EL_TESORO.v7.10.0.bak` | `MEX_EL_TESORO_MGC_CON_EOD_v1_0_0` |
+| `MEX_EL_REY.v6.9.5.pine` | `MEX_EL_REY_MNQ_PROD_EOD_v1_0_0` + `..._INTRA_v1_0_0` |
+| `MEX_EL_PATRON.v6.9.5.pine` | `MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0` |
+| `MEX_EL_MATADOR.v6.9.5.pine` | `MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0` |
+| `MEX_EL_LEON.v6.9.5.pine` | de drie LEON-scripts |
+| `MEX_EL_DORADO.v6.9.5.pine` | **geen** — DORADO staat niet in de vloottabel |
+| `MEX_EL_MINERO.v6.9.5.pine` | **geen** — gereserveerd merk, geen engine |
+
+⚠️ **De TESORO-back-up heet `.v7.10.0`, niet `.v7.9.5`.** Het besluit beschreef v7.9.5
+(3 MGC, FVG 9–15, SL 100t, 1,55R); de werkboom droeg v7.10.0 met **6 MGC, FVG 9–15,
+maxStop 130, SL 100, 1,55R, CVD4**. De naam volgt wat er stond, niet wat het besluit
+aannam — anders archiveer je een bestand onder een versienummer dat het niet is.
+
+## 🔴 Elke export in het pakket is ouder dan het script waar hij bij hoort
+
+De vloot staat op **v2.3.0**; alle exports komen van de v1.0.x-lijn. Voor de parameters
+maakt dat niets uit — de pariteitstest van Backtest Setup draait groen tegen de huidige
+bestanden en de presets zijn regel voor regel geverifieerd. De toevoegingen (zes
+signaalfilters, risk-gate, regimevensters) staan allemaal default UIT.
+
+**Eén uitzondering, en die is echt:** `skipMonEarly` is 25-08 verwijderd uit **EL PATRON,
+EL TESORO en de vier EL TORO's**, waar hij op `true` stond. In die zes handelt maandag
+00:00–02:00 ET nu mee. **De bestaande exports van die zes beschrijven het script niet meer**
+en mogen niet als validatie van v2.3.0 geciteerd worden. De overige zeven zijn ongemoeid:
+daar stond de schakelaar al uit, dus was het verwijderen gedragsneutraal.

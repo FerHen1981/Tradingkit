@@ -14,7 +14,7 @@ Drie controles voordat er iets gepusht wordt:
 1. **Per verwijderde input** vastleggen: naam, huidige default, de constante die ervoor
    in de plaats komt. Die lijst gaat mee in de commit.
 2. **`backtest/tests/test_fleet_parity_source.py`** (Backtest Setup, D-61) leest
-   `pine/v1_0_0/*.pine` bij elke testrun en faalt bij afwijking. Verandert er per ongeluk
+   `pine/*.pine` bij elke testrun en faalt bij afwijking. Verandert er per ongeluk
    een waarde, dan valt hun suite om.
 3. **Ferry's eigen test:** zelfde chart, zelfde periode, export vóór en ná. Die moeten
    **trade voor trade** gelijk zijn. Wijkt er één trade af, dan gaat de wijziging terug.

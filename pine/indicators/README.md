@@ -16,7 +16,7 @@ Pine v6, genummerde inputgroepen, themabewust palet (Auto/Dark/Light) en één t
 
 ## De strategie is de bron
 
-Deze scripts **spiegelen** de berekening uit `pine/v1_0_0/`, ze definiëren hem niet. Lopen ze
+Deze scripts **spiegelen** de berekening uit `pine/`, ze definiëren hem niet. Lopen ze
 ooit uiteen, dan heeft de strategie gelijk en moet het indicatorbestand bij.
 
 Dat is bewust een kopie en geen Pine-library. Een library moet je eerst publiceren op

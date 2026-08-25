@@ -53,7 +53,66 @@ per chart opnieuw instellen, en **elke alert die op die scripts hangt opnieuw aa
 Je hebt gisteren net alle alerts opnieuw gemaakt. Het is dus verstandig dit in één keer te
 doen en daarna niet meer aan de inputvolgorde te komen.
 
-## Openstaande vragen
+## Besluiten Ferry 25-08 — de vragen zijn beantwoord
+
+| # | Besluit |
+|---|---|
+| C | Nieuwe filters **werkend bouwen maar default OFF**. Ze grijpen alleen in als ze aangevinkt zijn, dus de bevroren config blijft ongemoeid. |
+| 1 | idem — werkend, uit |
+| 2 | Vensters hieronder voorgesteld; **de tijden moeten in de input-labels zichtbaar zijn** |
+| 3 | Uurraster blijft als handmatig blackout-gereedschap. **17:00 blijft staan** voor toekomstige markten |
+| 4 | RTH/ETH raakt **alleen de sessie/dag-grens**, niet de entries. Entry-filtering als notitie voor later |
+| 5 | **Developer** = het huidige "Research (none)". **Custom** = accountregels handmatig, firm preset genegeerd |
+| 6 | Ging over **Bot Name**, niet over de middleware-sleutel: Bot Name neemt de titel uit de scriptheader over |
+| 7 | Roll/OpEx/news **weg** · MEX Policy preset **weg** · **Skip Monday weg** (oude aanname, de statistiek bepaalt dat zelf) · **Eval-tracking weg** (Custom dekt het, en het is onduidelijk wat het doet) |
+| 8 | Daily risk-gate hoort onder **ACCOUNT — Guard** |
+| 9/10 | **EL REY eerst**, daarna de rest |
+
+### Meegenomen: de openstaande wijziging uit inbox 20
+
+Dit is de reden dat de scripts sowieso aangepast moesten worden, en hij gaat mee in deze ronde:
+
+1. **De daily risk-gate uit D-45** (DLL + trail op sessie-P&L, venster, reset op de CME-roll)
+   zit alleen in `pine/MEX_EL_TESORO.pine`. Komt nu in alle scripts, onder ACCOUNT — Guard.
+2. **De registry-koppeling uit v7.9.5.** `f_firmRules` levert `_fkDD` / `_fkMax` / `_fkDLL`
+   maar niemand leest ze, dus `dllHit` rekent op de handmatige `acctDLL` en een
+   Intraday-programma wordt als EOD gerekend. Wordt `ddModelEff` / `acctTrailEff` /
+   `acctDllEff`, precies zoals in TESORO v7.9.5.
+
+### En één defect dat besluit 6 meteen dicht
+
+**Alle negen v1_0_0-scripts dragen `botName = "MΞX ΞL TΞSORO"`.** Elke Discord-kaart van
+PATRON, REY, LEON, MATADOR en BANDIDO komt dus binnen onder de naam TESORO — zichtbaar in de
+alertlog van 24-08, waar `PAT-MGC-A` meldingen stuurde als TESORO. Bot Name uit de header
+halen lost dat in één keer op voor de hele vloot.
+
+## Voorstel Market Regime — negen vensters, tijden in ET
+
+De **eerste drie bestaan al en blijven exact zoals ze zijn**, want `Liquidity Core` is
+gedefinieerd als precies die drie en voedt de live time-gate. Daar mag niets aan schuiven.
+
+| Venster | ET | Grondslag |
+|---|---|---|
+| Globex reopen | **18:00 – 19:00** | heropening na settlement *(bestaat)* |
+| London | **02:00 – 05:00** | Londen open t/m Europese ochtend *(bestaat)* |
+| US | **07:00 – 12:00** | pre-cash t/m late ochtend *(bestaat)* |
+| Asia | **19:00 – 02:00** | Tokio-sessie, loopt over middernacht |
+| Initial Balance | **09:30 – 10:30** | eerste uur na de cash open |
+| NY AM | **09:30 – 11:30** | ochtendtrend |
+| Lunch | **11:30 – 13:00** | liquiditeitsdip |
+| NY PM | **13:00 – 15:00** | middagsessie |
+| Power Hour | **15:00 – 16:00** | slotuur richting settlement |
+
+Twee dingen om te weten:
+
+- **US overlapt bewust met Initial Balance, NY AM en Lunch.** De vensters worden ge-OR'd, dus
+  overlap is onschadelijk; het geeft je een grof blok naast fijnere. Wil je dat niet, dan
+  knip ik US terug naar 07:00–09:30 — maar dan **verandert `Liquidity Core` van betekenis**
+  en vervalt de vergelijkbaarheid met alles wat daarop gemeten is.
+- **Asia loopt over middernacht** (19:00–02:00), dus die test anders dan de andere acht. Dat
+  is code, geen keuze, maar het is de plek waar zo'n venster stuk kan gaan.
+
+## Openstaande vragen (beantwoord 25-08 — hierboven)
 
 1. **De zes nieuwe filters** (BBWP, EMA, POC, Discount/Premium, MFI, Long/Short): inert
    bouwen zoals hierboven, of meteen werkend? *Voorstel: inert.*

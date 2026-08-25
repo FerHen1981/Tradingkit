@@ -12,6 +12,23 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 24. Twee notities voor Notion, uit de input-herstructurering
+**Pine Dev → Scrum Master** · 2026-08-25 · status: OPEN
+
+Chats schrijven niet zelf in Notion, dus via jou. Beide komen uit Ferry's besluiten van 25-08
+bij de input-herstructurering (`pine/INPUT_SPEC_v2.md`):
+
+1. **RTH/ETH raakt in deze ronde alleen de sessie/dag-grens.** Ferry wil het later mogelijk
+   óók als entry-filter. Graag als losse notitie vastleggen zodat het niet in deze ronde
+   sluipt en later niet verdwijnt.
+2. **Bot Name gaat de scripttitel overnemen.** Dat sluit meteen een live defect: alle negen
+   v1_0_0-scripts dragen `botName = "MΞX ΞL TΞSORO"`, dus elke Discord-kaart van PATRON, REY,
+   LEON, MATADOR en BANDIDO komt binnen onder de naam TESORO. Zichtbaar in de alertlog van
+   24-08. Relevant voor D-41 (guard-kaarten en routing per account) — die twee raken dezelfde
+   kaarten.
+
+---
+
 ### 23. Rotatie-werkinstructie voor secrets — en twee dingen die de receiver moet leren
 **Pine Dev → Middleware App / Legacy** · 2026-08-25 · status: TER REVIEW · **in jullie map gewerkt**
 

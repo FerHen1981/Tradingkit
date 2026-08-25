@@ -2091,3 +2091,48 @@ meetvenster (`--since 2023-08-24`) en de twee groottes naast elkaar.
 De oude rangorde staat er nu als **ingetrokken** in, met de sweep-tabel, het MGC-voorbehoud en de
 sizing-bevinding ervoor in de plaats. Er is op dit moment geen geldige vlootrangorde — alleen
 MATADOR is bruikbaar.
+
+---
+
+## 25-08 · Scrum Master → Middleware App + Pine Dev — sizing gaat via de fan-out (route B)
+
+Ferry heeft gekozen: **qty per account in de fan-out**. Route A (`derisk`/`deriskPA` in de bevroren
+configs) blijft bestaan als aparte onderzoeksronde en staat nu als **D-57**, expliciet achter D-54.
+
+### ⚠️ Eerst een correctie op mezelf
+
+Ik noemde B in mijn advies "omkeerbaar en bijna gratis", met de per-account
+`quantity_multiplier` uit `accounts.example.yaml` in mijn hoofd. **Die staat in de Python-fan-out,
+en dat is het dode pad.** De draaiende .NET-receiver leest `accounts.yaml` niet en raakt `quantity`
+nergens aan — `ForwardJsonAsync` stuurt de body ongewijzigd door.
+
+**Er is vandaag geen volumecontrole per account in het live pad.** De keuze voor B blijft goed; mijn
+kostenschatting was fout. Het is bouwwerk, geen configregel.
+
+### Middleware App — bouw D-40 en D-53 samen
+
+Beide zetten een controle per account vóór `ForwardJsonAsync` in `/signal/{token}`, op basis van
+hetzelfde `multiple_accounts[0].account_id`. Apart bouwen betekent twee keer dezelfde plek in het
+live executiepad openleggen.
+
+| | Wat |
+|---|---|
+| **D-40** | account geblokkeerd (day cap / DLL) ⇒ niet forwarden, `GEWEIGERD` + Discord |
+| **D-53** | `multiple_accounts[0].quantity_multiplier` overschrijven uit een qty-map per account |
+
+Pine zet `quantity_multiplier` nu hard op `1` in `f_pmtJSON` — dat is precies de bedoelde haak, en
+overschrijven in de receiver houdt Pine bevroren. Bron voor de map: env-var of klein JSON-bestand,
+**geen nieuwe datafeed**. Automatisch schalen op accountfase is v2 en vraagt de Tradovate-poller;
+begin met een handmatige map en vers account = 1.
+
+⛔ Allebei geblokkeerd op **D-06**. Zolang `.sln` en `.csproj` niet in git staan kunnen jullie dit
+niet bouwen of testen.
+
+### Pine Dev — twee dingen
+
+1. **Niets doen aan sizing.** `derisk`/`deriskPA` blijft zoals het is tot D-57, en D-57 wacht op
+   D-54. Zolang de harde poorten van LEON en REY open staan is er geen geldige meetlat om een
+   nieuwe configuratie tegen af te zetten.
+2. **D-54 heeft jullie nodig:** TradingView-exports voor LEON en REY, zodat Backtest Setup trap 1
+   kan sluiten en trap 8 opnieuw kan draaien. Dat is nu de kritieke schakel — zonder die exports
+   staat de hele vlootrangorde stil en kan D-57 niet beginnen.

@@ -11,6 +11,52 @@ executiepad hebt gewijzigd. Nieuwste bovenaan. Afgehandeld? Regel laten staan me
 
 ---
 
+## 2026-08-25 (2) · D-06 opgeleverd — én een secret-incident dat ik zelf veroorzaakte
+
+### ⚠️ Eerst: twee secrets moeten geroteerd
+
+De solution is van de VPS geëxporteerd en tijdelijk gepubliceerd op
+`https://mw.mex-traders.com/charts/recv-<random>.tgz` zodat ik hem kon ophalen.
+`src/Mex.Journal.Receiver/mex-receiver.service` bleek **live secrets** te bevatten:
+
+- `MEX_WEBHOOK_SECRET=97876d1d…` — stond al sinds 11-08 op de rotatielijst omdat hij
+  ook in een gedeeld alerts-log voorkwam. Nu tweede keer geëxposeerd.
+- `MEX_DISCORD_WEBHOOK=https://discord.com/api/webhooks/1517…` — volledige URL.
+
+**Mijn fout.** Ik stelde de publicatieroute voor en gaf een controlecommando dat alleen
+`appsettings.json` bekeek — terwijl systemd-env-vars per definitie in het `.service`-bestand
+staan. Verkeerde plek gecontroleerd. Het bestand stond ongeveer twee minuten publiek onder
+een 64-bits willekeurige naam, dus de kans op misbruik is klein, maar niet nul.
+
+**Beide roteren.** Het webhook-secret betekent ook: alle alert-URL's in TradingView bijwerken.
+
+### D-06 — wat er nu in git staat
+
+`middleware/receiver-src/`: `MexJournal.sln`, `Mex.Journal` (incl. `Recon/DiscordNotifier`),
+`Mex.Journal.Cli` en `Mex.Journal.Receiver` (csproj, appsettings, Caddyfile, SETUP.md,
+service-**sjabloon**). Daarmee is de receiver voor het eerst buiten de VPS bouwbaar.
+
+Bewust weggelaten:
+- `src/Mex.Journal.Receiver/Program.cs` — de authoritatieve versie is
+  `middleware/dotnet-receiver/Program.cs`. Twee kopieën is precies wat werkafspraak 3
+  verbiedt. Bouwinstructie staat in `middleware/receiver-src/README.md`.
+- `Program.cs.bak` (17-08-versie).
+- De echte waarden in `mex-receiver.service` → sjabloon met placeholders.
+
+### Twee constateringen bij de export
+
+**De tarball is van 20-08, niet van nu.** Zijn `Program.cs` mist de IPv4-fix; het is de
+staat vóór de D-35-build. Bruikbaar voor de projectstructuur, niet als bewijs over de
+draaiende binary.
+
+**De rate-limit heeft nog nooit gebeten.** `grep -c "card rate-limited"` geeft 0 op
+20, 21, 23, 24 en 25 augustus. De drempel van 12/min is dus nooit geraakt;
+`MEX_CARD_MAX_PER_MINUTE=12` staat nu expliciet in `env.conf` (stap 1 van D-28 afgerond).
+
+### Wat dit deblokkeert
+
+D-40 wachtte op D-06 plus één echte PMT-weigering. De eerste helft is hiermee weg.
+
 ## 2026-08-25 · D-28 — volgorde van aanzetten + drie correcties (LIVE PAD, vóór env-vars)
 
 Conform werkafspraak 4 gemeld vóórdat er één env-var gezet wordt.

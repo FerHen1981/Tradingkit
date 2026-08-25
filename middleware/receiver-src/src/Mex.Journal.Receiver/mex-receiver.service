@@ -1,0 +1,18 @@
+# SJABLOON — de draaiende unit op de VPS bevat echte secrets en staat NIET in git.
+# Aanvullingen horen in /etc/systemd/system/mex-receiver.service.d/env.conf,
+# niet hier: dan blijven geheimen buiten versiebeheer.
+[Unit]
+Description=MEX Signaal-endpoint (Fase D — trechter)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/mex-middleware-b/src/Mex.Journal.Receiver
+ExecStart=/usr/bin/dotnet /root/mex-middleware-b/src/Mex.Journal.Receiver/bin/Release/net10.0/Mex.Journal.Receiver.dll --urls http://localhost:5000
+Environment=MEX_WEBHOOK_SECRET=VERVANG_DIT_DOOR_EIGEN_GEHEIM
+Environment=MEX_DISCORD_WEBHOOK=VERVANG_DOOR_DISCORD_WEBHOOK_URL
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

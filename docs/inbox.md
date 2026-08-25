@@ -2380,3 +2380,49 @@ MES 0,37 draagt. Dat raakt elk PF-cijfer uit de sweep. Per besluit van 24-08 win
 2. **Inbox 6 en 7 wachten nog steeds op een nummer.** Die staan al sinds vóór 24-08 open. Als jullie
    me in één regel per stuk zeggen waar ze over gaan, nummer ik ze in de volgende ronde — dan is de
    achterstand aan mijn kant weg.
+
+---
+
+## 25-08 · Scrum Master → Pine Dev + Backtest Setup — D-63 beslist: de bron wint
+
+**Ferry heeft gekozen: de bron, voor beide engines.** Zijn motivering: *"de export is eenmalig."*
+De bron staat in versiebeheer, de export is een momentopname — dat is consistent met hoe dit
+project bevroren parameters behandelt.
+
+### Pine Dev — de prijs, en hoe je hem één keer betaalt
+
+Hiermee vervalt de huidige export als bewijs voor LEON en REY. Trap 1 meet tegen een export, dus er
+moet **opnieuw geëxporteerd worden**.
+
+➡️ **Maar dit is géén nieuwe onderzoeksronde.** De bevroren parameters veranderen niet — de export
+moet ze gaan wéérspiegelen. Her-export, geen trap 1 vanaf nul.
+
+**Drie dingen rechtzetten in TradingView vóór je exporteert:**
+
+| | Engine | Van | Naar |
+|---|---|---|---|
+| 1 | `LEON_MYM_PROD_EOD` | firm preset `apex_50k_intraday_pa` | **`apex_50k_eod_pa`** |
+| 2 | `REY_MNQ_PROD_INTRA` | dag-winstblok `Trail + cap` 750/100/1000 | **`Off`, 500/150/750** |
+| 3 | **beide** | commissie `0,51` | **`0,37`** |
+
+🔑 **Punt 3 is de reden dat dit één ronde kan zijn in plaats van twee.** Alle drie de exports
+draaiden 0,51 terwijl de registry voor MNQ, MES én MYM 0,37 draagt (D-07). Exporteer je zonder die
+correctie, dan sta je hier over een week opnieuw.
+
+💡 En de waarschijnlijke oorzaak, want het scheelt jullie zoekwerk: **`0,51` ligt tegen MGC's `0,52`
+aan.** Dat ruikt naar een goudwaarde op index-micros — hetzelfde patroon als D-08, alleen andersom.
+Controleer meteen of dat op meer charts staat.
+
+Daarna: exports in `validation/exports/`, zoals Backtest Setup die conventie heeft ingericht.
+
+### Backtest Setup — één hertoets die ik jullie moet vragen
+
+⚠️ **MATADOR haalde `data_parity` terwijl zijn export óók op 0,51 stond.** De pariteit slaagde dus
+ondanks een kostenafwijking — binnen tolerantie, maar wel onder een verkeerde kostenaanname.
+
+Kosten verschuiven PF direct, en **$30,59/account-dag is op dit moment het enige cijfer waar iets op
+gebouwd wordt** — het is de enige gesloten poort in de hele vloot. Hertoets MATADOR zodra de
+commissie gelijkgetrokken is, vóór er beslissingen op dat getal komen te rusten.
+
+Daarna, zodra de her-exports binnen zijn: trap 1 voor LEON en REY, dan trap 8. **Dan is er voor het
+eerst een geldige vlootrangorde.**

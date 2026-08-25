@@ -2553,3 +2553,54 @@ de kraan open. Doen: de negen `v1_0_0`-bestanden in `STRATEGY_DEFAULT` opnemen m
 firm-programma, en de generator over de vloot laten lopen.
 
 `tools/gen_pine_firms.py` is per de eigenaarstabel expliciet van jullie, dus ik heb niets aangeraakt.
+
+---
+
+## 21 — Pine Dev → Ferry · EL REY v2.1.0: de visuals herbouwd, en drie dingen die je moet weten
+
+`pine/v1_0_0/MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine` → **v2.1.0**. Punten 1–14 van je review zitten
+erin. Alles in deze release is tekenwerk; geen signaal-, order- of accountlogica aangeraakt.
+
+### Wat er nu in groep 12 · VISUALS — Strategy staat
+
+Eén regel `Dashboard | positie | thema | tekstgrootte`, daaronder `Layout`, dan
+`Signals · TP/SL Levels · Order Levels · Unfilled Orders`, en dan de trade labels:
+`Params · PnL / MFE / MAE · DLL reached $` en `Day cap reached $ · Payout reached ·
+Account breached · Trail activated`.
+
+Zoals gevraagd dekt **TP/SL Levels** nu zowel de lijnen als de kleurvlakken — dat waren twee
+schakelaars. De vijf eventmarkers zijn nieuw: elk wordt één keer getekend op de bar waar de
+toestand omklapt, met het bedrag erbij. Ze lezen bestaande toestand af (`dayHalted` +
+`haltReason`, `payoutReady`, `acctHalted`, `rgTrailArmed`/`dayTrailArmed`) en veranderen er niets aan.
+Het exit-label draagt nu naast de PnL ook MFE en MAE in ticks — dezelfde twee getallen die de
+Discord-kaart en het journaal al stuurden, dus die drie kunnen niet uit elkaar lopen.
+
+### Groep 13 · VISUALS — Indicators is teruggebracht tot vijf regels
+
+`FVG [Filled|Unfilled|Both]` + `[In range|All]`, en drie achtergrondlagen
+`Filters valid · TimeGate open · Trade Gate open`. **In range** = wat je nu al zag: alleen gaps die
+door het size-filter komen. **All** tekent ook de gaps die het filter weggooit, zodat je kunt zien
+wát het weggooit. Kleuren, Max Boxes, draw-last en de gate-transparantie zijn constanten geworden.
+Standaard staat alleen *Trade Gate open* aan — precies het gedrag dat je nu hebt.
+
+### 🔴 Drie dingen die ik niet zelf mocht beslissen, en toch moest
+
+1. **De long-driehoek ontbrak in de HELE `v1_0_0`-vloot.** "Show Signals" plotte alleen shorts —
+   `plotshape(... "Short Signal" ...)` stond er, de long-tegenhanger nergens, in geen van de negen
+   scripts. Komt uit `MEX_FLEET_PACKAGE_2026-08-23`, niet uit deze ronde. Hersteld in REY; de
+   andere acht hebben hem nog steeds niet. Puur cosmetisch — de entries zelf werkten gewoon.
+2. **`paBacktestMode` hangt nu aan Developer** in plaats van aan een eigen vinkje. Gevolg dat je
+   moet willen: **op Funded en Eval stopt een backtest voortaan bij de eerste breach.** Dat is wat
+   een breach in het echt doet, maar je historische REY-exports op Funded liepen dóór na een
+   breach. Vergelijk je oud met nieuw, dan is dát het verschil — niet de strategie.
+3. **Wait-for-cap staat nu hard op `true`.** Je vroeg of dat al in het firm-programma zat. **Nee.**
+   De registry levert de laddertrede en de minimum payout; "aanvragen op de volle trede" versus
+   "aanvragen zodra het mag" is een beleidskeuze die nergens anders vastligt. Ik heb hem op je
+   huidige stand bevroren. Wil je hem terug als knop, zeg het — het is één regel.
+
+### Nog niet gedaan
+
+De groepsnummering heeft gaten (0, 3–9, 11–14; geen 1, 2 en 10) omdat *Reference Timezone* en
+*Trading Boundary* onder TIME GATE zijn blijven zitten. Ik heb ze **bewust niet hernummerd** midden
+in je review — dat zou je referentiepunten verschuiven. Zeg het als je ze aaneengesloten wilt.
+De uitrol naar de andere acht `v1_0_0`-scripts en de vier TORO's wacht op jouw akkoord op REY.

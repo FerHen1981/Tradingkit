@@ -2057,7 +2057,7 @@ if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.sty
 showTab((location.hash&&document.getElementById('tab-'+location.hash.slice(1)))?location.hash.slice(1):'pipeline');
 loadPipeline();loadExports();
 
-loadWizard();loadGenDatasets();
+loadWizard();loadGenDatasets();loadBuilder();
 load();
 loadCandidates();
 setTimeout(syncVerifyWhat, 300);   // na loadWizard(), zodra de dropdowns gevuld zijn
@@ -2137,7 +2137,27 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
 <!-- ===================== VAULTS ===================== -->
 <div class=tab id=tab-vaults>
-  <div class=hint style="margin-bottom:14px">Waar strategieën tot stand komen — de <b>grofmazige</b> basis. Drie ingangen (komen hier samen in een latere ronde): parameters uitschrijven, indicatoren aanvinken, of een Pine-script uploaden. Voorlopig toont dit de bestaande, gepromote strategie-bibliotheek. Een strategie wordt pas een pijplijn-engine nadat hij bevroren is.</div>
+  <div class=hint style="margin-bottom:14px">Waar strategieën tot stand komen — de <b>grofmazige</b> basis. Vink indicatoren aan of begin bij een preset; opslaan zet de strategie klaar in <b>Strats</b> om te fijnslijpen. Een strategie wordt pas een pijplijn-engine nadat hij bevroren is.</div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Bouw een strategie — indicatoren aanvinken</b><span class=muted>redundantie-guard aan</span></div>
+    <div class=hint>Kies een setup-klasse en entry, vink coherente filters en desgewenst een regime-gate aan, en zet een basis-preset (de handmatige parameter-ingang). De bouwer stelt de spec samen en toont meteen de score en de framework-stack. Opslaan → klaar in Strats.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Setup-klasse</span><select id=bSetup style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Entry</span><select id=bEntry style="min-width:160px"></select></label>
+      <label class=field><span class=fld>Basis-preset</span><select id=bPreset style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Naam</span><input id=bName placeholder="custom" style="width:130px"></label>
+    </div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:12px">
+      <div><div class=muted style="font-size:11px;margin-bottom:5px">filters</div>
+        <div id=bFilters style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px"></div></div>
+      <div><div class=muted style="font-size:11px;margin-bottom:5px">regime-gate (leeg = alle regimes)</div>
+        <div id=bRegimes style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px"></div></div>
+    </div>
+    <div id=bPreview style="margin-top:14px"></div>
+    <div style="margin-top:12px"><button class=go id=bSave>Opslaan → Strats</button><span id=bMsg class=muted style="margin-left:10px"></span></div>
+  </div>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">

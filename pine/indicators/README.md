@@ -1,6 +1,6 @@
 # Companion indicators
 
-Zes losse indicatoren die tonen waar de strategie op filtert. Zelfde huisstijl: MPL-header,
+Zeven losse indicatoren die tonen waar de strategie op filtert. Zelfde huisstijl: MPL-header,
 Pine v6, genummerde inputgroepen, themabewust palet (Auto/Dark/Light) en één tabel per script.
 **Defaults volgen EL REY MNQ PROD EOD.**
 
@@ -12,6 +12,7 @@ Pine v6, genummerde inputgroepen, themabewust palet (Auto/Dark/Light) en één t
 | `MPT_VOLUME_PROFILE.pine` | overlay | Daily, 30 bins, VA 70%, intrabar 1m |
 | `MPT_DISCOUNT_PREMIUM.pine` | overlay | 60 bars, mid 50% |
 | `MPT_EMA.pine` | overlay | EMA 200 op close |
+| `MPT_TIME_GATE.pine` | overlay | alle uren/dagen aan behalve za/zo, regime "All sessions", force flat 16:55–18:00 |
 
 ## De strategie is de bron
 
@@ -35,6 +36,11 @@ De drie pane-indicatoren (CVD, BBWP, MFI) hebben er geen last van: die zitten in
 
 ## Wat elke tabel onderaan toont
 
-Elke indicator sluit af met **Side allowed** — LONG, SHORT, BOTH of —. Dat is precies de
-bijdrage van dat filter aan `sigLongOK` / `sigShortOK` in de strategie. Staan ze alle zes op
+Elke signaalindicator sluit af met **Side allowed** — LONG, SHORT, BOTH of —. Dat is precies
+de bijdrage van dat filter aan `sigLongOK` / `sigShortOK` in de strategie. Staan ze alle zes op
 LONG, dan houdt geen enkel filter een long tegen.
+
+`MPT_TIME_GATE` werkt anders, want tijd is geen richting: die sluit af met **Blocked by** en
+**Time gate OPEN/CLOSED**. De gates worden in dezelfde volgorde getoetst als in de strategie —
+weekdag → uur → market regime → force flat → risk-gate-venster — en het veld noemt de EERSTE
+die dicht staat. Zo weet je niet alleen dát er niet gehandeld wordt maar ook waardoor.

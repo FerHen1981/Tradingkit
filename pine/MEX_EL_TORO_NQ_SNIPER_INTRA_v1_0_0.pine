@@ -175,8 +175,6 @@ customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", 
 // waarde gehad. Alleen de schakelaar is nog een keuze; de tijden zijn vast.
 useAutoFlat = input.bool(true, "Force flat 16:55 – 18:00", group=GROUP_TIME,
      tooltip="No new entries inside the window, and open positions are flattened. This is the CME session break; the times are fixed and coincide with the session roll.", display=display.none)
-skipMonEarly = input.bool(true, "Skip Monday open (no entries Mon 00:00–02:00 ET)", group=GROUP_TIME,
-     tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
 int flatHour     = 16
 int flatMinute   = 55
 int resumeHour   = 18
@@ -639,7 +637,7 @@ f_isTradingDay() =>
      (tradeDOW == dayofweek.tuesday and tradeTuesday) or (tradeDOW == dayofweek.wednesday and tradeWednesday) or
      (tradeDOW == dayofweek.thursday and tradeThursday) or (tradeDOW == dayofweek.friday and tradeFriday) or
      (tradeDOW == dayofweek.saturday and tradeSaturday)
-monEarlyBlock = skipMonEarly and tradeDOW == dayofweek.monday and f_minuteOfDay() < 120
+monEarlyBlock = false   // Skip-Monday verwijderd 25-08 (besluit Ferry): oude aanname, de statistiek bepaalt dit zelf
 bool _mregLondon = f_inRangeMOD(2, 0, 5, 0)
 bool _mregUsMorning = f_inRangeMOD(7, 0, 12, 0)
 bool _mregGlobex = f_inRangeMOD(18, 0, 19, 0)

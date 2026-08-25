@@ -48,6 +48,11 @@
 //   open). Kleuren, Max Boxes, draw-last en gate-transparantie zijn constanten geworden.
 //   Hersteld: de long-entry driehoek ontbrak in de HELE v1_0_0-vloot - "Show Signals"
 //   plotte alleen shorts. Alles in deze release is tekenwerk; geen signaal- of accountlogica.
+// v2.2.0 (25-08): paneelnummering aaneengesloten 0-13 conform INPUT_SPEC_v2. Reference
+//   Timezone en Trading Boundary kregen hun eigen groep (1 en 2), Alerts 11->10, Visuals
+//   Strategy 12->11, Visuals Indicators 13->12, Developer 14->13. Het TIME GATE-blok en de
+//   visuals-inputs zijn fysiek verplaatst zodat de paneelvolgorde numeriek loopt; alleen
+//   declaratievolgorde van inputs, geen enkele berekening verplaatst.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -55,7 +60,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v2.1.0"
+var string currentVersion = "v2.2.0"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -82,9 +87,11 @@ var string GROUP_SIG   = "9 · SIGNAL — Filters"
 var string GROUP_CVD   = "9 · SIGNAL — Filters"
 var string GROUP_FVG   = "9 · SIGNAL — Filters"
 var string GROUP_TIME  = "3 · TIME GATE"
-var string GROUP_VIS   = "13 · VISUALS — Indicators"
-var string GROUP_DASH  = "12 · VISUALS — Strategy"
-var string GROUP_EXEC  = "11 · SIGNAL — Alerts"
+var string GROUP_TZ    = "1 · TIME — Reference timezone"
+var string GROUP_BND   = "2 · TIME — Trading boundary"
+var string GROUP_VIS   = "12 · VISUALS — Indicators"
+var string GROUP_DASH  = "11 · VISUALS — Strategy"
+var string GROUP_EXEC  = "10 · SIGNAL — Alerts"
 var string GROUP_ALRT  = GROUP_EXEC
 var string GROUP_MREG  = "3 · TIME GATE"
 
@@ -131,10 +138,10 @@ accountID = input.string("", "PMT/Tradovate Account ID", group=GROUP_ACCT,
 
 input_tz = input.string("America/New_York", "Reference Timezone",
      options=["Pacific/Honolulu","America/Anchorage","America/Los_Angeles","America/Denver","America/Chicago","America/New_York","America/Sao_Paulo","Etc/UTC","Europe/London","Europe/Berlin","Europe/Amsterdam","Europe/Athens","Europe/Moscow","Asia/Dubai","Asia/Karachi","Asia/Dhaka","Asia/Bangkok","Asia/Singapore","Asia/Tokyo","Australia/Sydney","Pacific/Auckland"],
-     group=GROUP_TIME, tooltip="Timezone for the time gate, flat window and day boundary. Keep America/New_York — all", display=display.none)
+     group=GROUP_TZ, tooltip="Timezone for the time gate, flat window and day boundary. Keep America/New_York — all", display=display.none)
 string activeTz = input_tz
 dayBoundaryMode = input.string("Exchange session (ETH)", "Trading day boundary",
-     options=["Exchange session (ETH)","Regular hours (RTH)","Calendar day (timezone)"], group=GROUP_TIME, tooltip="Where the trading day rolls over. Exchange session (default) = 18:00 ET futures session open, matching Apex and the research engine. Calendar day: midnight in the reference timezone.", display=display.none)
+     options=["Exchange session (ETH)","Regular hours (RTH)","Calendar day (timezone)"], group=GROUP_BND, tooltip="Where the trading day rolls over. Exchange session (default) = 18:00 ET futures session open, matching Apex and the research engine. Calendar day: midnight in the reference timezone.", display=display.none)
 
 f_getHour()     => hour(time, activeTz)
 f_getMinute()   => minute(time, activeTz)
@@ -149,6 +156,46 @@ prevCalDayId := f_calDayId()
 int  _dayMod  = f_minuteOfDay()
 bool _rthRoll = _dayMod >= 570 and nz(_dayMod[1], _dayMod) < 570
 bool isNewTradingDay = barstate.isfirst or (dayBoundaryMode == "Regular hours (RTH)" ? _rthRoll : dayBoundaryMode == "Calendar day (timezone)" ? newCalDay : timeframe.change("1D"))
+
+// === TIME GATE (alleen Manual; in-sample modes verwijderd) ===================
+tradeSunday    = input.bool(true, "Sun", inline="wd", group=GROUP_TIME, display=display.none)
+tradeMonday    = input.bool(true,  "Mon", inline="wd", group=GROUP_TIME, display=display.none)
+tradeTuesday   = input.bool(true,  "Tue", inline="wd", group=GROUP_TIME, display=display.none)
+tradeWednesday = input.bool(true,  "Wed", inline="wd", group=GROUP_TIME, display=display.none)
+tradeThursday  = input.bool(true,  "Thu", inline="wd", group=GROUP_TIME, display=display.none)
+tradeFriday    = input.bool(true,  "Fri", inline="wd", group=GROUP_TIME, display=display.none)
+tradeSaturday  = input.bool(false, "Sat (crypto)", inline="wd", group=GROUP_TIME, tooltip="Weekday toggles for the time gate. The Monday 00:00-02:00 filter below is separate and day-specific.", display=display.none)
+timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_TIME), timeHour01 = input.bool(true, "01", inline="h0", group=GROUP_TIME), timeHour02 = input.bool(true, "02", inline="h0", group=GROUP_TIME), timeHour03 = input.bool(true, "03", inline="h0", group=GROUP_TIME), timeHour04 = input.bool(true, "04", inline="h0", group=GROUP_TIME), timeHour05 = input.bool(true, "05", inline="h0", group=GROUP_TIME, tooltip="00.", display=display.none)
+timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_TIME), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_TIME), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_TIME), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_TIME), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_TIME), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_TIME, tooltip="06.", display=display.none)
+timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
+timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_TIME), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_TIME), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_TIME), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_TIME), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_TIME, tooltip="18.", display=display.none)
+// Revalidated all-24h Stability Core defaults: LONG 09/10/11/20/21/23 · SHORT 10/11/21. All 24 switches remain user-editable.
+// === MARKET REGIME GATE ======================================================
+// Research-defined structural sessions; no individual hour/day cherry-picking.
+marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
+     tooltip="Liquidity Core = London 02:00-05:00 ET + US pre-cash/morning 07:00-12:00 ET + Globex reopen 18:00-19:00 ET. These windows were defined by market structure, not individual-hour optimization.")
+// Negen economisch vooraf gedefinieerde vensters, tijden in de referentie-timezone.
+// De eerste drie zijn samen "Liquidity Core" en zijn NIET aangepast: die definitie zit
+// onder alles wat er tot nu toe op gemeten is.
+customGlobexOpen = input.bool(true,  "Globex reopen 18:00-19:00", inline="mr1", group=GROUP_MREG)
+customAsia       = input.bool(false, "Asia 19:00-02:00",          inline="mr1", group=GROUP_MREG)
+customLondon     = input.bool(true,  "London 02:00-05:00",        inline="mr2", group=GROUP_MREG)
+customUsMorning  = input.bool(true,  "US 07:00-12:00",            inline="mr2", group=GROUP_MREG)
+customInitBal    = input.bool(false, "Initial balance 09:30-10:30", inline="mr3", group=GROUP_MREG)
+customNyAm       = input.bool(false, "NY AM 09:30-11:30",         inline="mr3", group=GROUP_MREG)
+customLunch      = input.bool(false, "Lunch 11:30-13:00",         inline="mr4", group=GROUP_MREG)
+customNyPm       = input.bool(false, "NY PM 13:00-15:00",         inline="mr4", group=GROUP_MREG)
+customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", group=GROUP_MREG,
+     tooltip="US overlaps Initial Balance, NY AM and Lunch on purpose: the windows are OR-ed, so a coarse block can sit next to finer ones.")
+
+// Force flat en de sessie-roll vallen samen op de CME-grens en hebben altijd dezelfde
+// waarde gehad. Alleen de schakelaar is nog een keuze; de tijden zijn vast.
+useAutoFlat = input.bool(true, "Force flat 16:55 – 18:00", group=GROUP_TIME,
+     tooltip="No new entries inside the window, and open positions are flattened. This is the CME session break; the times are fixed.")
+int flatHour     = 16
+int flatMinute   = 55
+int resumeHour   = 18
+int resumeMinute = 0
 
 // === UNITS & SIZING ==========================================================
 unitMode  = input.string("Ticks", "Distance Unit", options=["Ticks","Points","%","ATR"], group=GROUP_UNIT, tooltip="Unit for all distance inputs (stops, gaps, buffers).", display=display.none)
@@ -477,46 +524,6 @@ confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, 
 
 
 int confirmBars = confirmBarsIn
-// === TIME GATE (alleen Manual; in-sample modes verwijderd) ===================
-tradeSunday    = input.bool(true, "Sun", inline="wd", group=GROUP_TIME, display=display.none)
-tradeMonday    = input.bool(true,  "Mon", inline="wd", group=GROUP_TIME, display=display.none)
-tradeTuesday   = input.bool(true,  "Tue", inline="wd", group=GROUP_TIME, display=display.none)
-tradeWednesday = input.bool(true,  "Wed", inline="wd", group=GROUP_TIME, display=display.none)
-tradeThursday  = input.bool(true,  "Thu", inline="wd", group=GROUP_TIME, display=display.none)
-tradeFriday    = input.bool(true,  "Fri", inline="wd", group=GROUP_TIME, display=display.none)
-tradeSaturday  = input.bool(false, "Sat (crypto)", inline="wd", group=GROUP_TIME, tooltip="Weekday toggles for the time gate. The Monday 00:00-02:00 filter below is separate and day-specific.", display=display.none)
-timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_TIME), timeHour01 = input.bool(true, "01", inline="h0", group=GROUP_TIME), timeHour02 = input.bool(true, "02", inline="h0", group=GROUP_TIME), timeHour03 = input.bool(true, "03", inline="h0", group=GROUP_TIME), timeHour04 = input.bool(true, "04", inline="h0", group=GROUP_TIME), timeHour05 = input.bool(true, "05", inline="h0", group=GROUP_TIME, tooltip="00.", display=display.none)
-timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_TIME), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_TIME), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_TIME), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_TIME), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_TIME), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_TIME, tooltip="06.", display=display.none)
-timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_TIME), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_TIME), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_TIME), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_TIME), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_TIME), timeHour17 = input.bool(false, "17", inline="h2", group=GROUP_TIME, tooltip="12.", display=display.none)
-timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_TIME), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_TIME), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_TIME), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_TIME), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_TIME, tooltip="18.", display=display.none)
-// Revalidated all-24h Stability Core defaults: LONG 09/10/11/20/21/23 · SHORT 10/11/21. All 24 switches remain user-editable.
-// === MARKET REGIME GATE ======================================================
-// Research-defined structural sessions; no individual hour/day cherry-picking.
-marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
-     tooltip="Liquidity Core = London 02:00-05:00 ET + US pre-cash/morning 07:00-12:00 ET + Globex reopen 18:00-19:00 ET. These windows were defined by market structure, not individual-hour optimization.")
-// Negen economisch vooraf gedefinieerde vensters, tijden in de referentie-timezone.
-// De eerste drie zijn samen "Liquidity Core" en zijn NIET aangepast: die definitie zit
-// onder alles wat er tot nu toe op gemeten is.
-customGlobexOpen = input.bool(true,  "Globex reopen 18:00-19:00", inline="mr1", group=GROUP_MREG)
-customAsia       = input.bool(false, "Asia 19:00-02:00",          inline="mr1", group=GROUP_MREG)
-customLondon     = input.bool(true,  "London 02:00-05:00",        inline="mr2", group=GROUP_MREG)
-customUsMorning  = input.bool(true,  "US 07:00-12:00",            inline="mr2", group=GROUP_MREG)
-customInitBal    = input.bool(false, "Initial balance 09:30-10:30", inline="mr3", group=GROUP_MREG)
-customNyAm       = input.bool(false, "NY AM 09:30-11:30",         inline="mr3", group=GROUP_MREG)
-customLunch      = input.bool(false, "Lunch 11:30-13:00",         inline="mr4", group=GROUP_MREG)
-customNyPm       = input.bool(false, "NY PM 13:00-15:00",         inline="mr4", group=GROUP_MREG)
-customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", group=GROUP_MREG,
-     tooltip="US overlaps Initial Balance, NY AM and Lunch on purpose: the windows are OR-ed, so a coarse block can sit next to finer ones.")
-
-// Force flat en de sessie-roll vallen samen op de CME-grens en hebben altijd dezelfde
-// waarde gehad. Alleen de schakelaar is nog een keuze; de tijden zijn vast.
-useAutoFlat = input.bool(true, "Force flat 16:55 – 18:00", group=GROUP_TIME,
-     tooltip="No new entries inside the window, and open positions are flattened. This is the CME session break; the times are fixed.")
-int flatHour     = 16
-int flatMinute   = 55
-int resumeHour   = 18
-int resumeMinute = 0
-
 // === ROLL / OPEX / NEWS FACTORY (event-regime filters) ======================
 // Validated on 3y OOS: for the mean-reversion engine the losses concentrate in the
 // quarterly roll/triple-witching window (esp. quiet, no-news days), while macro news
@@ -526,65 +533,6 @@ int resumeMinute = 0
 // toggles yourself. Survival over winning — don't fight the bull in the witching-week chaos.
 // Roll/OpEx/news-factory verwijderd 25-08 (besluit Ferry). De master stond op false, dus
 // evtBlock was altijd onwaar en de poort altijd open.
-// === 12 · VISUALS — STRATEGY =================================================
-showDashboard = input.bool(true, "Dashboard", inline="d1", group=GROUP_DASH, display=display.none)
-dashPos       = input.string("Bottom Right", "", options=["Top Right","Top Left","Bottom Right","Bottom Left"], inline="d1", group=GROUP_DASH, display=display.none)
-visTheme      = input.string("Auto", "", options=["Auto","Dark","Light"], inline="d1", group=GROUP_DASH,
-     tooltip="Auto reads the chart background. Applies to dashboard, trade info, exit text and zones.", display=display.none)
-txtSize       = input.string(size.tiny, "", options=[size.huge,size.large,size.small,size.tiny,size.auto,size.normal], inline="d1", group=GROUP_DASH, tooltip="Position · theme · text size of the dashboard.", display=display.none)
-dashLayout    = input.string("Wide (4 columns)", "Layout", options=["Wide (4 columns)","Compact (mobile)"], group=GROUP_DASH,
-     tooltip="Wide: the classic 4-column dashboard. Compact (mobile): two narrow columns with the same information stacked on separate lines inside each cell — fits a phone screen without horizontal squeezing. Visual only; no strategy impact.", display=display.none)
-showSignals     = input.bool(true, "Signals", inline="s1", group=GROUP_DASH, display=display.none)
-showTradeLevels = input.bool(true, "TP/SL Levels", inline="s1", group=GROUP_DASH, display=display.none)
-showPending     = input.bool(true, "Order Levels", inline="s1", group=GROUP_DASH, display=display.none)
-showExpired     = input.bool(true, "Unfilled Orders", inline="s1", group=GROUP_DASH,
-     tooltip="Signals: entry triangles. TP/SL Levels: the active stop/target/entry lines AND the shaded risk/reward zones. Order Levels: the resting limit and its planned stop while an order is pending. Unfilled Orders: a box marking a limit that expired without a fill.", display=display.none)
-// Trade labels — what is written next to a trade, and which account events get marked.
-lblParams   = input.bool(true, "Params", inline="s2", group=GROUP_DASH, display=display.none)
-lblOutcome  = input.bool(true, "PnL / MFE / MAE", inline="s2", group=GROUP_DASH, display=display.none)
-lblDll      = input.bool(true, "DLL reached $", inline="s2", group=GROUP_DASH,
-     tooltip="Params: FVG size, CVD state, order age and R:R next to the open trade. PnL / MFE / MAE: realized result at the exit plus the best and worst excursion in ticks. DLL reached $: label on the bar where the daily loss limit halted the day.", display=display.none)
-lblDayCap   = input.bool(true, "Day cap reached $", inline="s3", group=GROUP_DASH, display=display.none)
-lblPayout   = input.bool(true, "Payout reached", inline="s3", group=GROUP_DASH, display=display.none)
-lblBreach   = input.bool(true, "Account breached", inline="s3", group=GROUP_DASH, display=display.none)
-lblTrail    = input.bool(true, "Trail activated", inline="s3", group=GROUP_DASH,
-     tooltip="Account-level events, each marked once on the bar where it happens: the day-cap halt with the banked amount, the moment the account becomes payout-ready, the breach that halts the account, and the arming of the day trail (risk gate).", display=display.none)
-// Aliases: the drawing code below still speaks the old names. TP/SL Levels now
-// covers the lines AND the fills, which is what Ferry asked for (25-08).
-bool showTradeZones  = showTradeLevels
-bool showTradeLabels = lblParams
-bool showExitLabels  = lblOutcome
-
-// === 13 · VISUALS — INDICATORS ===============================================
-fvgFillMode = input.string("Both", "FVG", options=["Filled","Unfilled","Both"], inline="i1", group=GROUP_VIS, display=display.none)
-fvgSizeMode = input.string("In range", "", options=["In range","All"], inline="i1", group=GROUP_VIS,
-     tooltip="Left: which gaps stay visible — Filled = price has traded back into the gap, Unfilled = still untouched, Both = show all. Right: In range = only gaps that pass the FVG size filter (group 9), i.e. the ones this strategy can actually trade; All = every gap on the chart. Visual only — neither dropdown touches the signal logic.", display=display.none)
-showFiltersBg  = input.bool(false, "Filters valid", inline="i2", group=GROUP_VIS, display=display.none)
-showTimeGateBg = input.bool(false, "TimeGate open", inline="i2", group=GROUP_VIS, display=display.none)
-showGateBg     = input.bool(true, "Trade Gate open", inline="i2", group=GROUP_VIS,
-     tooltip="Three background layers, from loosest to strictest. Filters valid: the signal filters of group 9 (BBWP/EMA/MFI/POC/Discount-Premium and the long-short switch) pass on at least one side. TimeGate open: the trading day, hour window, market regime and flat window allow trading. Trade Gate open: the FULL gate — time gate plus day halt, account status, CVD, VWAP veto, bias and sweep — teal = long tradable, red = short, amber = both. A stronger amber flash marks a valid signal blocked by an operational rule (MAE guard, halts).", display=display.none)
-// Cosmetics with no operational meaning are fixed here rather than in the panel.
-int   maxBoxes     = 40
-int   drawLast     = 2000
-int   gateBgTransp = 90
-color bullColor    = color.new(color.green, 85)
-color bearColor    = color.new(color.red, 85)
-color testedColor  = color.new(color.gray, 88)
-bool  inDrawWin    = drawLast <= 0 or (last_bar_index - bar_index) <= drawLast
-
-
-// === v5.5: THEMA-PALET =======================================================
-float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
-bool visIsDark = visTheme == "Dark" ? true : visTheme == "Light" ? false : _bgLum < 128
-color vPOS    = #089981
-color vNEG    = #F23645
-color vText   = visIsDark ? #ECECEC : #1E222D
-color vMuted  = visIsDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
-color vPosTxt = visIsDark ? #34D1B2 : #056656
-color vNegTxt = visIsDark ? #FF7A85 : #B22833
-color zRiskBg   = color.new(vNEG, visIsDark ? 90 : 92)
-color zRewardBg = color.new(vPOS, visIsDark ? 90 : 92)
-
 // === EXECUTION / ROUTING =====================================================
 // v6.8.13 — independent per-destination toggles; ALL config lives in these inputs
 // (single-select "Alert destination" dropdown removed). Enable any combination.
@@ -628,8 +576,67 @@ notifyBlocked = input.bool(true, "Alert: signal blocked by non-strategy rule", g
      tooltip="Fires a TradingView alert (and Discord, if enabled) when a setup satisfies ALL strategy rules (FVG + CVD + bias + VWAP veto + sweep) but is blocked by an operational rule: MAE guard, DD guard, day halt, account halt, time gate or flat window. Being in a position or having a pending order does NOT trigger this alert — that is normal system behaviour.", display=display.none)
 
 
+// === 11 · VISUALS — STRATEGY =================================================
+showDashboard = input.bool(true, "Dashboard", inline="d1", group=GROUP_DASH, display=display.none)
+dashPos       = input.string("Bottom Right", "", options=["Top Right","Top Left","Bottom Right","Bottom Left"], inline="d1", group=GROUP_DASH, display=display.none)
+visTheme      = input.string("Auto", "", options=["Auto","Dark","Light"], inline="d1", group=GROUP_DASH,
+     tooltip="Auto reads the chart background. Applies to dashboard, trade info, exit text and zones.", display=display.none)
+txtSize       = input.string(size.tiny, "", options=[size.huge,size.large,size.small,size.tiny,size.auto,size.normal], inline="d1", group=GROUP_DASH, tooltip="Position · theme · text size of the dashboard.", display=display.none)
+dashLayout    = input.string("Wide (4 columns)", "Layout", options=["Wide (4 columns)","Compact (mobile)"], group=GROUP_DASH,
+     tooltip="Wide: the classic 4-column dashboard. Compact (mobile): two narrow columns with the same information stacked on separate lines inside each cell — fits a phone screen without horizontal squeezing. Visual only; no strategy impact.", display=display.none)
+showSignals     = input.bool(true, "Signals", inline="s1", group=GROUP_DASH, display=display.none)
+showTradeLevels = input.bool(true, "TP/SL Levels", inline="s1", group=GROUP_DASH, display=display.none)
+showPending     = input.bool(true, "Order Levels", inline="s1", group=GROUP_DASH, display=display.none)
+showExpired     = input.bool(true, "Unfilled Orders", inline="s1", group=GROUP_DASH,
+     tooltip="Signals: entry triangles. TP/SL Levels: the active stop/target/entry lines AND the shaded risk/reward zones. Order Levels: the resting limit and its planned stop while an order is pending. Unfilled Orders: a box marking a limit that expired without a fill.", display=display.none)
+// Trade labels — what is written next to a trade, and which account events get marked.
+lblParams   = input.bool(true, "Params", inline="s2", group=GROUP_DASH, display=display.none)
+lblOutcome  = input.bool(true, "PnL / MFE / MAE", inline="s2", group=GROUP_DASH, display=display.none)
+lblDll      = input.bool(true, "DLL reached $", inline="s2", group=GROUP_DASH,
+     tooltip="Params: FVG size, CVD state, order age and R:R next to the open trade. PnL / MFE / MAE: realized result at the exit plus the best and worst excursion in ticks. DLL reached $: label on the bar where the daily loss limit halted the day.", display=display.none)
+lblDayCap   = input.bool(true, "Day cap reached $", inline="s3", group=GROUP_DASH, display=display.none)
+lblPayout   = input.bool(true, "Payout reached", inline="s3", group=GROUP_DASH, display=display.none)
+lblBreach   = input.bool(true, "Account breached", inline="s3", group=GROUP_DASH, display=display.none)
+lblTrail    = input.bool(true, "Trail activated", inline="s3", group=GROUP_DASH,
+     tooltip="Account-level events, each marked once on the bar where it happens: the day-cap halt with the banked amount, the moment the account becomes payout-ready, the breach that halts the account, and the arming of the day trail (risk gate).", display=display.none)
+// Aliases: the drawing code below still speaks the old names. TP/SL Levels now
+// covers the lines AND the fills, which is what Ferry asked for (25-08).
+bool showTradeZones  = showTradeLevels
+bool showTradeLabels = lblParams
+bool showExitLabels  = lblOutcome
+
+// === 12 · VISUALS — INDICATORS ===============================================
+fvgFillMode = input.string("Both", "FVG", options=["Filled","Unfilled","Both"], inline="i1", group=GROUP_VIS, display=display.none)
+fvgSizeMode = input.string("In range", "", options=["In range","All"], inline="i1", group=GROUP_VIS,
+     tooltip="Left: which gaps stay visible — Filled = price has traded back into the gap, Unfilled = still untouched, Both = show all. Right: In range = only gaps that pass the FVG size filter (group 9), i.e. the ones this strategy can actually trade; All = every gap on the chart. Visual only — neither dropdown touches the signal logic.", display=display.none)
+showFiltersBg  = input.bool(false, "Filters valid", inline="i2", group=GROUP_VIS, display=display.none)
+showTimeGateBg = input.bool(false, "TimeGate open", inline="i2", group=GROUP_VIS, display=display.none)
+showGateBg     = input.bool(true, "Trade Gate open", inline="i2", group=GROUP_VIS,
+     tooltip="Three background layers, from loosest to strictest. Filters valid: the signal filters of group 9 (BBWP/EMA/MFI/POC/Discount-Premium and the long-short switch) pass on at least one side. TimeGate open: the trading day, hour window, market regime and flat window allow trading. Trade Gate open: the FULL gate — time gate plus day halt, account status, CVD, VWAP veto, bias and sweep — teal = long tradable, red = short, amber = both. A stronger amber flash marks a valid signal blocked by an operational rule (MAE guard, halts).", display=display.none)
+// Cosmetics with no operational meaning are fixed here rather than in the panel.
+int   maxBoxes     = 40
+int   drawLast     = 2000
+int   gateBgTransp = 90
+color bullColor    = color.new(color.green, 85)
+color bearColor    = color.new(color.red, 85)
+color testedColor  = color.new(color.gray, 88)
+bool  inDrawWin    = drawLast <= 0 or (last_bar_index - bar_index) <= drawLast
+
+
+// === v5.5: THEMA-PALET =======================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool visIsDark = visTheme == "Dark" ? true : visTheme == "Light" ? false : _bgLum < 128
+color vPOS    = #089981
+color vNEG    = #F23645
+color vText   = visIsDark ? #ECECEC : #1E222D
+color vMuted  = visIsDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color vPosTxt = visIsDark ? #34D1B2 : #056656
+color vNegTxt = visIsDark ? #FF7A85 : #B22833
+color zRiskBg   = color.new(vNEG, visIsDark ? 90 : 92)
+color zRewardBg = color.new(vPOS, visIsDark ? 90 : 92)
+
 // === v5: EVAL / PA TRACKING ==================================================
-var string GROUP_EVAL = "14 · DEVELOPER — Settings"
+var string GROUP_EVAL = "13 · DEVELOPER — Settings"
 // Eval-tracking verwijderd als knop 25-08 (besluit Ferry: onduidelijk wat het doet, en
 // Phase=Custom dekt hetzelfde). De motor eronder staat achter een constante false en is
 // daarmee dood; hij wordt in een aparte ronde gestript zodra niets hem meer leest.

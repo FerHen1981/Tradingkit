@@ -2604,3 +2604,71 @@ De groepsnummering heeft gaten (0, 3–9, 11–14; geen 1, 2 en 10) omdat *Refer
 *Trading Boundary* onder TIME GATE zijn blijven zitten. Ik heb ze **bewust niet hernummerd** midden
 in je review — dat zou je referentiepunten verschuiven. Zeg het als je ze aaneengesloten wilt.
 De uitrol naar de andere acht `v1_0_0`-scripts en de vier TORO's wacht op jouw akkoord op REY.
+
+---
+
+## 22 — Pine Dev → Ferry · uitrol v2.2.0: zeven scripts klaar, twee kunnen niet mee
+
+Nummering en uitrol gedaan. **Zeven van de negen `v1_0_0`-scripts staan op v2.2.0.**
+
+### De paneelnummering loopt nu aaneengesloten 0–13
+
+Precies de volgorde uit `INPUT_SPEC_v2.md`. *Reference Timezone* en *Trading Boundary* kregen
+hun eigen groep (1 en 2), Alerts 11→10, Visuals Strategy 12→11, Visuals Indicators 13→12,
+Developer 14→13. De gaten (er was geen 1, 2 en 10) zijn weg.
+
+Om de paneelvolgorde numeriek te krijgen zijn twee inputblokken **fysiek verplaatst**: het
+TIME GATE-blok naar boven, de visuals-inputs naar achter de alert-routering. Alleen de
+declaratievolgorde van inputs; er is geen enkele berekening verplaatst, en de statische
+controle (haakjesbalans, dubbele declaraties, verweesde vervolgregels, scope-voor-gebruik)
+is op alle zeven schoon.
+
+| Script | Inputs | Regels |
+|---|---|---|
+| EL REY MNQ PROD EOD | 170 | 2079 |
+| EL REY MNQ PROD INTRA | 170 | 2079 |
+| EL MATADOR MES PROD EOD | 173 | 2087 |
+| EL LEON MYM PROD EOD | 170 | 2079 |
+| EL LEON MYM CON EOD Q2 | 170 | 2079 |
+| EL LEON MYM CON INTRA Q2 | 170 | 2079 |
+| EL BANDIDO MYM HF EOD | 170 | 2080 |
+
+MATADOR heeft er drie extra: zijn dagverlieslimiet-knoppen. Die stonden in het verkeerde blok
+en zetten groep 8 vóór groep 7 in het paneel; verplaatst naar ACCOUNT — Guard.
+
+**Elk script houdt zijn eigen presets.** Ik heb ze niet overgetypt maar per script
+drieweg-gemerged tegen de gemeenschappelijke basis, en daarna geverifieerd dat het verschil
+met EL REY exact en alleen de eigen parameters is: contractgrootte, expiry, stop, FVG-venster,
+CVD-count, R-multiple, day-cap, firm-preset, commissie, titel en shorttitle. `SCRIPT_NAME` is
+per script gezet, dus de Discord-kaarten dragen eindelijk de juiste naam.
+
+### 🔴 EL PATRON en EL TESORO kunnen hier niet mee — en de reden is groter dan de uitrol
+
+Die twee komen uit een **oudere generatie van het vendor-pakket** dan de andere zeven: 1871
+regels tegen 1931, met de stability-preset-laag er nog in (63 verwijzingen naar `stabilityOn`,
+`GROUP_STAB`, de richtings-uurkaarten) en de oude zes regimevensters.
+
+Dat alleen was op te lossen. Dit niet:
+
+> **Beide MGC-scripts draaien de niet-canonieke delta-engine.** Ze gebruiken
+> `ta.requestVolumeDelta` met een per-bar auto-guard en `ta.barssince`-streaks. De andere zeven
+> gebruiken de deterministische OHLCV-polariteitsproxy — de canonieke engine uit **D-09**.
+
+Het sjabloon van EL REY over ze heen leggen zou hun delta-engine stilzwijgend vervangen. Dat is
+geen herstructurering meer, dat is een signaalwijziging op de twee engines waarvan het bewijs
+sowieso al onder het MGC-voorbehoud staat. Ik heb ze daarom **onaangeraakt gelaten**.
+
+Er zit nog een tweede addertje in: **`skipMonEarly` staat in PATRON op `true`.** Jouw besluit 7
+("Skip Monday weg, oude aanname") is voor de andere zeven gedragsneutraal — daar stond hij uit.
+Voor PATRON niet: hem weghalen zet de maandagochtend-blokkade áán het handelen. Dat is een
+parameterbesluit, geen opruiming, en dat is aan jou.
+
+**Wat ik voorstel:** PATRON en TESORO in één aparte ronde, waarin eerst de delta-engine-vraag
+valt (canoniek maken = nieuwe onderzoeksronde vanaf trap 1, of laten staan en de
+herstructurering met de hand op hún tekst doen). Zeg welke kant je op wilt.
+
+### De vier EL TORO's staan ook nog
+
+Andere, slankere lijn: 1662 regels, 131 inputs, 543 regels verschil met de basis. Hun
+delta-engine is wél canoniek, dus daar zit het probleem niet — het is gewoon een tweede port.
+Wachten op jouw akkoord op de zeven, dan is het één ronde werk.

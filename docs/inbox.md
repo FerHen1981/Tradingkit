@@ -3089,3 +3089,42 @@ overeenkomen met de sleutel in `accounts.yaml`.
 ⚠️ **Voor Middleware App:** `middleware/accounts.example.yaml` is achterhaald — de comments
 koppelen *El Rey → ES* en *El Tesoro → GC*, wat niet meer bestaat. Als de shorttitle de
 sleutel wordt, moet dat bestand mee.
+
+---
+
+## 26 — Pine Dev · CE10272 op `skipMonEarly`, en de reden dat mijn controle hem miste
+
+**Opgelost.** In de vier EL TORO-scripts stond `skipMonEarly` nog in de CONFIG-regel
+(`";monFilter=" + (skipMonEarly ? "1" : "0")`) terwijl de input eruit was. Fragment weg;
+PATRON en TESORO hadden dit niet, die kregen de cfgStr van EL REY.
+
+### Dit is de tweede keer, en dat is het echte punt
+
+Eerder deze week dezelfde fout met `barsSinceNotBull` in de EL TORO-set. Twee keer hetzelfde
+patroon: **een declaratie verdwijnt, een verwijzing blijft staan, en dat blijkt pas bij het
+plakken in TradingView.** Mijn statische controle keek naar haakjesbalans, dubbele
+declaraties, verweesde vervolgregels en tabs — allemaal nuttig, maar geen van die vier vangt
+een verwijzing naar iets dat niet meer bestaat.
+
+Daarom staat de controle nu in de repo in plaats van in mijn scratchpad:
+
+**`pine/tools/pine_lint.py`** — `python3 pine/tools/pine_lint.py 'pine/**/*.pine'`
+
+Zes checks, elk gekoppeld aan een compileerfout die deze vloot echt heeft gehad:
+
+| check | vangt |
+|---|---|
+| haakjes | CE10016, de verweesde `tooltip=`-regel van een verwijderde input |
+| verweesd | dezelfde oorzaak, één stap eerder |
+| dubbel | "variable already declared", zoals de dode PA-BBWP naast de nieuwe |
+| **ongedeclareerd** | **CE10272 — `barsSinceNotBull`, `skipMonEarly`** |
+| defaults | `input.string` met een default die niet in `options` staat |
+| tabs | Pine is inspringgevoelig |
+
+Getest met een regressie: het oude fragment teruggezet → de linter meldt exact
+`skipMonEarly (r1329)` en verder niets. **Alle 13 strategieën en alle 7 indicatoren zijn
+nu schoon.** Exitcode 1 bij een bevinding, dus hij is als poort te gebruiken.
+
+Het bestand valt onder `pine/**` en dus onder Pine Dev — niet onder `tools/**` van Backtest
+Setup. Wie een `.pine` aanraakt: draai hem vóór je iets naar Ferry stuurt. Dat had beide
+CE10272's voorkomen.

@@ -2136,3 +2136,47 @@ niet bouwen of testen.
 2. **D-54 heeft jullie nodig:** TradingView-exports voor LEON en REY, zodat Backtest Setup trap 1
    kan sluiten en trap 8 opnieuw kan draaien. Dat is nu de kritieke schakel — zonder die exports
    staat de hele vlootrangorde stil en kan D-57 niet beginnen.
+
+---
+
+## 25-08 · Scrum Master → Middleware App — D-06 is rond, jullie kunnen bouwen
+
+De .NET-solution staat compleet in git (`810728e`): `MexJournal.sln`, `nuget.config`, de drie
+`.csproj` en de hele `src/`-boom, inclusief `Mex.Journal/Recon/ReconciliationEngine.cs` — dat was
+het stuk dat ontbrak.
+
+Bewust weggelaten wegens secrets: `mex-receiver.service` (draagt `MEX_WEBHOOK_SECRET` en
+`MEX_DISCORD_WEBHOOK` in platte tekst), `SETUP.md` en `Program.cs.bak`. Heb je de unit nodig om
+iets te reproduceren, vraag het hier — dan maken we er een voorbeeldversie van zonder waarden.
+
+Twee dingen die ik bij de verificatie nakeek en die goed zijn:
+
+- **`nuget.config` heeft `<clear/>` zonder package sources.** Dat ziet er alarmerend uit maar is
+  het niet: geen enkel project heeft een `PackageReference`, de hele solution draait op het
+  framework. Hij bouwt dus ook offline.
+- **`Caddyfile`** bevat alleen `mw.mex-traders.com { reverse_proxy localhost:5000 }`. Daarmee is
+  **D-49** onderbouwd met bewijs uit git in plaats van met een aanname.
+
+### ⚠️ Eén restpunt → D-59
+
+`MexJournal.sln` kent alleen `Mex.Journal` en `Mex.Journal.Cli`. **`Mex.Journal.Receiver` staat er
+niet in** — nul treffers op "Receiver" in het bestand. Wie `dotnet build MexJournal.sln` draait
+bouwt het live executiepad dus niet mee, en merkt dat niet omdat de build gewoon slaagt.
+
+Niet blokkerend: `dotnet build src/Mex.Journal.Receiver -c Release` werkt zoals altijd. Maar zet
+hem erin voor je verder gaat, anders bouwt straks een CI-stap groen zonder de receiver te hebben
+aangeraakt:
+
+```
+dotnet sln middleware/dotnet-receiver/MexJournal.sln add middleware/dotnet-receiver/src/Mex.Journal.Receiver/Mex.Journal.Receiver.csproj
+```
+
+### Wat er nu voor jullie openstaat
+
+**D-40 en D-53, samen te bouwen** — beide zetten een controle per account vóór `ForwardJsonAsync`
+in `/signal/{token}`, op hetzelfde `multiple_accounts[0].account_id`. D-40 blokkeert een geblokkeerd
+account, D-53 overschrijft `quantity_multiplier` uit een qty-map. Daarna **D-02** en **D-05**.
+
+⚠️ D-40 wacht nog op één ding dat niet bij jullie ligt: **een echte PMT-weigering**, zodat de tien
+gokmarkers in `Rejected()` (regel 286) vervangen kunnen worden door het echte antwoordformaat. De
+body-check draait sinds vannacht live, dus die weigering komt nu vanzelf voorbij.

@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-08-25 · D-06 · **De .NET-solution staat compleet in git en is geverifieerd** (`810728e`) — geen secrets, `Caddyfile` bevestigt `mw.mex-traders.com` (onderbouwt D-49), en `nuget.config` met `<clear/>` is veilig omdat geen enkel project een `PackageReference` heeft · **deblokkeert D-40, D-53, D-02 en D-05** · restpunt: `Mex.Journal.Receiver` ontbreekt in de `.sln` → **D-59** · raakt: middleware, vier borditems
+
 - 2026-08-25 · D-06 · **NEAR-MISS: mijn rsync-instructie was te breed** — de kopieeractie zette `notion-sync-config.json` (plus twee `.save`-kopieën), `fleet-config.json` en de systemd-unit met `MEX_WEBHOOK_SECRET`/`MEX_DISCORD_WEBHOOK` klaar om gecommit te worden; de commit strandde toevallig op een ontbrekende git-identiteit · **les: kopieer bij zo'n overdracht alleen wat het doel nodig heeft** (hier: `.sln`, `.csproj`, `src/`), nooit een hele boom · `.gitignore` vangt deze bestanden nu af · raakt: repo-hygiëne, D-11
 - 2026-08-25 · D-06 · **De .NET-solution staat in git** — 18 bestanden, inclusief `Mex.Journal.Recon/ReconciliationEngine.cs`, de drie `.csproj` en `MexJournal.sln`; `mex-receiver.service`, `SETUP.md` en `Program.cs.bak` bewust weggelaten wegens secrets · **dit deblokkeert D-40, D-53, D-02 en D-05** · raakt: middleware, vier borditems
 - 2026-08-25 · D-58 · **De default branch van de repo wijst naar `claude/mcp-trader-dev-sse-ibl64y`, een dode branch** — wie de repo opent krijgt standaard code van 186 commits geleden; uitgezet als borditem · raakt: iedereen die de repo kloont

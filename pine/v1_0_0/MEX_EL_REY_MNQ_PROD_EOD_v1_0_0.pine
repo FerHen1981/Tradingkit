@@ -68,6 +68,7 @@ var string GROUP_UNIT  = "2 · TRADE — Position sizing"
 var string GROUP_ENTRY = "3 · TRADE — Entry & stop"
 var string GROUP_RISK  = "4 · TRADE — Take-profit & exits"
 var string GROUP_DAY   = "L4x · retired"
+var string GROUP_RG    = "1F · ACCOUNT — Guard: daily risk-gate"
 var string GROUP_PHASE = "1 · ACCOUNT — Phase, drawdown & guard"
 var string GROUP_BIAS  = "7 · SIGNAL — VWAP / bias"
 var string GROUP_SIG   = "9 · SIGNAL — Filters"
@@ -93,17 +94,7 @@ var string GROUP_STAB  = "0b · MEX — Stability presets"
 var string GROUP_ACCT = "0 · ACCOUNT — Firm & routing"
 
 // === v6.8: retired features — hard-disabled (inputs removed; engine paths inert) =========
-bool   usePaFilters   = false
 bool   useRelVolFilter= false
-bool   useBbwpFilter  = false
-bool   blockRthOpen   = false
-float  relVolMax      = 1.2
-float  bbwpMax        = 0.5
-int    relVolLen      = 30
-int    bbwpStdLen     = 20
-int    bbwpLook       = 250
-int    rthOpenLo      = 570
-int    rthOpenHi      = 600
 bool   useOrBreakout  = false
 bool   orOneSetup     = true
 int    orStartMin     = 570
@@ -138,8 +129,8 @@ input_tz = input.string("America/New_York", "Reference Timezone",
      options=["Pacific/Honolulu","America/Anchorage","America/Los_Angeles","America/Denver","America/Chicago","America/New_York","America/Sao_Paulo","Etc/UTC","Europe/London","Europe/Berlin","Europe/Amsterdam","Europe/Athens","Europe/Moscow","Asia/Dubai","Asia/Karachi","Asia/Dhaka","Asia/Bangkok","Asia/Singapore","Asia/Tokyo","Australia/Sydney","Pacific/Auckland"],
      group=GROUP_TIME, tooltip="Timezone for the time gate, flat window and day boundary. Keep America/New_York — all", display=display.none)
 string activeTz = input_tz
-dayBoundaryMode = input.string("Exchange session", "Trading-Day Boundary",
-     options=["Exchange session","Calendar day (timezone)"], group=GROUP_TIME, tooltip="Where the trading day rolls over. Exchange session (default) = 18:00 ET futures session open, matching Apex and the research engine. Calendar day: midnight in the reference timezone.", display=display.none)
+dayBoundaryMode = input.string("Exchange session (ETH)", "Trading day boundary",
+     options=["Exchange session (ETH)","Regular hours (RTH)","Calendar day (timezone)"], group=GROUP_TIME, tooltip="Where the trading day rolls over. Exchange session (default) = 18:00 ET futures session open, matching Apex and the research engine. Calendar day: midnight in the reference timezone.", display=display.none)
 
 f_getHour()     => hour(time, activeTz)
 f_getMinute()   => minute(time, activeTz)
@@ -148,7 +139,12 @@ f_calDayId()    => year(time, activeTz) * 10000 + month(time, activeTz) * 100 + 
 var int prevCalDayId = na
 bool newCalDay = na(prevCalDayId) or f_calDayId() != prevCalDayId
 prevCalDayId := f_calDayId()
-bool isNewTradingDay = barstate.isfirst or (dayBoundaryMode == "Exchange session" ? timeframe.change("1D") : newCalDay)
+// RTH rolt op de cash-open (09:30), ETH op de futures-sessie. Dit bepaalt WAAR de dag
+// omslaat -- waar de sessie-P&L, de dagteller en de halt resetten -- niet welke bars je
+// mag handelen. Entry-filtering op RTH/ETH is bewust een aparte vraag.
+int  _dayMod  = f_minuteOfDay()
+bool _rthRoll = _dayMod >= 570 and nz(_dayMod[1], _dayMod) < 570
+bool isNewTradingDay = barstate.isfirst or (dayBoundaryMode == "Regular hours (RTH)" ? _rthRoll : dayBoundaryMode == "Calendar day (timezone)" ? newCalDay : timeframe.change("1D"))
 
 // === UNITS & SIZING ==========================================================
 unitMode  = input.string("Ticks", "Distance Unit", options=["Ticks","Points","%","ATR"], group=GROUP_UNIT, tooltip="Unit for all distance inputs (stops, gaps, buffers).", display=display.none)
@@ -284,6 +280,24 @@ lastPayoutTime= input.time(timestamp("2024-01-01T00:00:00"), "Last payout (consi
 // === 0 · FIRM PRESET — auto-fills account rules from data/propfirms.json ======
 // Futures (trailing-DD) firms only. Forex/static firms run via the Python
 // backtester until the static-DD Pine engine is added. Manual inputs stay as override.
+// === Daily risk-gate (D-45) =================================================
+// Twee ONAFHANKELIJKE drempels per sessie, allebei op GEREALISEERDE P&L:
+//   DLL   - cum realized <= -DLL         -> halt
+//   Trail - na trigger T volgt hij de piek; cum <= piek - B -> halt
+// De trail kijkt bewust alleen naar trade-closes: intra-trade ruis mag er niet aan zitten.
+// Beide voeden dayHalted, zodat de bestaande machinerie (cancel + close_all + close naar
+// PMT + entry-blokkade) ongewijzigd hergebruikt wordt - geen tweede executiepad.
+useRiskGate = input.bool(false, "Daily risk-gate", inline="rg1", group=GROUP_RG, tooltip="Off = behaviour of this engine as frozen. On adds a session loss limit and a give-back trail on realized P&L, on top of the account rules below.")
+rgDLL       = input.float(150, "DLL $", minval=0, step=10, inline="rg1", group=GROUP_RG)
+rgTriggerT  = input.float(10,  "Trail arms above $", minval=0, step=1, inline="rg2", group=GROUP_RG)
+rgBufferB   = input.float(100, "give-back $", minval=0, step=1, inline="rg2", group=GROUP_RG)
+rgDllBasis  = input.string("Realized + open (cuts the trade)", "DLL basis", options=["Realized + open (cuts the trade)","Realized only (halts after the close)"], group=GROUP_RG,
+     tooltip="Realized + open makes the DLL a loss LIMITER: the position closes mid-trade the moment realized+open reaches it. Realized only makes it a halt TRIGGER: the losing trade runs to its stop first and the day closes after. Same number of halted days, very different cost. The trail works on trade closes in both modes.", display=display.none)
+rgRollHour  = input.int(18, "Session roll hour", minval=0, maxval=23, group=GROUP_RG, tooltip="Where session P&L, peak and halt reset.", display=display.none)
+rgUseWindow = input.bool(false, "Entries only inside window", inline="rg3", group=GROUP_RG)
+rgWinStart  = input.int(18, "from", minval=0, maxval=23, inline="rg3", group=GROUP_RG)
+rgWinEnd    = input.int(23, "to", minval=0, maxval=23, inline="rg3", group=GROUP_RG, tooltip="Inclusive: 23 = through 23:59. Outside the window exits still fire, entries do not.")
+
 useFirmPreset = input.bool(true, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
 firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
@@ -716,16 +730,11 @@ bool orGateLong  = not useOrBreakout or (orBrokeLong  and not (orOneSetup and or
 bool orGateShort = not useOrBreakout or (orBrokeShort and not (orOneSetup and orUsedShort))
 
 // === PA CONTEXT FILTERS — berekening (ex-ante, geen repaint) =================
-bool paFiltersActive = usePaFilters and not useOrBreakout
-float _volMa   = ta.sma(volume, relVolLen)
-float relVol   = not na(_volMa) and _volMa > 0 ? volume / _volMa : na
-bool relVolOK  = not (paFiltersActive and useRelVolFilter) or na(relVol) or relVol <= relVolMax
-float _bbStd   = ta.stdev(close, bbwpStdLen)
-float bbwpVal  = ta.percentrank(_bbStd, bbwpLook) / 100.0
-bool bbwpOK    = not (paFiltersActive and useBbwpFilter) or na(bbwpVal) or bbwpVal <= bbwpMax
-int  _mod      = f_minuteOfDay()
-bool rthOpenBlock = paFiltersActive and blockRthOpen and _mod >= rthOpenLo and _mod < rthOpenHi
-bool paFiltersOK  = relVolOK and bbwpOK and not rthOpenBlock
+// Het oude PA-filterblok (relatief volume / BBWP / RTH-open-blok) is 25-08 verwijderd:
+// usePaFilters, useRelVolFilter en useBbwpFilter stonden alle drie als harde constante
+// op false, dus paFiltersOK was altijd true. De BBWP daarin botste bovendien in naam
+// met de werkende BBWP uit groep 9 · SIGNAL — Filters.
+bool paFiltersOK = true
 
 timeGatePass = timeGatePassRaw and paFiltersOK
 inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
@@ -1079,9 +1088,39 @@ bool dayTrailArmed = dayTrailModel == "Legacy: activation = giveback" ? riskDayP
 float dayTrailGivebackEff = dayTrailModel == "Legacy: activation = giveback" ? dayTrailUSDEff : dayTrailGivebackUSDEff
 dayTrailHit = _dexTrailOn and dayTrailArmed and runningPnL <= riskDayPeak - dayTrailGivebackEff
 dayCapHit   = _dexCapOn and riskDayPeak >= dayCapUSDEff
-if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit)
+// --- risk-gate: sessie-state op GEREALISEERDE P&L ---------------------------
+var float rgBaseNet    = na
+var float rgPeak       = 0.0
+var float rgExitLvl    = na
+var bool  rgTrailArmed = false
+var int   rgClosedSeen = 0
+int  _rgHour = hour(time, activeTz)
+bool rgRoll  = na(rgBaseNet) or (_rgHour == rgRollHour and nz(hour(time[1], activeTz), -1) != rgRollHour)
+if rgRoll
+    rgBaseNet    := strategy.netprofit
+    rgPeak       := 0.0
+    rgExitLvl    := na
+    rgTrailArmed := false
+    rgClosedSeen := strategy.closedtrades
+float rgCum = strategy.netprofit - nz(rgBaseNet, strategy.netprofit)
+if useRiskGate and strategy.closedtrades > rgClosedSeen
+    rgClosedSeen := strategy.closedtrades
+    if not rgTrailArmed and rgTriggerT > 0 and rgCum >= rgTriggerT
+        rgTrailArmed := true
+        rgPeak       := rgCum
+        rgExitLvl    := rgCum - rgBufferB
+    else if rgTrailArmed and rgCum > rgPeak
+        rgPeak    := rgCum
+        rgExitLvl := rgPeak - rgBufferB
+bool  rgDllOpen = rgDllBasis == "Realized + open (cuts the trade)"
+float rgLive    = rgCum + (rgDllOpen ? nz(strategy.openprofit) : 0.0)
+bool rgDllHit   = useRiskGate and rgDLL > 0 and rgLive <= -rgDLL
+bool rgTrailHit = useRiskGate and rgTrailArmed and not na(rgExitLvl) and rgCum <= rgExitLvl
+bool rgWindowOK = not (useRiskGate and rgUseWindow) or (_rgHour >= rgWinStart and _rgHour <= rgWinEnd)
+
+if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
     dayHalted := true
-    haltReason := dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
+    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
 
 // === ACCOUNT ENGINE (trailing floor / eval goal / payout) ====================
 float acctPnL      = acctPnlOffset + strategy.netprofit - paResetPnLPrev + strategy.openprofit
@@ -1172,7 +1211,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
-canTrade = timeGatePass and evtGateOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
+canTrade = timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
 
 
 // ============================================================================
@@ -1359,7 +1398,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";filters=" + (useBbwpFilter ? "bbwp" : "") + (useEmaFilter ? "ema" : "") + (useMfiFilter ? "mfi" : "") + (usePocFilter ? "poc" : "") + (useDpFilter ? "dp" : "") + (allowLongs and allowShorts ? "" : allowLongs ? "L" : "S") + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";rg=" + (useRiskGate ? str.tostring(rgDLL, "#") + "/" + str.tostring(rgTriggerT, "#") + "/" + str.tostring(rgBufferB, "#") : "off") + ";filters=" + (useBbwpFilter ? "bbwp" : "") + (useEmaFilter ? "ema" : "") + (useMfiFilter ? "mfi" : "") + (usePocFilter ? "poc" : "") + (useDpFilter ? "dp" : "") + (allowLongs and allowShorts ? "" : allowLongs ? "L" : "S") + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent

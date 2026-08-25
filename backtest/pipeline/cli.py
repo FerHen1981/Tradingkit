@@ -436,6 +436,63 @@ def _write_and_record_stage2(engine, dataset, k, years, status, verdict):
                                       "status": status}, default=str), flush=True)
 
 
+def cmd_scorecard(args):
+    """Rich performance scorecard for one engine on one dataset — the Analysis view.
+
+    Not a pipeline gate: it does not judge pass/fail, it MEASURES. Runs the engine
+    once and reports the full performance picture (equity curve, streaks, best/worst,
+    per-side split, MFE/MAE, hold time, exit-reason edge). Default posture is
+    DEPLOYMENT (research_mode=False — the engine as it runs live, account overlay on);
+    --raw strips to the 1-contract intrinsic mechanic (no PA sizing, no day caps),
+    the same view stage 2 uses."""
+    import dataclasses
+    from .. import data as dm, indicators as im
+    from ..engine import Engine
+    from . import scorecard as sc
+
+    path, sym = _dataset_path(args.dataset)
+    base = fleet.engine_config(args.engine)
+    posture = "raw (1 contract, geen overlay)" if args.raw else "deployment (overlay aan)"
+    print(f"scorecard · {args.engine} op {args.dataset} · {posture}")
+
+    cfg = (dataclasses.replace(base, contract_size=1.0, day_exit_mode="Off")
+           if args.raw else base)
+    df = dm.load(path)
+    if args.since:
+        df = dm.slice_dates(df, since=args.since)
+    if args.until:
+        df = dm.slice_dates(df, until=args.until)
+    if df.empty:
+        raise SystemExit(f"dataset {args.dataset!r} bevat geen bars in het gevraagde venster.")
+    print(f"  {len(df):,} bars {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+
+    res = Engine(cfg, df, im.compute(df, cfg), research_mode=not args.raw).run()
+    card = sc.scorecard(res)
+    card["engine"], card["dataset"], card["posture"] = args.engine, args.dataset, \
+        ("raw" if args.raw else "deploy")
+    card["window"] = {"since": args.since, "until": args.until, "bars": len(df)}
+
+    k = card["kpis"]
+    if not k.get("trades"):
+        print("  GEEN trades — niets te scoren.")
+    else:
+        bd = card["by_direction"]
+        print(f"\n  {k['trades']} trades · net ${k['net_profit']:,.0f} · PF {k['profit_factor']} · "
+              f"WR {k['win_rate_pct']}% · E ${k['expectancy']}/trade · maxDD ${k['max_drawdown']:,.0f}")
+        print(f"    long {bd['long']['trades']} (net ${bd['long']['net']:,.0f}, PF {bd['long']['pf']}) · "
+              f"short {bd['short']['trades']} (net ${bd['short']['net']:,.0f}, PF {bd['short']['pf']})")
+        st = card["streaks"]
+        print(f"    langste win-reeks {st['longest_win']} · verlies-reeks {st['longest_loss']}")
+        ex = card["excursion"]
+        print(f"    MFE ø {ex['avg_mfe_ticks']}t · MAE ø {ex['avg_mae_ticks']}t · "
+              f"hold ø {card['hold_time_bars']['avg']} bars")
+        print(f"    exit-redenen: " + ", ".join(f"{r['reason']} {r['trades']}"
+                                                 for r in card["exit_reason_edge"][:6]))
+
+    art = _write_artifact(args.engine, "scorecard", card)
+    print(f"  artefact {art}")
+    print("SCORECARD_JSON " + json.dumps(card, default=str), flush=True)
+
 
 def _fleet_dataset_for(market):
     """Best dataset for a market: the real micro if present, else its twin,
@@ -1182,6 +1239,14 @@ def main():
                           "(grondregel 10 blijft gemeld)")
     p10.add_argument("--diff", action="store_true",
                      help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
+
+    psc = sub.add_parser("scorecard"); psc.set_defaults(fn=cmd_scorecard)
+    psc.add_argument("--dataset", required=True)
+    psc.add_argument("--engine", required=True, choices=fleet.names())
+    psc.add_argument("--since"); psc.add_argument("--until")
+    psc.add_argument("--raw", action="store_true",
+                     help="1 contract, geen account-overlay/dagcaps — de intrinsieke mechaniek "
+                          "(default is deployment-houding, overlay aan)")
 
 
     pr = sub.add_parser("reset"); pr.set_defaults(fn=cmd_reset)

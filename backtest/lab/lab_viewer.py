@@ -799,6 +799,27 @@ def _start_stage(q) -> tuple[dict, int]:
     return {"error": f"stage {stage!r} is not implemented yet"}, 400
 
 
+def _start_scorecard(q) -> tuple[dict, int]:
+    """Analysis scorecard — run one engine on one dataset and emit SCORECARD_JSON."""
+    from ..pipeline import fleet
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    engine = (q.get("engine") or [""])[0]
+    if engine not in fleet.names():
+        return {"error": "pick an engine for the scorecard"}, 400
+    cmd = [sys.executable, "-m", "backtest.pipeline.cli", "scorecard",
+           "--dataset", dataset, "--engine", engine]
+    if (q.get("posture") or [""])[0] == "raw":
+        cmd.append("--raw")
+    for name, flag in (("since", "--since"), ("until", "--until")):
+        v = (q.get(name) or [""])[0].strip()
+        if v:
+            cmd += [flag, v]
+    return _spawn(cmd, f"scorecard · {engine}"), 200
+
+
 def _export_dirs() -> list[Path]:
     """Where TradingView exports may live: uploaded ones under $LAB_DIR/exports,
     and the ones committed as evidence in validation/exports (so a clean checkout
@@ -977,6 +998,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(body, code)
         if u.path == "/api/stage":
             body, code = _start_stage(q)
+            return self._json(body, code)
+        if u.path == "/api/scorecard":
+            body, code = _start_scorecard(q)
             return self._json(body, code)
         if u.path == "/api/portfolio":
             body, code = _start_portfolio(q)
@@ -1246,7 +1270,7 @@ function diagnosisHtml(diag){
     +`<span style="flex:1">${(f.message||'').replace(/</g,'&lt;')}</span></div>`).join('');
   return `<div style="margin-top:12px;padding:12px;background:rgba(90,162,255,.06);border:1px solid var(--line);border-radius:4px">`
     +`<b>Why this run behaved this way</b> <span class=muted>— derived from the trades and the signal flow, no pre-assumption the parameters are right. `
-    +`Sweep the flagged parameter (Test → Sweep) to see the response.</span>`
+    +`Sweep the flagged parameter (Strats → Sweep) to see the response.</span>`
     +`<div style="margin-top:6px">${rows}</div></div>`;
 }
 function regimeHtml(reg){
@@ -1440,6 +1464,7 @@ async function loadWizard(){
     const swD=$('#swDs');if(swD)swD.innerHTML=dsOpts;
     const esD=$('#esDs');if(esD)esD.innerHTML=dsOpts;
     const stD=$('#stDs');if(stD)stD.innerHTML=dsOpts;
+    const scD=$('#scDs');if(scD)scD.innerHTML=dsOpts;
     loadLibrary();
   }catch(e){}
 }
@@ -1472,7 +1497,7 @@ function loadLibrary(){
   $('#libCount').textContent=specs.length+' strategies';
   $('#libRows').querySelectorAll('.card').forEach(el=>el.addEventListener('click',()=>{
     const sel=$('#wSpec');if(sel)sel.value=el.dataset.id;
-    showTab('test');                       // create → test: card loads into the runner
+    showTab('strats');                     // library card loads into the backtest runner (Strats)
     window.scrollTo({top:0,behavior:'smooth'});
     sel&&sel.focus();
   }));
@@ -1577,7 +1602,7 @@ function renderAutotune(at){
   box.style.display='block';
   if(!at.tuned.length){
     box.innerHTML='<div class=muted>No sweepable parameter flagged — below is what the data <b>did</b> find. '
-      +'If the edge itself is absent, tuning cannot create one: that is the job of the discovery funnel (2 · Create).</div>'
+      +'If the edge itself is absent, tuning cannot create one: that is the job of the discovery funnel (Verkenning).</div>'
       +(diagnosisHtml(at.diagnosis)||'<div class=muted style="margin-top:8px">No findings at all — the mechanics look consistent with this data; the (lack of) edge is the signal itself.</div>');
     return}
   const blocks=at.tuned.map(t=>{
@@ -1661,13 +1686,13 @@ function gqs(){return 'dataset='+encodeURIComponent($('#gDs').value)+'&n='+encod
 $('#gRun').addEventListener('click',()=>{if(!$('#gDs').value){$('#gLog').style.display='block';$('#gLog').textContent='Upload a dataset first.';return}
   postJob('/api/generate',gqs(),'#gLog','#gRun',()=>{load();loadCandidates();syncVerifyWhat();});});
 $('#gVerify').addEventListener('click',()=>postJob('/api/verify',gqs(),'#vfLog','#gVerify',()=>{load();loadCandidates();}));
-// toon welke instellingen Verify gebruikt (ze staan in 2 · Create)
+// toon welke instellingen Verify gebruikt (ze staan in Verkenning)
 function syncVerifyWhat(){
   const el=$('#vfWhat');if(!el)return;
   const ds=$('#gDs')&&$('#gDs').value||'—';
   el.textContent='uses '+ds+' · '+($('#gTf')?$('#gTf').value:'?')+' · holdout '
     +($('#gHold')?$('#gHold').value:'?')+'d · seed '+($('#gSeed')?$('#gSeed').value:'0')
-    +'  (set in 2 · Create)';
+    +'  (set in Verkenning)';
 }
 ['#gDs','#gTf','#gHold','#gSeed'].forEach(sel=>{const e=$(sel);if(e)e.addEventListener('change',syncVerifyWhat)});
 async function loadCandidates(){
@@ -1721,9 +1746,9 @@ async function saveBuilder(){
     const r=await (await fetch('/api/builder/save',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(builderBody())})).json();
     if(!r.ok){m.innerHTML='<span class=neg>'+r.error+'</span>';return;}
-    m.innerHTML='saved <b style="color:var(--gold)">'+r.name+'</b> — opened in Test';
+    m.innerHTML='saved <b style="color:var(--gold)">'+r.name+'</b> — geopend in Strats';
     await loadWizard(); const sel=$('#wSpec'); if(sel)sel.value=r.id;
-    showTab('test'); window.scrollTo({top:0,behavior:'smooth'});
+    showTab('strats'); window.scrollTo({top:0,behavior:'smooth'});
   }catch(e){m.innerHTML='<span class=neg>'+e+'</span>';}
 }
 async function loadBuilder(){
@@ -1802,7 +1827,9 @@ async function loadPipeline(){
       <td style="text-align:left">${f.regime}</td></tr>`
      +(f.pine_defect?`<tr><td colspan=10 style="text-align:left;color:var(--rose);font-size:12px;padding:2px 6px 8px">
        <b>! brondefect</b> — ${f.pine_defect.replace(/</g,'&lt;')}</td></tr>`:'')).join('')+'</tbody></table>';
-  const es=$('#stEngine'); if(es) es.innerHTML=PIPE.fleet.map(f=>`<option value="${f.name}">${f.name.replace('EL_','')}</option>`).join('');
+  const engOpts=PIPE.fleet.map(f=>`<option value="${f.name}">${f.name.replace('EL_','')}</option>`).join('');
+  const es=$('#stEngine'); if(es) es.innerHTML=engOpts;
+  const sce=$('#scEngine'); if(sce) sce.innerHTML=engOpts;
 }
 function showEngine(name){
   const view=(PIPE.detail||{})[name]||[];
@@ -1899,14 +1926,65 @@ $('#stRun')&&$('#stRun').addEventListener('click',()=>{
   postJob('/api/stage',qs,'#stLog','#stRun',()=>{loadPipeline();});
 });
 
+// --- scorecard (Analysis) ---
+function _svgEquity(ec){
+  const pts=(ec&&ec.points)||[]; if(pts.length<2) return '<div class=muted>te weinig trades voor een curve</div>';
+  const W=680,H=160,pad=6, ys=pts.map(p=>p.equity), mn=Math.min(0,...ys), mx=Math.max(0,...ys), rng=(mx-mn)||1;
+  const x=i=>pad+(W-2*pad)*i/(pts.length-1), y=v=>pad+(H-2*pad)*(1-(v-mn)/rng);
+  const path=pts.map((p,i)=>`${i?'L':'M'}${x(i).toFixed(1)},${y(p.equity).toFixed(1)}`).join(' ');
+  const zeroY=y(0).toFixed(1), col=(ys[ys.length-1]>=0)?'var(--gold)':'var(--rose)';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio=none style="width:100%;height:${H}px;background:var(--deep);border:1px solid var(--line);border-radius:3px">
+    <line x1="${pad}" y1="${zeroY}" x2="${W-pad}" y2="${zeroY}" stroke="var(--line)" stroke-dasharray="3 3"/>
+    <path d="${path}" fill=none stroke="${col}" stroke-width=1.6 vector-effect=non-scaling-stroke/></svg>`;
+}
+function renderScorecard(card){
+  const box=$('#scOut'); box.style.display='block';
+  if(!card||card.empty||!card.trades){box.innerHTML='<div class=muted>Geen trades in dit venster.</div>';return}
+  const k=card.kpis,bd=card.by_direction,st=card.streaks,ex=card.excursion,ht=card.hold_time_bars,dy=card.days;
+  const money=v=>'$'+Math.round(v).toLocaleString();
+  const kpi=(lab,val,cls)=>`<div style="min-width:92px"><div class=muted style="font-size:11px">${lab}</div><div style="font-family:var(--display);font-size:20px;color:${cls||'var(--gold)'}">${val}</div></div>`;
+  const dirRow=(nm,d)=>[nm,d.trades,money(d.net),'PF '+d.pf,d.win_rate_pct+'%','E $'+d.expectancy];
+  $('#scMeta').textContent=card.engine.replace('EL_','')+' · '+card.dataset+' · '+card.posture;
+  box.innerHTML=
+    `<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">
+      ${kpi('trades',k.trades)}${kpi('net',money(k.net_profit),k.net_profit>=0?'var(--azure)':'var(--rose)')}
+      ${kpi('PF',k.profit_factor)}${kpi('win%',k.win_rate_pct)}${kpi('E/trade','$'+k.expectancy)}
+      ${kpi('max DD',money(k.max_drawdown),'var(--rose)')}</div>`
+    +`<div class=muted style="font-size:11px;margin-bottom:3px">equity-curve — gebankt per trade${card.equity_curve.downsampled?' (uitgedund)':''}</div>`
+    +_svgEquity(card.equity_curve)
+    +`<div style="display:flex;gap:26px;flex-wrap:wrap;margin-top:14px">
+        <div><div class=muted style="font-size:11px">per richting</div>${_tbl([dirRow('long',bd.long),dirRow('short',bd.short)])}</div>
+        <div><div class=muted style="font-size:11px">streaks &amp; excursie</div>${_tbl([
+          ['langste win',st.longest_win],['langste verlies',st.longest_loss],
+          ['MFE ø (t)',ex.avg_mfe_ticks],['MAE ø (t)',ex.avg_mae_ticks],['hold ø (bars)',ht.avg]])}</div>
+        <div><div class=muted style="font-size:11px">best / worst &amp; dagen</div>${_tbl([
+          ['best',money(card.best_trade.net)+' ('+(card.best_trade.reason||'?')+')'],
+          ['worst',money(card.worst_trade.net)+' ('+(card.worst_trade.reason||'?')+')'],
+          ['win-dagen',dy.win_days+'/'+dy.trading_days+' ('+dy.win_day_pct+'%)'],
+          ['beste/slechtste dag',money(dy.best_day)+' / '+money(dy.worst_day)]])}</div>
+      </div>`
+    +`<div style="margin-top:14px"><div class=muted style="font-size:11px">exit-redenen (aantal · net)</div>${
+        _tbl((card.exit_reason_edge||[]).map(r=>[r.reason,r.trades,money(r.net)]))}</div>`;
+}
+$('#scRun')&&$('#scRun').addEventListener('click',()=>{
+  const eng=$('#scEngine').value, ds=$('#scDs').value;
+  if(!eng||!ds){$('#scLog').style.display='block';$('#scLog').textContent='Kies een engine én dataset.';return}
+  const qs='engine='+encodeURIComponent(eng)+'&dataset='+encodeURIComponent(ds)+'&posture='+encodeURIComponent($('#scPosture').value);
+  postJob('/api/scorecard',qs,'#scLog','#scRun',(j)=>{
+    const line=(j.log||[]).find(l=>l.startsWith('SCORECARD_JSON '));
+    if(line){try{renderScorecard(JSON.parse(line.slice(15)));}catch(e){$('#scOut').style.display='block';$('#scOut').innerHTML='<div class=muted>kon scorecard niet lezen</div>';}}
+  });
+});
+
 function showTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+name));
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
+  try{history.replaceState(null,'','#'+name);}catch(e){}
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
 const gAdvT=$('#gAdvToggle');
 if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.style.display!=='none';a.style.display=open?'none':'flex';gAdvT.textContent=open?'+ advanced':'− advanced';});
-showTab('pipeline');
+showTab((location.hash&&document.getElementById('tab-'+location.hash.slice(1)))?location.hash.slice(1):'pipeline');
 loadPipeline();loadExports();
 
 loadWizard();loadGenDatasets();
@@ -1933,13 +2011,14 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   <span class=muted id=sub></span></div>
 <div class=kpis id=kpis></div>
 
-<div class=steps>Pipeline: <b>1 Data</b> load it → <b>2 Create</b> discover candidates → <b>3 Test</b> verify · select · tune · match to an account → <b>4 Runs</b> review &amp; promote</div>
+<div class=steps>Levenscyclus: <b>Data</b> laden → <b>Vaults</b> strategie vormen → <b>Strats</b> fijnslijpen → <b>Analysis</b> doormeten → <b>Pijplijn</b> valideren tot live &nbsp;·&nbsp; <b>Verkenning</b> = nieuwe strategieën ontdekken (vóór bevriezing)</div>
 <div class=tabs id=tabs>
-  <button data-tab=data>1 · Data</button>
-  <button data-tab=pipeline class=on>2 · Pijplijn</button>
-  <button data-tab=create>3 · Create</button>
-  <button data-tab=test>4 · Test</button>
-  <button data-tab=runs>5 · Runs</button>
+  <button data-tab=data>Data</button>
+  <button data-tab=vaults>Vaults</button>
+  <button data-tab=strats>Strats</button>
+  <button data-tab=analysis>Analysis</button>
+  <button data-tab=pipeline class=on>Pijplijn</button>
+  <button data-tab=verkenning>Verkenning</button>
 </div>
 
 <!-- ===================== 1 · DATA ===================== -->
@@ -1958,9 +2037,19 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
   </div>
 </div>
 
-<!-- ===================== 2 · CREATE ===================== -->
+<!-- ===================== VAULTS ===================== -->
+<div class=tab id=tab-vaults>
+  <div class=hint style="margin-bottom:14px">Waar strategieën tot stand komen — de <b>grofmazige</b> basis. Drie ingangen (komen hier samen in een latere ronde): parameters uitschrijven, indicatoren aanvinken, of een Pine-script uploaden. Voorlopig toont dit de bestaande, gepromote strategie-bibliotheek. Een strategie wordt pas een pijplijn-engine nadat hij bevroren is.</div>
 
-<!-- ===================== 2 · PIJPLIJN ===================== -->
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
+    <div class=hint>Governed + promoted strategies — grade, entries, gates, exit and framework stack. Click a card to load it into the Strats runner.</div>
+    <div class=lib id=libRows></div>
+  </div>
+</div>
+
+<!-- ===================== PIJPLIJN ===================== -->
 <div class=tab id=tab-pipeline>
 
   <div class=panel>
@@ -2019,12 +2108,13 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
 </div>
 
-<div class=tab id=tab-create>
+<div class=tab id=tab-verkenning>
+  <div class=hint style="margin-bottom:14px">De <b>mill</b> — strategie-ontdekking vóór bevriezing. Doorzoek een ruimte, vind kandidaten, toets ze out-of-sample, selecteer een niet-gecorreleerde set. Dit is de dev-kant: een gevonden strategie gaat pas naar de pijplijn nádat hij bevroren is (grondregel 1: pariteit vóór optimalisatie). Losstaand van de bevroren vloot.</div>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
       <b class=sub>Discover strategies</b><span class=muted>seed a thesis — the machine finds the rest</span></div>
-    <div class=hint>You set the <b>thesis</b> (and optionally a regime to focus on); the search <b>discovers</b> the entry, filters, params <b>and the stop/target mechanics</b> — nothing is assumed up front, not even per asset. It screens candidates in-sample, then Verify OOS. Filters and mechanics are an <b>outcome</b> of the test. Leave the thesis on "Any" for unbiased broad discovery. Results appear in Test → Candidates. Tip: use 5m or 15m (not 1m) and set a "Coarse since" date under + advanced to keep the 20-year screen fast.</div>
+    <div class=hint>You set the <b>thesis</b> (and optionally a regime to focus on); the search <b>discovers</b> the entry, filters, params <b>and the stop/target mechanics</b> — nothing is assumed up front, not even per asset. It screens candidates in-sample, then Verify OOS. Filters and mechanics are an <b>outcome</b> of the test. Leave the thesis on "Any" for unbiased broad discovery. Results appear in the Candidates panel below. Tip: use 5m or 15m (not 1m) and set a "Coarse since" date under + advanced to keep the 20-year screen fast.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Dataset</span><select id=gDs style="min-width:150px"></select></label>
       <label class=field><span class=fld>Thesis</span><select id=gThesis title="constrain the search to one setup-class, or Any for broad discovery">
@@ -2057,20 +2147,8 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>Strategy library</b><span class=muted id=libCount>—</span></div>
-    <div class=hint>Governed + promoted strategies — grade, entries, gates, exit and framework stack. Click a card to load it into Test.</div>
-    <div class=lib id=libRows></div>
-  </div>
-
-</div>
-
-<!-- ===================== 3 · TEST ===================== -->
-<div class=tab id=tab-test>
-
-  <div class=panel>
-    <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>3.1 · Candidates — what survived the OOS gate</b><span class=muted id=lbSrc>no candidates yet</span></div>
-    <div class=hint>The overfit gate: every candidate from <b>2 · Create</b> is re-run on the untouched
+      <b class=sub>Candidates — wat de OOS-poort overleefde</b><span class=muted id=lbSrc>no candidates yet</span></div>
+    <div class=hint>The overfit gate: every candidate from <b>Discover</b> above is re-run on the untouched
       hold-out window. IS PF next to OOS PF — what does not hold here won the in-sample lottery.
       Run this <b>before</b> 3.2, it also records the daily series the portfolio step needs.</div>
     <div class=up style="margin-top:12px">
@@ -2084,12 +2162,9 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     </tr></thead><tbody id=lbrows></tbody></table></div>
   </div>
 
-</div>
-
-<!-- ===================== 4 · RUNS ===================== -->
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>3.2 · Portfolio — which survivors are actually different</b>
+      <b class=sub>Portfolio — welke overlevers écht verschillen</b>
       <span class=muted>a set, not a ranking</span></div>
     <div class=hint>The OOS gate judges every candidate <i>on its own</i>, so survivors are often the
       same trade under different names — and running clones on separate prop accounts means they
@@ -2108,9 +2183,15 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <pre id=pfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:180px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
+</div>
+
+<!-- ===================== STRATS ===================== -->
+<div class=tab id=tab-strats>
+  <div class=hint style="margin-bottom:14px">Fijnslijpen van bestaande strategieën — parameter-presets tunen, optimaliseren en multi-timeframe testen. Optimalisatie hoort <b>hier</b> thuis (dev), niet ná bevriezing (grondregel 1).</div>
+
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">
-      <b class=sub>3.3 · Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
+      <b class=sub>Auto-tune from the data</b><span class=muted>the data decides — no parameter, no ranges</span></div>
     <div class=hint>Runs the strategy, lets the <b>diagnosis</b> name which parameters are off (stop too wide, FVG band too big, position too large) and derive each range from the measured distribution, then sweeps them. Every value is measured on <b>both</b> raw edge and funded survival — the outcome tells you what the strategy is suited for (funded · eval-only · nothing); you choose no goal up front. Tunes on the <b>last 3 years</b> (coarse gate, same design as the mill) — validate the winner on the full history with Run/Verify. On a 2-core box run this OR a backtest, not both at once.</div>
     <div class=up style="margin-top:12px">
       <label class=field><span class=fld>Strategy</span><select id=swSpec style="min-width:190px"></select></label>
@@ -2184,7 +2265,27 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     <pre id=wLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:220px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
-<div class=tab id=tab-runs>
+</div>
+
+<!-- ===================== ANALYSIS ===================== -->
+<div class=tab id=tab-analysis>
+  <div class=hint style="margin-bottom:14px">Doormeten, geen poort — het volledige performancebeeld van één engine op één dataset: equity-curve, streaks, best/worst, per-richting, MFE/MAE, hold-time en exit-redenen. Onderaan de run-historie.</div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Scorecard — meet één engine door</b><span class=muted id=scMeta></span></div>
+    <div class=hint><b>Deployment</b> = zoals de engine live draait (account-overlay aan); <b>Raw</b> = de kale mechaniek (1 contract, geen dagcaps). Geen Sharpe/Sortino in v1 (apart besluit, D-23).</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Engine</span><select id=scEngine style="min-width:210px"></select></label>
+      <label class=field><span class=fld>Dataset</span><select id=scDs style="min-width:150px"></select></label>
+      <label class=field><span class=fld>Houding</span><select id=scPosture>
+        <option value=deploy>Deployment (overlay aan)</option>
+        <option value=raw>Raw (kale mechaniek)</option></select></label>
+      <button class=go id=scRun>Scorecard</button>
+    </div>
+    <div id=scOut style="display:none;margin-top:14px"></div>
+    <pre id=scLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
 
   <div class=panel>
     <div style="display:flex;justify-content:space-between;align-items:baseline">

@@ -12,6 +12,62 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 28. D-02 + D-05 bouwen — risk-gate naar .NET + Python fan-out verwijderen
+**Middleware App → Ferry / Scrum Master / Legacy** · 2026-08-25 · status: MELDING VOORAF
+
+Ferry vroeg deze twee samen af te wikkelen. Twee kleine wijzigingen aan het live
+executiepad plus een grote (maar dode) repo-opruiming.
+
+**D-02 — `AccountRiskGate` in `Mex.Journal.Receiver/Program.cs`.** Één klasse, poort
+vóór `ForwardJsonAsync` in `/signal/{token}`, ná D-40's blocked-gate (die is
+reactief op PMT-antwoorden; D-02 is proactief).
+
+- **HALT-flag** — env `MEX_HALTED_ACCOUNTS=account_id,account_id,…`. Handmatig,
+  onder Ferry's beheer. Nooit een exit blokkeren (dat is bewust: je moet een
+  positie altijd kunnen sluiten).
+- **Daily entry-cap** — env `MEX_ACCOUNT_ENTRY_CAPS=account_id=n,…` en optionele
+  `MEX_DEFAULT_ENTRY_CAP=n`. Sessiedag = 18:00 ET (zelfde grens die D-40 en
+  fills_pairing gebruiken). Alleen entries tellen (buy/sell), exits niet.
+- **Register** ná een geaccepteerde forward (`res.StartsWith("sent")`). Een
+  geweigerde order telt niet als geplaatste positie, dus die telt niet.
+
+Wat is dit **niet**: automatische DLL-halt op basis van dag-P&L. Dat vraagt de
+Tradovate-poller in de receiver en staat als v2 apart. `risk.py` liet die functie
+ook als dormant (`record_fill` was een lege hook), dus dit is pariteit met wat
+`risk.py` daadwerkelijk deed — niet een uitbreiding.
+
+**D-05 stap 2 — dead-path fysiek verwijderen.** De headers zijn 19-08 geplaatst;
+nu D-02 in de .NET-receiver staat, is er geen enkele levende importerende module
+meer. Weg gaan:
+`app/main.py`, `app/router.py`, `app/risk.py`, `app/journal.py`,
+`app/dedupe.py`, `app/models.py`, `app/config.py`, `app/brokers/**` en
+`tests/test_pmt_payload.py` (test op dead-code — de payload-vorm die dit bewees
+komt nu 1:1 van Pine's `f_pmtJSON`, de receiver muteert alleen
+`quantity_multiplier` via D-53). Ook de losse `middleware/dotnet-receiver/Program.cs`
+(oude 810-regel versie) — sinds D-06 is `src/Mex.Journal.Receiver/Program.cs` de
+canonical bron, en de losse root-versie stond alleen te verouderen.
+
+**Wat er blijft:** `viewer.py`, `dashboard_state.py`, `routed_journal.py`,
+`notion_journal.py`, `journal_sync.py`, `fills_pairing.py`, `reconcile_run.py`,
+`reconcile.py`, `account_health.py`, `cash_ledger.py`, `firm_rules.py`,
+`payout_rules.py`, `playbook.py`, `firms.py`, `notify_routing.py`,
+`public_stats.py`, `mex_units/**`, `seed_accounts.py`, `dashboard_meta.py`,
+`notion_recon.py`. Kortom: het live cockpit-, journal-, en reconcile-werk. De
+Python-fan-out is weg.
+
+**Ferry, om D-02 aan te zetten (na `dotnet build src/Mex.Journal.Receiver -c Release`):**
+1. `MEX_HALTED_ACCOUNTS=…` (leeg mag) in de EnvironmentFile.
+2. Optioneel `MEX_ACCOUNT_ENTRY_CAPS=…` en `MEX_DEFAULT_ENTRY_CAP=…` voor hard-caps.
+3. `sudo systemctl restart mex-receiver`.
+
+Zonder deze env-vars is D-02 dormant — niets verandert aan de dispatch. Zet je
+`MEX_HALTED_ACCOUNTS`, dan gaan die accounts onmiddellijk op slot voor entries
+(exits blijven mogelijk).
+
+Pushen zodra de code + verwijderingen staan en de Python-testsuite groen is.
+
+---
+
 ### 27. D-40 + D-53 bouwen in `Program.cs` — live executiepad
 **Middleware App → Ferry / Scrum Master / Legacy** · 2026-08-25 · status: MELDING VOORAF
 

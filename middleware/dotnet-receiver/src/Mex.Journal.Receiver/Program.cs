@@ -175,6 +175,24 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = msg, blocked = true });
         }
 
+        // D-02 · proactieve risk-gate — port van de oude Python risk.py naar het live pad.
+        // Twee dingen: een handmatig HALT-flag per account (env MEX_HALTED_ACCOUNTS) en
+        // een daily entry-cap per account (env MEX_ACCOUNT_ENTRY_CAPS + optioneel
+        // MEX_DEFAULT_ENTRY_CAP). Sessiedag rolt om 18:00 ET, zelfde grens als D-40.
+        // Alleen entries; exits blijven altijd mogelijk.
+        if (isEntry && !string.IsNullOrEmpty(acct))
+        {
+            var (allow, reason) = AccountRiskGate.Allow(acct, DateTime.UtcNow);
+            if (!allow)
+            {
+                var msg = $"GEWEIGERD lokaal — risk-gate: {reason}";
+                await AppendAsync(storePath, "pmt", body, msg, acct);
+                await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+                    $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{msg}", 14701138);
+                return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = msg, blocked = true, gate = "risk" });
+            }
+        }
+
         var rithmicList = Environment.GetEnvironmentVariable("MEX_PMT_RITHMIC_ACCOUNTS") ?? "";
         var useRithmic = !string.IsNullOrWhiteSpace(rithmicList) && !string.IsNullOrEmpty(acct)
             && rithmicList.Split(',').Select(x => x.Trim()).Contains(acct);
@@ -188,6 +206,12 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         // order na de weigering vertrok al — die is nu geweigerd — daarna is het dicht.
         if (res.StartsWith("GEWEIGERD") && !string.IsNullOrEmpty(acct))
             AccountBlockGate.RegisterIfLimitMarker(acct, res, DateTime.UtcNow);
+
+        // D-02 · tel de entry als hij daadwerkelijk is doorgezet. Een geweigerde of
+        // droog-uitgevoerde order telt niet voor de daily-cap — anders zou een burst
+        // van dry-runs een echte cap laten volstromen zonder dat er ooit iets is geplaatst.
+        if (isEntry && res.StartsWith("sent") && !string.IsNullOrEmpty(acct))
+            AccountRiskGate.RegisterEntry(acct, DateTime.UtcNow);
 
         // Een geweigerde order is stil: er komt geen fill, geen exit, geen kaart.
         // Zonder melding merk je het pas als je het bij de broker gaat zoeken.
@@ -492,6 +516,119 @@ public static class AccountBlockGate
     // Voor tests / debugging.
     public static void Reset() => _blocked.Clear();
     public static int Count => _blocked.Count;
+}
+
+// D-02 · Proactieve risk-gate per account. Poort van de oude Python risk.py naar het
+// live pad. Twee dingen die risk.py deed en die risico droegen zolang ze op main.py
+// hingen (dood pad): een handmatige HALT-flag en een daily entry-cap.
+//
+// Handmatige HALT-flag  — env MEX_HALTED_ACCOUNTS (kommalijst account_id). Ferry
+// zet dit bij een account dat vandaag niets meer mag; zet het weer aan door de
+// naam eruit te halen en de service te herstarten. Automatische DLL-halt op basis
+// van dag-P&L is v2 en vraagt de Tradovate-poller in de receiver.
+//
+// Daily entry-cap  — env MEX_ACCOUNT_ENTRY_CAPS (account_id=n,…) + optionele
+// MEX_DEFAULT_ENTRY_CAP als globale fallback. Sessiedag = 18:00 ET (zelfde grens
+// als D-40 en fills_pairing.session_date). Alleen entries (buy/sell); een exit
+// wordt nooit geblokkeerd — je moet een positie altijd kunnen sluiten.
+public static class AccountRiskGate
+{
+    static readonly HashSet<string> _halted = new(StringComparer.OrdinalIgnoreCase);
+    static readonly Dictionary<string, int> _caps = new(StringComparer.OrdinalIgnoreCase);
+    static int _defaultCap;
+
+    static readonly ConcurrentDictionary<string, (DateTime SessionRollUtc, int Count)> _entries = new();
+    static readonly TimeZoneInfo _et = ResolveEt();
+
+    static AccountRiskGate()
+    {
+        LoadHalts(Environment.GetEnvironmentVariable("MEX_HALTED_ACCOUNTS") ?? "");
+        LoadCaps(Environment.GetEnvironmentVariable("MEX_ACCOUNT_ENTRY_CAPS") ?? "");
+        int.TryParse(Environment.GetEnvironmentVariable("MEX_DEFAULT_ENTRY_CAP") ?? "0", out _defaultCap);
+    }
+
+    static TimeZoneInfo ResolveEt()
+    {
+        try { return TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+    }
+
+    // Zelfde definitie als AccountBlockGate.NextSessionRollUtc — bewust hier herhaald in
+    // plaats van een verwijzing over te dragen: dit is één regel per klasse en houdt de
+    // afhankelijkheid nul (twee losse gates die niet stiekem samen kunnen breken).
+    static DateTime NextSessionRollUtc(DateTime nowUtc)
+    {
+        var nowEt = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, _et);
+        var todayRollEt = new DateTime(nowEt.Year, nowEt.Month, nowEt.Day, 18, 0, 0, DateTimeKind.Unspecified);
+        var rollEt = nowEt < todayRollEt ? todayRollEt : todayRollEt.AddDays(1);
+        return TimeZoneInfo.ConvertTimeToUtc(rollEt, _et);
+    }
+
+    public static void LoadHalts(string spec)
+    {
+        _halted.Clear();
+        foreach (var a in (spec ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+            _halted.Add(a.Trim());
+    }
+
+    public static void LoadCaps(string spec)
+    {
+        _caps.Clear();
+        foreach (var part in (spec ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && int.TryParse(kv[1].Trim(), out var n) && n > 0)
+                _caps[kv[0].Trim()] = n;
+        }
+    }
+
+    public static void SetDefaultCap(int cap) => _defaultCap = cap > 0 ? cap : 0;
+
+    public static bool IsHalted(string account) =>
+        !string.IsNullOrEmpty(account) && _halted.Contains(account);
+
+    // Effectieve cap voor dit account: expliciet > default > geen cap (0).
+    public static int CapFor(string account)
+        => _caps.TryGetValue(account, out var n) ? n : _defaultCap;
+
+    public static int EntryCount(string account, DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(account)) return 0;
+        if (!_entries.TryGetValue(account, out var e)) return 0;
+        if (e.SessionRollUtc <= nowUtc) { _entries.TryRemove(account, out _); return 0; }
+        return e.Count;
+    }
+
+    // (allow, reason). Zonder reden bij `allow=true` — de aanroeper hoeft dan niets te loggen.
+    public static (bool Allow, string Reason) Allow(string account, DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(account)) return (true, "");
+        if (IsHalted(account)) return (false, "account halted (MEX_HALTED_ACCOUNTS)");
+        var cap = CapFor(account);
+        if (cap > 0 && EntryCount(account, nowUtc) >= cap)
+            return (false, $"daily entry cap {cap} reached");
+        return (true, "");
+    }
+
+    // Wordt aangeroepen ná een geslaagde forward (`res.StartsWith("sent")`). Een dry-run
+    // of geweigerde order telt niet mee: anders vult een burst van dry-runs de cap zonder
+    // dat er ooit iets bij de broker is geland.
+    public static void RegisterEntry(string account, DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(account)) return;
+        var roll = NextSessionRollUtc(nowUtc);
+        _entries.AddOrUpdate(account,
+            _ => (roll, 1),
+            (_, prev) => prev.SessionRollUtc > nowUtc
+                ? (prev.SessionRollUtc, prev.Count + 1)
+                : (roll, 1));   // sessie is intussen gerolld → nieuwe teller
+    }
+
+    // Voor tests / debugging.
+    public static void Reset() { _entries.Clear(); _halted.Clear(); _caps.Clear(); _defaultCap = 0; }
+    public static IReadOnlyDictionary<string, int> EntriesSnapshot(DateTime nowUtc)
+        => _entries.Where(kv => kv.Value.SessionRollUtc > nowUtc)
+                   .ToDictionary(kv => kv.Key, kv => kv.Value.Count);
 }
 
 public static class Audit

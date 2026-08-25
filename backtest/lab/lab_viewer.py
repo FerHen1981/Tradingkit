@@ -820,6 +820,34 @@ def _start_scorecard(q) -> tuple[dict, int]:
     return _spawn(cmd, f"scorecard · {engine}"), 200
 
 
+def _start_audit(q) -> tuple[dict, int]:
+    """Data-quality audit for one dataset — emits AUDIT_JSON."""
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    cmd = [sys.executable, "-m", "backtest.lab.dataprep", "audit", "--dataset", dataset]
+    return _spawn(cmd, f"audit · {dataset}"), 200
+
+
+def _start_aggregate(q) -> tuple[dict, int]:
+    """Resample a 1-minute dataset to a coarser timeframe and store it — AGGREGATE_JSON."""
+    from ..config import TIMEFRAMES
+    ds = {d["name"]: d for d in _datasets()}
+    dataset = (q.get("dataset") or [""])[0]
+    if dataset not in ds:
+        return {"error": f"unknown dataset {dataset!r}"}, 400
+    tf = (q.get("tf") or [""])[0].strip().lower()
+    if tf not in TIMEFRAMES or TIMEFRAMES[tf] <= 1:
+        return {"error": f"kies een timeframe grofmaziger dan 1m ({', '.join(t for t in TIMEFRAMES if TIMEFRAMES[t] > 1)})"}, 400
+    cmd = [sys.executable, "-m", "backtest.lab.dataprep", "aggregate",
+           "--dataset", dataset, "--tf", tf]
+    name = (q.get("name") or [""])[0].strip()
+    if name:
+        cmd += ["--name", name]
+    return _spawn(cmd, f"aggregate · {dataset} -> {tf}"), 200
+
+
 def _export_dirs() -> list[Path]:
     """Where TradingView exports may live: uploaded ones under $LAB_DIR/exports,
     and the ones committed as evidence in validation/exports (so a clean checkout
@@ -1001,6 +1029,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(body, code)
         if u.path == "/api/scorecard":
             body, code = _start_scorecard(q)
+            return self._json(body, code)
+        if u.path == "/api/dataset/audit":
+            body, code = _start_audit(q)
+            return self._json(body, code)
+        if u.path == "/api/dataset/aggregate":
+            body, code = _start_aggregate(q)
             return self._json(body, code)
         if u.path == "/api/portfolio":
             body, code = _start_portfolio(q)
@@ -1465,6 +1499,8 @@ async function loadWizard(){
     const esD=$('#esDs');if(esD)esD.innerHTML=dsOpts;
     const stD=$('#stDs');if(stD)stD.innerHTML=dsOpts;
     const scD=$('#scDs');if(scD)scD.innerHTML=dsOpts;
+    const daD=$('#daDs');if(daD)daD.innerHTML=dsOpts;
+    const agD=$('#agDs');if(agD)agD.innerHTML=dsOpts;
     loadLibrary();
   }catch(e){}
 }
@@ -1976,6 +2012,40 @@ $('#scRun')&&$('#scRun').addEventListener('click',()=>{
   });
 });
 
+// --- data prep (Data): validate + aggregate ---
+function renderAudit(rep){
+  const box=$('#daOut'); box.style.display='block';
+  const sev={high:'var(--rose)',medium:'var(--gold)',low:'var(--sub)'};
+  const f=(rep.findings||[]).map(x=>`<div style="color:${sev[x.severity]||'var(--sub)'};font-size:12.5px;margin-top:2px">[${x.severity}] ${x.message}</div>`).join('')
+    ||'<div style="color:var(--azure);font-size:12.5px">geen bevindingen — schoon</div>';
+  const rows=[['bars',(rep.bars||0).toLocaleString()],
+    ['periode',(''+(rep.first||'')).slice(0,10)+' → '+(''+(rep.last||'')).slice(0,10)+' ('+rep.years+'j)'],
+    ['sessies',rep.sessions],['bar-interval',rep.bar_interval],['tijdzone',rep.timezone],
+    ['gaps >6h / intrasessie',(rep.gaps_over_6h??'—')+' / '+(rep.intrasession_gap_minutes??'—')+'m'],
+    ['OHLC-fouten',rep.ohlc_violations],['bar-range (ticks)',rep.median_bar_range_ticks??'—'],
+    ['roll-sprongen',rep.roll_like_jumps??'—'],['Delta ≠0 %',rep.Delta_nonzero_pct??'—']];
+  const vc=rep.verdict==='clean'?'var(--azure)':rep.verdict==='attention'?'var(--rose)':'var(--gold)';
+  box.innerHTML=`<div class=muted style="font-size:11px;margin-bottom:4px">${rep.dataset} · ${rep.symbol||'?'} · verdict <b style="color:${vc}">${rep.verdict}</b></div>`
+    +_tbl(rows)+'<div style="margin-top:8px">'+f+'</div>';
+}
+$('#daRun')&&$('#daRun').addEventListener('click',()=>{
+  const ds=$('#daDs').value; if(!ds){$('#daLog').style.display='block';$('#daLog').textContent='Kies een dataset.';return}
+  postJob('/api/dataset/audit','dataset='+encodeURIComponent(ds),'#daLog','#daRun',(j)=>{
+    const line=(j.log||[]).find(l=>l.startsWith('AUDIT_JSON '));
+    if(line){try{renderAudit(JSON.parse(line.slice(11)));}catch(e){}}
+  });
+});
+$('#agRun')&&$('#agRun').addEventListener('click',()=>{
+  const ds=$('#agDs').value; if(!ds){$('#agLog').style.display='block';$('#agLog').textContent='Kies een bron-dataset.';return}
+  const qs='dataset='+encodeURIComponent(ds)+'&tf='+encodeURIComponent($('#agTf').value)+'&name='+encodeURIComponent($('#agName').value||'');
+  postJob('/api/dataset/aggregate',qs,'#agLog','#agRun',(j)=>{
+    const line=(j.log||[]).find(l=>l.startsWith('AGGREGATE_JSON '));
+    if(line){try{const r=JSON.parse(line.slice(15));const o=$('#agOut');o.style.display='block';
+      o.innerHTML='<span style="color:var(--azure)">✓ nieuwe dataset <b>'+r.dataset+'</b></span> — '+(r.rows||0).toLocaleString()+' bars · '+r.timeframe;}catch(e){}}
+    loadWizard(); loadGenDatasets();
+  });
+});
+
 function showTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+name));
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
@@ -2034,6 +2104,34 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <button class=go id=upbtn>Upload</button>
     </div><div id=msg class=muted style="margin-top:8px"></div>
     <pre id=upLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Valideer dataset — datakwaliteit</b><span class=muted>coverage · gaps · OHLC · roll · tick</span></div>
+    <div class=hint>Draai de data-audit (dezelfde als trap 0): dekking, tijdzone, continuïteit/gaps, OHLC-sanity, tick-size, Delta-dekking en contract-roll-artefacten. Een <b>high</b>-bevinding betekent: eerst oplossen vóór je erop backtest.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Dataset</span><select id=daDs style="min-width:180px"></select></label>
+      <button class=go id=daRun>Valideer</button>
+    </div>
+    <div id=daOut style="display:none;margin-top:14px"></div>
+    <pre id=daLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Aggregeer timeframe — 1m → 5/15/30m…</b><span class=muted>sessie-aligned op 18:00 ET</span></div>
+    <div class=hint>Maak van een 1-minuut dataset een grofmazigere, <b>opgeslagen</b> dataset (verschijnt als nieuwe kaart in de catalogus). Sessie-aligned en gap-safe. Let op: de pijplijn-poorten zijn op <b>1m</b> gevalideerd — een geaggregeerde set is voor analyse/verkenning, niet om trap 1 tegen een 1m-export te herdraaien.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field><span class=fld>Bron (1m)</span><select id=agDs style="min-width:180px"></select></label>
+      <label class=field><span class=fld>Timeframe</span><select id=agTf>
+        <option>5m</option><option>10m</option><option>15m</option><option>30m</option>
+        <option>1h</option><option>2h</option><option>4h</option></select></label>
+      <label class=field><span class=fld>Naam (optioneel)</span><input id=agName placeholder="&lt;bron&gt;_&lt;tf&gt;" style="width:160px"></label>
+      <button class=go id=agRun>Aggregeer</button>
+    </div>
+    <div id=agOut style="display:none;margin-top:12px"></div>
+    <pre id=agLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:200px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 </div>
 

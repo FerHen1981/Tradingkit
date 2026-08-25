@@ -3,7 +3,7 @@
 
 //@version=6
 // ============================================================================================
-//  MPT CVD v6.1 — companion indicator to the MEX fleet strategies
+//  MPT CVD v6.2 — companion indicator to the MEX fleet strategies
 // ============================================================================================
 //  Shows the exact CVD state the strategy filters on, in its own pane. Two engines:
 //
@@ -21,7 +21,7 @@
 //  the same corner sits ON TOP of the first — that cannot be tuned away. Both blocks
 //  therefore live in a single table and can never overlap.
 // ============================================================================================
-indicator("MPT CVD v6.1", "MPT CVD", format=format.volume, max_lines_count=500, max_boxes_count=500, overlay=false)
+indicator("MPT CVD v6.2", "MPT CVD", format=format.volume, max_lines_count=500, max_boxes_count=500, overlay=false)
 
 import TradingView/ta/8
 
@@ -183,7 +183,14 @@ var float[] deltaArr    = array.new_float()
 var float[] deltaPctArr = array.new_float()
 var float[] cvdArr      = array.new_float()
 var int[]   timeArr     = array.new_int()
+var float[] tvDeltaArr  = array.new_float()
+var float[] tvCvdArr    = array.new_float()
 if barstate.isconfirmed
+    array.push(tvDeltaArr, tvBarDelta)
+    array.push(tvCvdArr, tvCvd)
+    if array.size(tvDeltaArr) > histLen
+        array.shift(tvDeltaArr)
+        array.shift(tvCvdArr)
     array.push(deltaArr, barDelta)
     array.push(deltaPctArr, openVolume != 0 ? (barDelta / math.abs(openVolume)) * 100 : 0)
     array.push(cvdArr, sessCvd)
@@ -213,7 +220,7 @@ f_cellTxt(float v) =>
 // === ONE COMBINED PANEL =====================================================
 // Twee tabellen op dezelfde position stapelen in Pine over elkaar heen; dat is niet weg te
 // stellen. Beide blokken zitten daarom in één tabel en kunnen per constructie niet botsen.
-int  nRows     = (showTime ? 1 : 0) + (showDeltaAbs ? 1 : 0) + (showDeltaPct ? 1 : 0) + (showCVD ? 1 : 0)
+int  nRows     = (showTime ? 1 : 0) + (showDeltaAbs ? 1 : 0) + (showDeltaPct ? 1 : 0) + (showCVD ? 1 : 0) + (engBoth ? 2 : 0)
 bool wantTable = showTable and nRows > 0
 bool wantGate  = showGate
 bool gateLeft  = gateSideIn == "Left"
@@ -264,6 +271,10 @@ if barstate.islast and totalCols > 0 and totalRows > 0
             r += 1
         if showCVD
             table.cell(panel, tblOffset, r, "CVD", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            r += 1
+        if engBoth
+            table.cell(panel, tblOffset, r, "TV Δ", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+            table.cell(panel, tblOffset, r + 1, "TV CVD", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
 
         if nHist > 0
             for i = 0 to nHist - 1
@@ -283,6 +294,12 @@ if barstate.islast and totalCols > 0 and totalRows > 0
                 if showCVD
                     float cv = array.get(cvdArr, i)
                     table.cell(panel, c, r, formatVolume(cv), text_color=f_cellTxt(cv), bgcolor=f_cellBg(cv, math.max(maxAbs, math.abs(cv))), text_size=textSize, text_halign=text.align_center)
+                    r += 1
+                if engBoth and i < array.size(tvDeltaArr)
+                    float td = array.get(tvDeltaArr, i)
+                    float tc = array.get(tvCvdArr, i)
+                    table.cell(panel, c, r, formatVolume(td), text_color=f_cellTxt(td), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+                    table.cell(panel, c, r + 1, formatVolume(tc), text_color=f_cellTxt(tc), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
 
         if barstate.isrealtime
             int c = tblOffset + nHist + 1
@@ -300,6 +317,10 @@ if barstate.islast and totalCols > 0 and totalRows > 0
                 r += 1
             if showCVD
                 table.cell(panel, c, r, formatVolume(sessCvd), text_color=f_cellTxt(sessCvd), bgcolor=f_cellBg(sessCvd, math.max(maxAbs, math.abs(sessCvd))), text_size=textSize, text_halign=text.align_center)
+                r += 1
+            if engBoth
+                table.cell(panel, c, r, formatVolume(tvBarDelta), text_color=f_cellTxt(tvBarDelta), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+                table.cell(panel, c, r + 1, formatVolume(tvCvd), text_color=f_cellTxt(tvCvd), bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
 
     if wantGate
         color posSoft = f_cellBg(1, 1)

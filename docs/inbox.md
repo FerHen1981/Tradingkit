@@ -3182,3 +3182,51 @@ nu schoon.** Exitcode 1 bij een bevinding, dus hij is als poort te gebruiken.
 Het bestand valt onder `pine/**` en dus onder Pine Dev — niet onder `tools/**` van Backtest
 Setup. Wie een `.pine` aanraakt: draai hem vóór je iets naar Ferry stuurt. Dat had beide
 CE10272's voorkomen.
+
+---
+
+## 27 — Pine Dev → Scrum Master + Legacy · D-41 is gebouwd, alleen de live proef blijft
+
+`D-41` staat op **review**. Alle dertien scripts zijn op **v2.3.0**; elke Discord-kaart draagt
+nu `jrnlAcct + " | "` vooraan de description, precies de vorm die FILL en EXIT al gebruikten.
+
+### Het waren er negentien, niet elf
+
+De melding noemde elf emitters. Bij het nalopen bleken er acht meer hetzelfde gat te hebben:
+**RISK OFF ×2, TRAIL ACTIVE ×2, REGIME → FAVORABLE / UNFAVORABLE, en de twee entry-kaarten
+(LONG / SHORT)**. Die laatste vier dragen het account wél in de eval-tail, maar alleen *als de
+eval loopt* — de commentaarregels in `Program.cs:790-797` zeggen dat zelf. Buiten een lopende
+eval landden ook die op de globale webhook. Ik heb ze meegenomen: het is dezelfde regel en
+hetzelfde risico, en elf van de negentien repareren zou het beeld "opgelost" geven terwijl het
+half is. Geverifieerd: **geen enkele `f_sendDiscord`-aanroep in de dertien scripts staat nog
+zonder account.**
+
+### De valkuil uit de HOE-notitie is nu zichtbaar in plaats van stil
+
+`AccountFrom` splitst de description op `|` en `\n`, trimt voorloop-emoji en accepteert alleen
+twee letters + drie cijfers + koppelteken. `jrnlAcct` komt uit `f_autoAcctName()` =
+*eerste 2 tekens van de Account ID* + *laatste 3* + balans + datum. **Staat de Account ID leeg
+— en dat is de default — dan wordt `jrnlAcct` `"-0k-260813"` en valt de routing stil terug op
+globaal.** Precies wat de notitie voorspelde: je merkt het niet.
+
+Daarom staat er nu per script:
+
+```
+bool jrnlAcctRoutable = str.length(jrnlAcct) >= 6 and str.match(jrnlAcct, "^[A-Za-z][A-Za-z][0-9][0-9][0-9]-") != ""
+if barstate.islast and useDiscord and not jrnlAcctRoutable
+    ... label: "⚠️ Account ID leeg of afwijkend - Discord-kaarten routeren naar het GLOBALE kanaal"
+```
+
+Alleen tekenwerk. Geen signaal-, order- of accountlogica geraakt; `pine_lint` schoon op alle
+dertien.
+
+### 🔴 Wat mij tegenhoudt om D-41 op `done` te zetten
+
+**Alleen de proef, en die kan ik niet draaien.** De HOE-notitie vraagt: vuur na de wijziging
+één guard-kaart af en controleer dat hij op het juiste kanaal landt. Daar is een chart met een
+lopende alert plus de Discord-webhooks voor nodig — dat is Ferry's kant, niet die van deze chat.
+
+**Ferry, wat ik nodig heb (klein):** plak v2.3.0 op één chart, vul de **Account ID** in, en
+forceer één guard-kaart — de makkelijkste is `Send CONFIG message on first live bar` (groep 10),
+die vuurt bij het starten van de alert. Landt hij op het funded- of eval-kanaal in plaats van
+het globale, dan mag D-41 dicht en is **D-28/2 daarmee ook pas echt werkend**.

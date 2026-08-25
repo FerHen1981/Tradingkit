@@ -54,6 +54,13 @@
 //   Strategy 12->11, Visuals Indicators 13->12, Developer 14->13. Het TIME GATE-blok en de
 //   visuals-inputs zijn fysiek verplaatst zodat de paneelvolgorde numeriek loopt; alleen
 //   declaratievolgorde van inputs, geen enkele berekening verplaatst.
+// v2.3.0 (25-08, D-41): elke Discord-kaart draagt nu het account vooraan in de description,
+//   zodat de per-kanaal routing van D-28/2 funded en eval uit elkaar kan houden. Het waren er
+//   19 per script, niet de elf uit de melding: RISK OFF, TRAIL ACTIVE, REGIME en de entries
+//   hadden hetzelfde gat. De receiver leest de eerste kolom en herkent alleen LLddd- (zoals
+//   PA016-0k-260813); wijkt jrnlAcct af, dan viel de routing STIL terug op de globale webhook.
+//   Daarom staat er nu ook een zichtbare waarschuwing op de laatste bar als het account leeg
+//   of afwijkend is. Alleen berichtinhoud; geen signaal-, order- of accountlogica geraakt.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -61,7 +68,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL BANDIDO · MYM HF EOD"
-var string currentVersion = "v2.2.0"
+var string currentVersion = "v2.3.0"
 strategy("MΞX EL BANDIDO · MYM HF EOD · " + currentVersion, shorttitle="BAN-MYM-H", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -686,6 +693,16 @@ f_autoAcctName() =>
     string _dt = str.format_time(evalStartTime, "yyMMdd", "America/New_York")
     _pfx + _sfx + "-" + _bal + "-" + _dt
 string jrnlAcct = str.length(jrnlAcctName) > 0 ? jrnlAcctName : f_autoAcctName()
+// D-41: de routing per kanaal leest het account uit de EERSTE kolom van de description en
+// herkent alleen twee letters + drie cijfers + koppelteken (PA016-0k-260813). Staat de
+// Account ID leeg of wijkt hij af, dan valt de routing STIL terug op de globale webhook --
+// je merkt het niet. Daarom hier een zichtbare waarschuwing in plaats van die stille terugval.
+bool jrnlAcctRoutable = str.length(jrnlAcct) >= 6 and str.match(jrnlAcct, "^[A-Za-z][A-Za-z][0-9][0-9][0-9]-") != ""
+if barstate.islast and useDiscord and not jrnlAcctRoutable
+    var label _acctWarn = na
+    label.delete(_acctWarn)
+    _acctWarn := label.new(bar_index, high, "⚠️ Account ID leeg of afwijkend - Discord-kaarten routeren naar het GLOBALE kanaal (jrnlAcct = " + jrnlAcct + ")",
+         style=label.style_label_down, color=color.new(color.orange, 10), textcolor=color.white, size=size.small)
 f_msgHead() =>
     "MPT " + currentVersion + " | " + jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz)
 bool plainAlertsOK = not usePMT and not useRithmic and not usePineConnector and not useDiscord and not useJournal and not useMiddleware
@@ -1445,14 +1462,14 @@ if sendCfgOnStart and barstate.isrealtime and not cfgSent
         string _cfgRow = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "," + accountID + "," + jrnlAcct + "," + syminfo.ticker + ",CONFIG,-,-,-,-,-,-,-,-," + cfgStr
         alert(jrnlJsonWrap ? "{\"type\":\"config\",\"csv\":\"" + _cfgRow + "\"}" : _cfgRow, alert.freq_once_per_bar)
     else if useDiscord
-        f_sendDiscord("⚙️ " + syminfo.ticker + " CONFIG", cfgStr)
+        f_sendDiscord("⚙️ " + syminfo.ticker + " CONFIG", jrnlAcct + " | " + cfgStr)
     else if plainAlertsOK
         alert(f_msgHead() + " | CONFIG | " + cfgStr, alert.freq_once_per_bar)
 
 var bool payoutDiscordSent = false
 if payoutReady and not payoutDiscordSent
     payoutDiscordSent := true
-    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", (useWaitForCap ? "FULL CAP $" + str.tostring(curLadderCap, "#") + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
+    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP $" + str.tostring(curLadderCap, "#") + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
 var bool capLocked = false
 if lockOnCap and isPA and useWaitForCap and not capLocked and strategy.position_size != 0
     float _lockBufC = lockBufTicks * syminfo.mintick * syminfo.pointvalue * math.abs(strategy.position_size)
@@ -1461,7 +1478,7 @@ if lockOnCap and isPA and useWaitForCap and not capLocked and strategy.position_
         exitReasonNext := "CAP-LOCK"
         strategy.close_all(comment="CAP-LOCK")
         f_sendExec("close", math.abs(strategy.position_size), close, 0, 0, "MKT")
-        f_sendDiscord("🔐 " + syminfo.ticker + " CAP LOCK", "Projected withdrawable covers the FULL ladder cap (+" + str.tostring(lockBufTicks, "#") + "t cost buffer). Closing all — payout secured.")
+        f_sendDiscord("🔐 " + syminfo.ticker + " CAP LOCK", jrnlAcct + " | " + "Projected withdrawable covers the FULL ladder cap (+" + str.tostring(lockBufTicks, "#") + "t cost buffer). Closing all — payout secured.")
 if not payoutReady
     payoutDiscordSent := false
 
@@ -1563,7 +1580,7 @@ if sigBlockedEvt and notifyBlocked
     if plainAlertsOK
         alert(f_msgHead() + " | ⛔ SIGNAL BLOCKED | " + (rawLong ? "LONG" : "SHORT") + " " + syminfo.ticker + " | strategy rules met, blocked by: " + _reasons, alert.freq_once_per_bar)
     if useDiscord
-        f_sendDiscord("⛔ " + syminfo.ticker + " SIGNAL BLOCKED", (rawLong ? "Long" : "Short") + " setup meets all strategy rules but was blocked by: " + _reasons)
+        f_sendDiscord("⛔ " + syminfo.ticker + " SIGNAL BLOCKED", jrnlAcct + " | " + (rawLong ? "Long" : "Short") + " setup meets all strategy rules but was blocked by: " + _reasons)
 if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk and ddGuardOK and maeGuardOK and (not onlyFirstTrade or not hasTraded)
     if isLimitMode and pendDir != 0
         f_markUnfilled(pendBar, pendLimit, true)
@@ -1591,6 +1608,7 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
             strategy.exit("XL", from_entry="Long", stop=pendStop, limit=t_tpPx, alert_message=f_orderMsg("EXIT", 1, close, pendStop, t_tpPx, t_qty))
         f_sendExec("buy", t_qty, isLimitMode ? pendLimit : close, sigStopDist, math.abs(t_tpPx - sigEntryPx), isLimitMode ? "LMT" : "MKT")
         f_sendDiscord("📈 " + syminfo.ticker + " LONG " + (isLimitMode ? "LIMIT" : "MARKET"),
+             jrnlAcct + " | " +
              "Entry " + str.tostring(sigEntryPx, format.mintick) + " | Stop " + str.tostring(pendStop, format.mintick) + " | TP " + str.tostring(t_tpPx, format.mintick) + " (" + tpMode + ")" + " | Qty " + str.tostring(t_qty) + " | " + phase + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
     if shortSignal
         if isLimitMode
@@ -1601,6 +1619,7 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
             strategy.exit("XS", from_entry="Short", stop=pendStop, limit=t_tpPx, alert_message=f_orderMsg("EXIT", -1, close, pendStop, t_tpPx, t_qty))
         f_sendExec("sell", t_qty, isLimitMode ? pendLimit : close, sigStopDist, math.abs(t_tpPx - sigEntryPx), isLimitMode ? "LMT" : "MKT")
         f_sendDiscord("📉 " + syminfo.ticker + " SHORT " + (isLimitMode ? "LIMIT" : "MARKET"),
+             jrnlAcct + " | " +
              "Entry " + str.tostring(sigEntryPx, format.mintick) + " | Stop " + str.tostring(pendStop, format.mintick) + " | TP " + str.tostring(t_tpPx, format.mintick) + " (" + tpMode + ")" + " | Qty " + str.tostring(t_qty) + " | " + phase + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
 
 if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow or dayHalted)
@@ -1608,7 +1627,7 @@ if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow
     strategy.cancel("Short")
     f_markUnfilled(pendBar, pendLimit, false)
     f_sendExec("close", t_qty, close, 0, 0, "MKT")
-    f_sendDiscord("⏳ " + syminfo.ticker + " LIMIT EXPIRED", "Pending " + (pendDir == 1 ? "long" : "short") + " cancelled @ " + str.tostring(pendLimit, format.mintick))
+    f_sendDiscord("⏳ " + syminfo.ticker + " LIMIT EXPIRED", jrnlAcct + " | " + "Pending " + (pendDir == 1 ? "long" : "short") + " cancelled @ " + str.tostring(pendLimit, format.mintick))
     f_journal("EXPIRED", pendDir, "NOT_FILLED", pendLimit, pendStop, float(na), t_qty, float(na), evalStarted, evalBal, distTarget, distFail, useRegime, regimeFav)
     pendDir := 0
     pendLimit := na
@@ -1744,14 +1763,14 @@ if inLong
         if not posRiskOff
             posRiskOff := true
             if notifyRiskOff
-                f_sendDiscord("🛡️ " + syminfo.ticker + " RISK OFF", "Long moved to break-even (+" + str.tostring(beOffsetSize) + "). Initial risk off the table." + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
+                f_sendDiscord("🛡️ " + syminfo.ticker + " RISK OFF", jrnlAcct + " | " + "Long moved to break-even (+" + str.tostring(beOffsetSize) + "). Initial risk off the table." + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
                 f_journal("RISKOFF", 1, "BE", entryAvg, cand, curLimit, math.abs(posSize), float(na), evalStarted, evalBal, distTarget, distFail, useRegime, regimeFav)
     if useTrailEff and mfe >= f_distPrice(trStartEff)
         cand := math.max(cand, posHi - f_distPrice(trBufEff))
         if not posTrailOn
             posTrailOn := true
             if notifyRiskOff
-                f_sendDiscord("🎯 " + syminfo.ticker + " TRAIL ACTIVE", "Long trail armed — stop now tracks the peak.")
+                f_sendDiscord("🎯 " + syminfo.ticker + " TRAIL ACTIVE", jrnlAcct + " | " + "Long trail armed — stop now tracks the peak.")
 
     if useRecovTrail and isEval and attemptTradeNo == 1 and attemptFirstLoss and mfe >= f_distPrice(recovTrailStart)
         cand := math.max(cand, posHi - f_distPrice(recovTrailBuf))
@@ -1767,14 +1786,14 @@ if inShort
         if not posRiskOff
             posRiskOff := true
             if notifyRiskOff
-                f_sendDiscord("🛡️ " + syminfo.ticker + " RISK OFF", "Short moved to break-even (+" + str.tostring(beOffsetSize) + "). Initial risk off the table." + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
+                f_sendDiscord("🛡️ " + syminfo.ticker + " RISK OFF", jrnlAcct + " | " + "Short moved to break-even (+" + str.tostring(beOffsetSize) + "). Initial risk off the table." + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
                 f_journal("RISKOFF", -1, "BE", entryAvg, cand, curLimit, math.abs(posSize), float(na), evalStarted, evalBal, distTarget, distFail, useRegime, regimeFav)
     if useTrailEff and mfe >= f_distPrice(trStartEff)
         cand := math.min(cand, posLo + f_distPrice(trBufEff))
         if not posTrailOn
             posTrailOn := true
             if notifyRiskOff
-                f_sendDiscord("🎯 " + syminfo.ticker + " TRAIL ACTIVE", "Short trail armed — stop now tracks the peak.")
+                f_sendDiscord("🎯 " + syminfo.ticker + " TRAIL ACTIVE", jrnlAcct + " | " + "Short trail armed — stop now tracks the peak.")
 
     if useRecovTrail and isEval and attemptTradeNo == 1 and attemptFirstLoss and mfe >= f_distPrice(recovTrailStart)
         cand := math.min(cand, posLo + f_distPrice(recovTrailBuf))
@@ -1789,7 +1808,7 @@ if barstate.isconfirmed and inFlatWindow and not flattenedToday
         strategy.close_all(comment="Auto Flat")
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
         exitReasonNext := "AUTO-FLAT"
-    f_sendDiscord("🕔 " + syminfo.ticker + " AUTO FLAT", "Forced flat @ ~" + str.tostring(close, format.mintick))
+    f_sendDiscord("🕔 " + syminfo.ticker + " AUTO FLAT", jrnlAcct + " | " + "Forced flat @ ~" + str.tostring(close, format.mintick))
 
 var bool haltCloseSent = false
 if isNewTradingDay
@@ -1803,7 +1822,7 @@ if dayHalted and not haltCloseSent
         strategy.close_all(comment=haltReason)
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
     exitReasonNext := haltReason
-    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", haltReason + " | Today: $" + str.tostring(runningPnL, "#.##"))
+    f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", jrnlAcct + " | " + haltReason + " | Today: $" + str.tostring(runningPnL, "#.##"))
     if plainAlertsOK
         alert(f_msgHead() + " | 🔒 DAY HALT (" + haltReason + ") | PnL $" + str.tostring(runningPnL, "#.##"), alert.freq_once_per_bar)
 
@@ -1817,7 +1836,7 @@ if acctHalted and not acctCloseSent
         strategy.close_all(comment=acctHaltReason)
         f_sendExec("close", t_qty, close, 0, 0, "MKT")
     exitReasonNext := "ACCOUNT-HALT"
-    f_sendDiscord("🏁 " + syminfo.ticker + " ACCOUNT HALT", acctHaltReason + " | acct PnL $" + str.tostring(acctRealized, "#"))
+    f_sendDiscord("🏁 " + syminfo.ticker + " ACCOUNT HALT", jrnlAcct + " | " + acctHaltReason + " | acct PnL $" + str.tostring(acctRealized, "#"))
     if plainAlertsOK
         alert(f_msgHead() + " | 🏁 " + acctHaltReason + " | acct PnL $" + str.tostring(acctRealized, "#"), alert.freq_once_per_bar)
 
@@ -1843,9 +1862,9 @@ if useRegime and barstate.isconfirmed
             regimeWantCnt := 0
             if notifyRegime
                 if regimeFav
-                    f_sendDiscord("🟢📈 " + syminfo.ticker + " REGIME → FAVORABLE", "ER " + str.tostring(erVal, "#.00") + " > " + str.tostring(regThrUp, "#.00") + ". Trending — historically friendlier conditions. ⚠️ indication, not a guarantee.")
+                    f_sendDiscord("🟢📈 " + syminfo.ticker + " REGIME → FAVORABLE", jrnlAcct + " | " + "ER " + str.tostring(erVal, "#.00") + " > " + str.tostring(regThrUp, "#.00") + ". Trending — historically friendlier conditions. ⚠️ indication, not a guarantee.")
                 else
-                    f_sendDiscord("🔴📉 " + syminfo.ticker + " REGIME → UNFAVORABLE", "ER " + str.tostring(erVal, "#.00") + " ≤ " + str.tostring(regThrDn, "#.00") + ". Chop — be conservative with new accounts. ⚠️ indication, not a guarantee.")
+                    f_sendDiscord("🔴📉 " + syminfo.ticker + " REGIME → UNFAVORABLE", jrnlAcct + " | " + "ER " + str.tostring(erVal, "#.00") + " ≤ " + str.tostring(regThrDn, "#.00") + ". Chop — be conservative with new accounts. ⚠️ indication, not a guarantee.")
     else
         regimeWantCnt := 0
 
@@ -1896,17 +1915,17 @@ if evalTrack and evalStarted and not evalPassed and not evalFailed
         attemptTradeNo := 0
         attemptFirstLoss := false
         if notifyEval
-            f_sendDiscord("🎉🏆 " + syminfo.ticker + " PASSED", "Profit target reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalProfitTgt, "#") + " (balance $" + str.tostring(evalBal, "#") + "). Account funded! 🚀")
+            f_sendDiscord("🎉🏆 " + syminfo.ticker + " PASSED", jrnlAcct + " | " + "Profit target reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalProfitTgt, "#") + " (balance $" + str.tostring(evalBal, "#") + "). Account funded! 🚀")
     if not evalPassed and evalTrailDD > 0 and not na(evalFloor) and evalBal <= evalFloor
         evalFailed := true
         attemptTradeNo := 0
         attemptFirstLoss := false
         if notifyEval
-            f_sendDiscord("💀 " + syminfo.ticker + " FAILED", "Trailing drawdown hit. Balance $" + str.tostring(evalBal, "#") + " ≤ floor $" + str.tostring(evalFloor, "#") + ". Account blown. 🪦")
+            f_sendDiscord("💀 " + syminfo.ticker + " FAILED", jrnlAcct + " | " + "Trailing drawdown hit. Balance $" + str.tostring(evalBal, "#") + " ≤ floor $" + str.tostring(evalFloor, "#") + ". Account blown. 🪦")
     if not paReached and evalPaThresh > 0 and evalGain >= evalPaThresh
         paReached := true
         if notifyEval
-            f_sendDiscord("💰✨ " + syminfo.ticker + " PA THRESHOLD", "Payout threshold reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalPaThresh, "#") + " (balance $" + str.tostring(evalBal, "#") + "). 🤑")
+            f_sendDiscord("💰✨ " + syminfo.ticker + " PA THRESHOLD", jrnlAcct + " | " + "Payout threshold reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalPaThresh, "#") + " (balance $" + str.tostring(evalBal, "#") + "). 🤑")
 
 
 plotshape(showSignals and longSignal, "Long Signal", shape.triangleup, location.belowbar, color=color.new(color.green, 0), size=size.small)

@@ -2426,3 +2426,55 @@ commissie gelijkgetrokken is, vóór er beslissingen op dat getal komen te ruste
 
 Daarna, zodra de her-exports binnen zijn: trap 1 voor LEON en REY, dan trap 8. **Dan is er voor het
 eerst een geldige vlootrangorde.**
+
+---
+
+## 25-08 · Scrum Master → Pine Dev — D-61 geverifieerd, en twee dingen uit een eigen sweep
+
+**D-61 klopt.** `dayExitMode` staat nu op `"Day-cap (hard target)"`, binnen zijn eigen options, en
+je onderbouwing via de bevroren dagcap van $1.000 sluit. Backtest Setup kan de uitzondering in
+`fleet.PINE_DEFECTS` weghalen.
+
+Ik heb dezelfde controle daarna over **alle 22 `.pine`-bestanden** gedraaid in plaats van over de
+negen, plus een paar mechanische projectregels. Tabs: geen. Shorttitles boven 10 tekens: geen.
+Dubbele merkkoppen: geen — BANDIDO's `EL TESORO`-vermelding is een herkomstregel, geen tweede kop,
+die laat ik staan.
+
+Twee dingen kwamen er wél uit.
+
+### D-64 — DORADO compileert niet, en handmatig herstellen helpt niet
+
+`MEX_EL_DORADO.pine:221` heeft `firmPreset` defval **`"apex_intraday_pa"`**. Die sleutel bestaat
+niet in de registry; de juiste is `apex_50k_intraday_pa`. Exact dezelfde fout die je vanochtend in
+BANDIDO ophaalde.
+
+⚠️ **Het verschil: hier zit de fout in `tools/gen_pine_firms.py`.** In `STRATEGY_DEFAULT` op regel
+103 staat `"MEX_EL_DORADO.pine": "apex_intraday_pa"`, en regel 226-228 schrijft die waarde letterlijk
+als default terwijl de `options` uit de registry komen. **Repareer je het `.pine`, dan is het bij je
+volgende generatorrun weer stuk.** De fix hoort in de map.
+
+Je schreef: *"dezelfde controle over alle veertien scripts gedraaid: dit was de enige ongeldige
+`input.string`-default in de vloot."* Dat klopt — mijn sweep bevestigt dat er in `v1_0_0/` geen
+tweede zit. DORADO valt buiten die negen. Geen tegenspraak dus, wel een scope om te verruimen:
+draai die check over `pine/**`.
+
+### D-65 — de generator kent de v1_0_0-vloot niet, en dat kan D-63 verklaren
+
+`STRATEGY_DEFAULT` bevat alléén de oude v6.9.5-bestandsnamen. De negen `v1_0_0`-scripts staan er
+niet in. Je eigen comment op regel 96-98 zegt het al: *"Deze generator kent de v1_0_0-lijn nog niet
+— zie `docs/inbox.md` item 18 voor wat dat kost."*
+
+Gevolg: het firm-preset van de live vloot wordt met de hand onderhouden, terwijl **D-08** juist
+vastlegde dat een handmatig getal een tweede bron is.
+
+🔍 **En nu de reden dat ik dit vóór D-63 meld — als hypothese, niet als vaststelling.** LEON is
+gevalideerd onder `apex_50k_intraday_pa` terwijl de bron `apex_50k_eod_pa` draagt. Backtest Setup
+schreef dat toe aan TradingView dat oudere inputs bewaart. Dat kan kloppen. **Maar een handmatig
+onderhouden firm-preset is een minstens zo goede kandidaat** — en die zou het ná de her-export van
+D-63 gewoon opnieuw laten gebeuren.
+
+**Kijk hier dus naar vóór je D-63 uitvoert.** Is dit de oorzaak, dan is die her-export dweilen met
+de kraan open. Doen: de negen `v1_0_0`-bestanden in `STRATEGY_DEFAULT` opnemen met hun bedoelde
+firm-programma, en de generator over de vloot laten lopen.
+
+`tools/gen_pine_firms.py` is per de eigenaarstabel expliciet van jullie, dus ik heb niets aangeraakt.

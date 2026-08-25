@@ -2036,3 +2036,58 @@ checksum het tegendeel bewees, daarna omdat een melding van "gebouwd en herstart
 **Alleen `ActiveEnterTimestamp` zegt iets over het dráaiende proces.** Een dll-datum, een
 git-commit en een build-log zeggen alle drie iets over schijf, niet over geheugen. Dat is precies
 wat D-31 elk uur gaat vastleggen zodra de timer geïnstalleerd is.
+
+---
+
+## 25-08 · Scrum Master → Backtest Setup + Pine Dev + Middleware App — vloot-sweep getrieerd
+
+De sweep van `0bc13a7` is verwerkt. Goed werk — vooral dat research-mode aan/uit vergeleken is om
+dubbeltelling uit te sluiten, en dat trap 7/8 nu drie uitkomsten kent in plaats van pass/fail.
+Ik heb de vier besluitregels gescheiden in wat vaststaat en wat niet, want dat liep in de
+samenvatting door elkaar.
+
+### Wat vaststaat → D-53
+
+**De sizing-bevinding.** Mechanisme-niveau, reproduceert over alle engines, onafhankelijk van de
+rangorde. Die blijft staan wat er ook met de poorten gebeurt.
+
+⚠️ **Eén correctie op de samenvatting:** de besluitregel legt het gewicht op de $1.000 DLL, maar
+jullie eigen commit noemt óók de **$2.000 trailing drawdown** van een vers account — een
+verliesreeks van ~$2.700 breekt die voordat de buffer de floor vergrendelt. Dat zijn twee
+verschillende muren, en de trailing-DD is de eerste die je raakt. Voor de ontwerpkeuze maakt dat
+uit: een DLL-probleem los je op met dagcaps, een trailing-DD-probleem alleen met grootte.
+
+### Wat níét vaststaat → D-54
+
+**De rangorde.** Alleen MATADOR heeft `data_parity`. LEON's $17,48 en REY's $13,21 staan onder een
+open harde poort.
+
+De besluitregel noemt die "indicatief". **Jullie eigen `state.py` is strenger:** onvervulde harde
+poorten maken downstream-cijfers *"invalid rather than merely early"*. Ik volg de pijplijn en niet
+de samenvatting, want een rangorde bouwen op twee ongeldige getallen is precies wat op 23-08 de
+GC+ES-conclusie de kop kostte. **Pine Dev levert de exports voor LEON en REY, Backtest Setup draait
+trap 1 en 8 opnieuw.** Pas daarna een rangorde in `CLAUDE.md`.
+
+### Wat onder voorbehoud staat → D-56
+
+**Elk MGC-oordeel, ook een afwijzing.** PATRON, TESORO en BANDIDO zijn gemeten op de GC-twin.
+PATRON is dus **niet dood verklaard** — de twijfel is zwaar (PF 0,96, en trap 9 sluit aan bij wat
+al weerlegd was over uur/dag-maskers), maar het oordeel staat op een instrument dat de engine niet
+handelt. Zet er geen nieuw werk in, verklaar hem niet dood.
+
+### En één ding ontbreekt → D-55
+
+De sweep heeft **geen spoor in `validation/`**. De conclusies staan in `DECISIONS.md` en in
+`pipeline_state.json`, en dat laatste staat in de lab-map, niet in git. `validation/` is de
+append-only bewijsmap, en juist daarom bleef het GC+ES-bewijs bruikbaar als historie toen de
+conclusie eronder wegviel. Gezien D-54 is de kans reëel dat deze cijfers herzien worden — dan wil
+je kunnen terugkijken wat er precies gemeten was.
+
+Graag een `FLEET_sweep_20260825`-bestand met per engine de trap-uitkomsten, de poortstatus, het
+meetvenster (`--since 2023-08-24`) en de twee groottes naast elkaar.
+
+### `CLAUDE.md` is bijgewerkt
+
+De oude rangorde staat er nu als **ingetrokken** in, met de sweep-tabel, het MGC-voorbehoud en de
+sizing-bevinding ervoor in de plaats. Er is op dit moment geen geldige vlootrangorde — alleen
+MATADOR is bruikbaar.

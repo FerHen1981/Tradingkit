@@ -34,8 +34,32 @@ Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
 | EL PRINCIPE | MNQ | Balanced | research, niet live |
 | EL MINERO | — | gereserveerd | toekomstige HF/commodity |
 
-- **Rangorde:** REY (MNQ) › MATADOR (MES) › TESORO (MGC) › LEON (MYM) › PATRON (MGC) ›
-  BANDIDO (specialist) › PRINCIPE (research). Rangorde ≠ accounttoewijzing.
+- ⛔ **Er is op dit moment GEEN geldige rangorde.** De oude volgorde (REY › MATADOR ›
+  TESORO › LEON › PATRON › BANDIDO › PRINCIPE) is **ingetrokken** — die viel al onder de
+  research-invalidatieregel. De vloot-sweep van 25-08 (trap 0→9) leverde een verse meting,
+  maar die is maar voor één engine bruikbaar:
+
+  | Engine | Gemeten payout-$/account-dag (1 contract) | Status |
+  |---|---|---|
+  | MATADOR (MES) | $30,59 — P1 na 85 dagen | ✅ bruikbaar, pariteitspoort dicht (`data_parity`) |
+  | LEON (MYM) | $17,48 — P1 na 118 dagen | ⛔ **ongeldig**, harde poort open |
+  | REY (MNQ) | $13,21 — P1 na 161 dagen | ⛔ **ongeldig**, harde poort open |
+  | PATRON · TESORO · BANDIDO | funderen niet op 1 contract | ⚠️ voorlopig — zie MGC-voorbehoud |
+
+  "Ongeldig" is niet mijn woord maar dat van de pijplijn zelf: `state.py` noemt onvervulde
+  harde poorten de poorten die downstream-cijfers *"invalid rather than merely early"*
+  maken. Behandel LEON en REY dus niet als "indicatief maar ongeveer goed" — als de poort
+  dichtgaat kan het cijfer een andere kant op bewegen. **Rangorde ≠ accounttoewijzing.**
+- ⚠️ **MGC-voorbehoud:** beide MGC-engines zijn gemeten op de **GC-twin** omdat echte
+  MGC-data ontbreekt. Elk MGC-oordeel — ook een afwijzing — staat daarmee onder voorbehoud.
+- 🔴 **De bevroren volle contractgrootte is niet fresh-account-funderbaar** (sweep 25-08,
+  mechanisme-niveau vastgesteld en onafhankelijk van de rangorde). Op volle grootte breken
+  alle engines op trap 7/8; op 1 contract fundeert elke engine wél. Twee bindende muren:
+  de **$2.000 trailing drawdown** van een vers account (een verliesreeks van ~$2.700 breekt
+  hem voordat de buffer de floor vergrendelt) en de **$1.000 DLL** (MATADOR met 6 MES-
+  contracten à $150 stop gaat er met één slechte dag overheen). De `.pine`-bron schaalt
+  contracten in via `derisk`/`deriskPA`; **de bevroren config doet dat niet.** Dat gat is
+  een openstaande ontwerpkeuze, geen bug — zie D-53.
 - **Doel is niet PF maar gebankte payout-$ per bezette account-dag.** Account-mechanica kan
   de rangorde van twee identieke engines omdraaien.
 - **Correlatie:** MGC is de enige niet-aandelenbucket; MNQ/MES/MYM zijn alle drie

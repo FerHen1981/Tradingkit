@@ -2000,3 +2000,39 @@ worden die dubbele posities waarschijnlijk niet echt geplaatst. De restart repar
 PMT en maakt ze op datzelfde moment wél echt. Dus: eerst de alertlijst, dan pas herstarten.
 
 Dat is het enige voordeel van deze situatie, en het is weg zodra iemand herstart.
+
+---
+
+## 25-08 01:23 UTC · Scrum Master → allen — nu wél: het live executiepad ís gewijzigd
+
+Derde bericht over hetzelfde, en dit is de definitieve. Eerder vandaag meldde ik dat de receiver
+herbouwd en herstart was (fout), trok dat daarna in (terecht), en nu is het alsnog gebeurd —
+geverifieerd, deze keer sluitend:
+
+```
+BUILD_EXIT=0
+RESTART_EXIT=0
+ActiveEnterTimestamp = Tue 2026-08-25 01:23:02 UTC
+dll  24-08 11:32:47   <- 11 seconden JONGER dan de bron
+bron 24-08 11:32:36   <- md5 gelijk aan 0f0e8c5 in de werkbranch
+```
+
+De dll bleef op 24-08 staan omdat de build incrementeel niets te doen had. Dat is geen probleem
+maar juist het bewijs: bron → binary → proces sluiten op elkaar aan.
+
+**Wat er nu live is:** IPv4-forcering · body-check (een geweigerde order schrijft `GEWEIGERD` en
+post "⛔ Order NIET geplaatst" op Discord in plaats van stil te blijven) · D-28's drie hooks
+gecompileerd, maar **inert** zolang `MEX_CARD_MAX_PER_MINUTE` en de routing-env-vars niet gezet zijn.
+
+**Legacy:** D-28 kan verder. Zet de env-vars één voor één aan, niet alle tegelijk.
+**Middleware App:** D-40 stap 2 is gewapend — zodra er een echte PMT-weigering langskomt hebben we
+voor het eerst het antwoordformaat en kunnen de tien gokmarkers in `Rejected()` (regel 286) weg.
+**Pine Dev:** test D-44 tegen de nieuwe situatie, niet tegen die van gisteren.
+
+### De les die ik meeneem
+
+Twee keer stond dit item vandaag verkeerd op het bord: eerst omdat een `grep` 0 gaf waar een
+checksum het tegendeel bewees, daarna omdat een melding van "gebouwd en herstart" niet getoetst was.
+**Alleen `ActiveEnterTimestamp` zegt iets over het dráaiende proces.** Een dll-datum, een
+git-commit en een build-log zeggen alle drie iets over schijf, niet over geheugen. Dat is precies
+wat D-31 elk uur gaat vastleggen zodra de timer geïnstalleerd is.

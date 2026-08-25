@@ -3046,3 +3046,46 @@ eerstvolgende meting op deze vijf afwijkt van de vorige, is dít de eerste kandi
 Dertien scripts, één structuur. Wat nog openstaat is geen Pine-werk meer: de proxy-vraag voor
 de MGC-bucket, en het punt uit `frozen-engines.md` dat de bevroren contractgrootte niet
 fresh-account-funderbaar is (D-53).
+
+---
+
+## 25 — Pine Dev → Ferry · middleware-route in EL TORO, en een correctie op de vraag
+
+Toegevoegd in alle vier de EL TORO-scripts: **`→ Middleware (fan-out)` + `Middleware secret` +
+`Middleware strategy key`**, met de zendtak in `f_sendExec` en `useMiddleware` opgenomen in
+`plainAlertsOK` en `execInstance`. Ze staan nu gelijk aan de negen andere.
+
+### Twee dingen kloppen niet aan de aanname, en het tweede is het belangrijkste
+
+**1. Het was niet weggehaald — het heeft nooit bestaan.** Ik heb het door de hele historie
+gezocht: `git log -S'routeMiddleware'` op de TORO-bestanden geeft **nul** commits. Het zat niet
+in het vendor-pakket en het is niet in de herstructurering gesneuveld.
+
+**2. 🔴 Deze route voert op het live pad geen orders uit — ook niet in de negen andere scripts.**
+Ik heb `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs` nagelezen:
+
+- De receiver authenticeert op de **token in de URL** (`/signal/{token}` tegen
+  `MEX_WEBHOOK_SECRET`). Het veld `"secret"` in de body wordt niet gelezen.
+- De uitvoerende tak is de **PMT-payload** — herkend op `multiple_accounts` of
+  `token`+`data`. Dáár hangen de kill-switch, de qty-map van D-53 en de blocked-gate van
+  D-40 aan.
+- De `routeMiddleware`-JSON (`secret` / `strategy` / `event` / `action` / …) heeft geen van
+  die sleutels en valt door naar de staart-tak "Fase C": opgeslagen als intent plus één
+  Discord-regel. **Geen order.**
+
+Dat contract is van de **Python**-middleware (`middleware/app`), en `CLAUDE.md` zegt zelf dat
+die niet live draait. Wil je vandaag via de middleware handelen, dan is het antwoord:
+**zet `→ PMT Tradovate` aan en richt de alert-URL op `mw.mex-traders.com/signal/<secret>`.**
+Dat is het pad dat wél uitvoert, en dat is ook wat de andere scripts doen. Ik heb dat in de
+tooltip van de schakelaar gezet zodat niemand er nog in trapt.
+
+### Meegenomen: `mwStrategy` stond in alle negen op `"GC"`
+
+Zelfde soort fout als `botName = "MΞX ΞL TΞSORO"`: één default die in het hele pakket bleef
+staan. Op vier MYM-, twee MNQ- en één MES-script is `GC` gewoon de verkeerde sleutel. Alle
+dertien staan nu op hun eigen **shorttitle** (`REY-MNQ-P`, `MAT-MES-P`, `TOR-NQ-SN`, …). Moet
+overeenkomen met de sleutel in `accounts.yaml`.
+
+⚠️ **Voor Middleware App:** `middleware/accounts.example.yaml` is achterhaald — de comments
+koppelen *El Rey → ES* en *El Tesoro → GC*, wat niet meer bestaat. Als de shorttitle de
+sleutel wordt, moet dat bestand mee.

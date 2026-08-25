@@ -548,7 +548,7 @@ pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GR
 pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size, or risk units, per your EA's configuration).", display=display.none)
 routeMiddleware = input.bool(false, "→ Middleware (fan-out)", group=GROUP_EXEC, tooltip="Send one lean signal to your middleware /webhook; it fans out to every account subscribed to this strategy. Put the webhook URL on the TradingView alert itself.")
 mwSecret   = input.string("", "Middleware secret", group=GROUP_EXEC, tooltip="Must match MIDDLEWARE_SECRET on your server.", display=display.none)
-mwStrategy = input.string("GC", "Middleware strategy key", group=GROUP_EXEC, tooltip="Strategy key the middleware maps to accounts (e.g. GC, ES, NQ). Match accounts.yaml.", display=display.none)
+mwStrategy = input.string("TES-MGC-C", "Middleware strategy key", group=GROUP_EXEC, tooltip="Sleutel waarop de middleware accounts opzoekt. Default is de shorttitle van dit script; moet overeenkomen met de sleutel in accounts.yaml.", display=display.none)
 useMiddleware = routeMiddleware
 // Stond in alle negen scripts op "MΞX ΞL TΞSORO", dus elke Discord-kaart van de hele
 // vloot kwam binnen onder de naam TESORO. Leeg laten = de naam van dit script.

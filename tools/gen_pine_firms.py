@@ -45,20 +45,20 @@ ASSET_DEFAULT = {
 # Kosten komen uit de registry -- besluit Ferry 24-08: `backtest/config.py` is leidend en
 # overruled zowel de pakketaanname ($0,51) als elk hand-getypt getal.
 FLEET_ASSET = {
-    "v1_0_0/MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "MGC",
-    "v1_0_0/MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "MGC",
-    "v1_0_0/MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "MNQ",
-    "v1_0_0/MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "MNQ",
-    "v1_0_0/MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "MES",
-    "v1_0_0/MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "MYM",
-    "v1_0_0/MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "MYM",
-    "v1_0_0/MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "MYM",
-    "v1_0_0/MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "MYM",
+    "MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "MGC",
+    "MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "MGC",
+    "MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "MNQ",
+    "MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "MNQ",
+    "MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "MES",
+    "MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "MYM",
+    "MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "MYM",
+    "MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "MYM",
+    "MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "MYM",
     # EL TORO is eval-only and trades the full minis, not the micros.
-    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":             "NQ",
-    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":         "NQ",
-    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":           "ES",
-    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":           "GC",
+    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":      "NQ",
+    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":  "NQ",
+    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":    "ES",
+    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":    "GC",
 }
 
 
@@ -106,19 +106,19 @@ PINE = os.path.join(REPO, "pine")
 # legacy = $2.500. De registry droeg 2.500 op alle Apex 50K-programma's, ook de vier 4.0-
 # programma's waar de vloot op draait; die staan nu op 2000 met lock 2100.
 STRATEGY_DEFAULT = {
-    "v1_0_0/MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "apex_50k_intraday_pa",
-    "v1_0_0/MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "apex_50k_eod_pa",
-    "v1_0_0/MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "apex_50k_intraday_pa",
-    "v1_0_0/MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
-    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":             "apex_50k_intraday_eval",
-    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":         "apex_50k_intraday_eval",
-    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":           "apex_50k_intraday_eval",
-    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":           "apex_50k_eod_eval",
+    "MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "apex_50k_eod_pa",
+    "MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "apex_50k_intraday_pa",
+    "MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "apex_50k_eod_pa",
+    "MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "apex_50k_eod_pa",
+    "MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "apex_50k_eod_pa",
+    "MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "apex_50k_intraday_pa",
+    "MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":      "apex_50k_intraday_eval",
+    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":  "apex_50k_intraday_eval",
+    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":    "apex_50k_intraday_eval",
+    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":    "apex_50k_eod_eval",
 }
 
 

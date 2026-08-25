@@ -18,7 +18,18 @@ import pytest
 
 from backtest.pipeline import fleet
 
-PINE_DIR = Path(__file__).resolve().parents[2] / "pine" / "v1_0_0"
+_ROOT = Path(__file__).resolve().parents[2]
+# De vloot verhuist van pine/v1_0_0/ naar pine/ (D-42). Zoek beide, zodat deze poort
+# voor en na die verhuizing werkt en de volgorde niet uitmaakt.
+PINE_DIR = next(
+    (d for d in (_ROOT / "pine" / "v1_0_0", _ROOT / "pine")
+     if (d / "MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine").exists()),
+    _ROOT / "pine" / "v1_0_0",
+)
+
+# EL TORO is de eval-lijn en heeft geen mirror in fleet.py; die scripts horen niet in
+# deze vergelijking. Zodra ze een mirror krijgen mag deze filter weg.
+_NO_MIRROR = ("MEX_EL_TORO_",)
 
 # Pine input title -> (getter on Config, kind). None getter = compared against _SPEC.
 FIELDS = [
@@ -98,10 +109,19 @@ def _engine_name(path: Path) -> str:
 
 
 def _sources() -> list[Path]:
-    return sorted(PINE_DIR.glob("*.pine")) if PINE_DIR.is_dir() else []
+    if not PINE_DIR.is_dir():
+        return []
+    return sorted(p for p in PINE_DIR.glob("*.pine")
+                  if not p.name.startswith(_NO_MIRROR))
 
 
-needs_pine = pytest.mark.skipif(not _sources(), reason="pine/v1_0_0 niet aanwezig")
+def test_pine_sources_are_findable():
+    """Een lege bronmap mag deze poort niet stilzetten. Met alleen skipif() maakt een
+    verplaatste map er 49 groene skips van: de suite blijft groen en bewaakt niets."""
+    assert _sources(), f"geen .pine-bronnen gevonden onder {PINE_DIR}"
+
+
+needs_pine = pytest.mark.skipif(not _sources(), reason=f"geen .pine-bronnen onder {PINE_DIR}")
 
 
 @needs_pine

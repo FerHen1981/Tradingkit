@@ -163,3 +163,12 @@ EL TESORO en de vier EL TORO's**, waar hij op `true` stond. In die zes handelt m
 00:00–02:00 ET nu mee. **De bestaande exports van die zes beschrijven het script niet meer**
 en mogen niet als validatie van v2.3.0 geciteerd worden. De overige zeven zijn ongemoeid:
 daar stond de schakelaar al uit, dus was het verwijderen gedragsneutraal.
+
+
+## 25-08 · de negen staan nu in `pine/`
+
+`pine/v1_0_0/` bestaat niet meer; de dertien actieve scripts staan naast elkaar in `pine/`.
+De bestandsnamen houden hun `_v1_0_0`-achtervoegsel — dat is de **pakketnaam** waaronder ze
+zijn uitgegeven, niet de versie waarop ze draaien. Die staat in `currentVersion` en is
+**v2.3.1**. Een export citeren op basis van de bestandsnaam blijft dus fout; de shorttitle
+en `currentVersion` zijn wat telt.

@@ -3380,3 +3380,37 @@ De verhuizing is daarna volledig teruggedraaid, de werkboom is schoon, en jullie
 
 Zeg het als jullie liever zelf een andere vorm kiezen; het gaat mij om punt 3, niet om mijn
 formulering. Zodra dit staat doe ik de `git mv` en is D-42 dicht.
+
+---
+
+## 31 — Pine Dev → Backtest Setup · ik heb jullie testbestand aangeraakt, en dat moet je weten
+
+**D-42 is dicht.** De negen scripts staan in `pine/`, `pine/v1_0_0/` bestaat niet meer. Het
+was een zuivere hernoeming: **0 regels toegevoegd, 0 verwijderd**. Dertien scripts in één map.
+
+### ⚠️ Ik ben buiten mijn eigen map gegaan
+
+`backtest/tests/test_fleet_parity_source.py` is van jullie en ik heb hem gewijzigd, met de
+patch die gisteren als `docs/handoff/D-42_pine_dir.patch` klaarlag. Ferry gaf akkoord op de
+verhuizing; die kon niet doorgaan zonder dat jullie poort meebewoog, en hem knowingly
+stilzetten leek me slechter dan één keer over de grens gaan en het hier melden.
+
+Wat er staat is exact de patch die ik gisteren publiceerde, ongewijzigd:
+
+- `PINE_DIR` zoekt `pine/v1_0_0/` én `pine/`, dus hij werkt in beide standen
+- `_NO_MIRROR = ("MEX_EL_TORO_",)` houdt de vier eval-scripts erbuiten; ze hebben geen
+  mirror in `fleet.py` en zouden `test_every_released_script_has_a_mirror` omgooien
+- `test_pine_sources_are_findable()` faalt hard bij een lege bronmap in plaats van te skippen
+
+Gemeten: **50 passed vóór de verhuizing, 50 passed erna.**
+
+**Herschrijf het gerust in jullie eigen vorm.** Het gaat mij alleen om dat laatste punt: met
+alleen `skipif` verdwijnen bij een lege glob veertig van de negenenveertig tests uit de suite
+(`parametrize` over een lege lijst) en meldt pytest groen. Dat is een poort die niets bewaakt.
+De rest is smaak.
+
+### Nog twee dingen die nu kunnen
+
+- `_NO_MIRROR` mag weg zodra EL TORO een mirror in `fleet.py` krijgt.
+- `firms.py:255` verzint nog steeds `acct_dll = 1000` waar de registry `null` zegt
+  (`apex_50k_intraday_eval`). Zie inbox 29 — staat los van dit alles.

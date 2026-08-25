@@ -13,12 +13,14 @@ sinds 25-08 wél in alle dertien scripts, default UIT, op los verzoek van Ferry 
 `INPUT_SPEC_v2.md`. Dat is een nieuwe uitrol, geen herleving van de meting: de cijfers van
 D-45/D-46 blijven vervallen.
 
-**Niet gedaan, en waarom:** de negen bestanden staan nog in `pine/v1_0_0/` in plaats van in
-`pine/`. Backtest Setup heeft er vandaag een pariteitspoort tegenaan gebouwd met een
-hard-gecodeerd `PINE_DIR = pine/v1_0_0`, en de skip-conditie is *leeg glob*. Verplaatsen
-maakt 49 groene tests stil tot 49 skips — een poort die groen blijft en niets meer bewaakt.
-Dat is een hand-off, geen blokkade: zodra `test_fleet_parity_source.py` meebeweegt gaat de
-map om.
+**De verhuizing is af (25-08, akkoord Ferry).** De negen bestanden staan nu in `pine/`,
+naast de vier EL TORO's — dertien scripts in één map, geen `v1_0_0/`-submap meer. Het was een
+zuivere hernoeming: 0 regels toegevoegd, 0 verwijderd.
+
+De pariteitspoort van Backtest Setup hing aan een hard-gecodeerd `PINE_DIR = pine/v1_0_0` met
+een `skipif` op een lege glob. Die is eerst meebewogen — `PINE_DIR` zoekt nu beide locaties,
+de EL TORO-scripts worden gefilterd omdat ze geen mirror in `fleet.py` hebben, en er staat een
+test bij die niet geskipt kan worden. Vóór de verhuizing 50 passed, ná de verhuizing 50 passed.
 
 
 Nieuwe groep **`0B · ENGINE PROFILE`**. Een dropdown zet de bevroren signaal- en

@@ -219,6 +219,17 @@ class Config:
     # "proxy"  = canonical deterministic OHLCV polarity proxy (pipeline v7 rule 4)
     # "native" = the CSV Delta column — a separate experiment, never the default
     cvd_source: str = "proxy"
+    # Optional signal side-filters (default OFF — research knobs, not frozen edge).
+    # BBWP = Bollinger band-width percentile band-pass gate (symmetric, both sides).
+    use_bbwp_filter: bool = False
+    bbwp_len: int = 20                   # BB basis/stdev window
+    bbwp_lookback: int = 255             # bars the current width is ranked against
+    bbwp_basis: str = "SMA"              # SMA | EMA | VWMA  (VWMA = volume-weighted)
+    bbwp_min: float = 0.0                # keep only widths at/above this percentile
+    bbwp_max: float = 100.0              # keep only widths at/below this percentile
+    # MFI = candle money-flow side (HMA-smoothed): longs>0, shorts<0.
+    use_mfi_filter: bool = False
+    mfi_period: int = 60                 # HMA smoothing length
 
     # --- regime (L1 classifier: MA-stack + ADX + ATR percentile) ---
     # Objective trend x volatility regime tag. See lab/FRAMEWORK.md §1/§6. The

@@ -57,6 +57,34 @@ def _pine_inputs(path: Path) -> dict[str, str]:
     return {m.group(2): m.group(1).strip() for m in _INPUT.finditer(txt)}
 
 
+_CONST = re.compile(r'^\s*(?:int|float)\s+(\w+)\s*=\s*(-?\d+(?:\.\d+)?)', re.M)
+
+
+def _pine_constants(path: Path) -> dict[str, float]:
+    """Bare numeric constant assignments (`int x = 3` / `float y = 2.0`). The v2
+    line demotes inputs that are inert in the frozen config (pivotK/swingBufSize
+    are only live in Swing-stop mode; EL_REY runs Fixed) to fixed constants. Parity
+    still verifies the value — it just reads it from the constant, not a widget."""
+    txt = path.read_text(encoding="utf-8", errors="replace")
+    return {m.group(1): float(m.group(2)) for m in _CONST.finditer(txt)}
+
+
+# Inputs the v2 script demoted to fixed constants: mirror field title -> source
+# constant name. When the input title is absent, parity reads the constant instead.
+_DEMOTED_CONST = {
+    "Pivot Strength (bars links/rechts)": "pivotK",
+    "Stop Buffer beyond swing (units)":   "swingBufSize",
+}
+
+
+def _force_flat_raw(ins: dict[str, str]):
+    """The v2 line renamed 'Force Flat Window' to 'Force flat 16:55 – 18:00'
+    (title only; still input.bool(true)). Match either by prefix so the en-dash
+    spelling does not matter."""
+    return next((v for k, v in ins.items()
+                 if k == "Force Flat Window" or k.lower().startswith("force flat")), None)
+
+
 def _coerce(raw: str, kind):
     if kind is bool:
         return raw == "true"
@@ -103,6 +131,7 @@ def _norm_phase(v) -> str:
 def test_mirror_matches_source(path):
     name = _engine_name(path)
     ins, cfg = _pine_inputs(path), fleet.engine_config(name)
+    consts = _pine_constants(path)
     diffs = []
     for title, get, kind in FIELDS:
         if title == "Account Phase":
@@ -114,6 +143,12 @@ def test_mirror_matches_source(path):
                 diffs.append(f"Account Phase: pine={raw!r} mirror={get(cfg)!r}")
             continue
         if title not in ins:
+            # v2 may have demoted this input to a fixed constant — still verify it.
+            const = consts.get(_DEMOTED_CONST.get(title, ""))
+            if const is not None:
+                if float(const) != float(get(cfg)):
+                    diffs.append(f"{title}: pine-const={const!r} mirror={get(cfg)!r}")
+                continue
             diffs.append(f"{title}: ontbreekt in de .pine")
             continue
         pine, ours = _coerce(ins[title], kind), get(cfg)
@@ -200,7 +235,9 @@ def test_session_window_matches_the_source(path):
         f"{name}: pine zet uren {sorted(off)} uit, mirror "
         f"{sorted(set(range(24)) - set(cfg.enabled_hours))}")
 
-    assert _coerce(ins["Force Flat Window"], bool) == cfg.use_auto_flat, name
+    flat_raw = _force_flat_raw(ins)
+    assert flat_raw is not None, f"{name}: force-flat input ontbreekt in de .pine"
+    assert _coerce(flat_raw, bool) == cfg.use_auto_flat, name
 
 
 @needs_pine

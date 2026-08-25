@@ -297,8 +297,8 @@ def spec_from_selection(registry: dict, *, setup_class: str, entry: str | None =
         _add(entry, table[entry])
 
     for f in filters:
-        if f not in ("vwap", "cvd_delta"):
-            raise SpecError(f"unknown filter {f!r} (allowed: vwap, cvd_delta)")
+        if f not in ("vwap", "cvd_delta", "bbwp", "mfi"):
+            raise SpecError(f"unknown filter {f!r} (allowed: vwap, cvd_delta, bbwp, mfi)")
         cat = groups_reg[f][1].get("info_category")
         if cat in info_used:
             raise SpecError(f"filter {f!r} collides with the entry's "

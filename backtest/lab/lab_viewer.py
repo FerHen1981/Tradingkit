@@ -159,7 +159,7 @@ def _builder_options() -> dict:
     return {
         "setups": {sc: [g for g, _ in opts] for sc, opts in SETUP_ENTRIES.items()},
         "confluence_entry": ["silver_bullet"],
-        "filters": ["vwap", "cvd_delta"],
+        "filters": ["vwap", "cvd_delta", "bbwp", "mfi"],
         "regimes": [r for r in REGIME_LABELS if r != "Indecision"],
         "base_presets": sorted(PRESETS),
         "adopted": vault.list_adopted(),          # self-learned, not-yet-wired indicators

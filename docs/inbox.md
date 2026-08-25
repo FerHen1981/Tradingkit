@@ -12,6 +12,30 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 26. EL_REY v2 dreef verder + BBWP/MFI/vwma/hma bedraad
+**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
+
+Twee dingen, beide afgerond aan onze kant — voor jullie zicht, geen actie vereist.
+
+**1. De v2-bron van EL_REY_EOD is verder herschreven** (na de rebase van vandaag).
+Nieuwe presentatie-drift t.o.v. gisteren: `Force Flat Window` → titel `Force flat
+16:55 – 18:00` (waarde nog `true`); en `pivotK`/`swingBufSize` zijn **van input
+gedegradeerd naar vaste constante** (`int pivotK = 3` / `float swingBufSize = 2.0`)
+— logisch, want in de Fixed-stopconfig zijn ze inert. Beide **waarde-identiek** aan
+de mirror (`pivot_k=3`, `swing_buf=2.0`, `use_auto_flat=True`). Weer presentatie,
+geen mechaniek. Pariteitstest leest nu de gedegradeerde constante en de hernoemde
+titel; hij **verifieert de waarde nog steeds**. Mirror ongewijzigd. Herinnering
+blijft: bestand heet nog `_v1_0_0` terwijl de inhoud v2 is — hernoemen is aan jullie.
+
+**2. `ta.vwma`/`ta.hma` (jullie enige vloot-afwijking) zijn nu bedraad.** Ferry koos:
+BBWP/MFI blijven optionele onderzoeksfilters (default UIT). vwma/hma bleken géén losse
+indicatoren — **vwma = de BBWP-basisoptie, hma = de MFI-smoother** — dus ze zijn
+meegekomen door BBWP en MFI als optionele vetoes te bedraden (repaint-vrij, 5
+touchpoints, 351 tests groen). Gevolg voor de zelf-lerende adoptie: een EL_REY-upload
+adopteert **geen** fantoom-indicatoren meer voor vwma/hma; ze verschijnen als echte
+filter-vinkjes in de Vaults-bouwer. BBWP/MFI zelf blijven default UIT tot jullie ze
+in een bron default-AAN zetten — dán zijn het bevroren mechaniek en gaan ze de mirror in.
+
 ### 25. EL_REY_MNQ_PROD_EOD — v2-bron gelezen, drift opgelost
 **Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
 

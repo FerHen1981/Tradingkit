@@ -297,6 +297,13 @@ _PARAM_MAP: dict[tuple[str, str], str] = {
     ("bollinger_bands", "stddev_mult"): "bb_mult",
     ("supertrend", "atr_length"):    "st_atr_length",
     ("supertrend", "multiplier"):    "st_mult",
+    # --- Level-B signal filters (vetoes, not entries) ---
+    ("bbwp", "length"):              "bbwp_len",
+    ("bbwp", "lookback"):            "bbwp_lookback",
+    ("bbwp", "basis"):               "bbwp_basis",
+    ("bbwp", "min"):                 "bbwp_min",
+    ("bbwp", "max"):                 "bbwp_max",
+    ("mfi", "period"):               "mfi_period",
 }
 # Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
 _TOGGLE_CONSUMED: set[tuple[str, str]] = {
@@ -318,7 +325,7 @@ WIRED_GROUPS: tuple[str, ...] = (
     "fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross", "market_structure",
     "liquidity_eqhl", "divergence", "order_block", "momentum",
     "macd", "rsi", "donchian", "moving_average", "bollinger_bands",
-    "silver_bullet", "supertrend",
+    "silver_bullet", "supertrend", "bbwp", "mfi",
 )
 
 
@@ -340,6 +347,9 @@ def effective_signature(cfg) -> tuple:
             bool(cfg.use_ma_pullback), int(cfg.ma_fast), int(cfg.ma_slow), str(cfg.ma_type),
             bool(cfg.use_bb_revert), int(cfg.bb_len), round(float(cfg.bb_mult), 3),
             bool(cfg.use_supertrend), int(cfg.st_atr_length), round(float(cfg.st_mult), 3),
+            bool(cfg.use_bbwp_filter), int(cfg.bbwp_len), int(cfg.bbwp_lookback),
+            str(cfg.bbwp_basis), round(float(cfg.bbwp_min), 3), round(float(cfg.bbwp_max), 3),
+            bool(cfg.use_mfi_filter), int(cfg.mfi_period),
             bool(cfg.use_confluence), str(cfg.confl_primary), tuple(cfg.confl_require),
             int(cfg.confl_lookback))
 
@@ -458,6 +468,10 @@ def describe_config(cfg) -> dict:
         filt.append("VWAP veto")
     if cfg.use_gap_filter:
         filt.append(f"gap {cfg.gap_min_ticks:g}-{cfg.gap_max_ticks:g}t")
+    if getattr(cfg, "use_bbwp_filter", False):
+        filt.append(f"BBWP {cfg.bbwp_min:g}-{cfg.bbwp_max:g}%")
+    if getattr(cfg, "use_mfi_filter", False):
+        filt.append("MFI side")
     if getattr(cfg, "regime_filter", None):
         filt.append("regime gate: " + ", ".join(sorted(cfg.regime_filter)))
     out["filters"] = filt
@@ -524,6 +538,8 @@ def spec_to_config(rspec: ResolvedSpec):
         over["use_cvd_streak"] = True
     over["stop_swing"] = "swing_stops" in g
     over["use_vwap_veto"] = "vwap" in g and bool(g["vwap"].get("vwap_veto", True))
+    over["use_bbwp_filter"] = "bbwp" in g
+    over["use_mfi_filter"] = "mfi" in g
 
     # Entry generators (Level B). Presence of an explicit entry group turns its
     # generator on. A spec that enables ANY non-FVG entry but declares no fvg

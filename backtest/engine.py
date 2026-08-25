@@ -89,6 +89,12 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
         "veto_short": ind["veto_short"].to_numpy(bool),
+        "bbwp_pass": (ind["bbwp_pass"].to_numpy(bool) if "bbwp_pass" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
+        "mfi_long": (ind["mfi_long"].to_numpy(bool) if "mfi_long" in ind.columns
+                     else np.ones(len(df), dtype=bool)),
+        "mfi_short": (ind["mfi_short"].to_numpy(bool) if "mfi_short" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
         "regime_ok": (ind["regime_ok"].to_numpy(bool) if "regime_ok" in ind.columns
                       else np.ones(len(df), dtype=bool)),
         "vwap": ind["vwap"].to_numpy() if "vwap" in ind else np.full(len(df), np.nan),
@@ -135,6 +141,14 @@ class Engine:
         self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]; self.atr = a["atr"]
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
+        self.bbwp_pass = a.get("bbwp_pass")
+        self.mfi_long = a.get("mfi_long"); self.mfi_short = a.get("mfi_short")
+        if self.bbwp_pass is None:
+            self.bbwp_pass = np.ones(len(self.close), dtype=bool)
+        if self.mfi_long is None:
+            self.mfi_long = np.ones(len(self.close), dtype=bool)
+        if self.mfi_short is None:
+            self.mfi_short = np.ones(len(self.close), dtype=bool)
         self.regime_ok = a["regime_ok"]
         self.ema_cross_dir = a.get("ema_cross_dir")
         self.bos_dir = a.get("bos_dir")
@@ -767,8 +781,10 @@ class Engine:
                     self.veto_counts["primary"] += 1
                     self.veto_counts["confluence"] += 1
                 return False, False, np.nan, np.nan, np.nan
-        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
-        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
+        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.bbwp_pass[i]
+                 and self.mfi_long[i] and self.regime_ok[i] and can_trade)
+        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.bbwp_pass[i]
+                  and self.mfi_short[i] and self.regime_ok[i] and can_trade)
         if self.diag:
             self._attribute_veto(i, d, can_trade, long0 or short0)
         return long0, short0, entry_ref, stop_up, stop_down
@@ -784,8 +800,10 @@ class Engine:
             d, entry_ref, stop_up, stop_down = gen(i)
             if d == 0:
                 continue
-            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.regime_ok[i] and can_trade)
-            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.regime_ok[i] and can_trade)
+            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.bbwp_pass[i]
+                     and self.mfi_long[i] and self.regime_ok[i] and can_trade)
+            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.bbwp_pass[i]
+                      and self.mfi_short[i] and self.regime_ok[i] and can_trade)
             if self.diag:
                 self._attribute_veto(i, d, can_trade, long0 or short0)
             return long0, short0, entry_ref, stop_up, stop_down

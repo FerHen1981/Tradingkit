@@ -19,7 +19,9 @@ Claude-codegen step, not something the deterministic server should guess.
 Detection signals (from the fleet's Pine sources): the group constants
 `"N · SIGNAL — <name>"` are the authoritative "what this script trades on"; the
 `ta.*` call set is used mainly to catch UNKNOWN indicators (a `ta.*` the lab
-neither maps nor treats as a primitive — e.g. `ta.vwma`, `ta.hma`).
+neither maps nor treats as a primitive). `ta.vwma`/`ta.hma` were the fleet's only
+such unknowns (in EL_REY); they are now recognised — vwma is the BBWP basis option
+and hma the MFI smoother, both wired as filters (Fase 6).
 """
 from __future__ import annotations
 
@@ -36,12 +38,14 @@ _GROUP_KNOWN = {
     "fvg": "fvg", "fair value gap": "fvg",
     "volume delta": "cvd_delta", "delta": "cvd_delta", "cvd": "cvd_delta",
     "vwap": "vwap", "bias": "vwap",
+    "bbwp": "bbwp", "band width": "bbwp", "band-width": "bbwp",
+    "mfi": "mfi", "money flow": "mfi",
 }
 # ta.* names the lab already recognises — either a real group or a primitive it
 # does not need to adopt. Anything NOT here is treated as an unknown indicator.
 _TA_RECOGNIZED = {
     # mapped indicators
-    "vwap", "ema", "sma", "wma", "rsi", "macd",
+    "vwap", "ema", "sma", "wma", "vwma", "hma", "rsi", "macd",
     # primitives / plumbing
     "atr", "stdev", "highest", "lowest", "pivothigh", "pivotlow", "barssince",
     "percentrank", "requestvolumedelta", "change", "cum", "rma", "tr", "nz",

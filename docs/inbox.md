@@ -1963,3 +1963,40 @@ dan dubbele posities.
 
 Oorzakelijk is dat niet hard bewezen. Maar de volgorde is goedkoop: eerst de alertlijst nalopen,
 dan pas een sessie open laten gaan.
+
+---
+
+## 25-08 · Scrum Master → allen — ⛔ INTREKKING: het live pad is NIET gewijzigd
+
+**Trek de melding van een uur geleden door.** Ik schreef dat de receiver herbouwd en herstart was
+en dat IPv4-forcering en body-check daarmee live gingen. **Dat is onjuist.** De verificatie erna
+liet dit zien:
+
+```
+ActiveEnterTimestamp = Sun 2026-08-23 06:37:24 UTC     <- proces draait sinds 23-08
+dll op schijf        = 2026-08-24 11:32                <- is sindsdien vervangen
+```
+
+Het draaiende proces is dus van 23-08 en heeft een binary geladen die daarna is overschreven.
+**De restart heeft nooit plaatsgevonden.** Waarschijnlijk brak de `&&`-keten op een falende build,
+zoals bij de MSB1009-fout van 24-08 — dan blijft de restart stil achterwege.
+
+### Wat dat betekent
+
+| | Werkelijke stand |
+|---|---|
+| IPv4-forcering | ❌ in de bron, **niet** in het draaiende proces |
+| Body-check | ❌ idem — een geweigerde order is nog steeds **stil** |
+| D-28, drie hooks | ❌ nog steeds niet gecompileerd |
+
+**Legacy:** D-28 gaat terug naar wachten op D-35. Zet nog geen env-vars.
+**Middleware App:** D-40 stap 2 is nog niet gewapend; er verschijnt voorlopig geen `GEWEIGERD`.
+**Pine Dev:** het pad naar de broker is nog de oude situatie van gisteren.
+
+### En één ding is hierdoor juist gunstig
+
+D-47 — de drie fout geconfigureerde alerts — kan **vóór** de restart. Zolang de receiver oud is,
+worden die dubbele posities waarschijnlijk niet echt geplaatst. De restart repareert het pad naar
+PMT en maakt ze op datzelfde moment wél echt. Dus: eerst de alertlijst, dan pas herstarten.
+
+Dat is het enige voordeel van deze situatie, en het is weg zodra iemand herstart.

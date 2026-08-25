@@ -150,6 +150,31 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             return Results.Ok(new { accepted = true, handled = false, reason = "kill-switch: disarmed" });
         }
 
+        // D-53 · qty-map per account. Pine zet quantity_multiplier op 1; hier overschrijven
+        // we die met wat de map voor dit account voorschrijft. Ontbreekt het account in
+        // de map, dan laten we de payload precies zoals Pine hem stuurt. Bron: env
+        // MEX_ACCOUNT_QTY_MULTIPLIERS (kommalijst account_id=n). Vers account = 1.
+        var qtyMult = AccountQtyMap.MultiplierFor(acct);
+        if (qtyMult is int m && a0 is not null)
+        {
+            a0["quantity_multiplier"] = m;
+            body = node!.ToJsonString();     // rebuild — de forward stuurt deze gewijzigde body
+        }
+
+        // D-40 · reactieve blocked-gate per account. Een eerdere PMT-weigering met een
+        // day-cap/DLL/payout-cap marker houdt dit account dicht tot de eerstvolgende
+        // 18:00 ET sessie-roll. Dezelfde plek en vorm als de kill-switch hierboven.
+        // Alleen entries; een exit moet nog door zodat een openstaande positie kán sluiten.
+        if (isEntry && !string.IsNullOrEmpty(acct) && AccountBlockGate.IsBlocked(acct, DateTime.UtcNow))
+        {
+            var was = AccountBlockGate.ReasonFor(acct);
+            var msg = $"GEWEIGERD lokaal — day-cap/DLL blokkade actief (eerder: {was})";
+            await AppendAsync(storePath, "pmt", body, msg, acct);
+            await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+                $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{msg}", 14701138);
+            return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = msg, blocked = true });
+        }
+
         var rithmicList = Environment.GetEnvironmentVariable("MEX_PMT_RITHMIC_ACCOUNTS") ?? "";
         var useRithmic = !string.IsNullOrWhiteSpace(rithmicList) && !string.IsNullOrEmpty(acct)
             && rithmicList.Split(',').Select(x => x.Trim()).Contains(acct);
@@ -157,6 +182,12 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
         await AppendAsync(storePath, "pmt", body, res, acct);
+
+        // D-40 · registreer de weigering. Als PMT afwees met een day-cap/DLL marker in de
+        // reply, dan gaat dit account op slot tot 18:00 ET. Reactief, met opzet: de eerste
+        // order na de weigering vertrok al — die is nu geweigerd — daarna is het dicht.
+        if (res.StartsWith("GEWEIGERD") && !string.IsNullOrEmpty(acct))
+            AccountBlockGate.RegisterIfLimitMarker(acct, res, DateTime.UtcNow);
 
         // Een geweigerde order is stil: er komt geen fill, geen exit, geen kaart.
         // Zonder melding merk je het pas als je het bij de broker gaat zoeken.
@@ -366,6 +397,101 @@ static string Tail(string s) => s.Length >= 5 ? s[^5..] : s;
 public static class Runtime
 {
     public static volatile bool Armed = true;
+}
+
+// D-53 · Per-account quantity_multiplier override. Pine schrijft die hard op 1;
+// hier vertalen we per account naar een andere waarde. Env: MEX_ACCOUNT_QTY_MULTIPLIERS
+// (kommalijst account_id=n). Ontbrekend account = payload niet aanraken. Handmatige
+// map, geen fase-detectie — dat is v2 en vraagt echte accountstand uit de poller.
+public static class AccountQtyMap
+{
+    static readonly Dictionary<string, int> _map = new(StringComparer.OrdinalIgnoreCase);
+
+    static AccountQtyMap()
+    {
+        Load(Environment.GetEnvironmentVariable("MEX_ACCOUNT_QTY_MULTIPLIERS") ?? "");
+    }
+
+    // Herbouw de map — nuttig voor tests én voor een toekomstige reload zonder herstart.
+    public static void Load(string spec)
+    {
+        _map.Clear();
+        foreach (var part in (spec ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && int.TryParse(kv[1].Trim(), out var n) && n > 0)
+                _map[kv[0].Trim()] = n;
+        }
+    }
+
+    public static int? MultiplierFor(string account)
+        => !string.IsNullOrEmpty(account) && _map.TryGetValue(account, out var n) ? n : null;
+}
+
+// D-40 · Reactieve blocked-gate per account. Onthoudt een PMT-weigering met een
+// day-cap / DLL / payout-cap marker tot de eerstvolgende sessie-roll (18:00 ET —
+// zelfde grens die fills_pairing.session_date gebruikt). Bewust reactief: de eerste
+// order na een weigering vertrekt nog en wordt door PMT afgewezen — daarna is het
+// account dicht tot de nieuwe sessie. Een proactieve versie (echte dag-P&L per
+// account uit de Tradovate-poller) is v2, dat vraagt de poller-data in de receiver.
+public static class AccountBlockGate
+{
+    // Alleen markers die eenduidig "dag-limiet geraakt" betekenen. "rejected" en
+    // "unauthorized" zijn te breed — die vallen elk 4xx onder en zouden een account
+    // onterecht sluiten. Wat wél telt is het waarom.
+    static readonly string[] LimitMarkers =
+    {
+        "day cap", "daily cap", "day loss", "daily loss", "dll", "loss limit",
+        "payout cap", "payout limit", "profit target", "consistency", "max loss",
+    };
+
+    static readonly ConcurrentDictionary<string, (DateTime ExpiresUtc, string Reason)> _blocked = new();
+    static readonly TimeZoneInfo _et = ResolveEt();
+
+    static TimeZoneInfo ResolveEt()
+    {
+        // Linux draagt IANA-ids; Windows draagt de Engelse. Val netjes terug zodat het
+        // niet uitmaakt waar dit ooit gebouwd wordt.
+        try { return TimeZoneInfo.FindSystemTimeZoneById("America/New_York"); }
+        catch { return TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time"); }
+    }
+
+    // De eerstvolgende 18:00 ET in UTC — dezelfde grens die de dashboards en
+    // session_date() aanhouden. Vóór 18:00 ET = vandaag 18:00 ET, ná = morgen.
+    static DateTime NextSessionRollUtc(DateTime nowUtc)
+    {
+        var nowEt = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, _et);
+        var todayRollEt = new DateTime(nowEt.Year, nowEt.Month, nowEt.Day, 18, 0, 0, DateTimeKind.Unspecified);
+        var rollEt = nowEt < todayRollEt ? todayRollEt : todayRollEt.AddDays(1);
+        return TimeZoneInfo.ConvertTimeToUtc(rollEt, _et);
+    }
+
+    public static bool IsBlocked(string account, DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(account)) return false;
+        if (!_blocked.TryGetValue(account, out var entry)) return false;
+        if (entry.ExpiresUtc > nowUtc) return true;
+        _blocked.TryRemove(account, out _);
+        return false;
+    }
+
+    public static string ReasonFor(string account)
+        => _blocked.TryGetValue(account, out var e) ? e.Reason : "";
+
+    // Wordt aangeroepen ná ForwardJsonAsync met de reply. Alleen als de reply zelf
+    // "GEWEIGERD" heet én een limit-marker draagt slaat het account op slot.
+    public static void RegisterIfLimitMarker(string account, string reply, DateTime nowUtc)
+    {
+        if (string.IsNullOrEmpty(account) || string.IsNullOrEmpty(reply)) return;
+        var r = reply.ToLowerInvariant();
+        var hit = LimitMarkers.FirstOrDefault(m => r.Contains(m));
+        if (hit is null) return;
+        _blocked[account] = (NextSessionRollUtc(nowUtc), hit);
+    }
+
+    // Voor tests / debugging.
+    public static void Reset() => _blocked.Clear();
+    public static int Count => _blocked.Count;
 }
 
 public static class Audit

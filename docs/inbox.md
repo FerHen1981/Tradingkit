@@ -12,6 +12,55 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 27. D-40 + D-53 bouwen in `Program.cs` — live executiepad
+**Middleware App → Ferry / Scrum Master / Legacy** · 2026-08-25 · status: MELDING VOORAF
+
+Ferry heeft D-40 en D-53 samen laten pakken omdat ze op dezelfde plek in het live
+executiepad zitten — vóór `ForwardJsonAsync` in `/signal/{token}` van
+`Mex.Journal.Receiver` — en op dezelfde bron: `multiple_accounts[0].account_id`.
+
+**Wat er ingaat, in één functie per item:**
+
+- **D-40 (blocked-gate)** — `AccountBlockGate` onthoudt per account een PMT-weigering met een
+  day-cap/DLL/payout-cap marker. Volgende signaal voor dat account: geen forward, wel
+  `GEWEIGERD lokaal — day-cap/DLL blokkade actief` in `routed_*.jsonl`, plus
+  "⛔ Order NIET geplaatst" op Discord. Reset op de eerstvolgende 18:00 ET grens
+  (dezelfde sessie-roll als `fills_pairing.session_date`). Dit is **reactief**: de eerste
+  order na een blokkade gaat nog uit en wordt door PMT geweigerd — daarna is het account
+  dicht. De proactieve versie (echte dag-P&L uit een poller) is v2.
+- **D-53 (qty-map)** — `AccountQtyMap` leest `MEX_ACCOUNT_QTY_MULTIPLIERS`
+  (kommalijst `account_id=n`, bv. `PAAPEX2700250000015=1,APEX27002500000214=2`).
+  Vóór `ForwardJsonAsync` overschrijven we `multiple_accounts[0].quantity_multiplier`
+  met die waarde als er één staat; ontbreekt hij, dan blijft de payload zoals Pine
+  hem stuurt (nu hard `1`). Vers account = 1, uitbreiden = env-var editen. Geen
+  nieuwe datafeed, geen automatische fase-detectie (dat is v2, vraagt de Tradovate-poller).
+
+**Effect op de dispatch:** eerst de qty-map (payload muteren of laten), dán de blocked-gate
+(al of niet forwarden), dán `ForwardJsonAsync`. Volgorde is bewust: een geblokkeerd
+account met een verhoogde multiplier blijft geblokkeerd, en een niet-geblokkeerd
+account krijgt zijn juiste qty mee.
+
+**Wat er NIET in gaat:**
+- Wijziging aan `Rejected()`-markers (staat expliciet in D-40 als "verfijning, geen blokkade"
+  — komt zodra er een echte PMT-weigering in `routed_*.jsonl` verschijnt).
+- Automatische qty per fase op basis van accountnaam (v2).
+- Pine wordt niet aangeraakt.
+
+**Ferry, dit heb je nodig om het écht aan te zetten (na `dotnet build src/Mex.Journal.Receiver -c Release`):**
+`MEX_ACCOUNT_QTY_MULTIPLIERS=PAAPEX2700250000015=1,APEX27002500000214=1,…` in de
+EnvironmentFile van `mex-receiver`, één regel per account. Ontbrekend = payload
+niet aanraken. Zet vers accounts op `1`. Zonder deze env-var: **geen gedragswijziging**
+op qty-vlak; alleen de blocked-gate wordt actief.
+
+**Testbaar:** de twee helpers zijn `public static` en pure logica (geen HTTP), dus
+targetbaar in `Mex.Journal.Cli` of via een xUnit-project als iemand er een opzet.
+Voor nu leun ik op inspectie (functies zijn kort) en op de eerstvolgende PMT-weigering
+op de VPS als kanariemuis.
+
+Pushen zodra de code staat.
+
+---
+
 ### 26. EL_REY v2 dreef verder + BBWP/MFI/vwma/hma bedraad
 **Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
 

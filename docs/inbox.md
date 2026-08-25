@@ -1808,3 +1808,76 @@ Negen bestanden, één regel per stuk. `f_distPrice()` rekent om vanuit `unitMod
    vóór je de fix test, anders weet je niet wat je meet.
 
 **Dit raakt echte orders.** Meld het hier vóór je pusht.
+
+---
+
+## 25-08 · Scrum Master → Pine Dev + Middleware App — D-40 gaat naar de fan-out, D-44 blijft in Pine
+
+Ferry stelde vanmiddag twee vragen die op dezelfde grens neerkomen: **wat hoort in het script
+en wat hoort in de fan-out?** Hier het antwoord voor beide, met de scheidslijn erbij, zodat we
+hem de volgende keer niet opnieuw hoeven af te leiden.
+
+### De scheidslijn
+
+> **Wat alleen Pine weet, stuurt Pine mee. Wat alleen de fan-out weet, handhaaft de fan-out.**
+>
+> Strategieparameters (BE-trigger, BE-offset, stopafstand, qty-intentie) kent alleen het script —
+> die horen in de payload. Accountstand (day cap, DLL, brokerwaarheid, welk account dit is) kent
+> alleen de fan-out — die hoort in de receiver.
+
+### D-40 — ⚠️ instructie van vanochtend ingetrokken
+
+Op het bord stond vanochtend: *"Pine Dev breidt de `pmtBlock`-conditie uit met day-cap en DLL."*
+**Dat vervalt.** Pine Dev hoeft hier niets aan te doen. Vier redenen:
+
+1. **Pine-state is per chart, accounts zijn per alert.** D-47 liet twee alerts op één chart zien
+   met verschillende accounts en volumes (PA017 qty 4, PA018 qty 6). Eén script-instantie houdt
+   één set variabelen bij en kan dus geen aparte DLL-stand per account dragen. Wat je ook bouwt,
+   het klopt hoogstens voor één van de twee.
+2. **Pine's P&L is een simulatie.** Op 24-08 boekte TradingView +$759,20 op een trade die bij de
+   broker niet bestond. Een poort in Pine handhaaft tegen die fictie — hij blokkeert net zo goed
+   een gezond account als dat hij een geblokkeerd account doorlaat.
+3. **De blokkade-waarheid staat in PMT's embed** (day cap / DLL) en komt binnen bíj de receiver.
+   Pine ziet hem nooit.
+4. Het is hetzelfde handhavingspunt als **D-02**, dat Ferry al in de .NET-receiver heeft belegd,
+   en het is de laatste poort vóór de order. Alles daarvóór is advies.
+
+**Middleware App, dit item is nu volledig van jullie.** Het account wordt in `/signal/{token}`
+al uit `multiple_accounts[0].account_id` gehaald (`Program.cs` ±132). Toets dat vóór
+`ForwardJsonAsync` aan de laatst bekende blokkadestand; geblokkeerd ⇒ niet forwarden, wél
+wegschrijven als `GEWEIGERD` en melden op Discord. Volg het patroon van de kill-switch-poort
+(`Runtime.Armed`) — zelfde plek, zelfde vorm. ⚠️ Hangt achter **D-06**: zolang de solution niet
+uit git te bouwen is kun je dit niet testen.
+
+**Pine Dev, wat wél blijft:** `pmtBlock` op regel 998 doet alleen de payout-cap. Dat is
+ladderstand die Pine zélf bijhoudt en die PMT niet handhaaft — die hoort daar en blijft staan.
+Niet uitbreiden.
+
+### D-44 — blijft in Pine, de middleware injecteert niets
+
+Ferry vroeg of de middleware `breakeven_offset` kon toevoegen in plaats van negen scripts te
+wijzigen. **Nee**, om drie redenen:
+
+1. De waarde is een **bevroren strategieparameter** per engine (`beOffsetSize`, zie
+   `frozen-engines.md`). Injecteren vraagt een tweede tabel strategie→offset náást de Pine-input.
+   Iemand wijzigt de input, de middleware stuurt de oude waarde — en niemand merkt het.
+2. **Pine gebruikt `beOffEff` zelf al** om de eigen stop te verzetten (regel 1557/1580). Lopen de
+   twee uiteen, dan verzet de simulatie de stop naar entry±12 terwijl PMT hem ergens anders legt.
+   Dat is exact de pariteitsklasse fouten die deze pijplijn al een hele rangorde heeft gekost.
+3. `f_distPrice()` rekent om met de tick-math van het instrument. In de receiver zou die formule
+   herbouwd moeten worden in C# — een tweede implementatie van dezelfde som.
+
+**En het handwerk valt mee.** Het `f_pmtJSON`-blok is **byte-identiek in alle negen scripts** —
+md5 `9812c09d5b` over het functieblok, negen van de negen. Eén `sed` op dat anker doet ze
+allemaal en dezelfde checksum bewijst achteraf dat er niets is overgeslagen. Geen negen
+handmatige edits.
+
+### D-51 — nieuw, Ferry's onderliggende punt was wél raak
+
+Dát blok negen keer kopiëren ís schuld. Elke payload-wijziging kost negen bestanden en negen
+uploads naar TradingView, en één vergeten script geeft stille afwijking in het live pad —
+precies wat D-44 zichtbaar maakte. Voorstel: de payload-bouwers (`f_pmtJSON`, `f_pcSym`, de
+middleware-alert) naar één Pine v6 `library()` met `import` in de negen scripts.
+
+⚠️ **Niet nu.** Dit raakt negen live scripts en moet daarom opnieuw langs trap 1 (Pine-pariteit)
+van de pijplijn. Eerst D-44 uitleveren, dan dit als eigen onderzoeksronde.

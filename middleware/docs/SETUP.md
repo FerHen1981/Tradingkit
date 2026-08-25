@@ -1,5 +1,21 @@
 # Middleware opzetten — stap-voor-stap (voor beginners)
 
+> ⚠️ **LET OP: deze gids beschrijft de OUDE Python-middleware** (`main.py`/`router.py`
+> als FastAPI-app op de `mex-middleware` service), die inmiddels **DEAD PATH** is
+> (D-05). Het live executiepad draait op de .NET-receiver
+> (`Mex.Journal.Receiver`, service `mex-receiver`), niet op wat hier staat.
+>
+> De hostnaam is bijgewerkt naar `mw.mex-traders.com` (D-49) zodat de doc geen
+> NXDOMAIN meer noemt, maar de **endpoint-paden** hier (`/webhook`, `/journal`,
+> `/performance`, `?secret=…`) bestaan **niet** op de .NET-kant — daar is de
+> intake `POST /signal/{token}`, de kill-switch `POST /killswitch?token=…&armed=…`
+> en de health-check `GET /health`. Zie `middleware/README.md` voor de actuele
+> URL-vorm.
+>
+> Deze gids wordt in een aparte ronde onder D-05/opruiming vervangen door een
+> .NET-native versie; tot dan blijft hij staan als historie én als sjabloon voor
+> wie ooit een eigen Python-variant wil deployen.
+
 Deze gids neemt je van niks naar een werkende, altijd-aan middleware op je eigen
 server (VPS), met veilig HTTPS, persistente journaling en live feedback van je
 brokers (Tradovate + PineConnector/MT5) over echte fills en slippage.
@@ -8,7 +24,7 @@ Je hoeft **geen** Linux-expert te zijn. Bijna alles gebeurt met één installati
 
 **Wat je aan het eind hebt:**
 - Een server die 24/7 draait, ook als al je apparaten uitstaan.
-- Webhook-URL voor TradingView: `https://middleware.pipsandpalmtrees.com/webhook`
+- Webhook-URL voor TradingView: `https://mw.mex-traders.com/webhook`
 - Een journal (sqlite) dat bewaard blijft: elk signaal, elke order, elke P&L-snapshot.
 - Reconciliation: *intended* (TradingView) vs *actual* fills → slippage per venue.
 - Een kill-switch om alles direct te stoppen.
@@ -134,12 +150,12 @@ andere LifeOS-plannen) blijft gewoon vrij.
 
 3. Opslaan.
 
-Dit maakt `middleware.pipsandpalmtrees.com` wijzen naar je server. Je hoofddomein en
+Dit maakt `mw.mex-traders.com` wijzen naar je server. Je hoofddomein en
 `www` raak je **niet** aan — die houd je vrij voor je website.
 
 **Check (na een paar minuten tot ~30 min):** typ op je VPS in Termius:
 ```bash
-dig +short middleware.pipsandpalmtrees.com
+dig +short mw.mex-traders.com
 ```
 Zie je het IP-adres van je VPS terug? Dan is DNS doorgezet en kun je verder. Zo niet,
 even wachten en opnieuw proberen (DNS heeft soms tijd nodig).
@@ -163,14 +179,14 @@ git clone https://github.com/ferhen1981/tradingkit.git
 cd tradingkit/middleware
 
 # 3. Het installatiescript draaien met JOUW subdomein
-sudo bash deploy/setup.sh middleware.pipsandpalmtrees.com
+sudo bash deploy/setup.sh mw.mex-traders.com
 ```
 
 Het script print aan het eind onder andere **je automatisch gegenereerde
 `MIDDLEWARE_SECRET`**. **Kopieer en bewaar die** — je hebt 'm nodig in TradingView en
 voor de kill-switch.
 
-**Check:** open in je browser `https://middleware.pipsandpalmtrees.com/health`.
+**Check:** open in je browser `https://mw.mex-traders.com/health`.
 Zie je een OK-antwoord (en een geldig slotje/HTTPS)? Dan draait de app met HTTPS.
 
 > Duurt HTTPS even? Caddy haalt bij de eerste keer automatisch een gratis
@@ -256,7 +272,7 @@ Sla op (Ctrl+O, Enter, Ctrl+X) en herstart de service zodat de nieuwe waarden la
 sudo systemctl restart mex-middleware
 ```
 
-**Check:** `curl https://middleware.pipsandpalmtrees.com/health` geeft weer OK.
+**Check:** `curl https://mw.mex-traders.com/health` geeft weer OK.
 
 ---
 
@@ -267,7 +283,7 @@ Nu bewijs je dat alles werkt, zonder één echte order te versturen. Vervang
 
 Stuur een testsignaal — dit is exact wat TradingView straks stuurt:
 ```bash
-curl -s https://middleware.pipsandpalmtrees.com/webhook \
+curl -s https://mw.mex-traders.com/webhook \
   -H 'content-type: application/json' -d '{
   "secret":"JOUW_SECRET","strategy":"GC","event":"ENTRY","action":"buy",
   "symbol":"GC1!","price":2650.5,"order_type":"LMT","dollar_sl":100,"dollar_tp":250,"qty":1
@@ -278,7 +294,7 @@ Je hoort per gekoppeld account een gebouwde order terug te zien met
 
 Bekijk je journal (het bewijslogboek dat bewaard blijft):
 ```bash
-curl -s "https://middleware.pipsandpalmtrees.com/journal?secret=JOUW_SECRET&limit=5"
+curl -s "https://mw.mex-traders.com/journal?secret=JOUW_SECRET&limit=5"
 ```
 Je ziet het binnengekomen signaal én de dry-run-dispatches. Dit is Phase 0+1 bewezen.
 
@@ -291,7 +307,7 @@ keten TradingView-vorm → middleware → (klaar-om-te-versturen) order.
 
 1. **Koppel TradingView.** Zet in je "→ Middleware" alert als webhook-URL:
    ```
-   https://middleware.pipsandpalmtrees.com/webhook
+   https://mw.mex-traders.com/webhook
    ```
    en als bericht de lean JSON (strategy/action/symbol/price/dollar_sl/dollar_tp/qty +
    `secret`). Laat `DRY_RUN` nog op `true` en kijk een tijdje mee in het journal of de
@@ -314,7 +330,7 @@ keten TradingView-vorm → middleware → (klaar-om-te-versturen) order.
 
 **Kill-switch — stopt ALLE dispatch onmiddellijk:**
 ```bash
-curl -X POST "https://middleware.pipsandpalmtrees.com/killswitch?secret=JOUW_SECRET&armed=false"
+curl -X POST "https://mw.mex-traders.com/killswitch?secret=JOUW_SECRET&armed=false"
 # weer aanzetten: ...&armed=true
 ```
 
@@ -345,7 +361,7 @@ sudo systemctl restart mex-middleware
 
 | Symptoom | Waarschijnlijke oorzaak | Oplossing |
 |---|---|---|
-| `/health` laadt niet / geen HTTPS | DNS nog niet doorgezet of poort dicht | `dig +short middleware.pipsandpalmtrees.com` moet je VPS-IP tonen; even wachten |
+| `/health` laadt niet / geen HTTPS | DNS nog niet doorgezet of poort dicht | `dig +short mw.mex-traders.com` moet je VPS-IP tonen; even wachten |
 | Certificaat-fout in browser | Caddy kon nog geen certificaat halen | wacht ~1 min; check `journalctl -u caddy -f`; DNS moet eerst goed staan |
 | Signaal geweigerd / geen dispatch | verkeerd `secret` of `DRY_RUN`/kill-switch | check dat je `secret` klopt en de kill-switch `armed=true` is |
 | Geen P&L in `/performance` | `TRADOVATE_*` niet ingevuld | vul credentials in, of test met `TRADOVATE_MOCK=true` |
@@ -358,7 +374,7 @@ sudo systemctl restart mex-middleware
 1. VPS: **US-East, Ubuntu 24.04**, kleinste tier.
 2. Verbinden via **Termius** (iOS + Windows).
 3. GoDaddy: **A-record** `middleware` → VPS-IP.
-4. `git clone` + `sudo bash deploy/setup.sh middleware.pipsandpalmtrees.com`.
+4. `git clone` + `sudo bash deploy/setup.sh mw.mex-traders.com`.
 5. `.env` + `accounts.yaml` invullen (`DRY_RUN=true` laten).
 6. Testen in DRY_RUN via `/webhook` en `/journal`.
 7. Eén account live: `DRY_RUN=false`, herstart, order in Tradovate checken.

@@ -88,7 +88,7 @@ follower-functie en de recap er later bovenop zonder iets te slopen.
 ## Componenten
 
 ### 1. Control plane ("Brain") — uitbouw van de huidige FastAPI-middleware
-Blijft op de VPS (`middleware.pipsandpalmtrees.com`). Krijgt erbij:
+Blijft op de VPS (`mw.mex-traders.com`). Krijgt erbij:
 
 - **State Engine** (nieuw, het hart) — combineert live fills/PnL (Tradovate +
   MetaAPI/MT5) met de regels uit `backtest/firms.py` en levert **per account**:
@@ -150,7 +150,7 @@ live-actie-laag — dat is de control-plane.
 | Marketing-site | Vercel | `pipsandpalmtrees.com`, `www` |
 | Owner-console + follower-portal | Vercel | `app.pipsandpalmtrees.com` |
 | Viewer API (publiek, alleen-lezen) | VPS | `api.pipsandpalmtrees.com` |
-| Control-plane / webhook (privé) | VPS | `middleware.pipsandpalmtrees.com` |
+| Control-plane / webhook (privé) | VPS | `mw.mex-traders.com` |
 
 Elk subdomein = één DNS-record (A-record naar de VPS voor de API's; CNAME naar Vercel
 voor de site/app). De middleware-webhook uit `SETUP.md` blijft ongewijzigd bestaan.

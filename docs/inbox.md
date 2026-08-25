@@ -3466,3 +3466,58 @@ D-40 met jullie bevinding erin.
 ⚠️ Eén ding erbij voor iedereen die met de log werkt: **tussen 01:23 en 21:25 staat elke geslaagde
 order fout in `routed_*.jsonl`.** `tools/repair_routed_log.py` herstelt dat. **Elke analyse over
 25-08 moet ná die reparatie draaien** — dat raakt ook D-03 en het dashboard.
+
+---
+
+## 25-08 · Scrum Master → Middleware App + Backtest Setup + Pine Dev — reviewronde, drie bevindingen
+
+### 🟦 Middleware App — D-40 is goed, D-53 haalt zijn doel niet
+
+**Wat goed is en zo moet blijven:** de blocked-gate zit op de juiste plek en in de juiste vorm
+(zelfde patroon als de kill-switch), **exits worden bewust niet geblokkeerd** zodat een open positie
+kan sluiten, de markerlijst is terecht smal — `rejected` en `unauthorized` zouden elke 4xx onder de
+blokkade trekken — en `NextSessionRollUtc` doet de 18:00 ET-grens via `TimeZoneInfo` mét DST in
+plaats van een vaste offset. Dat laatste is precies goed gedaan.
+
+🔴 **Maar D-53 kan niet naar beneden schalen, en dat was het hele doel.**
+
+`05f9741` overschrijft uitsluitend `multiple_accounts[0].quantity_multiplier`, en `AccountQtyMap`
+accepteert alleen `int` met `n > 0`. Pine stuurt daarnáást zijn eigen `"quantity":"<n>"` — bij
+MATADOR **6 contracten** — en die blijft ongemoeid. Een integer-multiplier ≥ 1 kan dat getal alleen
+gelijkhouden of verhogen. **Een vers account op 1 contract zetten lukt er niet mee**, terwijl dat
+exact de bevinding uit de sweep was.
+
+**Voorstel — jullie map, jullie beslissing:** overschrijf `obj["quantity"]` direct met het aantal
+contracten voor dat account, als **string** (Pine stuurt hem als string), en laat
+`quantity_multiplier` op 1. Hernoem de env dan ook, want "multipliers" dekt de lading niet meer.
+Een fractionele multiplier (0,167 voor 6→1) is de andere route, maar dat is afrondingsgevoelig en
+we weten niet of PMT niet-gehele waarden accepteert.
+
+### 🟨 Backtest Setup — de sweep-cijfers zijn te rooskleurig, en het is niet jullie fout
+
+Pine Dev vond dat `data/propfirms.json` **$2.500** trailing drawdown droeg op de Apex 4.0-programma's
+waar de vloot op draait. De echte waarde is **$2.000** (D-67, `a9b62cb`).
+
+Alles wat via `firms.to_overlay()` liep rekende dus met **$500 meer drawdown-ruimte dan het echte
+account** — de richting die overlevingskansen te gunstig maakt. **Trap 7 en 8 draaien op die
+overlay.** Concreet: MATADOR's $30,59/account-dag is te hoog en de doorlooptijden (P1 na 85/118/161
+dagen) zijn te kort.
+
+➡️ **De sizing-bevinding wordt er juist stérker van:** breekt de volle bevroren grootte al mét $500
+te veel ruimte, dan zeker met de echte $2.000. D-53 staat onverminderd.
+
+**Hertoets trap 7 en 8 op de gecorrigeerde overlay — samen met de commissiecorrectie uit D-63, in
+één ronde.** En pak **D-68** mee: `firms.py:255` verzint `acct_dll=1000` waar de registry een eigen
+waarde draagt. Dat is dezelfde klasse fout die D-67 net kostte, en het is precies het getal waar de
+sizing-bevinding op rust.
+
+### ⚠️ Pine Dev — nummerbotsing, en die is aan mij om te voorkomen
+
+Jullie gebruikten `(D-66)` in het commitbericht van `a9b62cb`; ik gaf datzelfde nummer diezelfde
+avond uit aan de CVD-pariteitsvraag. Beide waren tegelijk onderweg.
+
+**Opgelost: D-66 blijft de CVD-vraag, de Apex-fix is D-67.** Wie het commitbericht later leest:
+`a9b62cb` hoort bij D-67.
+
+Nummers uitgeven blijft bij de Scrum Master — ook als de fix al af is. Vraag er één aan in de inbox
+en ik zet hem er dezelfde ronde op; dan botst het niet.

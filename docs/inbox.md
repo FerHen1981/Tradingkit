@@ -2943,3 +2943,52 @@ herstructurering met de hand op hún tekst doen). Zeg welke kant je op wilt.
 Andere, slankere lijn: 1662 regels, 131 inputs, 543 regels verschil met de basis. Hun
 delta-engine is wél canoniek, dus daar zit het probleem niet — het is gewoon een tweede port.
 Wachten op jouw akkoord op de zeven, dan is het één ronde werk.
+
+---
+
+## 23 — Pine Dev → Ferry · de vier EL TORO's staan op v2.2.0
+
+Uitrol af voor de eval-vloot. **Alle vier de EL TORO-scripts** dragen nu dezelfde structuur
+als de zeven `v1_0_0`-scripts: paneel aaneengesloten **0–13**, Engelse labels, dezelfde
+groepsnamen, dezelfde visuals.
+
+| Script | Inputs | Regels | Commissie |
+|---|---|---|---|
+| EL TORO NQ SNIP INTRA | 160 | 1968 | 1,55 |
+| EL TORO NQ HF INTRA | 160 | 1968 | 1,55 |
+| EL TORO ES FAST INTRA | 160 | 1969 | 1,55 |
+| EL TORO GC SNIPER EOD | 160 | 1969 | 1,75 |
+
+Dit was **geen merge maar een echte port.** EL TORO komt uit een andere, slankere lijn — 543
+regels verschil met de basis van de andere zeven — dus het sjabloon van EL REY eroverheen
+leggen was geen optie. Elke wijziging is los toegepast op TORO's eigen tekst, met een
+controle per stap. Presets geverifieerd en ongewijzigd: contractgrootte, stop, TP, R-multiple,
+FVG-venster, CVD-count, expiry, firm-preset, VWAP-veto en commissie staan er allemaal nog
+precies zo in.
+
+### Wat erbij kwam (allemaal default UIT)
+
+De zes signaalfilters (BBWP, EMA, MFI, volumeprofiel, discount/premium, long/short) en de
+**daily risk-gate uit D-45** — dat laatste was een openstaand uitrolpunt en zit nu ook hier.
+Verder de negen regimevensters, de RTH/ETH-dag-grens, en de twee nieuwe visuals-groepen met
+de FVG-dropdowns, de drie achtergrondlagen en de vijf account-eventmarkers. Het exit-label
+draagt nu MFE en MAE. Bot Name komt uit de scripttitel, dus ook deze vier kwamen tot vandaag
+binnen als *TESORO*.
+
+**Hersteld:** ook hier ontbrak de long-entry driehoek. Dat maakt het compleet — het zat in
+alle dertien scripts van beide pakketten.
+
+### 🔴 Twee dingen die ik bewust NIET heb doorgevoerd
+
+1. **`skipMonEarly` staat in alle vier op `true`** — net als in PATRON. Jouw besluit 7
+   ("Skip Monday weg") was voor de zeven gedragsneutraal omdat hij daar uit stond. Hier niet:
+   weghalen zet de maandagochtend-blokkade uit en dat verandert de trades. **De knop staat er
+   dus nog**, onder TIME GATE. Zeg het als hij alsnog weg moet.
+2. **De MEX policy-laag blijft staan.** In EL REY heb ik die verwijderd omdat hij op "Manual"
+   stond en dus nooit iets deed. In EL TORO doet hij wél werk: hij levert de
+   instrument-mismatch-waarschuwing die je gisteren zag, en overschrijft qty, max stop en
+   day-cap als je een preset kiest. Weghalen zou die guard slopen. Idem voor `evalTrack`
+   (stopt executies zodra de eval gehaald is) en `evalTrailEod`.
+
+Daarmee is de hele vloot behalve **EL PATRON en EL TESORO** om. Die twee wachten nog op jouw
+richting over de niet-canonieke delta-engine — zie item 22.

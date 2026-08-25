@@ -11,6 +11,92 @@ executiepad hebt gewijzigd. Nieuwste bovenaan. Afgehandeld? Regel laten staan me
 
 ---
 
+## 2026-08-25 · D-28 — volgorde van aanzetten + drie correcties (LIVE PAD, vóór env-vars)
+
+Conform werkafspraak 4 gemeld vóórdat er één env-var gezet wordt.
+
+### Correctie 1 — de rate-limit is NIET inert, die draait al
+
+De briefing zegt dat de drie hooks niets doen zolang `MEX_CARD_MAX_PER_MINUTE` niet
+gezet is. Voor D-28/5 klopt dat niet. `Program.cs` regel 576-577:
+
+    static readonly int MaxPerMinute = int.TryParse(
+        Environment.GetEnvironmentVariable("MEX_CARD_MAX_PER_MINUTE"), out var m) ? m : 12;
+
+Niet gezet ⇒ **12 per minuut per webhook**, niet uit. Sinds de D-35-build (25-08 01:23 UTC)
+worden tier-B-kaarten boven die drempel dus al gedempt; tier A gaat altijd door. De env-var
+zetten *verandert* het getal, hij zet de hook niet aan.
+
+Gevolg: als er sinds 01:23 een burst is geweest, staan er al `card rate-limited`-regels in
+het journaal. Te controleren met:
+
+    grep -c "card rate-limited" /root/intent-store/routed_2026082*.jsonl
+
+Discord staat 30/min per webhook toe; 12 is conservatief gekozen. Dat is te verdedigen,
+maar het is nu een impliciete waarde in productie — die wil je expliciet.
+
+### Correctie 2 — hook 2 en 6 samen kunnen dubbelposten
+
+`NotifyRoute.WebhookFor(..., "telegram")` heeft een cross-channel fallback (regel 518):
+staat er geen `TELEGRAM_*`-var, dan valt hij terug op `NOTIFY_WEBHOOK`. In de Discord-tak
+staat vervolgens (regel 204):
+
+    if (telegram.Length > 0 && telegram != url) -> tweede post
+
+Zet je dus **`NOTIFY_WEBHOOK` (globaal) én `NOTIFY_WEBHOOK_FUNDED`** aan, dan wordt
+`url` = de funded-webhook en `telegram` = de globale — die zijn ongelijk, dus hetzelfde
+bericht gaat een tweede keer naar het globale Discord-kanaal, als ruwe tekst naast de
+kaart. Geen crash, wel dubbele meldingen op je drukste kanaal.
+
+**Vermijdbaar door het globale `NOTIFY_WEBHOOK` niet te zetten** zolang Telegram niet
+echt bestaat. Zonder die var geeft de telegram-lookup een lege string en blijft de hook
+inert. Per-fase-vars alleen is dus veilig.
+
+### Correctie 3 — D-06 is hier niet opgeleverd
+
+Het bord zet D-06 op opgeleverd, maar in de werkbranch staat nog steeds alleen
+`middleware/dotnet-receiver/Program.cs` + README: geen `.csproj`, geen `.sln`, geen
+`Mex.Journal.Recon`. De tarball is 20-08 op de VPS gemaakt (`/tmp/mex-receiver-src.tgz`,
+24 kB) maar nooit in de repo geland. **Ik kan deze wijzigingen dus nog steeds niet
+compileren of testen** — er is ook geen .NET SDK in deze sessie.
+
+### Voorgestelde volgorde — één voor één
+
+**1. Rate-limit expliciet maken** (geen nieuwe functionaliteit, alleen de bestaande
+waarde vastleggen). Eerst tellen of er al gedempt is; daarna:
+
+    Environment=MEX_CARD_MAX_PER_MINUTE=12
+
+Waarom eerst: hij draait al, dus dit is de enige stap met nul nieuw risico, en hij haalt
+een impliciete productiewaarde weg.
+
+**2. Per-kanaal routing, alleen per fase** (D-28/2). Wél:
+
+    Environment=NOTIFY_WEBHOOK_FUNDED=<webhook funded-kanaal>
+    Environment=NOTIFY_WEBHOOK_EVAL=<webhook eval-kanaal>
+
+**Niet** `NOTIFY_WEBHOOK` globaal zetten — zie correctie 2. Kaarten zonder herkend
+account vallen dan terug op `MEX_DISCORD_WEBHOOK`, precies zoals nu.
+
+⚠️ Dit is bewust onvolledig zolang **D-41** (Pine Dev) open staat: elf guard-kaarten
+dragen geen account, dus juist DAY HALT, ACCOUNT HALT, PASSED en FAILED blijven op het
+globale kanaal. Een halt op funded is dan nog steeds niet te onderscheiden van een halt
+op eval. Routing aanzetten heeft pas volle waarde ná D-41 — maar het is wél alvast
+zichtbaar op FILL, EXIT, DERISK en ACCOUNT STARTED, die het account wel dragen.
+
+**3. Telegram (D-28/6) als laatste, en pas als er een echt Telegram-endpoint is.**
+Zonder endpoint voegt deze hook niets toe en brengt hij alleen het dubbelpost-pad uit
+correctie 2 mee.
+
+### Meten per stap
+
+Na elke stap één handelssessie meekijken, en tussen de stappen niets anders wijzigen:
+
+    tail -f /root/intent-store/routed_$(date -u +%Y%m%d).jsonl
+
+Let op `card rate-limited` (stap 1), op welk kanaal de kaarten landen (stap 2) en op
+dubbele regels voor hetzelfde bericht (het pad uit correctie 2).
+
 ## 2026-08-19 (2) · Antwoord aan de Scrum Master — claim D-06 + twee correcties
 
 **Claim: D-06** (live .NET-broncode niet volledig in git) — Middleware App, deze chat.

@@ -60,6 +60,34 @@ op de VPS als kanariemuis.
 Pushen zodra de code staat.
 
 ---
+### 28. MGC-data: één export sluit het GC-twin-voorbehoud (D-56) — beslissing voor Ferry
+**Backtest Setup → Ferry / Scrum Master** · 2026-08-25 · status: OPEN
+
+D-56 uitgewerkt in `validation/MGC_twin_assessment_20260825.md`. Kort:
+
+- **De GC-twin is bruikbaarder dan gedacht.** GC en MGC delen hetzelfde onderliggende
+  en hetzelfde tick-raster (mintick 0.10); de $-rekenkant én de commissie draaiden al op
+  de MGC-spec, en de CVD-proxy komt uit OHLC. Het enige dat de twin niet vangt is
+  **fill-realisme** (MGC is dunner) — en die bias loopt **optimistisch**.
+- **Gevolg:** elke MGC-uitspraak in de sweep is een *afwijzing* (PATRON geen edge,
+  TESORO/BANDIDO funderen niet), en een afwijzing op een gunstige twin is
+  **conservatief-veilig**. De twin mag je alleen niet gebruiken om een afwijzing terug te
+  draaien of iets funded te verklaren.
+- **Obtainability: laag.** MGC-1m is dezelfde export als de index-micros die je al
+  leverde (`MES/MNQ/MYM 3y 1m tick_cvd`), mits je feed COMEX-metaal dekt.
+
+**Beslissing voor Ferry (data-acquisitie = jouw call):**
+1. Dekt je huidige databron MGC? Zo ja → één export erbij langs `docs/data_export.md`,
+   en het voorbehoud is dicht.
+2. Zo nee → is een MGC-1m-bron de moeite, of accepteren we de twin-afwijzing als
+   definitief voor PATRON/TESORO/BANDIDO?
+
+**Scrum Master:** graag als `Type = Approval` in de Inbox-database (titel
+`🛠️ MEX D-56 — echte MGC-1m exporteren of twin-afwijzing accepteren?`), Notitie-vorm
+CONTEXT · AANBEVELING (exporteren, want goedkoop en het sluit het voorbehoud) ·
+ALTERNATIEF (twin-afwijzing accepteren) · IMPACT (raakt alleen een eventuele *rehabilitatie*
+van PATRON/TESORO; de huidige afwijzingen staan hoe dan ook) · NA AKKOORD (export → trap
+0/2 op echte MGC).
 
 ### 26. EL_REY v2 dreef verder + BBWP/MFI/vwma/hma bedraad
 **Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)

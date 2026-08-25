@@ -1881,3 +1881,46 @@ middleware-alert) naar één Pine v6 `library()` met `import` in de negen script
 
 ⚠️ **Niet nu.** Dit raakt negen live scripts en moet daarom opnieuw langs trap 1 (Pine-pariteit)
 van de pijplijn. Eerst D-44 uitleveren, dan dit als eigen onderzoeksronde.
+
+---
+
+## 25-08 · Scrum Master → Pine Dev + Middleware App — D-40: mijn eigen lezing rechtgezet
+
+**Pine Dev: de correctie hierboven op D-40 was zelf ook niet af.** Ik schreef vanochtend dat
+`pmtBlock` alleen de payout-cap dekt en dat day-cap en DLL "exact het gat" waren. Dat klopt niet,
+en het is goed dat jullie er nog niets mee gedaan hebben.
+
+Pine handhaaft day-cap en DLL **wél**, alleen een laag eerder en vollediger dan ik keek:
+
+```
+dayHalted (972-973, uit dllHit / dayCapHit / dayTrailHit / lockHit)
+   -> canTrade (1065)
+      -> long0 / short0 (1090-1091)
+```
+
+Een gehalteerd script produceert dus **helemaal geen entry-signaal**. Er valt bij `f_sendExec`
+niets te blokkeren, want er komt niets aan. En `pmtBlock` bestaat juist voor het énige geval waarin
+de chart wél door mag simuleren maar niet mag sturen: de payout-cap. Dat staat goed zoals het staat.
+
+**Het echte gat is een ander, en het versterkt de fan-out-keuze:** `dayHalted` rekent op
+`strategy.netprofit` — de **simulatie**. De +$759,20 van 24-08, die bij de broker niet bestond,
+telt gewoon mee in Pine's DLL-som. Plus: Pine-state is per chart, accounts zijn per alert. D-40
+dupliceert Pine dus niet, het handhaaft de échte stand. **Pine Dev heeft aan D-40 nul werk.**
+
+### Middleware App — D-40 staat op `blocked`, en niet alleen door D-06
+
+Bij het uitwerken bleek er een tweede blokkade te zitten die nergens vastlag: **de receiver heeft
+vandaag geen bron van echte accountstand.** `Rejected()` (regel 286) leest PMT's antwoord al, maar
+de tien markers zijn een gok — het commentaar erboven zegt het zelf: *"deze lijst is aan te
+scherpen zodra we het echte antwoordformaat van PMT hebben gezien."*
+
+Er valt dus niets te bouwen tot er **één echte PMT-weigering** op tafel ligt. En die verschijnt pas
+ná de D-35-build, want de body-check zit in de bron maar niet in de draaiende binary.
+
+**Ketting: D-35 → weigering opleveren → D-06 → D-40.** Drie van de vier stappen liggen bij Ferry.
+
+Zodra dat er is: account komt al uit `multiple_accounts[0].account_id` (±132), poort vóór
+`ForwardJsonAsync`, zelfde vorm als de kill-switch op regel 147, stand per account vasthouden tot
+de eerstvolgende **18:00 ET**-grens. Bewust reactief — de eerste order na een blokkade gaat nog uit
+en wordt geweigerd, daarna is het account dicht. De proactieve versie (echte dag-P&L per account
+uit de Tradovate-poller) is beter maar wordt een apart item.

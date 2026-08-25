@@ -25,13 +25,13 @@
         },
         "max_daily_loss": null,
         "max_overall_loss": {
-          "value": 2500,
+          "value": 2000,
           "unit": "usd"
         },
         "drawdown_type": "intraday_trailing",
         "drawdown_basis": "balance",
         "trailing_locks_at": {
-          "value": 2600,
+          "value": 2100,
           "unit": "usd"
         }
       },
@@ -99,13 +99,13 @@
         },
         "max_daily_loss": null,
         "max_overall_loss": {
-          "value": 2500,
+          "value": 2000,
           "unit": "usd"
         },
         "drawdown_type": "eod_trailing",
         "drawdown_basis": "balance",
         "trailing_locks_at": {
-          "value": 2600,
+          "value": 2100,
           "unit": "usd"
         }
       },
@@ -173,13 +173,13 @@
           "unit": "usd"
         },
         "max_overall_loss": {
-          "value": 2500,
+          "value": 2000,
           "unit": "usd"
         },
         "drawdown_type": "eod_trailing",
         "drawdown_basis": "balance",
         "trailing_locks_at": {
-          "value": 2600,
+          "value": 2100,
           "unit": "usd"
         }
       },
@@ -356,13 +356,13 @@
           "unit": "usd"
         },
         "max_overall_loss": {
-          "value": 2500,
+          "value": 2000,
           "unit": "usd"
         },
         "drawdown_type": "intraday_trailing",
         "drawdown_basis": "balance",
         "trailing_locks_at": {
-          "value": 2600,
+          "value": 2100,
           "unit": "usd"
         }
       },

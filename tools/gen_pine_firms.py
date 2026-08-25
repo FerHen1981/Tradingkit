@@ -96,24 +96,30 @@ PINE = os.path.join(REPO, "pine")
 # EL TORO staat hier NIET meer in: sinds 24-08 is hij vier v1_0_0-bestanden
 # (NQ HF/SNIPER, ES FAST, GC SNIPER) en is de v6.9.5 naar pine/history/ verhuisd. Deze
 # generator kent de v1_0_0-lijn nog niet -- zie docs/inbox.md item 18 voor wat dat kost.
-# LEEG, en dat is een keuze. Deze kaart stuurde de firmPreset EN de f_firmRules-regio van
-# de acht v6.9.5-scripts; die zijn 25-08 naar pine/history/ gegaan (D-42).
+# De acht v6.9.5-scripts zijn 25-08 naar pine/history/ gegaan (D-42); hun plek hier is
+# overgenomen door de dertien actieve scripts. Elk staat op zijn EIGEN huidige preset, dus
+# een generatorrun verzet geen accountregel -- hij ververst alleen de f_firmRules-regio uit
+# data/propfirms.json. Dat sluit D-65: een handmatig onderhouden regio is een tweede bron
+# naast de registry, en D-08 laat er maar een toe.
 #
-# De v1_0_0-vloot staat er BEWUST niet in. Ik heb het geprobeerd -- dat is wat D-65 vraagt --
-# en de proefrun liet zien waarom het niet kan zonder besluit: script en registry zijn het op
-# tien waarden oneens, over zes programma's. De vloot draait op apex_50k_eod_pa en
-# apex_50k_intraday_pa, en juist daar zit het zwaarste verschil:
-#
-#   trailing drawdown   script 2000   <->   registry 2500   (alle vier de Apex 50K-programma's)
-#   consistency (eval)  script 50     <->   registry 0      (firms.py:256 zegt: eval heeft geen regel)
-#   DLL intraday eval   script 0      <->   registry 1000
-#   en vier legacy-programma's zitten alleen in de registry
-#
-# Een generatorrun zou die tien stilzwijgend doordrukken op scripts die live gaan. Zolang
-# de $2.000-vraag niet beslecht is (CLAUDE.md houdt 2.000 aan, de registry 2.500) blijft de
-# vloot met de hand. Zie docs/inbox.md 28. De commissie loopt WEL via de registry, via
-# FLEET_ASSET hierboven -- dat is D-08 en daar is geen twijfel over.
-STRATEGY_DEFAULT: dict[str, str] = {}
+# Dit kon pas nadat de trailing drawdown beslecht was (Ferry 25-08): Apex 4.0 = $2.000,
+# legacy = $2.500. De registry droeg 2.500 op alle Apex 50K-programma's, ook de vier 4.0-
+# programma's waar de vloot op draait; die staan nu op 2000 met lock 2100.
+STRATEGY_DEFAULT = {
+    "v1_0_0/MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "apex_50k_intraday_pa",
+    "v1_0_0/MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine":  "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_LEON_MYM_PROD_EOD_v1_0_0.pine":     "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_LEON_MYM_CON_EOD_Q2_v1_0_0.pine":   "apex_50k_eod_pa",
+    "v1_0_0/MEX_EL_LEON_MYM_CON_INTRA_Q2_v1_0_0.pine": "apex_50k_intraday_pa",
+    "v1_0_0/MEX_EL_BANDIDO_MYM_HF_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "MEX_EL_TORO_NQ_HF_INTRA_v1_0_0.pine":             "apex_50k_intraday_eval",
+    "MEX_EL_TORO_NQ_SNIPER_INTRA_v1_0_0.pine":         "apex_50k_intraday_eval",
+    "MEX_EL_TORO_ES_FAST_INTRA_v1_0_0.pine":           "apex_50k_intraday_eval",
+    "MEX_EL_TORO_GC_SNIPER_EOD_v1_0_0.pine":           "apex_50k_eod_eval",
+}
 
 
 def tradeable(p):

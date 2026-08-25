@@ -28,28 +28,28 @@ export rules(string preset) =>
         acctSize := 25000.0
     else if preset == "apex_50k_eod_eval"
         ddType := "EOD"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_eod_pa"
         ddType := "EOD"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 50.0
         acctSize := 50000.0
     else if preset == "apex_50k_intraday_eval"
         ddType := "Intraday"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_intraday_pa"
         ddType := "Intraday"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 50.0

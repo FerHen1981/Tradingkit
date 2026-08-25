@@ -60,6 +60,14 @@
 //   PA016-0k-260813); wijkt jrnlAcct af, dan viel de routing STIL terug op de globale webhook.
 //   Daarom staat er nu ook een zichtbare waarschuwing op de laatste bar als het account leeg
 //   of afwijkend is. Alleen berichtinhoud; geen signaal-, order- of accountlogica geraakt.
+// v2.3.1 (25-08): f_firmRules komt weer uit data/propfirms.json in plaats van uit de hand
+//   (D-65/D-08). Mogelijk gemaakt door het besluit van Ferry: Apex 4.0 = $2.000 trailing
+//   drawdown, legacy = $2.500. De registry droeg 2.500 op ALLE Apex 50K-programma's, ook de
+//   vier 4.0-programma's waar deze vloot op draait; die staan nu op 2.000 met lock 2.100.
+//   Voor de twee presets die de vloot gebruikt verandert er niets - die stonden al op 2.000.
+//   Wel nieuw in de dropdown: de vier legacy-programma's. Consistency op eval-programma's
+//   gaat van 50 naar 0: dat is een PA-regel, een eval heeft hem niet, en in dit script komt
+//   consistencyPct alleen binnen via payoutEligible dat isPA eist - dus zonder gevolg.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -67,7 +75,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON INTRA Q2"
-var string currentVersion = "v2.3.0"
+var string currentVersion = "v2.3.1"
 strategy("MΞX EL LEON · MYM CON INTRA Q2 · " + currentVersion, shorttitle="LEO-YM-CI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -354,19 +362,31 @@ rgDllBasis  = input.string("Realized + open (cuts the trade)", "DLL basis", opti
 int rgRollHour = 18   // CME-roll; valt samen met het einde van de force-flat
 
 useFirmPreset = input.bool(true, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_intraday_pa", "Firm program", options=["apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+firmPreset    = input.string("apex_50k_intraday_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
     float _g = 3000.0
     float _dll = 1000.0
     float _cons = 50.0
-    if _p == "apex_50k_eod_eval"
+    if _p == "apex_250k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 6500.0
+        _g := 15000.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_25k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 1500.0
+        _g := 1500.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_50k_eod_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "apex_50k_eod_pa"
         _dd := "EOD"
         _ml := 2000.0
@@ -377,16 +397,26 @@ f_firmRules(string _p) =>
         _dd := "Intraday"
         _ml := 2000.0
         _g := 3000.0
-        _dll := 0.0
-        _cons := 50.0
+        _dll := 1000.0
+        _cons := 0.0
     else if _p == "apex_50k_intraday_pa"
-        // Apex 50K Intraday PA (current): $2,000 real-time trailing DD,
-        // threshold locks at +$100 once HWM reaches +$2,100; tier DLL starts at $1,000.
         _dd := "Intraday"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
         _cons := 50.0
+    else if _p == "apex_50k_legacy_eval"
+        _dd := "Intraday"
+        _ml := 2500.0
+        _g := 3000.0
+        _dll := 1000.0
+        _cons := 0.0
+    else if _p == "apex_50k_legacy_pa"
+        _dd := "EOD"
+        _ml := 2500.0
+        _g := 3000.0
+        _dll := 1000.0
+        _cons := 30.0
     else if _p == "daytraders_s2f_25k_instant"
         _dd := "EOD"
         _ml := 1000.0
@@ -398,19 +428,19 @@ f_firmRules(string _p) =>
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "takeprofittrader_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "topstep_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
-        _cons := 50.0
+        _cons := 0.0
     else if _p == "tradeify_advanced_25k_instant"
         _dd := "EOD"
         _ml := 1500.0
@@ -418,6 +448,238 @@ f_firmRules(string _p) =>
         _dll := 1000.0
         _cons := 50.0
     [_dd, _ml, _g, _dll, _cons]
+f_firmMinPayout(string _p) =>
+    float _mp = 500.0
+    if _p == "apex_250k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_25k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_eod_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_eod_pa"
+        _mp := 500.0
+    else if _p == "apex_50k_intraday_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_intraday_pa"
+        _mp := 500.0
+    else if _p == "apex_50k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_50k_legacy_pa"
+        _mp := 500.0
+    else if _p == "daytraders_s2f_25k_instant"
+        _mp := 500.0
+    else if _p == "mffu_50k_eval"
+        _mp := 500.0
+    else if _p == "takeprofittrader_50k_eval"
+        _mp := 500.0
+    else if _p == "topstep_50k_eval"
+        _mp := 500.0
+    else if _p == "tradeify_advanced_25k_instant"
+        _mp := 500.0
+    _mp
+f_firmLadder(string _p, int _n) =>
+    float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    if _p == "apex_50k_eod_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    else if _p == "apex_50k_intraday_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    else if _p == "apex_50k_legacy_pa"
+        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
+f_firmDays(string _p) =>
+    int _md = 0
+    int _pd = 0
+    float _qd = 50.0
+    if _p == "apex_250k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_25k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_eod_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_eod_pa"
+        _md := 5
+        _pd := 5
+        _qd := 50.0
+    else if _p == "apex_50k_intraday_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_intraday_pa"
+        _md := 5
+        _pd := 5
+        _qd := 50.0
+    else if _p == "apex_50k_legacy_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "apex_50k_legacy_pa"
+        _md := 8
+        _pd := 5
+        _qd := 50.0
+    else if _p == "daytraders_s2f_25k_instant"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "mffu_50k_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "takeprofittrader_50k_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "topstep_50k_eval"
+        _md := 2
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeify_advanced_25k_instant"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    [_md, _pd, _qd]
+f_contractSpec(string _root) =>
+    float _mt = 0.0
+    float _pv = 0.0
+    float _cm = 0.0
+    float _sl = 0.0
+    if _root == "6A"
+        _mt := 0.0001
+        _pv := 100000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "6B"
+        _mt := 0.0001
+        _pv := 62500.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "6C"
+        _mt := 5e-05
+        _pv := 100000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "6E"
+        _mt := 5e-05
+        _pv := 125000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "6J"
+        _mt := 5e-07
+        _pv := 12500000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "6S"
+        _mt := 0.0001
+        _pv := 125000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "AUDUSD"
+        _mt := 1e-05
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "BTC"
+        _mt := 5.0
+        _pv := 5.0
+        _cm := 5.0
+        _sl := 1.0
+    else if _root == "CADJPY"
+        _mt := 0.001
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "CL"
+        _mt := 0.01
+        _pv := 1000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "ES"
+        _mt := 0.25
+        _pv := 50.0
+        _cm := 1.55
+        _sl := 1.0
+    else if _root == "EURGBP"
+        _mt := 1e-05
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "EURUSD"
+        _mt := 1e-05
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "GBPUSD"
+        _mt := 1e-05
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "GC"
+        _mt := 0.1
+        _pv := 100.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "M2K"
+        _mt := 0.1
+        _pv := 5.0
+        _cm := 0.37
+        _sl := 1.0
+    else if _root == "MES"
+        _mt := 0.25
+        _pv := 5.0
+        _cm := 0.37
+        _sl := 1.0
+    else if _root == "MGC"
+        _mt := 0.1
+        _pv := 10.0
+        _cm := 0.52
+        _sl := 1.0
+    else if _root == "MNQ"
+        _mt := 0.25
+        _pv := 2.0
+        _cm := 0.37
+        _sl := 1.0
+    else if _root == "MYM"
+        _mt := 1.0
+        _pv := 0.5
+        _cm := 0.37
+        _sl := 1.0
+    else if _root == "NG"
+        _mt := 0.001
+        _pv := 10000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "NQ"
+        _mt := 0.25
+        _pv := 20.0
+        _cm := 1.55
+        _sl := 1.0
+    else if _root == "RTY"
+        _mt := 0.1
+        _pv := 50.0
+        _cm := 1.55
+        _sl := 1.0
+    else if _root == "SI"
+        _mt := 0.005
+        _pv := 5000.0
+        _cm := 1.75
+        _sl := 1.0
+    else if _root == "USDJPY"
+        _mt := 0.001
+        _pv := 100000.0
+        _cm := 3.5
+        _sl := 1.0
+    else if _root == "YM"
+        _mt := 1.0
+        _pv := 5.0
+        _cm := 1.55
+        _sl := 1.0
+    [_mt, _pv, _cm, _sl]
+// <<< GENERATED — do not edit above by hand; run tools/gen_pine_firms.py
 if useFirmPreset
     [pfDD, pfMax, pfGoal, pfDLL, pfCons] = f_firmRules(firmPreset)
     ddModel := pfDD

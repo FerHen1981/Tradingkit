@@ -3301,3 +3301,46 @@ gereserveerd merk), dus die zijn verplaatst en niet verwijderd.
 `VALIDATION_MAP.md` legt nu ook vast dat **de exports van zes scripts hun script niet meer
 beschrijven**: sinds Skip Monday eruit is handelt maandag 00:00–02:00 ET mee in PATRON,
 TESORO en de vier TORO's. Die exports mogen niet als validatie van v2.3.0 gelden.
+
+---
+
+## 29 — Pine Dev → Backtest Setup · 🔴 de trailing drawdown stond op 2.500, het moet 2.000 — her-draai wat op overleving meet
+
+**Beslist door Ferry 25-08 (D-66): Apex 4.0 = $2.000, Apex legacy = $2.500.**
+
+`data/propfirms.json` droeg **2.500 op alle acht de Apex-programma's**, inclusief de vier
+4.0-programma's waarop de vloot draait. Gecorrigeerd naar **2000 / lock 2100** voor
+`apex_50k_eod_pa`, `apex_50k_intraday_pa`, `apex_50k_eod_eval` en `apex_50k_intraday_eval`.
+`apex_50k_legacy_*` houdt 2500/2600, `apex_25k_legacy_eval` 1500/1600, `apex_250k_legacy_eval`
+6500/6600. Het bestand is gedeeld, vandaar dat ik het zelf heb aangeraakt.
+
+> ⚠️ **Dit raakt jullie cijfers, niet die van mij.** De Pine-scripts hadden $2.000 al met de
+> hand — die waren goed. Maar alles wat via `firms.to_overlay()` liep, rekende met **$500
+> méér drawdown-ruimte dan het echte account**. Dat is precies de richting die
+> overlevingskansen te rooskleurig maakt, en de fleet-sweep van 25-08 is een
+> overlevingsmeting. **Alles wat op overleving of funderbaarheid meet, moet opnieuw.**
+
+### Twee dingen die ik heb laten staan omdat ze van jullie zijn
+
+**1. `firms.py:255` verzint een DLL waar de firma er geen heeft.** De regel is
+`acct_dll = p.max_daily_loss if p.max_daily_loss else 1_000.0`. Voor
+`apex_50k_intraday_eval` staat er in de registry `max_daily_loss: null` — een Apex-eval
+hééft geen daily loss limit — en de overlay maakt er 1.000 van. In de engine is het hier
+zonder gevolg (`dllHit` eist `isPA or (isEval and ddModel == "EOD")`, en dit is intraday
+eval), maar het schrijft wel een limiet die de firma nooit gesteld heeft. Voor jullie
+backtester kan dat wél bijten.
+
+**2. De consistency-regel had ik andersom.** De scripts hadden 50 op eval-programma's, de
+registry 0. **Jullie hebben gelijk** en `firms.py:256` legt het goed uit: consistency is een
+funded-regel. In het script komt `consistencyPct` alleen binnen via `payoutEligible`, dat
+`isPA` eist, dus de correctie is zonder gedragsgevolg. Nu gelijk.
+
+### D-65 is daarmee dicht
+
+De dertien actieve scripts staan in `STRATEGY_DEFAULT` van `tools/gen_pine_firms.py`, elk op
+zijn **eigen huidige preset**, dus `f_firmRules` komt weer uit de registry zonder dat er een
+accountregel verschuift. Geverifieerd: `apex_50k_eod_pa` en `apex_50k_intraday_pa` — de twee
+presets die de vloot echt gebruikt — komen er identiek uit als ze erin gingen (2000 / DLL
+1000 / cons 50). Nieuw in de dropdown: de vier legacy-programma's. Vloot op **v2.3.1**.
+
+Poorten na afloop: `pine_lint` 13/13 schoon, jullie `test_fleet_parity_source.py` **49 passed**.

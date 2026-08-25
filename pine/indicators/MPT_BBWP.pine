@@ -1,0 +1,108 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT BBWP v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  Bollinger Band Width Percentile: what share of the lookback had a NARROWER band than now.
+//  0 = the tightest band in the window (compressed volatility), 100 = the widest.
+//  Method by John Bollinger; percentile variant by The_Caretaker (TradingView, MPL 2.0).
+//
+//  The strategy uses this as a BAND filter, not a threshold: entries are allowed while the
+//  percentile sits between min and max. Raise min to skip dead volatility, lower max to skip
+//  exhaustion. Defaults follow EL REY MNQ PROD EOD: SMA basis, length 20, lookback 255,
+//  band 0-100 (= passes everything, which is how the frozen engine runs).
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its calculation for inspection; if the
+//  two ever disagree, the strategy is right and this file needs updating.
+// ============================================================================================
+indicator("MPT BBWP v1.0", "MPT BBWP", format=format.percent, precision=1, overlay=false)
+
+// === INPUTS =================================================================
+var string GROUP_CALC = "1 · CALCULATION"
+var string GROUP_BAND = "2 · BAND"
+var string GROUP_TBL  = "3 · TABLE"
+var string GROUP_THEME = "4 · THEME"
+
+bbwpBasisType = input.string("SMA", "Basis", options=["SMA","EMA","VWMA"], inline="c", group=GROUP_CALC)
+bbwpLen       = input.int(20,  "length", minval=1, inline="c", group=GROUP_CALC)
+bbwpLookback  = input.int(255, "lookback", minval=2, inline="c", group=GROUP_CALC,
+     tooltip="Bars the current band width is ranked against. 255 is the author's default; the value only becomes meaningful once that much history exists.")
+bbwpSrc       = input.source(close, "Source", group=GROUP_CALC, display=display.none)
+
+bbwpMin  = input.float(0,   "Min %", minval=0, maxval=100, step=1, inline="b", group=GROUP_BAND)
+bbwpMax  = input.float(100, "Max %", minval=0, maxval=100, step=1, inline="b", group=GROUP_BAND,
+     tooltip="The strategy allows entries while the percentile sits inside this band. 0-100 passes everything, which is the frozen setting.")
+showBand = input.bool(true, "Shade the band", group=GROUP_BAND)
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME,
+     tooltip="Auto reads the chart background. Override only if detection fails.")
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+
+// === CALCULATION (mirrors the strategy) =====================================
+f_bbwpMa(_src, _len, _type) =>
+    _type == "SMA" ? ta.sma(_src, _len) : _type == "EMA" ? ta.ema(_src, _len) : ta.vwma(_src, _len)
+
+f_bbwp(_src, _len, _lookback, _type) =>
+    float _basis = f_bbwpMa(_src, _len, _type)
+    float _dev   = ta.stdev(_src, _len)
+    float _bbw   = _basis == 0 ? na : 2 * _dev / _basis     // (basis+dev)-(basis-dev) = 2*dev
+    int   _cnt   = 0
+    for _i = 1 to _lookback
+        _cnt += nz(_bbw[_i]) > nz(_bbw) ? 0 : 1
+    100.0 * _cnt / _lookback
+
+float bbwpVal = f_bbwp(bbwpSrc, bbwpLen, bbwpLookback, bbwpBasisType)
+bool  inBand  = not na(bbwpVal) and bbwpVal >= bbwpMin and bbwpVal <= bbwpMax
+
+// === PLOT ===================================================================
+plot(bbwpVal, "BBWP", color=inBand ? POS : NEG, linewidth=2)
+p_hi = hline(100, "Top", color=pBorder, linestyle=hline.style_dotted)
+p_lo = hline(0, "Bottom", color=pBorder, linestyle=hline.style_dotted)
+b_hi = plot(showBand ? bbwpMax : na, "Band max", color=pMuted, linewidth=1)
+b_lo = plot(showBand ? bbwpMin : na, "Band min", color=pMuted, linewidth=1)
+fill(b_hi, b_lo, color=showBand ? color.new(POS, 92) : na, title="Allowed band")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 3, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "BBWP", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, na(bbwpVal) ? "—" : str.tostring(bbwpVal, "#.#") + "%", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "Band", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 1, str.tostring(bbwpMin, "#") + " – " + str.tostring(bbwpMax, "#") + "%", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Filter", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 2, inBand ? "OPEN" : "blocked", text_color=inBand ? color.white : pText, bgcolor=inBand ? color.new(POS, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)

@@ -69,6 +69,7 @@ var string GROUP_RISK  = "4 · TRADE — Take-profit & exits"
 var string GROUP_DAY   = "L4x · retired"
 var string GROUP_PHASE = "1 · ACCOUNT — Phase, drawdown & guard"
 var string GROUP_BIAS  = "7 · SIGNAL — VWAP / bias"
+var string GROUP_SIG   = "9 · SIGNAL — Filters"
 var string GROUP_CVD   = "6 · SIGNAL — Volume delta"
 var string GROUP_FVG   = "5 · SIGNAL — FVG"
 var string GROUP_TIME  = "8 · SIGNAL — Time gate"
@@ -390,6 +391,37 @@ useSweepFilter = false
 sweepLookback  = 20
 useVwapVeto   = input.bool(false, "VWAP side veto (long above / short below only)", group=GROUP_BIAS,
      tooltip="Enige richtingsfilter die in beide datahelften consistent was: tegen-VWAP-trades waren structureel negatief.")
+
+// === BBWP — Bollinger Band Width Percentile ==================================
+// Volatiliteitsregime als percentiel: welk deel van de laatste N bars had een SMALLERE
+// band dan nu? 0 = de smalste band in het venster (samengedrukte volatiliteit),
+// 100 = de wijdste. Methode van John Bollinger; percentiel-variant van The_Caretaker
+// (TradingView, MPL 2.0). Hier alleen de berekening — geen plots, geen kleurenschalen.
+//
+// Standaard UIT en met een band van 0-100, dus in de defaultstand laat hij alles door
+// en is het gedrag identiek aan voor deze toevoeging.
+useBbwpFilter = input.bool(false, "BBWP filter", group=GROUP_SIG,
+     tooltip="Only take entries while the volatility percentile sits inside the band below. Off = no effect.")
+bbwpBasisType = input.string("SMA", "BBWP basis", options=["SMA","EMA","VWMA"], group=GROUP_SIG, display=display.none)
+bbwpLen       = input.int(20,  "BBWP length", minval=1, group=GROUP_SIG, display=display.none)
+bbwpLookback  = input.int(255, "BBWP lookback", minval=2, group=GROUP_SIG,
+     tooltip="How many bars the current band width is ranked against. 255 is the author's default; it needs that much history before the value is meaningful.", display=display.none)
+bbwpMin       = input.float(0,   "BBWP min (%)", minval=0, maxval=100, step=1, group=GROUP_SIG,
+     tooltip="Raise above 0 to skip dead, compressed volatility.")
+bbwpMax       = input.float(100, "BBWP max (%)", minval=0, maxval=100, step=1, group=GROUP_SIG,
+     tooltip="Lower below 100 to skip exhausted, over-extended volatility.")
+
+// === MFI — money-flow oscillator op candle-waarde ============================
+// Niet de klassieke Money Flow Index: dit is de candle-value variant die Ferry aanleverde.
+// Kern: hoe ver sluit de bar t.o.v. zijn eigen range, gladgestreken met een HMA, en de
+// SIGN daarvan is de trendrichting. Bull = boven nul, bear = onder nul.
+//
+// De multiplier uit het origineel is bewust weggelaten: die schaalt alleen de plot en kan
+// het teken niet veranderen, dus voor een richtingsveto doet hij niets.
+useMfiFilter = input.bool(false, "MFI side filter", group=GROUP_SIG,
+     tooltip="Only allow longs while the oscillator is above zero and shorts while it is below. Off = no effect.")
+mfiPeriod    = input.int(60, "MFI smoothing (HMA)", minval=1, group=GROUP_SIG,
+     tooltip="Length of the Hull moving average over the candle value.", display=display.none)
 useBiasFilter = false
 htf_tf        = "30"
 htfBosLen     = 7
@@ -852,6 +884,36 @@ else if cvdEff
 bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
 bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
 
+// --- BBWP -------------------------------------------------------------------
+f_bbwpMa(_src, _len, _type) =>
+    _type == "SMA" ? ta.sma(_src, _len) : _type == "EMA" ? ta.ema(_src, _len) : ta.vwma(_src, _len)
+
+f_bbwp(_src, _len, _lookback, _type) =>
+    float _basis = f_bbwpMa(_src, _len, _type)
+    float _dev   = ta.stdev(_src, _len)
+    // bandbreedte als fractie van de basis; (basis+dev)-(basis-dev) = 2*dev
+    float _bbw   = _basis == 0 ? na : 2 * _dev / _basis
+    int   _cnt   = 0
+    for _i = 1 to _lookback
+        _cnt += nz(_bbw[_i]) > nz(_bbw) ? 0 : 1
+    100.0 * _cnt / _lookback
+
+float bbwpVal  = f_bbwp(close, bbwpLen, bbwpLookback, bbwpBasisType)
+bool  bbwpPass = not useBbwpFilter or (not na(bbwpVal) and bbwpVal >= bbwpMin and bbwpVal <= bbwpMax)
+
+// --- MFI (candle-value money flow) ------------------------------------------
+float _mfiO   = ohlc4
+float _mfiH   = math.max(high, open, close)
+float _mfiL   = math.min(low, open, close)
+float _mfiC   = (nz(close[1], close) + nz(open[1], open)) / 2
+float _mfiRng = _mfiH - _mfiL
+// vlakke bar -> geen range -> geen uitspraak; nz() zou hier een 0 verzinnen die als
+// richting telt, dus expliciet na laten en de vorige waarde laten staan.
+float _mfiCV  = _mfiRng == 0 ? na : (_mfiC - _mfiO) / _mfiRng
+float mfiVal  = ta.hma(nz(_mfiCV, nz(_mfiCV[1], 0)), mfiPeriod) * -1
+bool  mfiLongOK  = not useMfiFilter or mfiVal > 0
+bool  mfiShortOK = not useMfiFilter or mfiVal < 0
+
 // ============================================================================
 // === DAILY RISK / EQUITY (geünificeerd, gelatcht) ===========================
 // ============================================================================
@@ -1006,8 +1068,8 @@ f_calcQty(_slDistPrice) =>
 isFlat = strategy.position_size == 0 and strategy.opentrades == 0
 var bool posRiskOff = false
 
-bool long0  = bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and dirHourLongPass and barstate.isconfirmed
-bool short0 = bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and dirHourShortPass and barstate.isconfirmed
+bool long0  = bullCandle and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and dirHourLongPass and barstate.isconfirmed
+bool short0 = bearCandle and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and dirHourShortPass and barstate.isconfirmed
 
 // === v6.1: FVG CONFIRMATION MEMORY ==========================================
 var array<int>   memBar = array.new<int>()
@@ -1052,8 +1114,8 @@ if confirmBars > 0 and barstate.isconfirmed
             int _age = bar_index - array.get(memBar, _k)
             if _age >= 1 and _age <= confirmBars
                 int _d = array.get(memDir, _k)
-                bool _ok = _d == 1 ? (bullCvdPass and canLong and vetoLongOK and sweepLongOK and orGateLong and dirHourLongPass) :
-                     (bearCvdPass and canShort and vetoShortOK and sweepShortOK and orGateShort and dirHourShortPass)
+                bool _ok = _d == 1 ? (bullCvdPass and bbwpPass and mfiLongOK and canLong and vetoLongOK and sweepLongOK and orGateLong and dirHourLongPass) :
+                     (bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and orGateShort and dirHourShortPass)
                 if _ok
                     memSigDir := _d
                     memSigMid := array.get(memMid, _k)
@@ -1172,7 +1234,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";mfi=" + (useMfiFilter ? str.tostring(mfiPeriod) : "off") + ";bbwp=" + (useBbwpFilter ? str.tostring(bbwpMin, "#") + "-" + str.tostring(bbwpMax, "#") : "off") + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1257,8 +1319,8 @@ var float t_qty = na
 gateOK = isFlat or (gateOpenOnRiskOff and posRiskOff)
 
 // === v6.0: BLOCKERS ENGINE ==================================================
-bool rawLong  = (bullCandle and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
-bool rawShort = (bearCandle and bearCvdPass and canShort and vetoShortOK and sweepShortOK and barstate.isconfirmed) or memSigDir == -1
+bool rawLong  = (bullCandle and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
+bool rawShort = (bearCandle and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and barstate.isconfirmed) or memSigDir == -1
 f_persistentBlockers() =>
     string _b = ""
     if preStartBlock
@@ -1651,8 +1713,8 @@ plot(showTradeLevels and not flatNow ? curLimit : na, "Take Profit", color=color
 plot(showTradeLevels and not flatNow ? entryAvg : na, "Entry", color=color.new(color.blue, 0), style=plot.style_linebr, linewidth=1)
 plot(vwapVal, "VWAP", color=color.new(color.purple, 40), linewidth=1)
 // === v6.0: FULL-LOGIC GATE VISUALISATION ====================================
-bool gateLongOpen  = canTrade and bullCvdPass and canLong  and vetoLongOK  and sweepLongOK
-bool gateShortOpen = canTrade and bearCvdPass and canShort and vetoShortOK and sweepShortOK
+bool gateLongOpen  = canTrade and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK
+bool gateShortOpen = canTrade and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK
 color _gateAmber = visIsDark ? #C9A227 : #8F6400
 int _flashT = math.max(70, gateBgTransp - 8)
 color gateBgCol = sigBlockedEvt ? color.new(_gateAmber, _flashT) :

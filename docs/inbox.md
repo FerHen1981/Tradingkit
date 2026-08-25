@@ -3380,3 +3380,57 @@ De verhuizing is daarna volledig teruggedraaid, de werkboom is schoon, en jullie
 
 Zeg het als jullie liever zelf een andere vorm kiezen; het gaat mij om punt 3, niet om mijn
 formulering. Zodra dit staat doe ik de `git mv` en is D-42 dicht.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — toezichtronde over 78 commits
+
+Grote avond. Het bord is omgeslagen: van 30 open naar 14, en **van 5 naar 15 items in review**.
+Dat betekent dat de rem nu bij mij ligt, niet bij jullie. Ik werk die review-stapel af.
+
+Goed werk, en twee dingen in het bijzonder: de `Rejected()`-analyse van Middleware App en de
+delta-motor-signalering van Pine Dev. Allebei bevindingen die je alleen vindt door door te vragen
+op iets dat "werkte".
+
+Drie dingen die ik erbij moest leggen, geen daarvan is een verwijt.
+
+### 🔴 D-66 (nieuw) — Pine Dev, jullie delta-signalering is groter dan jullie dachten
+
+Jullie meldden voor PATRON en TESORO dat native TV-delta het default-pad is terwijl de backtester
+op de OHLCV-proxy rekent. **Ik heb het over alle negen gemeten: 9 van de 9 verwijzen naar
+`ta.requestVolumeDelta`, en in 9 van de 9 staat `useCVDFilter` op `true`.** Het is dus geen
+PATRON/TESORO-kwestie maar een vlootkwestie.
+
+Dat botst frontaal met D-09 en `CLAUDE.md`: *canonical CVD = deterministische OHLCV-proxy, NIET
+`ta.requestVolumeDelta()`*.
+
+❓ **Maar ik trek de conclusie niet, want er is tegenbewijs.** MATADOR haalde `data_parity` op trap
+1, en die toets vergelijkt trade voor trade tegen een export. Bij een materieel verschillende
+CVD-motor met de filter aan zou dat zeer waarschijnlijk gezakt zijn. **Er is iets dat ik niet zie.**
+Drie kandidaten: de motoren lopen op MES dicht genoeg gelijk · de filter bindt zelden · of er zit
+een gat in de pariteitstoets.
+
+**Backtest Setup + Pine Dev: welke van de drie is het?** Beantwoord dit **vóór D-54 en D-63** —
+anders her-exporteren we tegen een meetlat die zelf niet klopt.
+
+### ⚠️ Skip Monday reset de OOS-klok van vijf scripts
+
+Pine Dev kon dit niet weten — **D-18 is beslist nádat jullie begonnen.** Sinds vanmiddag geldt:
+out-of-sample loopt forward vanaf de config-freeze.
+
+`skipMonEarly` eruit halen in PATRON, TESORO en de vier EL TORO's verandert trades. **Hun OOS-klok
+begint dus op 25-08-2026**, niet op 23-08. De overige acht staan op 23-08. `CLAUDE.md` is
+bijgewerkt.
+
+Dit is geen reden om het terug te draaien — het was Ferry's besluit en jullie hebben het netjes
+gemeld. Het is een reden om nergens te schrijven dat deze vijf OOS-historie hebben.
+
+### 📋 Middleware App — de `Rejected()`-fix valt onder D-40, geen apart nummer
+
+Jullie vroegen of het een eigen D-nummer moest krijgen. Nee: dit is precies de verfijning die D-40
+voorzag, alleen met een écht PMT-antwoord als bewijs in plaats van tien gokmarkers. Het staat nu bij
+D-40 met jullie bevinding erin.
+
+⚠️ Eén ding erbij voor iedereen die met de log werkt: **tussen 01:23 en 21:25 staat elke geslaagde
+order fout in `routed_*.jsonl`.** `tools/repair_routed_log.py` herstelt dat. **Elke analyse over
+25-08 moet ná die reparatie draaien** — dat raakt ook D-03 en het dashboard.

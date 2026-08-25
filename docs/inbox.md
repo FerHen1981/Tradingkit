@@ -12,24 +12,25 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
-### 25. EL_REY_MNQ_PROD_EOD — bron en fleet-mirror lopen uiteen
-**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: OPEN
+### 25. EL_REY_MNQ_PROD_EOD — v2-bron gelezen, drift opgelost
+**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: DONE (`<pending>`)
 
-De pariteitsbron-test (`test_fleet_parity_source.py`) staat rood op
-`EL_REY_MNQ_PROD_EOD`: `Account Phase: ontbreekt in de .pine`. Oorzaak is jullie
-actieve EL_REY-herschrijving (`44d6212` "fasen hernoemd", `23c1bf3` BBWP/MFI,
-`d150050` extra filters): de input heet nu **"Account phase"** (kleine p) met
-opties **`Developer/Eval/Funded`**, terwijl de andere acht scripts én de
-`fleet.py`-mirror **"Account Phase"** met `Research/Apex Eval/Apex PA` dragen. Dat
-is geen cosmetische hernoeming maar een **andere fase-vocabulaire** — ik pas de
-mirror daarom niet zelf aan (in tegenstelling tot BANDIDO/D-61, dat een
-eenduidige bronfix was). **Vraag aan Ferry/Pine Dev:** wat is de bedoelde
-bevroren config van EL_REY_EOD nu — volgt de mirror de nieuwe fase-namen/opties,
-en horen de nieuwe filters (BBWP, MFI, sessie-volumeprofiel) bij de bevroren
-EOD-engine of zijn het losse experimenten? Zolang dat open is houd ik de mirror
-op de oude vloot-vocabulaire en staat de test rood als bedoeld signaal.
-NB: BBWP/MFI zijn precies "indicatoren die het lab nog niet modelleert" — de
-zelf-lerende adoptie (Fase 6) zou ze bij een upload als pending oppikken.
+**Opgelost door de nieuwe bron zelf te lezen (grondregel 10 / D-63).** EL_REY_EOD
+is als enige script naar de **v2-lijn** herschreven (`v2.0.1`; bestand heet nog
+`_v1_0_0.pine` maar de inhoud is v2). Vergelijking van de v2-bron met de mirror:
+de **strategie-mechaniek is ONGEWIJZIGD** — FVG-band 2/8, CVD-count 8, max-stop
+200, R 1.25, expiry 6, day-exit Off: allemaal identiek aan `_SPEC`. De v2-
+herschrijving veranderde alleen **presentatie** (Engelse namen, Ferry's groepen),
+de **fase-vocabulaire** ("Account phase" · `Developer/Eval/Funded`, default
+`Funded`) en voegde **BBWP + MFI toe, allebei `input.bool(false)` — default UIT**,
+dus niet in de bevroren mechaniek. `Funded` ≡ de mirror's `Apex PA` (funded/PA-
+account): een 1:1 relabeling van dezelfde drie fasen. **Actie:** de mirror hoefde
+niet te wijzigen; de pariteitstest vergelijkt de fase-input nu op **betekenis**
+(vocab-normalisatie + titel-alias), net als de firm-programma-check (D-20). Test
+weer groen. **Rest voor jullie:** het bestand heet nog `_v1_0_0` terwijl het v2 is
+— hernoemen/versioneren is aan Pine Dev. BBWP/MFI zijn precies "indicatoren die
+het lab nog niet modelleert"; de zelf-lerende adoptie (Fase 6) pikt ze bij een
+upload op als pending — bedraden kan via de codegen-route zodra ze default-AAN gaan.
 
 ### 24. Twee notities voor Notion, uit de input-herstructurering
 **Pine Dev → Scrum Master** · 2026-08-25 · status: OPEN

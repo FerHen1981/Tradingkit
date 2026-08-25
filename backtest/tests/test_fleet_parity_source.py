@@ -81,6 +81,23 @@ def test_every_released_script_has_a_mirror():
     assert {_engine_name(p) for p in _sources()} == set(fleet.names())
 
 
+# The account-phase vocabulary was relabelled in the v2 script line (EL_REY):
+# Developer/Eval/Funded are the same three phases as Research/Apex Eval/Apex PA.
+# Parity is about the strategy the script runs, so the phase input is compared on
+# its MEANING, not its label — the same principle as the firm-program check (D-20).
+_PHASE_ALIASES = {
+    "developer": "research", "research (none)": "research", "research": "research",
+    "eval": "apex eval", "apex eval": "apex eval",
+    "funded": "apex pa", "apex pa": "apex pa",
+    "ftmo funded": "ftmo funded", "ftmo challenge": "ftmo challenge",
+}
+
+
+def _norm_phase(v) -> str:
+    s = str(v).strip().lower()
+    return _PHASE_ALIASES.get(s, s)
+
+
 @needs_pine
 @pytest.mark.parametrize("path", _sources(), ids=_engine_name)
 def test_mirror_matches_source(path):
@@ -88,6 +105,14 @@ def test_mirror_matches_source(path):
     ins, cfg = _pine_inputs(path), fleet.engine_config(name)
     diffs = []
     for title, get, kind in FIELDS:
+        if title == "Account Phase":
+            # accept either capitalisation (v1 "Account Phase" / v2 "Account phase")
+            raw = ins.get("Account Phase", ins.get("Account phase"))
+            if raw is None:
+                diffs.append("Account Phase: ontbreekt in de .pine")
+            elif _norm_phase(_coerce(raw, str)) != _norm_phase(get(cfg)):
+                diffs.append(f"Account Phase: pine={raw!r} mirror={get(cfg)!r}")
+            continue
         if title not in ins:
             diffs.append(f"{title}: ontbreekt in de .pine")
             continue

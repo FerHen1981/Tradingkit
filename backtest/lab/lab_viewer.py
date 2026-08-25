@@ -634,7 +634,8 @@ _STAGE_ARTIFACT_TAG = {
     "0": "trap0_data-audit", "1": "trap1_pariteit", "2": "trap2_structurele-edge",
     "3": "trap3_regimes", "4": "trap4_plateau", "5": "trap5_sizing",
     "6": "trap6_daily_mgmt", "7": "trap7_pa_lifecycle", "8": "trap8_time_for_money",
-    "9": "trap9_prod_vs_harvest",
+    "9": "trap9_prod_vs_harvest", "10": "trap10_tv-validatie",
+    "11": "trap11_portefeuille",
 }
 
 
@@ -646,7 +647,10 @@ def _artifact_detail(engine: str, stage: str) -> dict:
     if not engine or not tag:
         return {"found": False}
     d = lab_root() / "artifacts"
-    hits = sorted(glob.glob(str(d / f"{engine}_{tag}_*.json")))
+    # Trap 11 is a fleet-level artifact written under "PORTFOLIO", not per engine —
+    # every member's trap-11 cell points at the same shared measurement.
+    glob_engine = "PORTFOLIO" if str(stage) == "11" else engine
+    hits = sorted(glob.glob(str(d / f"{glob_engine}_{tag}_*.json")))
     if not hits:
         return {"found": False}
     try:
@@ -700,6 +704,9 @@ def _trim_artifact(stage: str, a: dict) -> dict:
                               ("paired", "median_mfe_diff_ticks", "median_mae_diff_ticks",
                                "within_tol_pct")},
                 "matched_pct": a.get("matched_pct"), "same_bar_pct": a.get("same_bar_pct")}
+    if s == "11":
+        return {k: a.get(k) for k in ("status", "verdict", "pairs", "active_days",
+                "min_pair_days", "min_days", "max_corr", "window_kind", "engines")}
     return a
 
 
@@ -824,6 +831,20 @@ def _start_stage(q) -> tuple[dict, int]:
             if v:
                 cmd += [flag, v]
         return _spawn(cmd, f"trap 10 · {engine}"), 200
+    if stage == "11":
+        # Trap 11 is multi-engine: correlation across the fleet. It takes a
+        # members string (ENGINE:dataset,…), not a single engine/dataset pair.
+        members = (q.get("members") or [""])[0].strip()
+        if not members or "," not in members:
+            return {"error": "trap 11 vergelijkt minstens twee engines — geef "
+                             "members als ENGINE:dataset,ENGINE:dataset"}, 400
+        cmd = [sys.executable, "-m", "backtest.pipeline.cli", "stage11", "--members", members]
+        for name, flag in (("since", "--since"), ("until", "--until"),
+                           ("min_days", "--min-days"), ("window_kind", "--window-kind")):
+            v = (q.get(name) or [""])[0].strip()
+            if v:
+                cmd += [flag, v]
+        return _spawn(cmd, "trap 11 · portefeuille"), 200
     return {"error": f"stage {stage!r} is not implemented yet"}, 400
 
 
@@ -1949,6 +1970,7 @@ async function loadPipeline(){
   const engOpts=PIPE.fleet.map(f=>`<option value="${f.name}">${f.name.replace('EL_','')}</option>`).join('');
   const es=$('#stEngine'); if(es) es.innerHTML=engOpts;
   const sce=$('#scEngine'); if(sce) sce.innerHTML=engOpts;
+  const pfe=$('#pfEngines'); if(pfe) pfe.textContent=PIPE.fleet.map(f=>f.name).join(' · ');
 }
 function showEngine(name){
   const view=(PIPE.detail||{})[name]||[];
@@ -2030,6 +2052,14 @@ function renderArtifact(n, d){
       +'<div class=muted style="margin-top:4px">exit-redenen · sim vs pine</div>'+_tbl(er)
       +`<div class=muted style="margin-top:4px">MFE/MAE op ${ex.paired||0} paren: mediaan `
       +`${ex.median_mfe_diff_ticks??'—'}t / ${ex.median_mae_diff_ticks??'—'}t · ${ex.within_tol_pct??'—'}% binnen tolerantie</div>`;}
+  if(n==='11'){const pr=(d.pairs||[]).map(p=>{const lo=p.loss_overlap||{},br=p.breach_overlap||{};
+      return [p.pair,(p.corr===null||p.corr===undefined)?'n/a':(p.corr>0?'+':'')+p.corr,
+        p.days_both_active,`${lo.both}/${lo.either} (J=${lo.jaccard})`,
+        br?`${br.both}/${br.either}`:'—'];});
+    return `<div class=muted>${d.active_days} actieve dagen · laagste paar-overlap ${d.min_pair_days} `
+      +`(drempel ${d.min_days}) · hoogste paar-r ${d.max_corr??'—'} · venster ${d.window_kind}</div>`
+      +'<div class=muted style="margin-top:4px">paar · daily-P&amp;L-correlatie · dagen · verlies-overlap · breach-overlap</div>'
+      +_tbl([['paar','r','dagen','verlies','breach'],...pr]);}
   return '<pre style="font-size:11px;white-space:pre-wrap">'+JSON.stringify(d,null,1).slice(0,1200)+'</pre>';
 }
 async function loadExports(){
@@ -2043,6 +2073,16 @@ $('#stRun')&&$('#stRun').addEventListener('click',()=>{
   const qs='stage='+encodeURIComponent($('#stStage').value)+'&engine='+encodeURIComponent($('#stEngine').value)
     +'&dataset='+encodeURIComponent($('#stDs').value)+'&export='+encodeURIComponent($('#stExport').value||'');
   postJob('/api/stage',qs,'#stLog','#stRun',()=>{loadPipeline();});
+});
+
+// --- trap 11 · portefeuille (multi-engine) ---
+$('#pfRun')&&$('#pfRun').addEventListener('click',()=>{
+  const m=($('#pfMembers').value||'').trim();
+  if(!m||m.indexOf(',')<0){alert('geef minstens twee leden: ENGINE:dataset,ENGINE:dataset');return;}
+  const qs='stage=11&members='+encodeURIComponent(m)
+    +'&min_days='+encodeURIComponent($('#pfMinDays').value||'20')
+    +'&window_kind='+encodeURIComponent($('#pfWindow').value||'validation');
+  postJob('/api/stage',qs,'#pfLog','#pfRun',()=>{loadPipeline();});
 });
 
 // --- scorecard (Analysis) ---
@@ -2347,6 +2387,33 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
     </div>
     <div id=stOut style="display:none;margin-top:14px"></div>
     <pre id=stLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:260px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Trap 11 · portefeuille-diversificatie</b>
+      <span class=muted>de laatste trap · multi-engine</span></div>
+    <div class=hint>De enige <b>meet-multi-engine</b> trap: hij draait elk lid op zijn eigen markt,
+      aggregeert de dagelijkse P&amp;L per 18:00-sessiedag en meet de <b>paar-correlatie</b> plus de
+      overlap in verlies- en breachdagen. Een sterk <b>negatieve</b> correlatie is een hedge (goed);
+      alleen sterk positieve correlatie doodt de diversificatie. <b>De poort gaat over voldoende
+      dagen, niet over een getal</b>: onder de drempel actieve dagen is een decorrelatie-claim
+      verboden (CLAUDE.md) — de vloot is dagen geleden bevroren, dus het eerlijke live-antwoord is nu
+      "nog te weinig data". Op het validatievenster meet hij de <i>historische</i> correlatie
+      (MNQ/MES/MYM zijn alle drie index-exposure; MGC is de enige aparte bucket).</div>
+    <div class=up style="margin-top:12px">
+      <label class=field style="flex:1;min-width:280px"><span class=fld>Leden — ENGINE:dataset, komma-gescheiden</span>
+        <input id=pfMembers placeholder="EL_MATADOR_MES_PROD_EOD:mes,EL_REY_MNQ_PROD_EOD:mnq" style="width:100%"></label>
+      <label class=field><span class=fld>Min. dagen</span><input id=pfMinDays value=20 style="width:70px"></label>
+      <label class=field><span class=fld>Venster</span><select id=pfWindow>
+        <option value=validation>validatie (pre-freeze)</option>
+        <option value=forward>forward (live)</option>
+      </select></label>
+      <button class=go id=pfRun>Draai trap 11</button>
+    </div>
+    <div class=hint style="margin-top:8px">Hulp bij de leden: <span id=pfEngines class=mono></span></div>
+    <div id=pfOut style="display:none;margin-top:14px"></div>
+    <pre id=pfLog style="display:none;margin:12px 0 0;padding:12px;background:#081D46;border:1px solid var(--line);border-radius:3px;font-family:var(--mono);font-size:11px;color:var(--sub);max-height:260px;overflow:auto;white-space:pre-wrap"></pre>
   </div>
 
   <div class=panel>

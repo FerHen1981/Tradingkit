@@ -1162,6 +1162,97 @@ def cmd_stage10(args):
          "pass": status in ("passed", "data_parity")}, default=str), flush=True)
 
 
+def _parse_members(spec: str) -> list[tuple[str, str]]:
+    """`ENGINE:dataset,ENGINE:dataset,…` -> [(engine, dataset), …]. Each fleet
+    engine trades its own market, so trap 11 pairs each with its own dataset."""
+    out = []
+    for tok in (spec or "").split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        if ":" not in tok:
+            raise SystemExit(f"lid {tok!r} moet ENGINE:dataset zijn")
+        eng, ds = tok.split(":", 1)
+        eng, ds = eng.strip(), ds.strip()
+        if eng not in fleet.names():
+            raise SystemExit(f"onbekende engine {eng!r}")
+        out.append((eng, ds))
+    return out
+
+
+def cmd_stage11(args):
+    """Trap 11 — portefeuille-diversificatie, de laatste v7-trap.
+
+    Meet-multi-engine: draait elk lid over zijn eigen dataset, aggregeert de
+    dagelijkse P&L per 18:00-sessiedag en meet de paar-correlatie + verlies-/
+    breachdag-overlap. De poort gaat over VOLDOENDE dagen, niet over een getal:
+    onder `--min-days` overlappende actieve dagen is een decorrelatie-claim
+    verboden (grondregel/CLAUDE.md), hoe de correlatie ook uitvalt."""
+    from .. import data as dm, indicators as im
+    from ..engine import Engine
+    from .. import funded
+    from . import portfolio, state as _state
+
+    members = _parse_members(args.members)
+    if len(members) < 2:
+        raise SystemExit("trap 11 vergelijkt minstens twee engines: "
+                         "--members EL_REY:mnq,EL_MATADOR:mes")
+    print(f"trap 11 · portefeuille-diversificatie · {len(members)} engines")
+    print("  POORT: gaat over voldoende overlappende actieve dagen, niet over een "
+          "correlatiegetal — onder de drempel is een decorrelatie-claim verboden.\n")
+
+    series: dict[str, dict] = {}
+    dll: dict[str, float] = {}
+    for eng, ds in members:
+        path, _sym = _dataset_path(ds)
+        cfg = fleet.engine_config(eng)
+        df = dm.load(path)
+        if args.since:
+            df = dm.slice_dates(df, since=args.since)
+        if args.until:
+            df = dm.slice_dates(df, until=args.until)
+        # research_mode=False: same deployment posture as trap 10, so the daily P&L
+        # is the account-overlay P&L a funded account actually banks.
+        res = Engine(cfg, df, im.compute(df, cfg), research_mode=False).run()
+        daily = funded.daily_from_trades(res.trades)
+        series[eng] = daily
+        dll[eng] = float(getattr(cfg, "acct_dll", 0.0) or 0.0)
+        print(f"    {eng.replace('EL_',''):<20} {ds:<14} {len(res.trades):>5} trades · "
+              f"{len(daily):>4} handelsdagen")
+
+    rep = portfolio.assess(series, min_days=args.min_days, corr_hi=args.corr_hi,
+                           corr_lo=args.corr_lo, dll_by_engine=dll,
+                           window_kind=args.window_kind)
+
+    print(f"\n    {'paar':<44}{'dagen':>7}{'corr':>8}   verlies-overlap")
+    for r in rep["pairs"]:
+        c = "n/a" if r["corr"] is None else f"{r['corr']:+.2f}"
+        lo = r["loss_overlap"]
+        print(f"    {r['pair']:<44}{r['days_both_active']:>7}{c:>8}   "
+              f"{lo['both']}/{lo['either']} (J={lo['jaccard']:.2f})")
+
+    status = rep["status"]
+    art = _write_artifact("PORTFOLIO", "trap11_portefeuille", {
+        "members": [{"engine": e, "dataset": d} for e, d in members],
+        "window": {"since": args.since, "until": args.until, "kind": args.window_kind},
+        **rep})
+    # A portfolio verdict is shared: record it against every participating engine so
+    # each engine's trap-11 cell reflects the same measurement.
+    for eng, _ds in members:
+        _state.record(eng, "portfolio", status, summary=rep["verdict"], artifact=art,
+                      detail={"members": [e for e, _ in members],
+                              "max_corr": rep["max_corr"],
+                              "min_pair_days": rep["min_pair_days"]})
+    label = {"passed": "GEHAALD", "inconclusive": "INCONCLUSIEF",
+             "failed": "NIET GEHAALD"}[status]
+    print(f"\n  POORT: {label} — {rep['verdict']}")
+    print(f"  artefact {art}")
+    print("STAGE_JSON " + json.dumps(
+        {"stage": 11, "status": status, "pass": status == "passed",
+         "max_corr": rep["max_corr"], "min_pair_days": rep["min_pair_days"],
+         "pairs": rep["pairs"]}, default=str), flush=True)
+
+
 def _write_artifact(engine: str, tag: str, payload: dict) -> str:
     """Ground rule 11 — every stage leaves an artifact."""
     from datetime import datetime
@@ -1273,6 +1364,22 @@ def main():
                           "(grondregel 10 blijft gemeld)")
     p10.add_argument("--diff", action="store_true",
                      help="toon de trade-voor-trade vergelijking ook als de poort slaagt")
+
+    p11 = sub.add_parser("stage11"); p11.set_defaults(fn=cmd_stage11)
+    p11.add_argument("--members", required=True,
+                     help="ENGINE:dataset,ENGINE:dataset,… — elk lid draait op zijn eigen markt")
+    p11.add_argument("--since"); p11.add_argument("--until")
+    p11.add_argument("--min-days", type=int, default=20,
+                     help="minimum overlappende actieve dagen per paar vóór een "
+                          "decorrelatie-claim mag (default 20)")
+    p11.add_argument("--corr-hi", type=float, default=0.7,
+                     help="|r| ≥ dit = samen bewegend (poort faalt)")
+    p11.add_argument("--corr-lo", type=float, default=0.3,
+                     help="|r| ≤ dit = gedecorreleerd (poort haalt)")
+    p11.add_argument("--window-kind", default="validation",
+                     choices=["validation", "forward"],
+                     help="validation = pre-freeze historie (default); forward = live "
+                          "dagen ná het bevriezen (D-18)")
 
     psc = sub.add_parser("scorecard"); psc.set_defaults(fn=cmd_scorecard)
     psc.add_argument("--dataset", required=True)

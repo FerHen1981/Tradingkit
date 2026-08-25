@@ -2992,3 +2992,57 @@ alle dertien scripts van beide pakketten.
 
 Daarmee is de hele vloot behalve **EL PATRON en EL TESORO** om. Die twee wachten nog op jouw
 richting over de niet-canonieke delta-engine — zie item 22.
+
+---
+
+## 24 — Pine Dev → Ferry · PATRON en TESORO om (optie C). De hele vloot staat op v2.2.0
+
+Alle **dertien** scripts dragen nu dezelfde structuur: paneel aaneengesloten 0–13, Engelse
+labels, dezelfde groepen, dezelfde visuals, en `SCRIPT_NAME` per script — de Discord-kaarten
+komen niet langer als *TESORO* binnen.
+
+| | Inputs | Regels |
+|---|---|---|
+| EL PATRON MGC AGG EOD | 170 | 2070 |
+| EL TESORO MGC CON EOD | 170 | 2070 |
+
+Presets geverifieerd ongewijzigd: contractgrootte, stop, R-multiple, FVG-venster, CVD-count,
+expiry, firm-preset, VWAP-veto, dag-exit, trail, BE, `tradeSunday`, `marketRegimeMode`,
+commissie (0,52 = MGC).
+
+### De delta-motor zit nu achter een dropdown, en de default verandert niets
+
+Groep 9 draagt **"Delta engine"** met twee standen:
+
+- **`TradingView volume delta` — DEFAULT.** Letterlijk de motor die deze twee altijd al
+  draaiden: `ta.requestVolumeDelta`, `ta.barssince`-streaks, inclusief de auto-guard voor
+  symbolen zonder volume. **Vandaag verandert er geen enkel signaal.**
+- **`Research OHLCV proxy`.** De canonieke motor uit D-09 waar de Python-backtester op
+  rekent (`backtest/indicators.py:41`, expliciet onafhankelijk van Pine's engine).
+
+> ⚠️ **Zet dit door naar Backtest Setup:** de parity-breuk is hiermee zichtbaar gemaakt, niet
+> opgelost. Zolang de dropdown op TV-delta staat, meet de sweep iets anders dan het script
+> doet. Dat raakt hun D-56-notitie, die schrijft *"CVD is faithful… native Delta… is niet het
+> default-pad"* — dat klopt voor de Python-kant, maar in deze twee `.pine`-bestanden ís native
+> delta het default-pad, met `useCVDFilter` aan. Omzetten naar de proxy is een
+> onderzoeksronde vanaf trap 1, geen tweak.
+
+### Wat er verder weg is
+
+De **stability-preset-laag** (stond op Manual, dus `stabilityOn` was false en `contractSizeEff`,
+`maxStopSizeEff` en `slSizeLegacyEff` vielen alle drie al door naar de gewone inputs — 63
+verwijzingen, allemaal inert) en de **richtings-uurkaarten** (`useDirectionalHours` stond uit).
+Allebei gedragsneutraal op de default-stand.
+
+### 🔴 Skip Monday is er in vijf scripts uit — en dat verandert wel trades
+
+Jouw besluit. `skipMonEarly` stond op `true` in **PATRON, TESORO en alle vier de EL TORO's**.
+Weg betekent dat **maandag 00:00–02:00 ET nu meehandelt** in die vijf. Bij de andere zeven
+stond hij al uit, dus daar was het een opruiming; hier is het een parameterwijziging. Als de
+eerstvolgende meting op deze vijf afwijkt van de vorige, is dít de eerste kandidaat.
+
+### Stand van de vloot
+
+Dertien scripts, één structuur. Wat nog openstaat is geen Pine-werk meer: de proxy-vraag voor
+de MGC-bucket, en het punt uit `frozen-engines.md` dat de bevroren contractgrootte niet
+fresh-account-funderbaar is (D-53).

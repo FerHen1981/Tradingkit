@@ -392,36 +392,36 @@ sweepLookback  = 20
 useVwapVeto   = input.bool(false, "VWAP side veto (long above / short below only)", group=GROUP_BIAS,
      tooltip="Enige richtingsfilter die in beide datahelften consistent was: tegen-VWAP-trades waren structureel negatief.")
 
-// === BBWP — Bollinger Band Width Percentile ==================================
-// Volatiliteitsregime als percentiel: welk deel van de laatste N bars had een SMALLERE
-// band dan nu? 0 = de smalste band in het venster (samengedrukte volatiliteit),
-// 100 = de wijdste. Methode van John Bollinger; percentiel-variant van The_Caretaker
-// (TradingView, MPL 2.0). Hier alleen de berekening — geen plots, geen kleurenschalen.
-//
-// Standaard UIT en met een band van 0-100, dus in de defaultstand laat hij alles door
-// en is het gedrag identiek aan voor deze toevoeging.
-useBbwpFilter = input.bool(false, "BBWP filter", group=GROUP_SIG,
-     tooltip="Only take entries while the volatility percentile sits inside the band below. Off = no effect.")
+// === 9 · SIGNAL — Filters ====================================================
+// Elke regel is een filter: schakelaar plus zijn parameters op één rij. Allemaal default
+// UIT of neutraal, dus in deze stand is het gedrag identiek aan voor deze toevoeging.
+// BBWP = volatiliteitspercentiel (Bollinger; percentiel-variant van The_Caretaker).
+useBbwpFilter = input.bool(false, "BBWP", inline="sf_bbwp", group=GROUP_SIG, tooltip="Volatility percentile: what share of the lookback had a NARROWER band than now. Raise min to skip dead volatility, lower max to skip exhaustion.")
+bbwpMin       = input.float(0,   "min", minval=0, maxval=100, step=1, inline="sf_bbwp", group=GROUP_SIG)
+bbwpMax       = input.float(100, "max", minval=0, maxval=100, step=1, inline="sf_bbwp", group=GROUP_SIG)
 bbwpBasisType = input.string("SMA", "BBWP basis", options=["SMA","EMA","VWMA"], group=GROUP_SIG, display=display.none)
-bbwpLen       = input.int(20,  "BBWP length", minval=1, group=GROUP_SIG, display=display.none)
-bbwpLookback  = input.int(255, "BBWP lookback", minval=2, group=GROUP_SIG,
-     tooltip="How many bars the current band width is ranked against. 255 is the author's default; it needs that much history before the value is meaningful.", display=display.none)
-bbwpMin       = input.float(0,   "BBWP min (%)", minval=0, maxval=100, step=1, group=GROUP_SIG,
-     tooltip="Raise above 0 to skip dead, compressed volatility.")
-bbwpMax       = input.float(100, "BBWP max (%)", minval=0, maxval=100, step=1, group=GROUP_SIG,
-     tooltip="Lower below 100 to skip exhausted, over-extended volatility.")
+bbwpLen       = input.int(20,  "BBWP length",   minval=1, group=GROUP_SIG, display=display.none)
+bbwpLookback  = input.int(255, "BBWP lookback", minval=2, group=GROUP_SIG, tooltip="Bars the current width is ranked against.", display=display.none)
 
-// === MFI — money-flow oscillator op candle-waarde ============================
-// Niet de klassieke Money Flow Index: dit is de candle-value variant die Ferry aanleverde.
-// Kern: hoe ver sluit de bar t.o.v. zijn eigen range, gladgestreken met een HMA, en de
-// SIGN daarvan is de trendrichting. Bull = boven nul, bear = onder nul.
-//
-// De multiplier uit het origineel is bewust weggelaten: die schaalt alleen de plot en kan
-// het teken niet veranderen, dus voor een richtingsveto doet hij niets.
-useMfiFilter = input.bool(false, "MFI side filter", group=GROUP_SIG,
-     tooltip="Only allow longs while the oscillator is above zero and shorts while it is below. Off = no effect.")
-mfiPeriod    = input.int(60, "MFI smoothing (HMA)", minval=1, group=GROUP_SIG,
-     tooltip="Length of the Hull moving average over the candle value.", display=display.none)
+useEmaFilter  = input.bool(false, "EMA trend", inline="sf_ema", group=GROUP_SIG, tooltip="Longs only above the EMA, shorts only below it.")
+emaLen        = input.int(200, "len", minval=1, inline="sf_ema", group=GROUP_SIG)
+
+useMfiFilter  = input.bool(false, "MFI side", inline="sf_mfi", group=GROUP_SIG, tooltip="Candle-value money flow. Longs only while it is above zero, shorts only below. The multiplier from the original is omitted: a positive scale factor cannot change the sign.")
+mfiPeriod     = input.int(60, "HMA", minval=1, inline="sf_mfi", group=GROUP_SIG)
+
+usePocFilter  = input.bool(false, "Volume profile", inline="sf_poc", group=GROUP_SIG, tooltip="Session volume profile (MEX Volume Pack). Longs only above the reference level, shorts only below. Uses intrabar data, so the level moves while the bar forms - the gate reads it on bar close.")
+pocRef        = input.string("POC", "vs", options=["POC","VAH","VAL"], inline="sf_poc", group=GROUP_SIG)
+pocSession    = input.string("Daily", "session", options=["Daily","Weekly","Tokyo","London","New York"], inline="sf_poc", group=GROUP_SIG)
+pocResolution = input.int(30, "Profile resolution", minval=5, maxval=100, group=GROUP_SIG, tooltip="More bins = finer profile, more computation.", display=display.none)
+pocVaWidth    = input.int(70, "Value area volume %", minval=1, maxval=100, group=GROUP_SIG, display=display.none)
+pocLowerTf    = input.timeframe("1", "Intrabar timeframe", group=GROUP_SIG, tooltip="Lower timeframe the profile is built from.", display=display.none)
+
+useDpFilter   = input.bool(false, "Discount/Premium", inline="sf_dp", group=GROUP_SIG, tooltip="Position inside the recent range. Longs only in the discount half, shorts only in the premium half.")
+dpLookback    = input.int(60, "bars", minval=5, inline="sf_dp", group=GROUP_SIG)
+dpMid         = input.float(50, "mid %", minval=1, maxval=99, step=1, inline="sf_dp", group=GROUP_SIG)
+
+allowLongs    = input.bool(true, "Longs",  inline="sf_dir", group=GROUP_SIG)
+allowShorts   = input.bool(true, "Shorts", inline="sf_dir", group=GROUP_SIG, tooltip="Master direction switches. Off = that side never enters.")
 useBiasFilter = false
 htf_tf        = "30"
 htfBosLen     = 7
@@ -884,35 +884,147 @@ else if cvdEff
 bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
 bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
 
-// --- BBWP -------------------------------------------------------------------
+// --- SIGNAL FILTERS ---------------------------------------------------------
 f_bbwpMa(_src, _len, _type) =>
     _type == "SMA" ? ta.sma(_src, _len) : _type == "EMA" ? ta.ema(_src, _len) : ta.vwma(_src, _len)
 
 f_bbwp(_src, _len, _lookback, _type) =>
     float _basis = f_bbwpMa(_src, _len, _type)
     float _dev   = ta.stdev(_src, _len)
-    // bandbreedte als fractie van de basis; (basis+dev)-(basis-dev) = 2*dev
-    float _bbw   = _basis == 0 ? na : 2 * _dev / _basis
+    float _bbw   = _basis == 0 ? na : 2 * _dev / _basis     // (basis+dev)-(basis-dev) = 2*dev
     int   _cnt   = 0
     for _i = 1 to _lookback
         _cnt += nz(_bbw[_i]) > nz(_bbw) ? 0 : 1
     100.0 * _cnt / _lookback
 
+// Sessie-volumeprofiel, overgenomen uit [MEX] Volume Pack v1.2. Alleen de rekenkant:
+// intrabar-data verzamelen, volume over body en wicks verdelen, POC en value area.
+// Alle tekenwerk (boxes, lijnen, kleuren) is weggelaten - een strategie heeft een
+// PRIJSNIVEAU nodig, geen profiel op het scherm.
+// Eén array in plaats van de groene/rode splitsing: die splitsing bestond alleen om de
+// balken te kunnen kleuren en verandert de POC niet.
+f_volSlice(_y11, _y12, _y21, _y22, _height, _vol) =>
+    nz(math.max(math.min(math.max(_y11, _y12), math.max(_y21, _y22)) - math.max(math.min(_y11, _y12), math.min(_y21, _y22)), 0) * _vol / _height)
+
+var float[] vpVol      = array.new_float(pocResolution, 0.0)
+var float[] vpBounds   = array.new_float(pocResolution, 0.0)
+var float[] ltfO = array.new_float(0)
+var float[] ltfH = array.new_float(0)
+var float[] ltfL = array.new_float(0)
+var float[] ltfC = array.new_float(0)
+var float[] ltfV = array.new_float(0)
+var int     vpStart = 0
+
+[_dO, _dC, _dH, _dL, _dV] = request.security_lower_tf(syminfo.tickerid, pocLowerTf, [open, close, high, low, volume])
+
+f_profileAdd(_o, _h, _l, _c, _v, _gap) =>
+    for _i = 0 to array.size(vpVol) - 1
+        float _zTop = array.get(vpBounds, _i)
+        float _zBot = _zTop - _gap
+        float _bodyTop = math.max(_c, _o)
+        float _bodyBot = math.min(_c, _o)
+        float _topWick = _h - _bodyTop
+        float _botWick = _bodyBot - _l
+        float _body    = _bodyTop - _bodyBot
+        float _den     = 2 * _topWick + 2 * _botWick + _body
+        if _den > 0
+            float _bodyVol = _body * _v / _den
+            float _topVol  = 2 * _topWick * _v / _den
+            float _botVol  = 2 * _botWick * _v / _den
+            array.set(vpVol, _i, array.get(vpVol, _i)
+                 + f_volSlice(_zBot, _zTop, _bodyBot, _bodyTop, _body, _bodyVol)
+                 + f_volSlice(_zBot, _zTop, _bodyTop, _h, _topWick, _topVol) / 2
+                 + f_volSlice(_zBot, _zTop, _bodyBot, _l, _botWick, _botVol) / 2)
+
+// nieuwe sessie volgens de gekozen anker
+bool _pocNew = pocSession == "Weekly"   ? weekofyear(time, activeTz) != weekofyear(time[1], activeTz) :
+     pocSession == "Tokyo"    ? hour(time, activeTz) == 19 and hour(time[1], activeTz) != 19 :
+     pocSession == "London"   ? hour(time, activeTz) == 2  and hour(time[1], activeTz) != 2  :
+     pocSession == "New York" ? hour(time, activeTz) == 9  and hour(time[1], activeTz) != 9  :
+     dayofweek(time, activeTz) != dayofweek(time[1], activeTz)
+
+float pocVal = na
+float vahVal = na
+float valVal = na
+if usePocFilter
+    if _pocNew
+        array.fill(vpVol, 0.0)
+        array.clear(ltfO)
+        array.clear(ltfH)
+        array.clear(ltfL)
+        array.clear(ltfC)
+        array.clear(ltfV)
+        vpStart := bar_index
+    if array.size(_dO) > 0
+        for _i = 0 to array.size(_dO) - 1
+            array.push(ltfO, array.get(_dO, _i))
+            array.push(ltfH, array.get(_dH, _i))
+            array.push(ltfL, array.get(_dL, _i))
+            array.push(ltfC, array.get(_dC, _i))
+            array.push(ltfV, array.get(_dV, _i))
+    int _lb = math.max(1, bar_index - vpStart)
+    float _pHi = ta.highest(high, _lb + 1)
+    float _pLo = ta.lowest(low, _lb + 1)
+    if _pHi > _pLo and array.size(ltfO) > 0
+        float _gap = (_pHi - _pLo) / pocResolution
+        array.fill(vpVol, 0.0)
+        for _i = 0 to pocResolution - 1
+            array.set(vpBounds, _i, _pHi - _gap * _i)
+        for _j = 0 to array.size(ltfO) - 1
+            f_profileAdd(array.get(ltfO, _j), array.get(ltfH, _j), array.get(ltfL, _j), array.get(ltfC, _j), array.get(ltfV, _j), _gap)
+        // POC = midden van de zwaarste bin
+        int _pocIdx = array.indexof(vpVol, array.max(vpVol))
+        pocVal := array.get(vpBounds, _pocIdx) - _gap / 2
+        // value area: vanaf de POC naar buiten tot het gekozen volumepercentage bereikt is
+        float _tot = array.sum(vpVol)
+        float _cnt = array.get(vpVol, _pocIdx)
+        vahVal := pocVal
+        valVal := pocVal
+        for _k = 1 to array.size(vpVol)
+            if _cnt >= _tot * pocVaWidth / 100.0
+                break
+            if _pocIdx + _k < array.size(vpVol)
+                _cnt += array.get(vpVol, _pocIdx + _k)
+                valVal := array.get(vpBounds, _pocIdx + _k) - _gap
+            if _pocIdx - _k >= 0
+                _cnt += array.get(vpVol, _pocIdx - _k)
+                vahVal := array.get(vpBounds, _pocIdx - _k)
+
+float pocLevel = pocRef == "VAH" ? vahVal : pocRef == "VAL" ? valVal : pocVal
+
 float bbwpVal  = f_bbwp(close, bbwpLen, bbwpLookback, bbwpBasisType)
 bool  bbwpPass = not useBbwpFilter or (not na(bbwpVal) and bbwpVal >= bbwpMin and bbwpVal <= bbwpMax)
 
-// --- MFI (candle-value money flow) ------------------------------------------
+float emaVal     = ta.ema(close, emaLen)
+bool  emaLongOK  = not useEmaFilter or close > emaVal
+bool  emaShortOK = not useEmaFilter or close < emaVal
+
+// MFI (candle-value money flow, niet de klassieke Money Flow Index)
 float _mfiO   = ohlc4
 float _mfiH   = math.max(high, open, close)
 float _mfiL   = math.min(low, open, close)
 float _mfiC   = (nz(close[1], close) + nz(open[1], open)) / 2
 float _mfiRng = _mfiH - _mfiL
-// vlakke bar -> geen range -> geen uitspraak; nz() zou hier een 0 verzinnen die als
-// richting telt, dus expliciet na laten en de vorige waarde laten staan.
+// Vlakke bar -> geen range -> geen uitspraak. nz() zou hier een 0 verzinnen, en 0 telt in
+// dit veto als richting.
 float _mfiCV  = _mfiRng == 0 ? na : (_mfiC - _mfiO) / _mfiRng
 float mfiVal  = ta.hma(nz(_mfiCV, nz(_mfiCV[1], 0)), mfiPeriod) * -1
 bool  mfiLongOK  = not useMfiFilter or mfiVal > 0
 bool  mfiShortOK = not useMfiFilter or mfiVal < 0
+
+bool  pocLongOK  = not usePocFilter or (not na(pocLevel) and close > pocLevel)
+bool  pocShortOK = not usePocFilter or (not na(pocLevel) and close < pocLevel)
+
+float _dpHi = ta.highest(high, dpLookback)
+float _dpLo = ta.lowest(low, dpLookback)
+float dpPos = _dpHi - _dpLo <= 0 ? na : 100.0 * (close - _dpLo) / (_dpHi - _dpLo)
+bool  dpLongOK  = not useDpFilter or (not na(dpPos) and dpPos <= dpMid)
+bool  dpShortOK = not useDpFilter or (not na(dpPos) and dpPos >= dpMid)
+
+// Alles wat een kant mag tegenhouden, op één plek. De poorten verderop lezen alleen deze
+// twee, zodat er nooit een filter op de ene poort wel en op de andere niet hangt.
+bool sigLongOK  = allowLongs  and bbwpPass and emaLongOK  and mfiLongOK  and pocLongOK  and dpLongOK
+bool sigShortOK = allowShorts and bbwpPass and emaShortOK and mfiShortOK and pocShortOK and dpShortOK
 
 // ============================================================================
 // === DAILY RISK / EQUITY (geünificeerd, gelatcht) ===========================
@@ -1068,8 +1180,8 @@ f_calcQty(_slDistPrice) =>
 isFlat = strategy.position_size == 0 and strategy.opentrades == 0
 var bool posRiskOff = false
 
-bool long0  = bullCandle and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and dirHourLongPass and barstate.isconfirmed
-bool short0 = bearCandle and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and dirHourShortPass and barstate.isconfirmed
+bool long0  = bullCandle and bullCvdPass and sigLongOK and canLong  and vetoLongOK  and sweepLongOK and canTrade and orGateLong  and dirHourLongPass and barstate.isconfirmed
+bool short0 = bearCandle and bearCvdPass and sigShortOK and canShort and vetoShortOK and sweepShortOK and canTrade and orGateShort and dirHourShortPass and barstate.isconfirmed
 
 // === v6.1: FVG CONFIRMATION MEMORY ==========================================
 var array<int>   memBar = array.new<int>()
@@ -1114,8 +1226,8 @@ if confirmBars > 0 and barstate.isconfirmed
             int _age = bar_index - array.get(memBar, _k)
             if _age >= 1 and _age <= confirmBars
                 int _d = array.get(memDir, _k)
-                bool _ok = _d == 1 ? (bullCvdPass and bbwpPass and mfiLongOK and canLong and vetoLongOK and sweepLongOK and orGateLong and dirHourLongPass) :
-                     (bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and orGateShort and dirHourShortPass)
+                bool _ok = _d == 1 ? (bullCvdPass and sigLongOK and canLong and vetoLongOK and sweepLongOK and orGateLong and dirHourLongPass) :
+                     (bearCvdPass and sigShortOK and canShort and vetoShortOK and sweepShortOK and orGateShort and dirHourShortPass)
                 if _ok
                     memSigDir := _d
                     memSigMid := array.get(memMid, _k)
@@ -1234,7 +1346,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";mfi=" + (useMfiFilter ? str.tostring(mfiPeriod) : "off") + ";bbwp=" + (useBbwpFilter ? str.tostring(bbwpMin, "#") + "-" + str.tostring(bbwpMax, "#") : "off") + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";filters=" + (useBbwpFilter ? "bbwp" : "") + (useEmaFilter ? "ema" : "") + (useMfiFilter ? "mfi" : "") + (usePocFilter ? "poc" : "") + (useDpFilter ? "dp" : "") + (allowLongs and allowShorts ? "" : allowLongs ? "L" : "S") + ";tz=" + activeTz
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -1319,8 +1431,8 @@ var float t_qty = na
 gateOK = isFlat or (gateOpenOnRiskOff and posRiskOff)
 
 // === v6.0: BLOCKERS ENGINE ==================================================
-bool rawLong  = (bullCandle and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
-bool rawShort = (bearCandle and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK and barstate.isconfirmed) or memSigDir == -1
+bool rawLong  = (bullCandle and bullCvdPass and sigLongOK and canLong  and vetoLongOK  and sweepLongOK and barstate.isconfirmed) or memSigDir == 1
+bool rawShort = (bearCandle and bearCvdPass and sigShortOK and canShort and vetoShortOK and sweepShortOK and barstate.isconfirmed) or memSigDir == -1
 f_persistentBlockers() =>
     string _b = ""
     if preStartBlock
@@ -1713,8 +1825,8 @@ plot(showTradeLevels and not flatNow ? curLimit : na, "Take Profit", color=color
 plot(showTradeLevels and not flatNow ? entryAvg : na, "Entry", color=color.new(color.blue, 0), style=plot.style_linebr, linewidth=1)
 plot(vwapVal, "VWAP", color=color.new(color.purple, 40), linewidth=1)
 // === v6.0: FULL-LOGIC GATE VISUALISATION ====================================
-bool gateLongOpen  = canTrade and bullCvdPass and bbwpPass and mfiLongOK and canLong  and vetoLongOK  and sweepLongOK
-bool gateShortOpen = canTrade and bearCvdPass and bbwpPass and mfiShortOK and canShort and vetoShortOK and sweepShortOK
+bool gateLongOpen  = canTrade and bullCvdPass and sigLongOK and canLong  and vetoLongOK  and sweepLongOK
+bool gateShortOpen = canTrade and bearCvdPass and sigShortOK and canShort and vetoShortOK and sweepShortOK
 color _gateAmber = visIsDark ? #C9A227 : #8F6400
 int _flashT = math.max(70, gateBgTransp - 8)
 color gateBgCol = sigBlockedEvt ? color.new(_gateAmber, _flashT) :

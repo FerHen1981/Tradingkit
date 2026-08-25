@@ -665,6 +665,13 @@ def _trim_artifact(stage: str, a: dict) -> dict:
     if s == "9":
         return {"with_filter": a.get("with_filter"), "without_filter": a.get("without_filter"),
                 "mask_contribution_pct": a.get("mask_contribution_pct")}
+    if s == "10":
+        return {"status": a.get("status"), "dimensions": a.get("dimensions"),
+                "exit_reasons": (a.get("exit_reasons") or {}).get("rows"),
+                "excursion": {k: (a.get("excursion") or {}).get(k) for k in
+                              ("paired", "median_mfe_diff_ticks", "median_mae_diff_ticks",
+                               "within_tol_pct")},
+                "matched_pct": a.get("matched_pct"), "same_bar_pct": a.get("same_bar_pct")}
     return a
 
 
@@ -769,6 +776,26 @@ def _start_stage(q) -> tuple[dict, int]:
             if v:
                 cmd += [flag, v]
         return _spawn(cmd, f"trap {stage} · {engine}"), 200
+    if stage == "10":
+        # Like stage 1, the deployment gate needs the TradingView export to
+        # validate against, plus --as-tested so a cosmetic input difference does
+        # not block the run (ground rule 10 stays reported either way).
+        if engine not in fleet.names():
+            return {"error": "pick an engine for the TradingView-validation run"}, 400
+        exp = (q.get("export") or [""])[0].strip()
+        if not exp:
+            return {"error": "stage 10 needs a TradingView export (.xlsx) to validate against"}, 400
+        f = _export_path(exp)
+        if f is None:
+            return {"error": f"export not found: {os.path.basename(exp)} — upload it "
+                             f"under 1 · Data of zet hem in validation/exports/"}, 400
+        cmd = [sys.executable, "-m", "backtest.pipeline.cli", "stage10", "--dataset", dataset,
+               "--engine", engine, "--export", str(f), "--as-tested"]
+        for name, flag in (("since", "--since"), ("until", "--until")):
+            v = (q.get(name) or [""])[0].strip()
+            if v:
+                cmd += [flag, v]
+        return _spawn(cmd, f"trap 10 · {engine}"), 200
     return {"error": f"stage {stage!r} is not implemented yet"}, 400
 
 
@@ -1848,6 +1875,15 @@ function renderArtifact(n, d){
     ['per maand $',(d.per_month||0).toLocaleString()],['breach',d.breached?'ja':'nee']]);
   if(n==='9')return `<div class=muted>mét uur/dag-masker: ${_e(d.with_filter)}<br>`
     +`zónder masker: ${_e(d.without_filter)}<br>masker draagt ${d.mask_contribution_pct}% van de netto bij</div>`;
+  if(n==='10'){const dim=d.dimensions||{};
+    const dr=Object.entries(dim).map(([k,v])=>[k,(v.ok?'ok':'✗'),(v.detail||'')]);
+    const er=(d.exit_reasons||[]).map(x=>[x.category,`${x.sim_n} (${x.sim_pct}%)`,`${x.pine_n} (${x.pine_pct}%)`,`Δ${x.gap_pp}pp`]);
+    const ex=d.excursion||{};
+    return `<div class=muted>timing: ${d.matched_pct}% gepaard · ${d.same_bar_pct}% zelfde bar</div>`
+      +'<div class=muted style="margin-top:4px">dimensies (harde deployment-poort)</div>'+_tbl(dr)
+      +'<div class=muted style="margin-top:4px">exit-redenen · sim vs pine</div>'+_tbl(er)
+      +`<div class=muted style="margin-top:4px">MFE/MAE op ${ex.paired||0} paren: mediaan `
+      +`${ex.median_mfe_diff_ticks??'—'}t / ${ex.median_mae_diff_ticks??'—'}t · ${ex.within_tol_pct??'—'}% binnen tolerantie</div>`;}
   return '<pre style="font-size:11px;white-space:pre-wrap">'+JSON.stringify(d,null,1).slice(0,1200)+'</pre>';
 }
 async function loadExports(){
@@ -1950,10 +1986,11 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <label class=field><span class=fld>Trap</span><select id=stStage style="min-width:230px">
         <option value=0>0 · Data-audit</option>
         <option value=1>1 · Pine-pariteit (harde poort)</option>
+        <option value=10>10 · TradingView-validatie (harde poort)</option>
       </select></label>
       <label class=field><span class=fld>Engine</span><select id=stEngine style="min-width:210px"></select></label>
       <label class=field><span class=fld>Dataset</span><select id=stDs style="min-width:150px"></select></label>
-      <label class=field><span class=fld>TV-export (trap 1)</span><select id=stExport style="min-width:200px"></select></label>
+      <label class=field><span class=fld>TV-export (trap 1 &amp; 10)</span><select id=stExport style="min-width:200px"></select></label>
       <button class=go id=stRun>Draai trap</button>
     </div>
     <div id=stOut style="display:none;margin-top:14px"></div>

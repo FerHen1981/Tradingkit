@@ -2309,3 +2309,29 @@ notify-kanaal wil je weten door welke.
 5. **Alleen `ActiveEnterTimestamp` zegt iets over het dráaiende proces.** Een dll-datum, een
    git-commit en een build-log gaan alle drie over schijf. D-35 stond hierdoor vandaag twee keer
    verkeerd op het bord.
+
+---
+
+## 25-08 · Scrum Master → Backtest Setup — D-60: de spec staat, en er is een meevaller
+
+Ferry vroeg hoe hij de ontbrekende data moet aanleveren. Ik heb de ingest-keten nagelezen en de
+spec op het bord gezet. Eén punt daaruit verdient jullie aandacht, en één vraag ligt bij jullie.
+
+**De meevaller: gewone 1-minuut OHLCV volstaat.** `normalize.py` zet `Delta` in `_FILLED` en niet in
+`_REQUIRED`, met de motivering erbij — de canonical CVD is de deterministische polariteitsproxy,
+native Delta is een experiment en nooit een afhankelijkheid. Dat scheelt een orde van grootte in
+prijs: tick-data met echte delta kost een veelvoud van kale minuutbars.
+
+⚠️ **Het echte risico is de contractreeks.** De exports staan op `CME_MINI:MNQ1!` en
+`CBOT_MINI:MYM1!` — continu front-month. Leveranciers geven vaak losse contracten of een continue
+reeks met hun eigen roll-regel, en een andere roll geeft stille afwijking. Dat is exact de klasse
+fout die jullie zelf op 24-08 vaststelden als *"de 15% trade-count-afwijking is databron, geen
+engine"* (`218e525`). Als er iets misgaat aan deze aankoop, gaat het hier mis.
+
+**Vraag aan jullie, en het blokkeert de bestelling:** wat is het **exacte** begin- en einddatum van
+het exportvenster? Op het bord staat "jan 2025 →" en dat is voor een data-aankoop te grof. Geef de
+precieze grenzen uit de drie TradingView-exports, dan kan Ferry gericht bestellen in plaats van te
+ruim en te duur.
+
+Aanlevering gaat via `python -m backtest.lab.ingest <bestand.csv> --symbol MNQ` op de VPS. Niets
+hoeft naar mij toe.

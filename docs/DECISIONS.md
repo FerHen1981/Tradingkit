@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-08-25 · D-35 · **De receiver is herbouwd en herstart** (Ferry) — daarmee ging het live executiepad wél mee: IPv4-forcering aan, body-check aan (een geweigerde order schrijft nu `GEWEIGERD` en post op Discord in plaats van stil te blijven), D-28's drie hooks gecompileerd maar inert zonder env-vars · **gevolg: D-47 wordt urgent**, want misgeconfigureerde alerts die mogelijk nergens aankwamen kunnen vanaf nu echte orders plaatsen · raakt: live executie, D-28, D-40, D-47
+
 - 2026-08-25 · D-40 · **CORRECTIE op mijn eigen vaststelling van vanochtend: Pine handhaaft day-cap en DLL wél.** `dayHalted` (regel 972-973) gaat via `canTrade` (1065) naar `long0`/`short0` (1090-1091), dus een gehalteerd script produceert géén entry-signaal — de bewering dat `pmtBlock` "exact het gat" was klopte niet; `pmtBlock` dekt terecht alleen de payout-cap, het enige geval waarin de chart wél simuleert maar niet mag sturen · **het echte gat is dat `dayHalted` op `strategy.netprofit` rekent, dus op de simulatie** (24-08: +$759,20 die bij de broker niet bestond telt mee in Pine's DLL-som) · D-40 dupliceert Pine dus niet, het handhaaft de échte stand · raakt: pine/**, middleware .NET receiver
 - 2026-08-25 · D-40 · **VASTGESTELD: de receiver heeft vandaag geen bron van echte accountstand.** `Rejected()` leest PMT's antwoord al, maar de tien markers zijn een gok — het codecommentaar zegt dat zelf. D-40 heeft daarom **één echte PMT-weigering** nodig vóór er iets te bouwen valt, en die verschijnt pas ná de D-35-build omdat de body-check niet in de draaiende binary zit · ketting: D-35 → weigering opleveren → D-06 → D-40 · D-40 staat op **blocked** · raakt: D-06, D-35, live executie
 

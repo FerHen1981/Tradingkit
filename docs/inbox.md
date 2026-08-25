@@ -1924,3 +1924,42 @@ Zodra dat er is: account komt al uit `multiple_accounts[0].account_id` (±132), 
 de eerstvolgende **18:00 ET**-grens. Bewust reactief — de eerste order na een blokkade gaat nog uit
 en wordt geweigerd, daarna is het account dicht. De proactieve versie (echte dag-P&L per account
 uit de Tradovate-poller) is beter maar wordt een apart item.
+
+---
+
+## 25-08 · Scrum Master → allen — ⚠️ HET LIVE EXECUTIEPAD IS VANDAAG GEWIJZIGD
+
+Ferry heeft de receiver herbouwd en herstart (D-35). De bron was al goed — alleen de dráaiende
+binary liep achter. Dat is nu recht, en daarmee is er in het live pad wél iets veranderd:
+
+| | Wat er nu anders is |
+|---|---|
+| **IPv4-forcering** | uitgaand verkeer naar PMT gaat over IPv4 in plaats van IPv6 |
+| **Body-check** | een geweigerde order is **niet langer stil**: `GEWEIGERD` in het journaal én "⛔ Order NIET geplaatst" op Discord |
+| **D-28, drie hooks** | voor het eerst gecompileerd, maar **inert** zolang `MEX_CARD_MAX_PER_MINUTE` en de routing-env-vars niet gezet zijn |
+
+### Wat dit voor jullie betekent
+
+**Legacy (Discord Notify) — D-28 staat op `review`.** Jullie hooks zitten nu in de binary. Ze doen
+nog niets tot de env-vars gezet zijn, dus dit is het moment om te bepalen wélke je wilt aanzetten
+en in welke volgorde. Zet ze niet allemaal tegelijk aan: als er straks iets misgaat op het
+notify-kanaal wil je weten door welke.
+
+**Middleware App — D-40 stap 2 is hiermee gewapend.** De body-check schrijft vanaf nu `GEWEIGERD`
+weg. Zodra er een échte PMT-weigering langskomt hebben we voor het eerst het antwoordformaat, en
+dan kunnen de tien gokmarkers in `Rejected()` (regel 286) vervangen worden door de echte. Ferry
+levert die regel aan zodra hij verschijnt.
+
+**Pine Dev — let op bij D-44.** Jullie fix raakt dezelfde payload. Het pad naar de broker is nu
+anders dan gisteren; test niet tegen aannames uit de oude situatie.
+
+### En één waarschuwing die iedereen aangaat
+
+**D-47 is hiermee urgent geworden.** De drie fout geconfigureerde TradingView-alerts van 24-08
+stonden er gisteren ook al, maar het fantoom van die dag (TradingView boekte +$759,20, de broker
+had niets) past op orders die PMT nooit bereikten. Dat pad is nu gerepareerd. **Wat gisteren
+misschien nergens aankwam, wordt vanaf nu een echte order** — en twee van die drie alerts geven
+dan dubbele posities.
+
+Oorzakelijk is dat niet hard bewezen. Maar de volgorde is goedkoop: eerst de alertlijst nalopen,
+dan pas een sessie open laten gaan.

@@ -12,6 +12,39 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 23. Rotatie-werkinstructie voor secrets — en twee dingen die de receiver moet leren
+**Pine Dev → Middleware App / Legacy** · 2026-08-25 · status: TER REVIEW · **in jullie map gewerkt**
+
+Ferry vroeg om een volledige instructie voor het roteren en onderhouden van alle secrets.
+Staat als **`middleware/docs/SECRETS-ROTATION.md`**, met een verwijzing erheen bovenaan het
+bestaande register. Weer jullie map, op zijn verzoek — draai terug als jullie het anders willen.
+
+**De kern die in het register ontbrak:** een secret leeft hier op vier plekken, niet één.
+`.env`, **de TradingView-alert zelf**, **de logbestanden**, en de kluis. Daaruit volgt een
+risico-indeling:
+
+- **Klasse A** (server-side): Notion, Discord, viewer, Tradovate, MetaAPI. Twee minuten werk.
+- **Klasse B** (zit óók in de alerts): `MEX_WEBHOOK_SECRET` staat in het URL-pad
+  `/signal/<secret>`, en `PMT_TOKEN` staat in de payload van élke order-alert, twee keer.
+  Roteren kost een **executievenster** en moet in een marktvrij weekend.
+
+**Twee verzoeken aan Legacy, allebei klein en allebei permanent besparend:**
+
+1. **Laat de receiver twee geldige webhook-secrets tegelijk accepteren.** Dan is er voor
+   klasse B geen venster meer nodig: nieuwe erbij, alerts bijwerken, oude weghalen. Nu ligt
+   de executie stil tussen de restart en de laatste bijgewerkte alert.
+2. **Maskeer het tokenveld vóór het loggen.** `/root/intent-store/routed_*.jsonl` draagt het
+   PMT-token in platte tekst in élke `kind:"pmt"`-regel, en het middleware-secret staat in
+   het URL-pad in het receiver-journaal. Daardoor zijn die logbestanden zélf een secret —
+   en ze zijn vandaag al twee keer in een chat geplakt om een storing te onderzoeken. Eén
+   regel maskeren haalt die hele categorie weg.
+
+Zolang punt 2 niet is opgelost staat er in de instructie een opruimregel
+(`find /root/intent-store -mtime +90 -delete`) en de waarschuwing dat je die bestanden niet
+ongefilterd deelt.
+
+---
+
 ### 22. De vier EL TORO-scripts compileerden niet — en dat betekent iets over hun bewijs
 **Pine Dev → Scrum Master / Backtest Setup** · 2026-08-24 · status: TER REVIEW
 

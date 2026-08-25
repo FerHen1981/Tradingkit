@@ -16,6 +16,11 @@
 
 ---
 
+> 📘 **Hoe je roteert staat in [`SECRETS-ROTATION.md`](SECRETS-ROTATION.md)** — dit bestand
+> is het register (wát bestaat er), dat bestand is de werkinstructie (hóe vervang je het
+> zonder de executie te breken), inclusief de twee secrets die in de TradingView-alerts zelf
+> zitten en dus een gepland venster vragen.
+
 ## 🔴 Roteren NU — checklist (D-11)
 
 Deze secrets zijn tussen 9-aug en 19-aug langs chats gekomen (Discord-webhook,

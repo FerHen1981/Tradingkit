@@ -33,3 +33,9 @@ web/**/.env
 web/portal/users.yaml
 web/portal/*.db
 .wrangler/
+
+# .NET build-artefacten (D-06) — nooit committen, ze zijn groot en machine-specifiek
+middleware/dotnet-receiver/**/bin/
+middleware/dotnet-receiver/**/obj/
+# appsettings dragen doorgaans tokens; de receiver leest zijn secrets uit systemd Environment=
+middleware/dotnet-receiver/**/appsettings*.json

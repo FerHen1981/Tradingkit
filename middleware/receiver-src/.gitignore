@@ -1,2 +1,4 @@
 bin/
 obj/
+# wordt vóór het bouwen gekopieerd uit middleware/dotnet-receiver/ (één bron)
+src/Mex.Journal.Receiver/Program.cs

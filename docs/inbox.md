@@ -11,6 +11,60 @@ executiepad hebt gewijzigd. Nieuwste bovenaan. Afgehandeld? Regel laten staan me
 
 ---
 
+## 2026-08-25 (3) · D-40 gebouwd en getest — LIVE PAD, klaar voor uitrol
+
+**Voor het eerst gecompileerd én gedraaid.** Ik heb de .NET 10 SDK in mijn sessie
+geïnstalleerd; met `middleware/receiver-src/` uit D-06 bouwt de receiver nu buiten de VPS.
+Dat leverde meteen twee dingen op: de **IPv4- en body-check-wijziging van 19-08 compileert
+schoon** (0 warnings, 0 errors) — die vraag stond een week open — en D-40 gaf bij de eerste
+build een `CS0136` op een naamconflict, gevangen hier in plaats van op de VPS.
+
+### Wat D-40 doet
+
+Poort per account in de PMT-tak, ná de kill-switch en vóór `ForwardJsonAsync`. Weigert PMT
+een order met een **account-halt**-reden, dan gaat dat account dicht tot de eerstvolgende
+**18:00 ET**. Reactief zoals afgesproken: de eerste order na een halt vertrekt nog en wordt
+geweigerd, daarna is het account dicht.
+
+**Exits worden nooit geblokkeerd** — zelfde regel als de kill-switch, en getest.
+
+### Bewust nauwer dan `Rejected()`
+
+`Rejected()` bevat ook `"not found in pool"` en `"unauthorized"`. Die mogen **geen** account
+sluiten: dat zijn configuratieproblemen die de hele fan-out raken, en een IP-fout zou dan een
+halve dag stilte per account opleveren. De poort heeft daarom een eigen, smallere lijst:
+`daily loss`, `day loss`, `loss limit`, `max loss`, `drawdown`, `account locked`,
+`trading disabled`, `not allowed to trade`. Te overschrijven met `MEX_PMT_HALT_MARKERS`
+zodra PMT's echte bewoordingen bekend zijn — dat blijft de openstaande verfijning.
+
+### Ontsnappingsluik
+
+`POST /gate/clear?token=<secret>[&account=<id>]` opent één account of alle. Zonder dat zou
+een te brede marker een account tot de volgende herstart stilleggen. `/health` toont
+`gatedAccounts`.
+
+State staat alleen in het geheugen: na een herstart is de poort open. Dat is de veilige
+kant — een gemiste blokkade kost één geweigerde order, een blijvende blokkade een handelsdag.
+
+### Getest tegen een lokale PMT-stub die een daglimiet-weigering teruggeeft
+
+| | verwacht | uitkomst |
+|---|---|---|
+| 1e entry | gaat door, PMT weigert, account dicht | `GEWEIGERD 200 door doelserver` ✔ |
+| 2e entry | poort blokkeert | `GEWEIGERD door poort — … (dicht tot 26-08 22:00 UTC)` ✔ |
+| exit | gaat er altijd doorheen | doorgelaten ✔ |
+| `/health` | telt geblokkeerde accounts | `gatedAccounts: 1` ✔ |
+| `/gate/clear` | opent zonder herstart | `cleared: 1` ✔ |
+
+### Uitrollen
+
+Bouwen op de VPS zoals gebruikelijk (`dotnet build src/Mex.Journal.Receiver -c Release`).
+Geen nieuwe env-var nodig; `MEX_PMT_HALT_MARKERS` is optioneel.
+
+⚠️ Raakt het live executiepad met `dryRun:false` en `armed:true`. De poort kan orders alleen
+**tegenhouden**, nooit extra versturen — het faalpad is dus "een order gaat niet uit", en
+`/gate/clear` maakt dat direct ongedaan.
+
 ## 2026-08-25 (2) · D-06 opgeleverd — én een secret-incident dat ik zelf veroorzaakte
 
 ### ⚠️ Eerst: twee secrets moeten geroteerd

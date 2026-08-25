@@ -97,7 +97,8 @@ app.MapGet("/health", () => Results.Ok(new
     armed = Runtime.Armed,
     pmtConfigured = !string.IsNullOrEmpty(pmtUrl),
     renderEnabled,
-    renderScript
+    renderScript,
+    gatedAccounts = AccountGate.Count       // D-40: accounts die tot 18:00 ET dichtstaan
 }));
 
 // Kill-switch: POST /killswitch?token=<secret>&armed=false  -> geen entries meer door.
@@ -107,6 +108,16 @@ app.MapPost("/killswitch", (string token, bool armed) =>
     if (string.IsNullOrEmpty(secret) || token != secret) return Results.Unauthorized();
     Runtime.Armed = armed;
     return Results.Ok(new { armed = Runtime.Armed });
+});
+
+// D-40 — poort handmatig openen zonder herstart. Zonder `account` gaan ze allemaal open.
+// Nodig omdat de poort op PMT's bewoordingen afgaat: blijkt een marker te breed, dan moet
+// je een account kunnen vrijgeven zonder de hele service te raken.
+app.MapPost("/gate/clear", (string token, string? account) =>
+{
+    if (string.IsNullOrEmpty(secret) || token != secret) return Results.Unauthorized();
+    var cleared = string.IsNullOrEmpty(account) ? AccountGate.ClearAll() : (AccountGate.Clear(account) ? 1 : 0);
+    return Results.Ok(new { cleared, gatedAccounts = AccountGate.Count });
 });
 
 app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
@@ -150,6 +161,26 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             return Results.Ok(new { accepted = true, handled = false, reason = "kill-switch: disarmed" });
         }
 
+        // D-40 — executiepoort per account. Pine's `dayHalted` rekent op strategy.netprofit,
+        // dus op de simulatie: op 24-08 boekte TradingView +$759,20 op een trade die bij de
+        // broker niet bestond. Die telt daar mee in de DLL-som en de echte stand niet. En
+        // Pine-state is per chart terwijl accounts per alert zijn (PA017 q4 en PA018 q6 op
+        // één chart), dus één dayHalted kan nooit twee accountstanden dragen. Deze poort
+        // dupliceert Pine niet — hij handhaaft de échte stand, en die kent alleen de fan-out.
+        //
+        // Bewust reactief: de eerste order na een halt gaat nog uit en wordt door PMT
+        // geweigerd; die weigering sluit het account tot de eerstvolgende 18:00 ET.
+        // Exits gaan er NOOIT doorheen geblokkeerd worden — zelfde regel als de kill-switch.
+        if (isEntry && AccountGate.Blocked(acct, out var gateReason))
+        {
+            var gateMsg = "GEWEIGERD door poort — " + gateReason;
+            await AppendAsync(storePath, "pmt", body, gateMsg, acct);
+            await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+                $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{gateMsg}", 14701138);
+            return Results.Ok(new { accepted = true, handled = false, kind = "pmt",
+                                    account = Tail(acct), reason = gateMsg });
+        }
+
         var rithmicList = Environment.GetEnvironmentVariable("MEX_PMT_RITHMIC_ACCOUNTS") ?? "";
         var useRithmic = !string.IsNullOrWhiteSpace(rithmicList) && !string.IsNullOrEmpty(acct)
             && rithmicList.Split(',').Select(x => x.Trim()).Contains(acct);
@@ -157,6 +188,13 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
         await AppendAsync(storePath, "pmt", body, res, acct);
+
+        // D-40 — weigert PMT op een account-halt (daglimiet, drawdown, account op slot),
+        // dan is dat de échte stand en sluiten we het account tot 18:00 ET. Bewust een
+        // NAUWERE lijst dan Rejected(): een IP- of auth-fout is een configuratieprobleem
+        // dat álle accounts raakt, en dat mag geen account de dag uit werken.
+        if (isEntry && AccountGate.IsAccountHalt(res))
+            AccountGate.Block(acct, res);
 
         // Een geweigerde order is stil: er komt geen fill, geen exit, geen kaart.
         // Zonder melding merk je het pas als je het bij de broker gaat zoeken.
@@ -379,6 +417,77 @@ static string Tail(string s) => s.Length >= 5 ? s[^5..] : s;
 public static class Runtime
 {
     public static volatile bool Armed = true;
+}
+
+// D-40 — houdt per account bij dat PMT een account-halt meldde, tot de eerstvolgende
+// 18:00 ET. Dat is dezelfde grens die Apex hanteert: daarna mag er weer gehandeld worden.
+// Alleen state in het geheugen: bij een herstart is de poort open, en dat is de veilige
+// kant — een gemiste blokkade kost één geweigerde order, een blijvende blokkade kost
+// een handelsdag.
+public static class AccountGate
+{
+    static readonly ConcurrentDictionary<string, (DateTime UntilUtc, string Reason)> Blocks = new();
+
+    /// Een account-halt is iets anders dan een afgewezen verbinding. Alleen redenen die
+    /// over DIT account gaan sluiten het; een IP- of tokenprobleem raakt de hele fan-out
+    /// en moet je oplossen, niet stilzwijgend uitzitten. Te overschrijven met
+    /// MEX_PMT_HALT_MARKERS (kommalijst) zodra PMT's echte bewoordingen bekend zijn.
+    public static bool IsAccountHalt(string reply)
+    {
+        if (string.IsNullOrWhiteSpace(reply)) return false;
+        var r = reply.ToLowerInvariant();
+        var custom = Environment.GetEnvironmentVariable("MEX_PMT_HALT_MARKERS") ?? "";
+        var markers = custom.Length > 0
+            ? custom.Split(',').Select(x => x.Trim().ToLowerInvariant()).Where(x => x.Length > 0).ToArray()
+            : new[]
+            {
+                "daily loss", "day loss", "loss limit", "max loss", "drawdown",
+                "account locked", "account is locked", "trading disabled", "not allowed to trade",
+            };
+        return markers.Any(m => r.Contains(m));
+    }
+
+    public static void Block(string account, string reason)
+    {
+        if (string.IsNullOrEmpty(account)) return;
+        var why = reason.StartsWith("GEWEIGERD") ? reason[(reason.IndexOf(':') + 1)..].Trim() : reason;
+        Blocks[account] = (NextBoundaryUtc(DateTime.UtcNow), Excerpt(why));
+    }
+
+    public static bool Blocked(string account, out string reason)
+    {
+        reason = "";
+        if (string.IsNullOrEmpty(account)) return false;
+        if (!Blocks.TryGetValue(account, out var b)) return false;
+        if (DateTime.UtcNow >= b.UntilUtc) { Blocks.TryRemove(account, out _); return false; }
+        reason = $"{b.Reason} (dicht tot {b.UntilUtc:dd-MM HH:mm} UTC)";
+        return true;
+    }
+
+    /// Ontsnappingsluik: een poort die ten onrechte dichtstaat moet je kunnen openen
+    /// zonder de service te herstarten.
+    public static bool Clear(string account) => Blocks.TryRemove(account, out _);
+
+    public static int ClearAll() { var n = Blocks.Count; Blocks.Clear(); return n; }
+
+    public static int Count => Blocks.Count(kv => DateTime.UtcNow < kv.Value.UntilUtc);
+
+    /// Eerstvolgende 18:00 America/New_York, in UTC. Zomer- en wintertijd komen uit de
+    /// tijdzonedatabase; 18:00 valt nooit in een overgangsuur, dus geen dubbelzinnigheid.
+    static DateTime NextBoundaryUtc(DateTime nowUtc)
+    {
+        var tz = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        var et = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, tz);
+        var boundary = new DateTime(et.Year, et.Month, et.Day, 18, 0, 0, DateTimeKind.Unspecified);
+        if (et >= boundary) boundary = boundary.AddDays(1);
+        return TimeZoneInfo.ConvertTimeToUtc(boundary, tz);
+    }
+
+    static string Excerpt(string s)
+    {
+        s = (s ?? "").Replace('\n', ' ').Trim();
+        return s.Length <= 120 ? s : s[..120] + "…";
+    }
 }
 
 public static class Audit

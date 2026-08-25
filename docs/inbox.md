@@ -11,6 +11,51 @@ executiepad hebt gewijzigd. Nieuwste bovenaan. Afgehandeld? Regel laten staan me
 
 ---
 
+## 2026-08-25 (4) · D-40 LIVE — melding aan de Scrum Master
+
+Uitgerold 25-08 23:20 UTC. Bewijs: `dotnet build src/Mex.Journal.Receiver -c Release`
+geslaagd (beide projecten), en `/health` geeft nu het veld `gatedAccounts` — dat bestond
+in de vorige binary niet, dus bron → binary → proces sluiten aan.
+
+    {"status":"alive","dryRun":false,"armed":true,"pmtConfigured":true,
+     "renderEnabled":true,"gatedAccounts":0}
+
+**Vóór het kopiëren gecontroleerd wat de herstelactie van Ferry had achtergelaten.** De
+diff tussen VPS en nieuwe versie gaf één regel die alleen op de VPS stond: `renderScript`
+— zonder komma, omdat `gatedAccounts` erachter kwam. Geen verlies. Alles van D-28 en
+D-35 stond er nog.
+
+### Status van de items die bij mij lagen
+
+| Item | Status |
+|---|---|
+| **D-06** | opgeleverd — `middleware/receiver-src/` (sln, csproj's, `Mex.Journal.Recon`). Receiver buiten de VPS bouwbaar. |
+| **D-40** | **live** — poort per account, exits nooit geblokkeerd, `/gate/clear` als ontsnappingsluik. |
+| **D-28/5** | rate-limit expliciet gezet op 12. Heeft in vijf dagen **nul keer** gebeten. |
+
+### Wat D-06 direct opleverde
+
+Ik heb de .NET 10 SDK in mijn sessie geïnstalleerd. Daarmee:
+- de **IPv4/body-check van 19-08 compileert schoon** — die stond een week ongecompileerd live;
+- D-40 gaf bij de eerste build een `CS0136`, hier gevangen in plaats van op de VPS.
+
+Dat is precies waar D-06 voor bedoeld was. Voorstel: opnemen in de werkafspraken dat
+wijzigingen aan het live pad hier gebouwd worden vóór ze naar de VPS gaan.
+
+### Twee dingen die nog open staan
+
+**1 — de gokmarkers.** De poort kijkt naar `daily loss`, `day loss`, `loss limit`,
+`max loss`, `drawdown`, `account locked`, `trading disabled`, `not allowed to trade`.
+Bewust **nauwer dan `Rejected()`**: die bevat ook `not found in pool` en `unauthorized`,
+en dat zijn configuratieproblemen die de hele fan-out raken — een IP-fout mag geen account
+een halve dag stilleggen. `MEX_PMT_HALT_MARKERS` staat klaar om de lijst te vervangen
+zodra er één echte PMT-weigering in `routed_*.jsonl` staat. **De poort is nog nooit tegen
+PMT's echte tekst afgegaan**; alleen tegen een stub die ik zelf schreef.
+
+**2 — twee secrets moeten nog geroteerd** (item 25-08 (2)): `MEX_WEBHOOK_SECRET` en de
+Discord-webhook-URL stonden kort publiek doordat ik de solution via `/var/www/charts` liet
+ophalen en mijn secret-check naar het verkeerde bestand keek. Status bij Ferry onbekend.
+
 ## 2026-08-25 (3) · D-40 gebouwd en getest — LIVE PAD, klaar voor uitrol
 
 **Voor het eerst gecompileerd én gedraaid.** Ik heb de .NET 10 SDK in mijn sessie

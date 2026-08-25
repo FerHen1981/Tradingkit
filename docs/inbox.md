@@ -2604,3 +2604,69 @@ De groepsnummering heeft gaten (0, 3–9, 11–14; geen 1, 2 en 10) omdat *Refer
 *Trading Boundary* onder TIME GATE zijn blijven zitten. Ik heb ze **bewust niet hernummerd** midden
 in je review — dat zou je referentiepunten verschuiven. Zeg het als je ze aaneengesloten wilt.
 De uitrol naar de andere acht `v1_0_0`-scripts en de vier TORO's wacht op jouw akkoord op REY.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — bord-audit: zeven items stonden stil zonder reden
+
+Ferry vroeg om een volledige controle op verdeling, eigenaarschap en stilstand. Uitkomst: **het
+bord loog op zeven plekken**, allemaal in dezelfde richting — werk dat kón, stond geparkeerd.
+
+### 🟦 Middleware App — vier items zijn los, en jullie waren de enige die het niet konden weten
+
+`blocked` → `todo`, alle vier omdat **D-06 vanochtend is opgeleverd**:
+
+| | Wat |
+|---|---|
+| **D-40** | account-blokkade vóór `ForwardJsonAsync` |
+| **D-53** | `quantity_multiplier` per account uit een qty-map |
+| **D-05** | Python fan-out afvoeren (hing aan D-02, dat aan D-06 hing) |
+| **D-07** | commissie per contract — hing aan D-08 dat al `done` was |
+
+**D-40 en D-53 samen bouwen**, zelfde functie, zelfde plek. En bij D-40: de echte PMT-weigering is
+nog steeds nodig om de tien gokmarkers in `Rejected()` te vervangen, **maar dat is een verfijning
+van één functie en geen reden om niet te beginnen.** Bouw de poort.
+
+Bij **D-07** is de openstaande vraag inmiddels ook beantwoord: per besluit van Ferry 24-08 wint de
+registry, dus **0,37** voor MNQ/MES/MYM. Wat resteert is verifiëren tegen `Cash_History`.
+
+Start met **D-59** (`Mex.Journal.Receiver` in de `.sln`) — één commando, en anders bouwt jullie
+eigen build groen zonder het live pad aan te raken.
+
+### 🟨 Backtest Setup — één commando deblokkeert drie items
+
+⚠️ **D-10 staat sinds 20-08 stil op iets dat al af is.** `D-36` — de NQ pilot-export — is die dag
+opgeleverd. Het item zegt "wacht op validator-output", maar er wordt op niets gewacht: er moet
+iemand `python tools/validate_dataset.py` draaien.
+
+**Keten: D-10 → D-18 (Ferry beslist het OOS-venster) → D-34 (Web kan de publieke claims afronden).**
+Drie items los met één commando, en Web staat er al vijf dagen op te wachten zonder het te weten.
+
+Verder open bij jullie: D-54, D-55, D-56, D-43, D-50, D-15, D-16, D-38, D-39, D-25, D-27.
+
+### 🟩 Pine Dev — D-61 is afgerond, en er liggen er nu zes
+
+**D-61 staat op `done`** — ik heb hem geverifieerd, en Backtest Setup kan de uitzondering in
+`fleet.PINE_DEFECTS` weghalen.
+
+Open: **D-64** en **D-65** (nieuw, uit mijn sweep — begin bij D-65, want dat kan D-63 verklaren),
+**D-44**, **D-63**, **D-41**, **D-42**, **D-51**, **D-57**.
+
+### 🟪 Web — je stond geblokkeerd zonder dat het op het bord stond
+
+**D-34 heeft twee remmen, en geen van beide ben jij:** mijn review, en **D-18** (Ferry's besluit over
+het OOS-venster). Zolang dat besluit niet valt kun je de publieke claims niet definitief maken.
+D-18 staat nu op `todo` in plaats van `blocked` — het is vandaag beslisbaar.
+
+---
+
+### Wat ik van mezelf moest rechtzetten
+
+- **Drie items droegen de verkeerde eigenaar.** D-03, D-11 en D-31 stonden op een chat terwijl de
+  volgende handeling op de VPS of in een dashboard plaatsvindt. Die zijn nu van Ferry. D-31 stond
+  zelfs op míjn naam terwijl het bouwwerk al klaar was — dan kijkt niemand ernaar.
+- **D-17 en D-34 staan op `review`, en dat betekent dat ze op mij wachten**, niet op hun eigenaar.
+  Staat op mijn lijst.
+- **De les uit D-10, en die geldt voor het hele bord:** schrijf een item als een opdracht, niet als
+  een toestand. *"Wacht op validator-output"* nodigt uit tot wachten, ook als de invoer allang
+  binnen is. *"Draai `tools/validate_dataset.py`"* doet dat niet.

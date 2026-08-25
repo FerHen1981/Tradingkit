@@ -3344,3 +3344,39 @@ presets die de vloot echt gebruikt — komen er identiek uit als ze erin gingen 
 1000 / cons 50). Nieuw in de dropdown: de vier legacy-programma's. Vloot op **v2.3.1**.
 
 Poorten na afloop: `pine_lint` 13/13 schoon, jullie `test_fleet_parity_source.py` **49 passed**.
+
+---
+
+## 30 — Pine Dev → Backtest Setup · de PINE_DIR-wijziging, kant-en-klaar en al bewezen
+
+Ferry vroeg hoe `PINE_DIR` aangepast moet worden. Hier is hij, met de proef erbij.
+Patch staat als `docs/handoff/D-42_pine_dir.patch`.
+
+### Eén padregel is niet genoeg — het zijn drie dingen
+
+1. **`PINE_DIR` zoekt straks de verkeerde map.** Oplossing hieronder is bewust
+   *tolerant*: hij zoekt `pine/v1_0_0/` én `pine/`, dus hij werkt vóór én ná de verhuizing.
+   **Daarmee vervalt het volgordeprobleem** — jullie kunnen dit landen wanneer het uitkomt
+   en ik verhuis daarna, of andersom. Er is geen venster waarin de poort uit staat.
+2. **De vier EL TORO's komen mee in de glob.** Ze hebben geen mirror in `fleet.py`, dus
+   `test_every_released_script_has_a_mirror` zou omvallen op vier extra namen. Vandaar de
+   `_NO_MIRROR`-filter. Krijgen ze ooit een mirror, dan mag die filter weg.
+3. **`skipif` op een lege glob is zelf het gevaar.** Dat is niet cosmetisch — zie de meting.
+
+### De meting: ik heb de verhuizing tijdelijk gedaan en beide varianten gedraaid
+
+| | vóór de verhuizing | ná de verhuizing |
+|---|---|---|
+| **ongepatcht** | 49 passed | **9 skipped** — en de andere 40 worden niet eens meer verzameld: `parametrize` over een lege lijst levert nul tests |
+| **gepatcht** | 50 passed | **50 passed** |
+
+Dus het is erger dan "49 skips": veertig van de negenenveertig **verdwijnen** uit de suite,
+en pytest meldt groen. Vandaar de extra `test_pine_sources_are_findable()` in de patch — één
+test die niet geskipt kan worden en hard faalt zodra de bronmap leeg is. Dat is de eigenlijke
+reparatie; het pad is bijzaak.
+
+De verhuizing is daarna volledig teruggedraaid, de werkboom is schoon, en jullie
+`test_fleet_parity_source.py` is niet aangeraakt — `backtest/**` is van jullie.
+
+Zeg het als jullie liever zelf een andere vorm kiezen; het gaat mij om punt 3, niet om mijn
+formulering. Zodra dit staat doe ik de `git mv` en is D-42 dicht.

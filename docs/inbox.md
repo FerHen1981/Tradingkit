@@ -2180,3 +2180,93 @@ account, D-53 overschrijft `quantity_multiplier` uit een qty-map. Daarna **D-02*
 ⚠️ D-40 wacht nog op één ding dat niet bij jullie ligt: **een echte PMT-weigering**, zodat de tien
 gokmarkers in `Rejected()` (regel 286) vervangen kunnen worden door het echte antwoordformaat. De
 body-check draait sinds vannacht live, dus die weigering komt nu vanzelf voorbij.
+
+---
+
+## 25-08 · Scrum Master → ALLE CHATS — start hier, iedereen kan door
+
+Grote dag. **D-06 en D-35 zijn allebei rond**, en daarmee valt de grootste blokkade van het bord.
+Hieronder per chat wat er nú kan. Lees alleen je eigen blok — de rest staat er voor context.
+
+### 🟦 Middleware App — je bent gedeblokkeerd, en je hebt twee items die één bouwwerk zijn
+
+`.sln`, `.csproj` en de hele `src/`-boom staan sinds `810728e` in git, inclusief
+`Mex.Journal/Recon/ReconciliationEngine.cs`. **Je kunt bouwen.**
+
+**Bouw D-40 en D-53 samen.** Beide zetten een controle per account vóór `ForwardJsonAsync` in
+`/signal/{token}`, op hetzelfde `multiple_accounts[0].account_id`, in het patroon van de
+kill-switch-poort (`Runtime.Armed`, regel 147):
+
+| | Wat |
+|---|---|
+| **D-40** | account geblokkeerd (day cap / DLL) ⇒ niet forwarden, `GEWEIGERD` + Discord |
+| **D-53** | `multiple_accounts[0].quantity_multiplier` overschrijven uit een qty-map per account |
+
+⚠️ D-40 wacht nog op **één echte PMT-weigering** — de tien markers in `Rejected()` (regel 286) zijn
+een gok en het codecommentaar zegt dat zelf. De body-check draait sinds 25-08 01:23 UTC live, dus
+die weigering komt vanzelf voorbij. **D-53 kun je wél nu al bouwen.**
+
+Begin met **D-59**: `Mex.Journal.Receiver` staat niet in `MexJournal.sln`. Één commando, en anders
+bouwt je eigen build straks groen zonder de receiver te hebben aangeraakt.
+
+Daarna **D-02** en **D-05**. En **D-49**: alles naar `mw.mex-traders.com` — de `Caddyfile` die nu
+in git staat bevestigt dat dat de echte host is.
+
+### 🟩 Pine Dev — één item kan direct, en één maakt jou de kritieke schakel
+
+**D-44 kan nu.** De oorzaak is bewezen met PMT's eigen alert-template, de fix is één veld in
+`f_pmtJSON`, en het blok is byte-identiek in alle negen scripts (md5 `9812c09d5b`) — dus één `sed`
+plus een checksum als bewijs. Details staan in de ronde hierboven. Laat Ferry eerst het PMT risk
+type controleren, anders test je in het donker.
+
+**D-54 is belangrijker en ligt bij jou.** Er is op dit moment **geen geldige vlootrangorde**: alleen
+MATADOR heeft een gesloten pariteitspoort. LEON en REY hun cijfers staan onder een open harde poort
+en zijn daarmee *ongeldig*, niet indicatief — `state.py` noemt onvervulde harde poorten zelf
+*"invalid rather than merely early"*. **Zonder jullie TradingView-exports voor LEON en REY staat de
+hele rangorde stil**, en D-57 (sizing route A) kan niet beginnen.
+
+**Niets doen aan sizing.** `derisk`/`deriskPA` blijft zoals het is tot D-57, en D-57 wacht op D-54.
+**Niets doen aan D-40.** Pine blijft daar volledig ongewijzigd.
+
+### 🟨 Backtest Setup — drie dingen, en één daarvan is snel
+
+**D-55 (snel):** de vloot-sweep heeft geen spoor in `validation/`. Een `FLEET_sweep_20260825` met
+per engine de trap-uitkomsten, de poortstatus, het meetvenster (`--since 2023-08-24`) en de twee
+groottes naast elkaar. Gezien D-54 worden deze cijfers waarschijnlijk herzien — dan wil je kunnen
+terugkijken wat er gemeten was.
+
+**D-54:** zodra Pine Dev de exports levert, trap 1 opnieuw tot de poort dicht is, dan trap 8.
+
+**D-56:** vaststellen of echte MGC-data te krijgen is. Zolang die ontbreekt staat elk MGC-oordeel
+onder voorbehoud — **ook de afwijzing van PATRON**. Verklaar hem niet dood.
+
+**D-43** staat nog steeds bij jullie: de analyses-branch botst in `backtest/`, en dat is een open
+ontwerpkeuze in jullie eigen map.
+
+### 🟪 Web — D-34 wacht op review
+
+De publieke claims zijn afgezwakt maar de onderbouwing is opnieuw verschoven. Controleer of de
+tekst niet alsnog leunt op een rangorde die er niet is: **er is op dit moment geen geldige
+vlootrangorde.** Alleen MATADOR is met een gesloten poort gemeten.
+
+### ⚫ Legacy (Discord Notify) — D-28 kan verder
+
+Je drie hooks zitten sinds 25-08 01:23 UTC in de draaiende binary. Ze doen nog niets tot de
+env-vars gezet zijn. **Zet ze één voor één aan, niet alle tegelijk** — als er iets misgaat op het
+notify-kanaal wil je weten door welke.
+
+---
+
+### Wat er vandaag is rechtgezet, zodat niemand op oude tekst doorwerkt
+
+1. **Er is geen geldige vlootrangorde.** De oude volgorde in `CLAUDE.md` staat er nu als ingetrokken
+   in. Alleen MATADOR is bruikbaar.
+2. **De bevroren volle contractgrootte is niet funderbaar.** Onafhankelijk van de rangorde, op
+   mechanisme-niveau vastgesteld.
+3. **D-40 gaat naar de fan-out**, niet naar Pine — en Pine hándhaaft day-cap en DLL al, via
+   `dayHalted` → `canTrade`. Mijn eerdere bewering dat dat "het gat" was, klopte niet.
+4. **`breakeven_offset` bestaat wél** als JSON-veld. De documentatie-gebaseerde weerlegging van
+   20-08 is zelf weerlegd door een template die Ferry ín PMT heeft aangemaakt.
+5. **Alleen `ActiveEnterTimestamp` zegt iets over het dráaiende proces.** Een dll-datum, een
+   git-commit en een build-log gaan alle drie over schijf. D-35 stond hierdoor vandaag twee keer
+   verkeerd op het bord.

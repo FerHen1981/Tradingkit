@@ -397,7 +397,7 @@ classic:
     secondary: [L2]
     price_action: false
     provenance: sourced
-    engine: todo
+    engine: implemented   # wired Fase 6 (layer-2 codegen proof): entry on the flip bar
     optimize: multiplier
     params:
       atr_length: {default: 10,  min: 7,   max: 20,  step: 1,   type: opt}

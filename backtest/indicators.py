@@ -227,6 +227,35 @@ def _atr(high, low, close, length):
     return atr
 
 
+def _supertrend_dir(high, low, close, atr_length, mult):
+    """Repaint-free ATR-band trend flip. Returns +1 on the bar the trend flips UP,
+    -1 on the bar it flips DOWN, 0 otherwise — the same 'signal on the flip bar'
+    convention as the EMA cross, so the engine enters next bar (no same-bar fill).
+    Stateful band-tightening, computed causally from confirmed-bar data only.
+
+    Wired from an adopted registry entry as the layer-2 codegen proof (Fase 6)."""
+    n = len(close)
+    atr = _atr(high, low, close, atr_length)
+    hl2 = (high + low) / 2.0
+    up = hl2 + mult * atr
+    lo = hl2 - mult * atr
+    f_up = np.full(n, np.nan)
+    f_lo = np.full(n, np.nan)
+    out = np.zeros(n, dtype=np.int64)
+    prev = 1
+    for i in range(n):
+        if i == 0 or np.isnan(atr[i]):
+            f_up[i], f_lo[i], prev = up[i], lo[i], 1
+            continue
+        f_up[i] = up[i] if (up[i] < f_up[i - 1] or close[i - 1] > f_up[i - 1]) else f_up[i - 1]
+        f_lo[i] = lo[i] if (lo[i] > f_lo[i - 1] or close[i - 1] < f_lo[i - 1]) else f_lo[i - 1]
+        t = (-1 if close[i] < f_lo[i] else 1) if prev == 1 else (1 if close[i] > f_up[i] else -1)
+        if t != prev:
+            out[i] = t                       # flip -> entry on this bar
+        prev = t
+    return out
+
+
 def _adx(high, low, close, length):
     """Wilder's ADX (trend strength, 0-100). +DM/-DM and TR are Wilder-smoothed
     (RMA, alpha=1/length), +DI/-DI derived, DX = 100*|+DI--DI|/(+DI+-DI), and ADX
@@ -682,6 +711,13 @@ def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
         out["bb_dir"] = bb
     else:
         out["bb_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Supertrend entry (ATR-band trend flip) -------------------------------
+    if cfg.use_supertrend:
+        out["st_dir"] = _supertrend_dir(high, low, close, int(cfg.st_atr_length),
+                                        float(cfg.st_mult))
+    else:
+        out["st_dir"] = np.zeros(n, dtype=np.int64)
 
     _tick(6)
     return out

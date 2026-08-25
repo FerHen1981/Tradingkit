@@ -168,6 +168,9 @@ class Config:
     use_bb_revert: bool = False          # Bollinger-band extreme reversion
     bb_len: int = 20
     bb_mult: float = 2.0
+    use_supertrend: bool = False         # ATR-band trend flip (long/short) entry
+    st_atr_length: int = 10
+    st_mult: float = 3.0
 
     # --- confluence layer (Level C): require several mechanisms for ONE entry ---
     # When on, the roster's OR-of-generators is replaced by a single PRIMARY

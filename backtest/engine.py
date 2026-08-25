@@ -98,7 +98,7 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         else np.zeros(len(df), dtype=np.int64),
         **{k: (ind[k].to_numpy() if k in ind else np.zeros(len(df), dtype=np.int64))
            for k in ("choch_dir", "liq_dir", "cvddiv_dir", "ob_dir", "mom_dir",
-                     "macd_dir", "rsi_dir", "don_dir", "mapb_dir", "bb_dir")},
+                     "macd_dir", "rsi_dir", "don_dir", "mapb_dir", "bb_dir", "st_dir")},
     }
 
 
@@ -143,6 +143,7 @@ class Engine:
         self.mom_dir = a.get("mom_dir"); self.macd_dir = a.get("macd_dir")
         self.rsi_dir = a.get("rsi_dir"); self.don_dir = a.get("don_dir")
         self.mapb_dir = a.get("mapb_dir"); self.bb_dir = a.get("bb_dir")
+        self.st_dir = a.get("st_dir")
         self.vwap = a.get("vwap")
 
         self.n = len(self.close)
@@ -223,6 +224,7 @@ class Engine:
             (cfg.use_donchian, self._entry_don),
             (cfg.use_ma_pullback, self._entry_mapb),
             (cfg.use_bb_revert, self._entry_bb),
+            (cfg.use_supertrend, self._entry_st),
         ]
         gens = [m for on, m in roster if on]
         self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
@@ -728,6 +730,7 @@ class Engine:
     def _entry_don(self, i):     return self._mkt(self.don_dir, i)      # Donchian channel break
     def _entry_mapb(self, i):    return self._mkt(self.mapb_dir, i)     # MA trend pullback
     def _entry_bb(self, i):      return self._mkt(self.bb_dir, i)       # Bollinger reversion
+    def _entry_st(self, i):      return self._mkt(self.st_dir, i)       # supertrend ATR-band flip
 
     def _update_confl_mem(self, i: int):
         """Record, per confluence mechanism, the last bar it fired each way."""

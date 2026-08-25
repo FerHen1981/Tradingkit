@@ -60,11 +60,39 @@ class ResolvedSpec:
 # --------------------------------------------------------------------------- #
 # Registry access
 # --------------------------------------------------------------------------- #
-def load_registry(path: str | Path = REGISTRY_PATH) -> dict:
+def _overlay_path() -> Path | None:
+    """The lab-side registry overlay of ADOPTED (not-yet-sourced) indicators. Lives
+    in the data room, never in git — the sourced vocabulary stays in registry.yaml.
+    Read from $LAB_DIR so spec.py stays decoupled from the lab package."""
+    import os
+    lab = os.environ.get("LAB_DIR")
+    return Path(lab) / "adopted_indicators.yaml" if lab else None
+
+
+def _merge_overlay(reg: dict, overlay: dict) -> dict:
+    """Merge adopted-indicator groups into the base registry. The base ALWAYS wins:
+    an overlay may add new group names but may never shadow a sourced indicator."""
+    existing = set(reg.get("price_action") or {}) | set(reg.get("classic") or {})
+    for family in ("price_action", "classic"):
+        for gname, gdef in (overlay.get(family) or {}).items():
+            if gname in existing:
+                continue                       # never override a sourced group
+            reg.setdefault(family, {})[gname] = gdef
+    return reg
+
+
+def load_registry(path: str | Path = REGISTRY_PATH, with_overlay: bool = True) -> dict:
     with open(path) as fh:
         reg = yaml.safe_load(fh)
     if "price_action" not in reg or "classic" not in reg:
         raise SpecError("registry missing 'price_action' / 'classic' families")
+    ov = _overlay_path()
+    if with_overlay and ov and ov.exists():
+        try:
+            overlay = yaml.safe_load(ov.read_text()) or {}
+            reg = _merge_overlay(reg, overlay)
+        except Exception:
+            pass                               # a broken overlay never breaks the base
     return reg
 
 
@@ -267,6 +295,8 @@ _PARAM_MAP: dict[tuple[str, str], str] = {
     ("moving_average", "type"):      "ma_type",
     ("bollinger_bands", "length"):   "bb_len",
     ("bollinger_bands", "stddev_mult"): "bb_mult",
+    ("supertrend", "atr_length"):    "st_atr_length",
+    ("supertrend", "multiplier"):    "st_mult",
 }
 # Params consumed by a group-presence toggle below — not "unmapped" though absent from _PARAM_MAP.
 _TOGGLE_CONSUMED: set[tuple[str, str]] = {
@@ -288,7 +318,7 @@ WIRED_GROUPS: tuple[str, ...] = (
     "fvg", "cvd_delta", "vwap", "swing_stops", "ema_cross", "market_structure",
     "liquidity_eqhl", "divergence", "order_block", "momentum",
     "macd", "rsi", "donchian", "moving_average", "bollinger_bands",
-    "silver_bullet",
+    "silver_bullet", "supertrend",
 )
 
 
@@ -309,6 +339,7 @@ def effective_signature(cfg) -> tuple:
             round(float(cfg.rsi_os), 3), bool(cfg.use_donchian), int(cfg.donchian_len),
             bool(cfg.use_ma_pullback), int(cfg.ma_fast), int(cfg.ma_slow), str(cfg.ma_type),
             bool(cfg.use_bb_revert), int(cfg.bb_len), round(float(cfg.bb_mult), 3),
+            bool(cfg.use_supertrend), int(cfg.st_atr_length), round(float(cfg.st_mult), 3),
             bool(cfg.use_confluence), str(cfg.confl_primary), tuple(cfg.confl_require),
             int(cfg.confl_lookback))
 
@@ -328,6 +359,7 @@ _ENTRY_LABELS: dict[str, tuple[str, str]] = {
     "use_donchian":    ("Donchian break", "trend"),
     "use_ma_pullback": ("MA pullback", "trend"),
     "use_bb_revert":   ("Bollinger reversion", "reversal"),
+    "use_supertrend":  ("Supertrend flip", "trend"),
 }
 _KILLZONES = {3: "London 03-04", 10: "NY-AM 10-11", 14: "NY-PM 14-15"}
 _REQUIRE_LABELS = {"liq_sweep": "prior liquidity sweep", "cvd_div": "prior CVD divergence",
@@ -525,6 +557,8 @@ def spec_to_config(rspec: ResolvedSpec):
         entry_flags["use_ma_pullback"] = True
     if "bollinger_bands" in g:
         entry_flags["use_bb_revert"] = True
+    if "supertrend" in g:
+        entry_flags["use_supertrend"] = True
     over.update(entry_flags)
     if entry_flags and "fvg" not in g:
         over["use_fvg_entry"] = False

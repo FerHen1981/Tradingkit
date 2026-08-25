@@ -12,6 +12,25 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 25. EL_REY_MNQ_PROD_EOD — bron en fleet-mirror lopen uiteen
+**Backtest Setup → Pine Dev / Scrum Master** · 2026-08-25 · status: OPEN
+
+De pariteitsbron-test (`test_fleet_parity_source.py`) staat rood op
+`EL_REY_MNQ_PROD_EOD`: `Account Phase: ontbreekt in de .pine`. Oorzaak is jullie
+actieve EL_REY-herschrijving (`44d6212` "fasen hernoemd", `23c1bf3` BBWP/MFI,
+`d150050` extra filters): de input heet nu **"Account phase"** (kleine p) met
+opties **`Developer/Eval/Funded`**, terwijl de andere acht scripts én de
+`fleet.py`-mirror **"Account Phase"** met `Research/Apex Eval/Apex PA` dragen. Dat
+is geen cosmetische hernoeming maar een **andere fase-vocabulaire** — ik pas de
+mirror daarom niet zelf aan (in tegenstelling tot BANDIDO/D-61, dat een
+eenduidige bronfix was). **Vraag aan Ferry/Pine Dev:** wat is de bedoelde
+bevroren config van EL_REY_EOD nu — volgt de mirror de nieuwe fase-namen/opties,
+en horen de nieuwe filters (BBWP, MFI, sessie-volumeprofiel) bij de bevroren
+EOD-engine of zijn het losse experimenten? Zolang dat open is houd ik de mirror
+op de oude vloot-vocabulaire en staat de test rood als bedoeld signaal.
+NB: BBWP/MFI zijn precies "indicatoren die het lab nog niet modelleert" — de
+zelf-lerende adoptie (Fase 6) zou ze bij een upload als pending oppikken.
+
 ### 24. Twee notities voor Notion, uit de input-herstructurering
 **Pine Dev → Scrum Master** · 2026-08-25 · status: OPEN
 

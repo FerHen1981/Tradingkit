@@ -155,19 +155,40 @@ def _builder_options() -> dict:
     from ..generator import SETUP_ENTRIES
     from ..indicators import REGIME_LABELS
     from ..config import PRESETS
+    from . import vault
     return {
         "setups": {sc: [g for g, _ in opts] for sc, opts in SETUP_ENTRIES.items()},
         "confluence_entry": ["silver_bullet"],
         "filters": ["vwap", "cvd_delta"],
         "regimes": [r for r in REGIME_LABELS if r != "Indecision"],
         "base_presets": sorted(PRESETS),
+        "adopted": vault.list_adopted(),          # self-learned, not-yet-wired indicators
     }
+
+
+def _vault_adopt(body: dict) -> tuple[dict, int]:
+    """Adopt indicators from a pasted Pine source (deterministic, direct) or queue a
+    free-text description for the reviewed Claude-codegen step. Runs in-process —
+    vault.py is pure Python (no numpy)."""
+    from . import vault
+    mode = (body.get("mode") or "pine").strip()
+    src = body.get("source") or ""
+    if not src.strip():
+        return {"ok": False, "error": "leeg — plak Pine-bron of een beschrijving"}, 200
+    try:
+        if mode == "text":
+            res = vault.adopt_text(src, body.get("name") or "described_indicator")
+        else:
+            res = vault.adopt_pine(src, filename=(body.get("name") or "upload") + ".pine")
+        return {"ok": True, "mode": mode, "result": res}, 200
+    except Exception as e:
+        return {"ok": False, "error": str(e)}, 200
 
 
 def _builder_build(body: dict) -> dict:
     from ..generator import spec_from_selection
     from ..spec import load_registry
-    return spec_from_selection(
+    spec = spec_from_selection(
         load_registry(),
         setup_class=body.get("setup_class") or "trend_pullback",
         entry=body.get("entry") or None,
@@ -178,6 +199,13 @@ def _builder_build(body: dict) -> dict:
         name=body.get("name") or "custom",
         timeframe=body.get("timeframe") or None,
     )
+    # Adopted (self-learned, not-yet-wired) indicators the user ticked. They are
+    # valid registry groups (via the overlay) so they validate, but spec_to_config
+    # leaves them in `unmapped` — the honest "declared, pending wiring" state.
+    for g in (body.get("adopted") or []):
+        if g:
+            spec.setdefault("groups", {}).setdefault(g, {})
+    return spec
 
 
 def _builder_preview(body: dict) -> tuple[dict, int]:
@@ -991,6 +1019,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(_candidates())
         if u.path == "/api/builder/options":
             return self._json(_builder_options())
+        if u.path == "/api/vault/state":
+            from . import vault
+            return self._json({"adopted": vault.list_adopted(),
+                               "requests": vault.list_requests()})
         if u.path == "/api/fleet":
             from .fleet import load_fleet
             return self._json({"fleet": load_fleet()})
@@ -1055,6 +1087,14 @@ class Handler(BaseHTTPRequestHandler):
             fn = _builder_preview if u.path.endswith("preview") else _builder_save
             b, code = fn(jb)
             return self._json(b, code)
+        if u.path == "/api/vault/adopt":
+            length = int(self.headers.get("Content-Length", "0"))
+            raw = self.rfile.read(length).decode("utf-8", "replace") if length > 0 else "{}"
+            try:
+                jb = json.loads(raw)
+            except Exception:
+                jb = {}
+            return self._json(*_vault_adopt(jb))
         if u.path in ("/api/fleet/promote", "/api/fleet/demote"):
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length).decode("utf-8", "replace") if length > 0 else "{}"
@@ -1758,6 +1798,7 @@ function builderBody(){
   return {setup_class:setup, entry:setup==='confluence'?null:$('#bEntry').value,
     filters:[...document.querySelectorAll('.bFilt:checked')].map(x=>x.value),
     regime_filter:[...document.querySelectorAll('.bReg:checked')].map(x=>x.value),
+    adopted:[...document.querySelectorAll('.bAdopt:checked')].map(x=>x.value),
     base_preset:$('#bPreset').value, name:$('#bName').value||'custom'};
 }
 async function previewBuilder(){
@@ -1797,6 +1838,7 @@ async function loadBuilder(){
     $('#bPreset').innerHTML=(BOPTS.base_presets||[]).map(p=>`<option>${p}</option>`).join('');
     $('#bFilters').innerHTML=(BOPTS.filters||[]).map(f=>`<label><input type=checkbox class=bFilt value="${f}"> ${f}</label>`).join('');
     $('#bRegimes').innerHTML=(BOPTS.regimes||[]).map(r=>`<label><input type=checkbox class=bReg value="${r}"> ${r}</label>`).join('');
+    renderAdoptedChecks(BOPTS.adopted||[]);
     $('#bSetup').addEventListener('change',fillBuilderEntry);
     $('#bEntry').addEventListener('change',previewBuilder);
     $('#bPreset').addEventListener('change',previewBuilder);
@@ -1805,6 +1847,44 @@ async function loadBuilder(){
     fillBuilderEntry();
   }catch(e){}
 }
+function renderAdoptedChecks(adopted){
+  const box=$('#bAdopted'); if(!box)return;
+  box.innerHTML=adopted.length
+    ? adopted.map(a=>`<label title="${(a.desc||'').replace(/"/g,'&quot;')}"><input type=checkbox class=bAdopt value="${a.name}"> ${a.name} <span style="color:var(--rose)">·${a.engine}</span></label>`).join('')
+    : '<span class=muted>nog niets geadopteerd — plak een Pine-script hieronder</span>';
+  box.querySelectorAll('.bAdopt').forEach(x=>x.addEventListener('change',previewBuilder));
+}
+async function loadVaultState(){
+  try{const j=await (await fetch('/api/vault/state')).json();
+    renderAdoptedChecks(j.adopted||[]);
+    const q=$('#vQueue'); const reqs=j.requests||[];
+    $('#vQCount').textContent=reqs.length+' pending';
+    q.innerHTML=reqs.length? reqs.map(r=>`<div style="border-left:3px solid var(--gold);padding:5px 12px;margin-top:6px">
+      <b style="color:var(--gold)">${r.name}</b> <span class=muted>· ${r.source||'?'}</span>
+      <div class=muted style="font-size:12px">${(r.desc||r.description||'').slice(0,180).replace(/</g,'&lt;')}</div></div>`).join('')
+      : '<div class=muted>leeg — geen indicatoren wachten op bedrading</div>';
+  }catch(e){}
+}
+async function adoptVault(mode){
+  const src=mode==='text'?$('#vText').value:$('#vPine').value;
+  const name=mode==='text'?$('#vTextName').value:$('#vName').value;
+  const m=$('#vMsg');
+  if(!src.trim()){m.innerHTML='<span class=neg>leeg — plak Pine of een beschrijving</span>';return;}
+  m.textContent='bezig…';
+  try{const r=await (await fetch('/api/vault/adopt',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mode:mode,source:src,name:name})})).json();
+    if(!r.ok){m.innerHTML='<span class=neg>'+r.error+'</span>';return;}
+    const res=r.result||{};
+    if(mode==='text'){m.innerHTML='<span style="color:var(--gold)">in de wachtrij gezet: <b>'+res.queued+'</b></span> — wacht op Claude-review';}
+    else{const ad=(res.adopted||[]); const kn=Object.keys(res.known||{});
+      m.innerHTML='<span style="color:var(--azure)">Pine verwerkt</span> — bekend: '+(kn.join(', ')||'—')
+        +(ad.length?(' · <b style="color:var(--gold)">geadopteerd: '+ad.join(', ')+'</b>'):'')
+        +(res.spec?(' · strategie <b>'+res.spec+'</b> opgeslagen'):'');}
+    loadVaultState(); loadWizard();
+  }catch(e){m.innerHTML='<span class=neg>'+e+'</span>';}
+}
+$('#vAdoptPine')&&$('#vAdoptPine').addEventListener('click',()=>adoptVault('pine'));
+$('#vAdoptText')&&$('#vAdoptText').addEventListener('click',()=>adoptVault('text'));
 // ---- tabs ----
 
 // ---------- 2 · Pijplijn ----------
@@ -2088,7 +2168,7 @@ if(gAdvT)gAdvT.addEventListener('click',()=>{const a=$('#gAdv');const open=a.sty
 showTab((location.hash&&document.getElementById('tab-'+location.hash.slice(1)))?location.hash.slice(1):'pipeline');
 loadPipeline();loadExports();
 
-loadWizard();loadGenDatasets();loadBuilder();
+loadWizard();loadGenDatasets();loadBuilder();loadVaultState();
 load();
 loadCandidates();
 setTimeout(syncVerifyWhat, 300);   // na loadWizard(), zodra de dropdowns gevuld zijn
@@ -2186,8 +2266,42 @@ PAGE_HTML = f"""<!doctype html><html><head>{_HEAD}
       <div><div class=muted style="font-size:11px;margin-bottom:5px">regime-gate (leeg = alle regimes)</div>
         <div id=bRegimes style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px"></div></div>
     </div>
+    <div style="display:flex;gap:28px;flex-wrap:wrap;margin-top:12px">
+      <div><div class=muted style="font-size:11px;margin-bottom:5px">geadopteerd — nog niet bedraad <span style="color:var(--rose)">⚠</span></div>
+        <div id=bAdopted style="display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--sub)"></div></div>
+    </div>
     <div id=bPreview style="margin-top:14px"></div>
     <div style="margin-top:12px"><button class=go id=bSave>Opslaan → Strats</button><span id=bMsg class=muted style="margin-left:10px"></span></div>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Adopteer een indicator — self-learning</b><span class=muted>Pine of vrije tekst</span></div>
+    <div class=hint>Plak een <b>Pine-script</b>: bekende indicatoren worden een strategie in de bibliotheek, onbekende worden meteen <b>geadopteerd</b> en verschijnen hierboven als vinkje (nog niet bedraad). Of beschrijf een indicator in <b>vrije tekst</b> — die gaat naar de bedradingswachtrij voor een Claude-review vóór adoptie. Écht meedraaien vereist engine-code (grondregel-conform); dat is de bedradingsstap.</div>
+    <div class=up style="margin-top:12px">
+      <label class=field style="flex:1;min-width:280px"><span class=fld>Pine-bron plakken</span>
+        <textarea id=vPine placeholder="//@version=6 ..." style="width:100%;min-height:90px;background:var(--deep);color:var(--sand);border:1px solid var(--line);border-radius:2px;padding:8px;font-family:var(--mono);font-size:11px"></textarea></label>
+    </div>
+    <div class=up style="margin-top:8px">
+      <label class=field><span class=fld>Naam</span><input id=vName placeholder="upload" style="width:150px"></label>
+      <button class=go id=vAdoptPine>Adopteer uit Pine</button>
+    </div>
+    <div class=up style="margin-top:14px">
+      <label class=field style="flex:1;min-width:280px"><span class=fld>Of: beschrijf een indicator (vrije tekst)</span>
+        <textarea id=vText placeholder="bv. 'een VWMA-crossover die long gaat als de snelle VWMA de trage kruist en CVD positief is'" style="width:100%;min-height:64px;background:var(--deep);color:var(--sand);border:1px solid var(--line);border-radius:2px;padding:8px;font-size:12.5px"></textarea></label>
+    </div>
+    <div class=up style="margin-top:8px">
+      <label class=field><span class=fld>Naam</span><input id=vTextName placeholder="mijn_indicator" style="width:150px"></label>
+      <button class=go id=vAdoptText>Naar bedradingswachtrij</button>
+    </div>
+    <div id=vMsg class=muted style="margin-top:10px"></div>
+  </div>
+
+  <div class=panel>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <b class=sub>Bedradingswachtrij — pending indicatoren</b><span class=muted id=vQCount>—</span></div>
+    <div class=hint>Geadopteerde en beschreven indicatoren die nog engine-code nodig hebben. Elk draagt de context (bron, params, grondregels) die een Claude Code-sessie nodig heeft om hem te bedraden — Ferry reviewt vóór commit.</div>
+    <div id=vQueue style="margin-top:10px"></div>
   </div>
 
   <div class=panel>

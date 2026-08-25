@@ -39,3 +39,11 @@ middleware/dotnet-receiver/**/bin/
 middleware/dotnet-receiver/**/obj/
 # appsettings dragen doorgaans tokens; de receiver leest zijn secrets uit systemd Environment=
 middleware/dotnet-receiver/**/appsettings*.json
+
+# D-06 near-miss 25-08: een brede rsync vanaf de VPS sleepte configbestanden met
+# tokens mee. Deze regels vangen dat af als het nog eens gebeurt.
+**/notion-sync-config.json
+**/fleet-config.json
+*.save
+*.save.[0-9]
+middleware/.env.save

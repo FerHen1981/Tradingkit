@@ -47,7 +47,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v2.0.0"
+var string currentVersion = "v2.0.1"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -81,7 +81,6 @@ var string GROUP_ALRT  = GROUP_EXEC
 var string GROUP_MREG  = "3 · TIME GATE"
 
 // === MEX STABILITY PRESET (additive; all legacy/live layers remain intact) =====
-     tooltip="Default = Manual: the visible inputs below are the actual values used and remain editable. Choose a Lock preset only when you intentionally want the tested stability values to override those inputs. Execution, alerts, account/fleet and event layers remain unchanged.")
 // stability-preset verwijderd 25-08. Hij stond op Manual, dus deze drie waarden vielen al
 // door naar de gewone inputs -- de gecompileerde beslissing is identiek.
 
@@ -505,7 +504,6 @@ customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", 
      tooltip="US overlaps Initial Balance, NY AM and Lunch on purpose: the windows are OR-ed, so a coarse block can sit next to finer ones.")
 
 useAutoFlat = input.bool(true, "Force Flat Window", inline="flat", group=GROUP_TIME, display=display.none)
-     tooltip="Blocks new entries during the first two Monday hours (thin liquidity).")
 flatHour    = input.int(16, "From", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
 flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP_TIME, display=display.none)
 resumeHour  = input.int(18, "Until", minval=0, maxval=23, inline="flat", group=GROUP_TIME, display=display.none)
@@ -623,7 +621,6 @@ evalStartBal    = input.float(0, "Start balance ($)", step=100, group=GROUP_EVAL
      tooltip="Balance at the start date. Use when tracking an account already underway (e.g. a PA at +$800). On day 1 = peak; floor = start - trailing DD.", display=display.none)
 evalProfitTgt   = acctGoal
 evalTrailDD     = acctTrailDD
-     tooltip="EOD: floor follows the closed daily balance only (milder). Intraday: floor follows the live peak (stricter).", display=display.none)
 
 // === v5.4: APEX LEGACY 30% MAE-GUARD =========================================
 var string GROUP_MAE = GROUP_PHASE

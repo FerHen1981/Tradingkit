@@ -310,12 +310,25 @@ static bool Rejected(string reply)
 {
     if (string.IsNullOrWhiteSpace(reply)) return false;
     var r = reply.ToLowerInvariant();
-    string[] markers =
+    var compact = r.Replace(" ", "");        // JSON-markers spatie-ongevoelig toetsen
+
+    // PMT antwoordt op een GESLAAGDE order met {"res":"Successfully send","error":false}.
+    // De sleutel `error` staat er dus altijd in — alleen de wáárde telt. De oude lijst
+    // toetste op "error" als losse marker en verklaarde daarmee elke geslaagde order
+    // geweigerd (waargenomen 25-08: "GEWEIGERD 200" terwijl de orders gewoon liepen).
+    if (compact.Contains("\"error\":false")) return false;
+
+    string[] prose =
     {
         "not found in pool", "cannot place", "invalid ip", "unauthorized", "forbidden",
-        "\"error\"", "\"success\":false", "\"status\":false", "not allowed", "rejected",
+        "not allowed", "rejected",
     };
-    return markers.Any(m => r.Contains(m));
+    if (prose.Any(m => r.Contains(m))) return true;
+
+    // error:true of error met een tekstuele boodschap = weigering; error:false is hierboven
+    // al afgevangen.
+    string[] json = { "\"error\":true", "\"error\":\"", "\"success\":false", "\"status\":false" };
+    return json.Any(m => compact.Contains(m));
 }
 
 static async Task<string> ForwardJsonAsync(HttpClient http, string url, string json, bool dryRun)

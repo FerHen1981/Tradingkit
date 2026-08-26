@@ -124,6 +124,12 @@
 //   EL TESORO houden die tak wel: daar is de motorkeuze een openstaande vraag (optie C).
 //   Weergave omlaag zoals afgesproken: draw-last 2000 -> 300, max FVG-boxen 40 -> 20,
 //   sessievensters 6 -> 4. Geen analytisch verlies, wel minder tekenwerk per bar.
+// v3.1.1 (26-08): de TRADE-laag verscheen alleen bij een open positie of order op de
+//   LAATSTE bar, en dat is op een backtestchart bijna nooit - je zag dus nooit dat hij
+//   bestond. Hij staat er nu altijd, met drie standen: POSITION, ORDER of FLAT. Inhoud
+//   conform de spec: richting, size @ entry, TP / SL, BE / Trail en open PnL. Een
+//   niet-opgepikte limietorder toont zijn entry en stop maar nog geen TP - die bestaat
+//   op dat moment ook niet.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -131,7 +137,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.1.0"
+var string currentVersion = "v3.1.1"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -2485,7 +2491,9 @@ if strategy.closedtrades > tdSeen
 // --- welke regels krijgen we? -------------------------------------------------
 bool inTrade   = posSize != 0
 bool inOrder   = isFlat and pendDir != 0
-bool showTrade = inTrade or inOrder
+// De TRADE-laag staat er ALTIJD, ook als er niets loopt. Hem alleen tonen bij een open
+// positie betekent dat je op een backtestchart vrijwel nooit ziet dat hij bestaat - en dan
+// kun je ook niet controleren of hij klopt. Drie standen: POSITION, ORDER of FLAT.
 int nInd = (useEmaFilter ? 1 : 0) + (useVwapVeto ? 1 : 0) + (usePocFilter ? 1 : 0) + (useDpFilter ? 1 : 0) +
      (useCVDFilterEff ? 1 : 0) + (useBbwpFilter ? 1 : 0) + (useMfiFilter ? 1 : 0) + 2
 int rAcctId = 0
@@ -2495,7 +2503,7 @@ int rAccHdr = rInd + nInd
 int rAcc    = rAccHdr + 1
 int rTrdHdr = rAcc + 3
 int rTrd    = rTrdHdr + 1
-int dashRows = showTrade ? rTrd + 3 : rTrdHdr
+int dashRows = rTrd + 4
 
 var table dash = na
 if showDashboard and barstate.islast
@@ -2565,13 +2573,19 @@ if showDashboard and barstate.islast
     table.cell(dash, 1, rAcc + 2, not _sync ? "—" : (na(_bufPct) ? "—" : str.tostring(_bufPct, "#") + "% · $" + str.tostring(_toBreach, "#") + " to breach" + (na(_toPayout) ? "" : " · $" + str.tostring(_toPayout, "#") + " to payout")), text_color=not _sync ? txtColor : na(_bufPct) ? txtColor : _bufPct < 25 ? vNegTxt : vPosTxt, text_size=txtSize, text_halign=text.align_right)
 
     // ---- laag 3: TRADE ------------------------------------------------------
-    if showTrade
-        int _d = inTrade ? (posSize > 0 ? 1 : -1) : pendDir
-        table.cell(dash, 0, rTrdHdr, "TRADE", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, rTrdHdr, inTrade ? "POSITION" : "ORDER", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_right)
-        table.cell(dash, 0, rTrd, _d > 0 ? "LONG" : "SHORT", text_color=_d > 0 ? vPosTxt : vNegTxt, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, rTrd, str.tostring(inTrade ? math.abs(posSize) : t_qty, "#") + "ct @ " + str.tostring(inTrade ? entryAvg : pendLimit, format.mintick), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
-        table.cell(dash, 0, rTrd + 1, "SL / TP", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, rTrd + 1, str.tostring(inTrade ? curStop : pendStop, format.mintick) + " / " + str.tostring(inTrade ? curLimit : na, format.mintick) + (posRiskOff ? " · BE" : "") + (posTrailOn ? " · trail" : ""), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
-        table.cell(dash, 0, rTrd + 2, "Open PnL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
-        table.cell(dash, 1, rTrd + 2, inTrade ? (strategy.openprofit >= 0 ? "+$" : "-$") + str.tostring(math.abs(strategy.openprofit), "#.##") : "—", text_color=f_valCol(strategy.openprofit), text_size=txtSize, text_halign=text.align_right)
+    int   _d    = inTrade ? (posSize > 0 ? 1 : -1) : inOrder ? pendDir : 0
+    float _entry = inTrade ? entryAvg : inOrder ? pendLimit : na
+    float _sl    = inTrade ? curStop : inOrder ? pendStop : na
+    float _tp    = inTrade ? curLimit : na          // een niet-opgepikte limiet heeft nog geen TP
+    float _size  = inTrade ? math.abs(posSize) : inOrder ? t_qty : na
+    string _state = inTrade ? "POSITION" : inOrder ? "ORDER" : "FLAT"
+    table.cell(dash, 0, rTrdHdr, "TRADE", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rTrdHdr, _state, text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_right)
+    table.cell(dash, 0, rTrd, _d > 0 ? "LONG" : _d < 0 ? "SHORT" : "—", text_color=_d > 0 ? vPosTxt : _d < 0 ? vNegTxt : txtColor, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rTrd, na(_entry) ? "—" : str.tostring(_size, "#") + "ct @ " + str.tostring(_entry, format.mintick), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
+    table.cell(dash, 0, rTrd + 1, "TP / SL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rTrd + 1, na(_sl) ? "—" : (na(_tp) ? "—" : str.tostring(_tp, format.mintick)) + " / " + str.tostring(_sl, format.mintick), text_color=txtColor, text_size=txtSize, text_halign=text.align_right)
+    table.cell(dash, 0, rTrd + 2, "BE / Trail", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rTrd + 2, not inTrade ? "—" : (posRiskOff ? "armed" : "—") + " / " + (posTrailOn ? (posRecovOn ? "recovery" : "armed") : "—"), text_color=inTrade and (posRiskOff or posTrailOn) ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
+    table.cell(dash, 0, rTrd + 3, "Open PnL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rTrd + 3, inTrade ? (strategy.openprofit >= 0 ? "+$" : "-$") + str.tostring(math.abs(strategy.openprofit), "#.##") : "—", text_color=inTrade ? f_valCol(strategy.openprofit) : txtColor, text_size=txtSize, text_halign=text.align_right)

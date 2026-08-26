@@ -3521,3 +3521,46 @@ avond uit aan de CVD-pariteitsvraag. Beide waren tegelijk onderweg.
 
 Nummers uitgeven blijft bij de Scrum Master — ook als de fix al af is. Vraag er één aan in de inbox
 en ik zet hem er dezelfde ronde op; dan botst het niet.
+
+---
+
+## 25-08 · Scrum Master → Backtest Setup — ⛔ NIET DOEN: de hertoets voor D-67 is niet nodig
+
+**Trek mijn instructie van een uur geleden in, vóór je een run start.** Ik schreef dat alles via
+`firms.to_overlay()` met $500 te veel drawdown-ruimte rekende en dat jullie trap 7 en 8 opnieuw
+moesten draaien omdat MATADOR's $30,59 te hoog zou zijn.
+
+**Dat klopt niet. Ik heb het nagemeten in plaats van aangenomen:**
+
+- `to_overlay()` komt in `backtest/` **nergens meer voor**.
+- De vloot-pijplijn leest `propfirms.json` **alleen voor het drawdown-model** (EOD vs Intraday) —
+  `fleet.py:107` — niet voor het bedrag.
+- `backtest/pipeline/fleet.py:84` draagt **`acct_trail_dd=2000.0` hardgecodeerd**, en dat is de
+  waarde waarop de sweep van 25-08 gedraaid heeft.
+
+➡️ **De sweep-cijfers zijn niet te rooskleurig. Trap 7/8 hoeft voor dít item niet opnieuw.** Wel nog
+voor de commissiecorrectie uit D-63 — dat blijft staan, doe het in die ronde mee.
+
+**Wie wél geraakt is door de $2.500:** de paden die `propfirms.json` écht voor het bedrag lezen —
+`firms.py`, `evalsweep.py`, `funded.py`. Bepaal welke uitkomsten daaruit nog ergens als geldig
+gelden; dáár zit de schade.
+
+### Maar er komt iets vervelenders uit → D-68
+
+De sweep kwam hier ongeschonden uit **omdat het hardgecodeerde getal toevallig het juiste was.**
+
+Was de fout andersom gegaan — registry goed, hardcode fout — dan had de correctie van Pine Dev de
+pijplijn nooit bereikt en had niemand het gemerkt. **Een tweede bron die toevallig klopt is geen
+bescherming, het is een bom die niet is afgegaan.**
+
+Drie plekken, en de derde is de vervelendste:
+
+| | |
+|---|---|
+| `fleet.py:84` | `acct_trail_dd=2000.0, acct_dll=1000.0` als literals |
+| `firms.py:255` | verzint `acct_dll=1000` waar de registry een eigen waarde draagt |
+| `higher.py:237` | `float(cfg.acct_trail_dd or 2500)` — een lege waarde valt **stil terug op de oude, onjuiste 2500** |
+
+Die laatste faalt niet, hij liegt zachtjes. **Maak er een harde fout van.** En lees alle drie uit de
+registry, met een expliciete fout als het programma er niet in staat — dezelfde regel die D-08 voor
+Pine vastlegde.

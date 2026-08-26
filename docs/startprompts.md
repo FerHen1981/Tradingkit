@@ -1,4 +1,4 @@
-# Startprompts per chat — ronde 25-08
+# Startprompts per chat — ronde 26-08
 
 _Eigenaar: Scrum Master. Ververst elke toezichtronde; de datum bovenaan is de houdbaarheid._
 
@@ -24,14 +24,25 @@ veranderd bij jullie:
   de body-check zijn nu echt in het draaiende proces.
 - Vier items stonden onterecht op `blocked` en zijn losgezet: D-40, D-53, D-05, D-07.
 
+D-40, D-02, D-05, D-49 en D-59 zijn geREVIEWD en akkoord — goed werk, vooral de
+`Rejected()`-analyse en het feit dat jullie erbij schreven dat de auto-DLL-halt ook in `risk.py`
+dormant was. Zo hoort een port verantwoord te worden.
+
 Werk in deze volgorde:
-1. D-59 — `Mex.Journal.Receiver` ontbreekt in `MexJournal.sln`. Eén commando. Doe dit eerst,
-   anders bouwt je eigen build groen zonder het live pad aan te raken.
-2. D-40 + D-53 SAMEN — beide zetten een controle per account vóór `ForwardJsonAsync` in
-   `/signal/{token}`, op hetzelfde `multiple_accounts[0].account_id`. Apart bouwen betekent
-   twee keer dezelfde plek in het live executiepad openleggen.
-3. D-49 — alles naar `mw.mex-traders.com`. De `Caddyfile` die nu in git staat bevestigt die host.
-4. D-05 en D-02 — Python fan-out afvoeren.
+1. 🔴 D-53 — DE QTY-FIX, EN HIJ BLOKKEERT DE UITROL. De implementatie raakt alleen
+   `quantity_multiplier` (int > 0), maar Pine stuurt daarnaast zijn eigen `"quantity"` — bij
+   MATADOR 6 contracten — en die blijft ongemoeid. Een integer-multiplier kan dat alleen
+   gelijkhouden of verhogen, dus naar 1 contract schalen lukt niet. Ook de bordregel "ontbrekend
+   account = vers account is per default veilig" klopt daardoor niet: dan handelt het account op
+   Pine's volle grootte, precies wat de sweep als niet-funderbaar aanwijst.
+   Voorstel: overschrijf `obj["quantity"]` direct als string, laat de multiplier op 1, en hernoem
+   de env — "multipliers" dekt de lading niet meer.
+2. D-69 — `render.yaml` start nog `uvicorn app.main:app` en dat bestand hebben jullie verwijderd.
+   Een deploy vanaf die blueprint crasht. Advies: verwijderen, de architectuur die hij deployde is
+   met D-04 afgevoerd. Jullie map, jullie besluit.
+3. D-07 — de commissievraag is beantwoord: registry wint (besluit Ferry 24-08), dus 0,37 voor
+   MNQ/MES/MYM. Wat resteert is verifiëren tegen `Cash_History`.
+4. D-17 — viewer-rol, wacht op mijn review zodra jullie melden dat hij af is.
 
 Claim één item in docs/SPRINT.md (status `wip` + owner + losse commit) vóór je begint.
 Raakt je wijziging het live executiepad, meld het in docs/inbox.md vóór je pusht.
@@ -47,19 +58,20 @@ git pull origin claude/middleware-setup-guide-afhvtk
 Lees docs/SPRINT.md en docs/inbox.md vanaf de rondes van 25-08. D-61 is afgerond en door de
 Scrum Master geverifieerd. Er liggen er nu zes, en de volgorde is niet willekeurig:
 
-1. D-65 EERST — de firm-preset-generator kent de v1_0_0-vloot niet; `STRATEGY_DEFAULT` in
-   `tools/gen_pine_firms.py` bevat alleen de oude v6.9.5-namen. Dit kan de wortel onder D-63
-   zijn: een handmatig onderhouden firm-preset verklaart LEON's verkeerde programma net zo
-   goed als TradingView dat oude inputs bewaart. Weet dit vóór D-63, anders is die her-export
-   dweilen met de kraan open.
-2. D-64 — `MEX_EL_DORADO.pine` compileert niet: `firmPreset` draagt `apex_intraday_pa`, een
+1. D-64 — `MEX_EL_DORADO.pine` compileert niet: `firmPreset` draagt `apex_intraday_pa`, een
    sleutel die niet in de registry bestaat. De fout zit in de generator, dus repareren in het
    .pine-bestand wordt bij de volgende run overschreven.
-3. D-63 — her-export LEON en REY op de bron-config. Zet in dezelfde ronde de commissie van
-   0,51 naar 0,37 (registry wint, besluit Ferry 24-08), anders exporteer je twee keer.
+2. 🔴 D-66 — jullie delta-signalering geldt voor de HELE vloot, niet voor twee scripts: 9 van de
+   9 verwijzen naar `ta.requestVolumeDelta` en in 9 van de 9 staat `useCVDFilter` op true. Dat
+   botst met D-09. Maar MATADOR haalde `data_parity`, wat daar tegenin gaat — er is iets dat ik
+   niet zie. Beantwoord samen met Backtest Setup welke het is: motoren lopen dicht genoeg gelijk,
+   filter bindt zelden, of gat in de pariteitstoets. DIT GAAT VOOR D-63.
+3. D-63 — her-export LEON en REY op de bron-config, PAS NA D-66. Zet in dezelfde ronde de
+   commissie van 0,51 naar 0,37 (registry wint, besluit Ferry 24-08), anders exporteer je twee
+   keer, en dan tegen een meetlat die zelf niet klopt.
 4. D-44 — `breakeven_offset` in `f_pmtJSON`. Byte-identiek blok in alle negen scripts, dus
    één sed. Wacht op Ferry's bevestiging dat het PMT risk type niet op `Price` staat.
-5. D-41, D-42, D-51, D-57 — in die volgorde, D-57 pas ná D-54.
+5. D-57 pas ná D-54. D-41, D-42, D-61 en D-65 zijn dicht en gereviewd — die kun je afvinken.
 
 Claim één item in docs/SPRINT.md vóór je begint. D-44 en D-63 raken echte orders: melden
 in docs/inbox.md vóór je pusht.
@@ -82,11 +94,20 @@ aan wat je dacht dat er lag:
   validator-commando niet.
 
 Werk in deze volgorde:
-1. D-55 — de vloot-sweep heeft geen spoor in `validation/`. Gezien D-54 worden die cijfers
-   waarschijnlijk herzien; dan wil je kunnen terugkijken wat er gemeten was.
-2. MATADOR hertoetsen zodra Pine Dev de commissie op 0,37 heeft: zijn `data_parity` is
-   behaald terwijl de export op 0,51 stond. $30,59/account-dag is nu het enige cijfer waar
-   iets op rust.
+D-55 en D-56 zijn binnen en gereviewd. Jullie MGC-analyse heeft mijn eigen voorbehoud
+gecorrigeerd — de twin-bias is asymmetrisch en pleit vóór de afwijzingen. Dat argument is beter
+dan het mijne en ik heb het overgenomen.
+
+⛔ EN TREK DIT IN: ik vroeg jullie trap 7/8 te hertoetsen omdat propfirms.json $2.500 droeg in
+plaats van $2.000. Nagemeten: de vloot-pijplijn leest dat bedrag helemaal niet — `fleet.py:84`
+draagt `acct_trail_dd=2000.0` hardgecodeerd. De sweep is dus NIET geraakt. Draai die run niet.
+
+1. 🔴 D-66 — de pariteitsvraag, samen met Pine Dev. Zie hun blok. Dit blokkeert D-63 en D-54.
+2. D-68 — juist ómdat de sweep hier ongeschonden uitkwam: dat was omdat een hardgecodeerd getal
+   toevallig klopte, niet omdat de registry gelezen werd. `fleet.py:84`, `firms.py:255`, en de
+   stille fallback `or 2500` in `higher.py:237` die bij een lege waarde terugvalt op precies de
+   onjuiste waarde. Maak daar een harde fout van.
+3. MATADOR hertoetsen zodra Pine Dev de commissie op 0,37 heeft — dat blijft wél staan.
 3. D-54 — zodra de her-exports van D-63 binnen zijn: trap 1 voor LEON en REY, dan trap 8.
 4. D-56 — is echte MGC-data te krijgen? Zolang die ontbreekt staat elk MGC-oordeel onder
    voorbehoud, ook de afwijzing van PATRON.

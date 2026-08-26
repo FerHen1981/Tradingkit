@@ -106,6 +106,9 @@
 //   niets. Ze hebben nu eigen schakelaars; de tabel blijft tonen welke er echt filteren.
 //   "Filled"/"Both" op de FVG-weergave is eruit: geraakte gaps worden opgeruimd, dus die
 //   keuzes konden niets meer tonen.
+// v3.0.2 (26-08): CE10123 - de titel van een plot moet een CONST string zijn, en
+//   "EMA " + str.tostring(emaLen) is simple. Titel is nu vast. pine_lint controleert dit
+//   voortaan op plot/plotshape/fill/bgcolor/barcolor/hline.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -113,7 +116,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.0.1"
+var string currentVersion = "v3.0.2"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -2299,7 +2302,7 @@ showPocLine  = input.bool(false, "Volume profile", inline="ov2", group=GROUP_VIS
 showDpBand   = input.bool(false, "Discount/Premium", inline="ov2", group=GROUP_VIS,
      tooltip="Tekenen is los van filteren. Volume profile staat default uit omdat het profiel intrabar-data ophaalt en dat is de duurste post in het script - zet hem alleen aan als je hem nodig hebt.")
 plot(showVwapLine ? vwapVal : na, "VWAP", color=color.new(color.purple, 30), linewidth=1)
-plot(showEmaLine ? emaVal : na, "EMA " + str.tostring(emaLen), color=close > emaVal ? color.new(vPOS, 20) : color.new(vNEG, 20), linewidth=2)
+plot(showEmaLine ? emaVal : na, "EMA filter", color=close > emaVal ? color.new(vPOS, 20) : color.new(vNEG, 20), linewidth=2)
 plot(showPocLine ? pocLevel : na, "Volume profile", color=color.new(color.orange, 20), linewidth=1, style=plot.style_linebr)
 _pDpHi  = plot(showDpBand ? _dpHi : na, "Range high", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)
 _pDpLo  = plot(showDpBand ? _dpLo : na, "Range low", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)

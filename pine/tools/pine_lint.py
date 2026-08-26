@@ -88,6 +88,8 @@ def check(path):
             if d.group(1) not in opts:
                 findings.append(f"r{n}: input.string default {d.group(1)!r} staat niet in options")
 
+    findings += check_plot_titles(path)
+
     tabs = [n for n, l in enumerate(raw, 1) if '\t' in l]
     if tabs: findings.append(f"tabs op {tabs}")
 
@@ -133,6 +135,57 @@ SHARED_BLOCKS = {
     "f_pmtJSON": ("f_pmtJSON(", "multiple_accounts"),
     "middleware-alert": ('    if useMiddleware', '}", alert.freq_once_per_bar)'),
 }
+
+
+# CE10123: de titel van plot/plotshape/fill/bgcolor moet een CONST string zijn. Een titel
+# als "EMA " + str.tostring(emaLen) is simple, niet const, en dat compileert niet -- maar je
+# ziet het pas in TradingView. De titel is het tweede positionele argument, of title=.
+_PLOTF = ("plot", "plotshape", "plotchar", "plotcandle", "plotbar", "plotarrow", "fill", "bgcolor", "barcolor", "hline")
+
+
+def check_plot_titles(path):
+    src = open(path).read()
+    findings = []
+    for m in re.finditer(r'(?<![\w.])(' + "|".join(_PLOTF) + r')\(', src):
+        i = m.end() - 1
+        depth = 0; q = False; k = i; args = []; cur = ""
+        while k < len(src):
+            c = src[k]
+            if q:
+                cur += c
+                if c == '\\':
+                    cur += src[k + 1]; k += 2; continue
+                if c == '"': q = False
+                k += 1; continue
+            if c == '"':
+                q = True; cur += c; k += 1; continue
+            if c in '([':
+                depth += 1
+                if depth == 1:
+                    k += 1; continue
+            elif c in ')]':
+                depth -= 1
+                if depth == 0:
+                    args.append(cur); break
+            if c == ',' and depth == 1:
+                args.append(cur); cur = ""; k += 1; continue
+            cur += c
+            k += 1
+        title = None
+        for a in args:
+            if a.strip().startswith("title="):
+                title = a.split("=", 1)[1]
+        if title is None and m.group(1) in ("plot", "plotshape", "plotchar") and len(args) > 1:
+            title = args[1]
+        if title is None:
+            continue
+        t = title.strip()
+        if not t.startswith('"'):
+            continue                      # een variabele kan best const zijn; niet te zien
+        if "+" in re.sub(r'"[^"]*"', "", t):
+            ln = src[:m.start()].count("\n") + 1
+            findings.append(f"r{ln}: {m.group(1)}() titel is samengesteld - moet een const string zijn (CE10123)")
+    return findings
 
 
 def check_shared(paths):

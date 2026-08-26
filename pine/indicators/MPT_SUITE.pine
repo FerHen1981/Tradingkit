@@ -1,0 +1,369 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT Suite v1.0 — de context-indicatoren van de MEX-vloot in één script
+// ============================================================================================
+//  Zes modules, elk los aan of uit:
+//
+//    1  MOVING AVERAGE   type-dropdown (EMA/SMA/HMA/WMA/VWMA/RMA/DEMA/TEMA) + lengte
+//    2  VWAP             los van de dropdown, met drie instelbare standaarddeviatiebanden
+//    3  TIME GATE        de negen regimevensters van de vloot + achtergrondkleur
+//    4  DISCOUNT/PREMIUM positie in de recente range
+//    5  FVG              dezelfde detectie als de strategieën, filled/unfilled/beide
+//    6  LEVELS           vorige dag/week/maand H-L-mid + de high/low van de sessie
+//
+//  SOURCE OF TRUTH IS DE STRATEGIE. De vensters (18:00-19:00 Globex, 02:00-05:00 London,
+//  07:00-12:00 US, ...) en de FVG-formule zijn letterlijk overgenomen uit de v1_0_0-vloot,
+//  zodat wat je hier ziet hetzelfde is als waar de strategie op filtert. Wijkt er ooit iets
+//  af, dan is de strategie leidend en is dit script fout.
+//
+//  Vervangt als bundel: MPT_EMA, MPT_TIME_GATE en MPT_DISCOUNT_PREMIUM. Die blijven los
+//  bestaan voor wie er maar één wil laden.
+// ============================================================================================
+indicator("MPT Suite v1.0", "MPT Suite", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+// === 0 · SUITE ==============================================================
+var string G_SUITE = "0 · SUITE — modules"
+var string G_MA    = "1 · MOVING AVERAGE"
+var string G_VWAP  = "2 · VWAP"
+var string G_GATE  = "3 · TIME GATE"
+var string G_DP    = "4 · DISCOUNT / PREMIUM"
+var string G_FVG   = "5 · FVG"
+var string G_LVL   = "6 · LEVELS"
+var string G_TBL   = "7 · TABLE"
+var string G_THEME = "8 · THEME"
+
+useMA   = input.bool(true,  "Moving average", inline="m1", group=G_SUITE)
+useVwap = input.bool(true,  "VWAP",           inline="m1", group=G_SUITE)
+useGate = input.bool(true,  "Time gate",      inline="m1", group=G_SUITE)
+useDP   = input.bool(false, "Discount/Premium", inline="m2", group=G_SUITE)
+useFvg  = input.bool(false, "FVG",            inline="m2", group=G_SUITE)
+useLvl  = input.bool(false, "Levels",         inline="m2", group=G_SUITE,
+     tooltip="Elke module tekent en rekent alleen als hij hier aanstaat. Uit = geen plot, geen tabelregel, geen rekenwerk dat je chart vertraagt.")
+tzIn    = input.string("America/New_York", "Reference timezone",
+     options=["America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Amsterdam","Asia/Tokyo","Asia/Shanghai","Australia/Sydney","UTC"],
+     group=G_SUITE, tooltip="Geldt voor de tijdvensters en de dag-grens. De vloot draait op America/New_York; de venstertijden hieronder zijn in die zone gedefinieerd.")
+
+// === 1 · MOVING AVERAGE =====================================================
+maType = input.string("EMA", "Type", options=["EMA","SMA","HMA","WMA","VWMA","RMA","DEMA","TEMA"], inline="a1", group=G_MA)
+maLen  = input.int(200, "length", minval=1, inline="a1", group=G_MA)
+maSrc  = input.source(close, "on", inline="a1", group=G_MA,
+     tooltip="EL REY filtert op EMA 200 op close: longs alleen erboven, shorts alleen eronder. De andere types zijn er om te vergelijken, niet omdat de strategie ze kent.")
+useMA2  = input.bool(false, "Second MA", inline="a2", group=G_MA)
+ma2Type = input.string("EMA", "", options=["EMA","SMA","HMA","WMA","VWMA","RMA","DEMA","TEMA"], inline="a2", group=G_MA)
+ma2Len  = input.int(50, "length", minval=1, inline="a2", group=G_MA,
+     tooltip="Alleen context. De strategie leest hem niet.")
+maColorBars = input.bool(false, "Colour bars by MA side", group=G_MA, display=display.none)
+
+// === 2 · VWAP ===============================================================
+vwapAnchor = input.string("Session", "Anchor", options=["Session","Week","Month"], inline="v1", group=G_VWAP)
+vwapSrc    = input.source(hlc3, "on", inline="v1", group=G_VWAP)
+useBand1 = input.bool(true,  "Band 1", inline="v2", group=G_VWAP)
+mult1    = input.float(1.0, "×σ", minval=0.1, step=0.1, inline="v2", group=G_VWAP)
+useBand2 = input.bool(true,  "Band 2", inline="v3", group=G_VWAP)
+mult2    = input.float(2.0, "×σ", minval=0.1, step=0.1, inline="v3", group=G_VWAP)
+useBand3 = input.bool(false, "Band 3", inline="v4", group=G_VWAP)
+mult3    = input.float(3.0, "×σ", minval=0.1, step=0.1, inline="v4", group=G_VWAP,
+     tooltip="Drie onafhankelijke banden op dezelfde VWAP. De strategie gebruikt de VWAP zelf als veto (long alleen erboven, short alleen eronder) en kent de banden niet.")
+vwapFill = input.bool(true, "Shade between the bands", group=G_VWAP, display=display.none)
+
+// === 3 · TIME GATE ==========================================================
+regimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=G_GATE,
+     tooltip="Liquidity Core = Globex reopen + London + US. Custom = wat je hieronder aanvinkt. De vensters worden ge-OR-d, dus een grof blok mag over een fijner heen liggen.")
+wGlobex  = input.bool(true,  "Globex reopen 18:00-19:00",   inline="w1", group=G_GATE)
+wAsia    = input.bool(false, "Asia 19:00-02:00",            inline="w1", group=G_GATE)
+wLondon  = input.bool(true,  "London 02:00-05:00",          inline="w2", group=G_GATE)
+wUs      = input.bool(true,  "US 07:00-12:00",              inline="w2", group=G_GATE)
+wInitBal = input.bool(false, "Initial balance 09:30-10:30", inline="w3", group=G_GATE)
+wNyAm    = input.bool(false, "NY AM 09:30-11:30",           inline="w3", group=G_GATE)
+wLunch   = input.bool(false, "Lunch 11:30-13:00",           inline="w4", group=G_GATE)
+wNyPm    = input.bool(false, "NY PM 13:00-15:00",           inline="w4", group=G_GATE)
+wPower   = input.bool(false, "Power hour 15:00-16:00",      inline="w5", group=G_GATE,
+     tooltip="Dezelfde negen vensters als in de strategieën, zelfde tijden. Alleen actief als Market regime op Custom staat.")
+useFlat  = input.bool(true, "Force flat 16:55 – 18:00", group=G_GATE,
+     tooltip="De CME-sessiepauze. In de strategie worden hier posities platgezet en komen er geen entries bij; hier kleurt hij alleen.")
+gateBg   = input.bool(true, "Colour the background", inline="g1", group=G_GATE)
+gateBgT  = input.int(92, "transp.", minval=70, maxval=99, inline="g1", group=G_GATE,
+     tooltip="Groen = venster open, grijs = force-flat, geen kleur = gesloten.")
+
+// === 4 · DISCOUNT / PREMIUM =================================================
+dpLookback = input.int(60, "Lookback bars", minval=5, inline="d1", group=G_DP)
+dpMid      = input.float(50, "mid %", minval=1, maxval=99, step=1, inline="d1", group=G_DP,
+     tooltip="Onder de mid = discount (longs), erboven = premium (shorts). De strategie gebruikt dezelfde twee getallen.")
+dpShade    = input.bool(true, "Shade the halves", group=G_DP, display=display.none)
+
+// === 5 · FVG ================================================================
+fvgFillMode = input.string("Unfilled", "Show", options=["Filled","Unfilled","Both"], inline="f1", group=G_FVG)
+fvgSizeMode = input.string("All", "", options=["In range","All"], inline="f1", group=G_FVG,
+     tooltip="In range = alleen gaps binnen het size-venster hieronder, dus wat de strategie zou kunnen nemen. All = elke gap.")
+fvgMinT = input.float(2,  "Min size (ticks)", minval=0, inline="f2", group=G_FVG)
+fvgMaxT = input.float(8,  "Max", minval=0.01, inline="f2", group=G_FVG,
+     tooltip="Alleen gebruikt als het filter links op In range staat. Defaults volgen EL REY MNQ.")
+fvgMax  = input.int(30, "Max boxes on the chart", minval=1, maxval=200, group=G_FVG, display=display.none)
+
+// === 6 · LEVELS =============================================================
+lvlDay   = input.bool(true,  "Prev day",   inline="l1", group=G_LVL)
+lvlWeek  = input.bool(true,  "Prev week",  inline="l1", group=G_LVL)
+lvlMonth = input.bool(false, "Prev month", inline="l1", group=G_LVL)
+lvlMid   = input.bool(false, "Show the midpoints too", inline="l2", group=G_LVL)
+lvlSess  = input.bool(true,  "High/low of the current gate window", inline="l2", group=G_LVL,
+     tooltip="De extremen sinds het actieve tijdvenster openging. Staat Market regime op All sessions, dan is dat de handelsdag.")
+lvlLabels = input.bool(true, "Labels", group=G_LVL, display=display.none)
+
+// === 7 · TABLE ==============================================================
+showTable  = input.bool(true, "Table", inline="t", group=G_TBL)
+panelPosIn = input.string("Middle right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=G_TBL,
+     tooltip="Twee tabellen op dezelfde positie overlappen elkaar: Pine tekent elke tabel op zijn eigen plek en er is geen offset. Geef elke geladen indicator zijn eigen hoek.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=G_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=G_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.middle_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color ACC = #2F80ED
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+
+// === 1 · MOVING AVERAGE — berekening ========================================
+f_ma(string _t, float _s, simple int _l) =>
+    switch _t
+        "SMA"  => ta.sma(_s, _l)
+        "HMA"  => ta.hma(_s, _l)
+        "WMA"  => ta.wma(_s, _l)
+        "VWMA" => ta.vwma(_s, _l)
+        "RMA"  => ta.rma(_s, _l)
+        "DEMA" => 2 * ta.ema(_s, _l) - ta.ema(ta.ema(_s, _l), _l)
+        "TEMA" => 3 * (ta.ema(_s, _l) - ta.ema(ta.ema(_s, _l), _l)) + ta.ema(ta.ema(ta.ema(_s, _l), _l), _l)
+        => ta.ema(_s, _l)
+
+float maVal  = useMA ? f_ma(maType, maSrc, maLen) : na
+float ma2Val = useMA and useMA2 ? f_ma(ma2Type, maSrc, ma2Len) : na
+bool  aboveMA = useMA and not na(maVal) and close > maVal
+bool  belowMA = useMA and not na(maVal) and close < maVal
+float maDistT = na(maVal) ? na : (close - maVal) / syminfo.mintick
+
+plot(maVal,  "MA",         color=aboveMA ? POS : belowMA ? NEG : pMuted, linewidth=2)
+plot(ma2Val, "Context MA", color=pMuted, linewidth=1)
+barcolor(useMA and maColorBars ? (aboveMA ? POS : belowMA ? NEG : na) : na, title="MA side")
+
+// === 2 · VWAP — berekening ==================================================
+bool vwapReset = vwapAnchor == "Week" ? timeframe.change("W") : vwapAnchor == "Month" ? timeframe.change("M") : timeframe.change("D")
+[vw, up1, lo1] = ta.vwap(vwapSrc, vwapReset, mult1)
+[_v2, up2, lo2] = ta.vwap(vwapSrc, vwapReset, mult2)
+[_v3, up3, lo3] = ta.vwap(vwapSrc, vwapReset, mult3)
+float vwapVal = useVwap ? vw : na
+bool  aboveVwap = useVwap and not na(vwapVal) and close > vwapVal
+bool  belowVwap = useVwap and not na(vwapVal) and close < vwapVal
+
+plot(vwapVal, "VWAP", color=ACC, linewidth=2)
+pU1 = plot(useVwap and useBand1 ? up1 : na, "+1σ", color=color.new(ACC, 55), linewidth=1)
+pL1 = plot(useVwap and useBand1 ? lo1 : na, "-1σ", color=color.new(ACC, 55), linewidth=1)
+pU2 = plot(useVwap and useBand2 ? up2 : na, "+2σ", color=color.new(ACC, 70), linewidth=1)
+pL2 = plot(useVwap and useBand2 ? lo2 : na, "-2σ", color=color.new(ACC, 70), linewidth=1)
+pU3 = plot(useVwap and useBand3 ? up3 : na, "+3σ", color=color.new(ACC, 82), linewidth=1)
+pL3 = plot(useVwap and useBand3 ? lo3 : na, "-3σ", color=color.new(ACC, 82), linewidth=1)
+fill(pU1, pL1, color=vwapFill ? color.new(ACC, 94) : na, title="±1σ")
+fill(pU2, pU1, color=vwapFill ? color.new(ACC, 96) : na, title="+1σ..+2σ")
+fill(pL1, pL2, color=vwapFill ? color.new(ACC, 96) : na, title="-1σ..-2σ")
+
+// === 3 · TIME GATE — berekening =============================================
+f_hour()   => hour(time, tzIn)
+f_minute() => minute(time, tzIn)
+f_mod()    => f_hour() * 60 + f_minute()
+f_toMOD(_h, _m) => _h * 60 + _m
+f_inRangeMOD(_sh, _sm, _eh, _em) =>
+    _cur = f_mod()
+    _s = f_toMOD(_sh, _sm)
+    _e = f_toMOD(_eh, _em)
+    _e > _s ? (_cur >= _s and _cur < _e) : (_cur >= _s or _cur < _e)
+
+bool _wGlobex  = f_inRangeMOD(18, 0, 19, 0)
+bool _wAsia    = f_inRangeMOD(19, 0, 2, 0)
+bool _wLondon  = f_inRangeMOD(2, 0, 5, 0)
+bool _wUs      = f_inRangeMOD(7, 0, 12, 0)
+bool _wInitBal = f_inRangeMOD(9, 30, 10, 30)
+bool _wNyAm    = f_inRangeMOD(9, 30, 11, 30)
+bool _wLunch   = f_inRangeMOD(11, 30, 13, 0)
+bool _wNyPm    = f_inRangeMOD(13, 0, 15, 0)
+bool _wPower   = f_inRangeMOD(15, 0, 16, 0)
+bool regimeOK = regimeMode == "All sessions" ? true :
+     regimeMode == "Liquidity Core" ? (_wLondon or _wUs or _wGlobex) :
+     ((wLondon and _wLondon) or (wUs and _wUs) or (wGlobex and _wGlobex) or (wAsia and _wAsia) or
+      (wLunch and _wLunch) or (wPower and _wPower) or (wInitBal and _wInitBal) or
+      (wNyAm and _wNyAm) or (wNyPm and _wNyPm))
+bool inFlat  = useFlat and f_inRangeMOD(16, 55, 18, 0)
+bool gateOpen = useGate and regimeOK and not inFlat
+
+// Welk venster is nu actief? Alleen voor de tabel; de poort hierboven OR-t ze allemaal.
+string activeWin = not useGate ? "—" :
+     inFlat ? "Force flat" :
+     _wGlobex ? "Globex reopen" : _wLondon ? "London" : _wUs and _wInitBal ? "US · initial balance" :
+     _wUs and _wNyAm ? "US · NY AM" : _wUs ? "US" : _wLunch ? "Lunch" : _wNyPm ? "NY PM" :
+     _wPower ? "Power hour" : _wAsia ? "Asia" : "outside"
+
+bgcolor(useGate and gateBg ? (inFlat ? color.new(pMuted, gateBgT) : gateOpen ? color.new(POS, gateBgT) : na) : na, title="Time gate")
+
+// === 4 · DISCOUNT / PREMIUM — berekening ====================================
+float dpHi  = useDP ? ta.highest(high, dpLookback) : na
+float dpLo  = useDP ? ta.lowest(low, dpLookback) : na
+float dpMidPx = na(dpHi) ? na : dpLo + (dpHi - dpLo) * dpMid / 100.0
+float dpPos = na(dpHi) or dpHi - dpLo <= 0 ? na : 100.0 * (close - dpLo) / (dpHi - dpLo)
+bool inDiscount = not na(dpPos) and dpPos <= dpMid
+bool inPremium  = not na(dpPos) and dpPos >= dpMid
+
+pHi  = plot(dpHi, "Range high", color=pBorder, linewidth=1, style=plot.style_linebr)
+pLo  = plot(dpLo, "Range low",  color=pBorder, linewidth=1, style=plot.style_linebr)
+pMid = plot(dpMidPx, "Range mid", color=pMuted, linewidth=1, style=plot.style_linebr)
+fill(pMid, pHi, color=useDP and dpShade ? color.new(NEG, 94) : na, title="Premium")
+fill(pLo, pMid, color=useDP and dpShade ? color.new(POS, 94) : na, title="Discount")
+
+// === 5 · FVG — dezelfde detectie als de strategieën =========================
+int fvgDir = 0
+float fvgTop = na
+float fvgBot = na
+if useFvg and bar_index >= 2
+    fvgDir := low[2] >= high ? -1 : low >= high[2] ? 1 : 0
+    fvgTop := fvgDir > 0 ? low : fvgDir < 0 ? low[2] : na
+    fvgBot := fvgDir > 0 ? high[2] : fvgDir < 0 ? high : na
+float fvgSize = na(fvgTop) ? na : math.abs(fvgTop - fvgBot)
+bool fvgInRange = not na(fvgSize) and fvgSize >= fvgMinT * syminfo.mintick and fvgSize <= fvgMaxT * syminfo.mintick and fvgSize > 0
+bool fvgDraw = useFvg and fvgDir != 0 and (fvgSizeMode == "All" or fvgInRange)
+
+var array<box>  fvgBoxes  = array.new<box>()
+var array<int>  fvgDirs   = array.new<int>()
+var array<bool> fvgFilled = array.new<bool>()
+if fvgDraw and barstate.isconfirmed
+    array.push(fvgBoxes, box.new(bar_index - 2, fvgTop, bar_index, fvgBot, border_color=na, bgcolor=na))
+    array.push(fvgDirs, fvgDir)
+    array.push(fvgFilled, false)
+    if array.size(fvgBoxes) > fvgMax
+        box.delete(array.shift(fvgBoxes))
+        array.shift(fvgDirs)
+        array.shift(fvgFilled)
+int fvgOpen = 0
+if useFvg and barstate.isconfirmed and array.size(fvgBoxes) > 0
+    for i = 0 to array.size(fvgBoxes) - 1
+        _b = array.get(fvgBoxes, i)
+        _d = array.get(fvgDirs, i)
+        bool _fl = array.get(fvgFilled, i)
+        if not _fl and bar_index > box.get_right(_b)
+            _fl := _d > 0 ? low <= box.get_top(_b) : high >= box.get_bottom(_b)
+            if _fl
+                array.set(fvgFilled, i, true)
+        if not _fl
+            fvgOpen := fvgOpen + 1
+        bool _vis = fvgFillMode == "Both" or (fvgFillMode == "Filled" and _fl) or (fvgFillMode == "Unfilled" and not _fl)
+        color _base = _d > 0 ? color.new(POS, 85) : color.new(NEG, 85)
+        box.set_bgcolor(_b, not _vis ? na : _fl ? color.new(color.gray, 88) : _base)
+        box.set_border_color(_b, not _vis ? na : color.new(_base, 40))
+
+// === 6 · LEVELS =============================================================
+// Vorige periode: [1] plus lookahead is de non-repainting vorm — de waarde van een
+// AFGESLOTEN periode is al bekend, dus vooruitkijken kan hier per definitie niet liegen.
+f_prev(simple string _tf) =>
+    request.security(syminfo.tickerid, _tf, [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[pdH, pdL] = f_prev("D")
+[pwH, pwL] = f_prev("W")
+[pmH, pmL] = f_prev("M")
+
+f_lvl(bool _on, float _px, string _txt, color _c) =>
+    var line  _ln = na
+    var label _lb = na
+    if barstate.islast
+        line.delete(_ln)
+        label.delete(_lb)
+        if _on and useLvl and not na(_px)
+            _ln := line.new(math.max(bar_index - 250, 0), _px, bar_index + 10, _px, color=_c, style=line.style_dotted, width=1)
+            if lvlLabels
+                _lb := label.new(bar_index + 10, _px, _txt, style=label.style_label_left, color=color.new(_c, 80), textcolor=pText, size=size.tiny)
+
+f_lvl(lvlDay,   pdH, "PDH", NEG)
+f_lvl(lvlDay,   pdL, "PDL", POS)
+f_lvl(lvlDay and lvlMid, na(pdH) ? na : (pdH + pdL) / 2, "PD mid", pMuted)
+f_lvl(lvlWeek,  pwH, "PWH", NEG)
+f_lvl(lvlWeek,  pwL, "PWL", POS)
+f_lvl(lvlWeek and lvlMid, na(pwH) ? na : (pwH + pwL) / 2, "PW mid", pMuted)
+f_lvl(lvlMonth, pmH, "PMH", NEG)
+f_lvl(lvlMonth, pmL, "PML", POS)
+f_lvl(lvlMonth and lvlMid, na(pmH) ? na : (pmH + pmL) / 2, "PM mid", pMuted)
+
+// High/low sinds het actieve venster openging
+var float sessHi = na
+var float sessLo = na
+bool winOpened = gateOpen and not gateOpen[1]
+if useLvl and lvlSess
+    if winOpened or na(sessHi)
+        sessHi := high
+        sessLo := low
+    else if gateOpen
+        sessHi := math.max(nz(sessHi, high), high)
+        sessLo := math.min(nz(sessLo, low), low)
+f_lvl(lvlSess, sessHi, "Gate H", ACC)
+f_lvl(lvlSess, sessLo, "Gate L", ACC)
+
+// === TABEL ==================================================================
+// Rij-indexen vooraf uitrekenen: een Pine-functie mag geen variabele uit de omliggende
+// scope muteren, en een functiedefinitie mag niet binnen een if-blok staan. Een teller
+// die per rij ophoogt kan dus niet - dit wel, en het is bovendien te lezen.
+int rMA   = 0
+int rVwap = rMA   + (useMA   ? 2 : 0)
+int rGate = rVwap + (useVwap ? 2 : 0)
+int rDP   = rGate + (useGate ? 2 : 0)
+int rFvg  = rDP   + (useDP   ? 1 : 0)
+int rLvl  = rFvg  + (useFvg  ? 1 : 0)
+int rows  = rLvl  + (useLvl  ? 2 : 0)
+
+var table panel = na
+if barstate.islast and showTable and rows > 0
+    panel := table.new(panelPos, 2, rows, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    if useMA
+        table.cell(panel, 0, rMA, maType + " " + str.tostring(maLen), text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rMA, na(maVal) ? "—" : str.tostring(maVal, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        table.cell(panel, 0, rMA + 1, "MA side", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rMA + 1, aboveMA ? "LONG" : belowMA ? "SHORT" : "—", text_color=aboveMA or belowMA ? color.white : pText, bgcolor=aboveMA ? color.new(POS, 15) : belowMA ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    if useVwap
+        table.cell(panel, 0, rVwap, "VWAP", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rVwap, na(vwapVal) ? "—" : str.tostring(vwapVal, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        table.cell(panel, 0, rVwap + 1, "VWAP side", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rVwap + 1, aboveVwap ? "LONG" : belowVwap ? "SHORT" : "—", text_color=aboveVwap or belowVwap ? color.white : pText, bgcolor=aboveVwap ? color.new(POS, 15) : belowVwap ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    if useGate
+        table.cell(panel, 0, rGate, "Window", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rGate, activeWin, text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        table.cell(panel, 0, rGate + 1, "Gate", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rGate + 1, gateOpen ? "OPEN" : inFlat ? "FLAT" : "CLOSED", text_color=color.white, bgcolor=gateOpen ? color.new(POS, 15) : inFlat ? color.new(#5A5D68, 25) : color.new(NEG, 15), text_size=textSize, text_halign=text.align_center)
+    if useDP
+        table.cell(panel, 0, rDP, "Range pos", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rDP, na(dpPos) ? "—" : str.tostring(dpPos, "#.#") + "%", text_color=inDiscount or inPremium ? color.white : pText, bgcolor=inDiscount ? color.new(POS, 15) : inPremium ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    if useFvg
+        table.cell(panel, 0, rFvg, "FVG open", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rFvg, str.tostring(fvgOpen), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    if useLvl
+        table.cell(panel, 0, rLvl, "PDH / PDL", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rLvl, na(pdH) ? "—" : str.tostring(pdH, format.mintick) + " / " + str.tostring(pdL, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        table.cell(panel, 0, rLvl + 1, "Gate H / L", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rLvl + 1, na(sessHi) ? "—" : str.tostring(sessHi, format.mintick) + " / " + str.tostring(sessLo, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)

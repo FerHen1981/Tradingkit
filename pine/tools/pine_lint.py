@@ -27,7 +27,7 @@ plot plotshape plotchar plotcandle plotbar plotarrow fill bgcolor barcolor hline
 math str ta request strategy syminfo timeframe barstate session dayofweek dayofmonth month year weekofyear
 hour minute second timestamp input indicator library runtime ticker currency display size shape location
 style format text xloc yloc extend order position adjustment barmerge lookahead scale timenow
-dividends earnings splits linefill TradingView
+dividends earnings splits linefill TradingView simple series const input_ na_
 '''.split())
 
 
@@ -174,6 +174,8 @@ NON_CANONICAL_BY_DESIGN = {"MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine",
 
 def effective_delta_engine(src: str) -> str:
     """Welke motor voedt bullDirOk als je niets aan de inputs verandert?"""
+    if "bullDirOk" not in src and "cvdEngine" not in src:
+        return "n/a"          # dit bestand heeft geen delta-motor
     m = re.search(r'cvdEngine\s*=\s*input\.string\("([^"]+)"', src)
     if m is None:
         # Geen dropdown: er is maar een tak. Kijk welke.
@@ -186,7 +188,7 @@ def check_delta_engines(paths):
     for p in paths:
         eng = effective_delta_engine(open(p).read())
         name = p.split("/")[-1]
-        if eng == "proxy":
+        if eng in ("proxy", "n/a"):
             continue
         if name in NON_CANONICAL_BY_DESIGN:
             print(f"delta   {name:44} tv-delta (bewust, besluit Ferry 25-08)")

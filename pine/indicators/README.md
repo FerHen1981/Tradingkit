@@ -44,3 +44,29 @@ LONG, dan houdt geen enkel filter een long tegen.
 **Time gate OPEN/CLOSED**. De gates worden in dezelfde volgorde getoetst als in de strategie —
 weekdag → uur → market regime → force flat → risk-gate-venster — en het veld noemt de EERSTE
 die dicht staat. Zo weet je niet alleen dát er niet gehandeld wordt maar ook waardoor.
+
+## MPT Suite — de zes context-modules in één script
+
+`MPT_SUITE.pine` bundelt wat je normaal als losse indicatoren zou laden. Elke module heeft
+zijn eigen schakelaar in groep 0 en rekent alleen als hij aanstaat.
+
+| module | wat je krijgt |
+|---|---|
+| **1 Moving average** | type-dropdown (EMA/SMA/HMA/WMA/VWMA/RMA/DEMA/TEMA) + lengte + bron, plus een tweede MA voor context |
+| **2 VWAP** | los van de dropdown, met drie los instelbare σ-banden en optionele arcering |
+| **3 Time gate** | de negen regimevensters van de vloot, achtergrondkleur groen bij open en grijs in het force-flat-venster |
+| **4 Discount/Premium** | positie in de recente range, met de helften gearceerd |
+| **5 FVG** | dezelfde detectie als de strategieën, filter op filled/unfilled/beide en op size |
+| **6 Levels** | vorige dag/week/maand H-L (+ mid) en de high/low sinds het actieve venster openging |
+
+De tabel staat standaard **middle right** en toont per actieve module zijn huidige waarde.
+Zet hem op een andere hoek zodra je twee MPT-indicatoren tegelijk laadt: Pine tekent elke
+tabel op zijn eigen positie en er is geen offset, dus twee tabellen in dezelfde hoek
+overlappen elkaar.
+
+**De strategie is leidend.** De venstertijden en de FVG-formule zijn letterlijk overgenomen
+uit de `v1_0_0`-vloot. Wijkt er ooit iets af, dan is dit script fout en niet de strategie.
+
+De losse `MPT_EMA`, `MPT_TIME_GATE` en `MPT_DISCOUNT_PREMIUM` blijven bestaan voor wie er
+maar één wil laden; de suite vervangt ze functioneel.
+

@@ -93,6 +93,19 @@
 //   verdwijnen zodra ze geraakt zijn of 60 bars oud, en de overlay-filters (VWAP, EMA,
 //   volumeprofiel, discount/premium) tekenen mee zodra ze in deze configuratie filteren.
 //   De tijdvensters zijn in te tekenen met hun naam erboven, net als in de Suite.
+// v3.0.1 (26-08): laadtijd en zichtbaarheid.
+//   SNELHEID - drie posten draaiden ook als hun filter uit stond. request.* voert Pine
+//   ALTIJD uit, ook binnen een if die onwaar is, dus het volumeprofiel haalde elke
+//   minuut-bar op terwijl usePocFilter false was; die aanroep vraagt nu de chart-timeframe
+//   zodra het filter uit staat. BBWP draaide een lus over 255 bars op elke bar en MFI een
+//   HMA, allebei ongebruikt; die staan nu achter hun eigen schakelaar.
+//   ZICHTBAARHEID - drie dingen ontbraken, elk om een andere reden. De vensters stonden
+//   default UIT. Het FVG-size-filter stond op "In range", en dat is op MNQ 2-8 ticks, dus
+//   vrijwel alles viel af; nu "All". En de overlay-indicatoren hingen aan het FILTER in
+//   plaats van aan een weergavekeuze: met alle zes de filters default uit tekende er dus
+//   niets. Ze hebben nu eigen schakelaars; de tabel blijft tonen welke er echt filteren.
+//   "Filled"/"Both" op de FVG-weergave is eruit: geraakte gaps worden opgeruimd, dus die
+//   keuzes konden niets meer tonen.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -100,7 +113,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.0.0"
+var string currentVersion = "v3.0.1"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -902,8 +915,10 @@ bool showTradeLabels = lblParams
 bool showExitLabels  = lblOutcome
 
 // === 12 · VISUALS — INDICATORS ===============================================
-fvgFillMode = input.string("Both", "FVG", options=["Filled","Unfilled","Both"], inline="i1", group=GROUP_VIS, display=display.none)
-fvgSizeMode = input.string("In range", "", options=["In range","All"], inline="i1", group=GROUP_VIS,
+// Geraakte gaps worden nu opgeruimd, dus "Filled" en "Both" konden nooit meer iets tonen:
+// dode keuze, eruit. Wil je ze toch zien, dan is het de opruimregel die weg moet.
+string fvgFillMode = "Unfilled"
+fvgSizeMode = input.string("All", "", options=["In range","All"], inline="i1", group=GROUP_VIS,
      tooltip="Left: which gaps stay visible — Filled = price has traded back into the gap, Unfilled = still untouched, Both = show all. Right: In range = only gaps that pass the FVG size filter (group 9), i.e. the ones this strategy can actually trade; All = every gap on the chart. Visual only — neither dropdown touches the signal logic.", display=display.none)
 bool showFiltersBg = false   // "Filters valid" staat nu in de tabel, niet meer als achtergrond
 showTimeGateBg = input.bool(false, "TimeGate open", inline="i2", group=GROUP_VIS, display=display.none)
@@ -1298,7 +1313,10 @@ var float[] ltfC = array.new_float(0)
 var float[] ltfV = array.new_float(0)
 var int     vpStart = 0
 
-[_dO, _dC, _dH, _dL, _dV] = request.security_lower_tf(syminfo.tickerid, pocLowerTf, [open, close, high, low, volume])
+// request.* draait in Pine ALTIJD, ook binnen een if die onwaar is. Staat het filter uit,
+// dan halen we de chart-timeframe op in plaats van elke minuut-bar: dezelfde aanroep, maar
+// een fractie van de data. Dit was de zwaarste post in het script.
+[_dO, _dC, _dH, _dL, _dV] = request.security_lower_tf(syminfo.tickerid, usePocFilter ? pocLowerTf : timeframe.period, [open, close, high, low, volume])
 
 f_profileAdd(_o, _h, _l, _c, _v, _gap) =>
     for _i = 0 to array.size(vpVol) - 1
@@ -1375,7 +1393,9 @@ if usePocFilter
 
 float pocLevel = pocRef == "VAH" ? vahVal : pocRef == "VAL" ? valVal : pocVal
 
-float bbwpVal  = f_bbwp(close, bbwpLen, bbwpLookback, bbwpBasisType)
+// Alleen rekenen als het filter aanstaat: f_bbwp draait een lus over de hele lookback
+// (255 bars) op ELKE bar. Uit = na, en bbwpPass hieronder is dan sowieso true.
+float bbwpVal  = useBbwpFilter ? f_bbwp(close, bbwpLen, bbwpLookback, bbwpBasisType) : na
 bool  bbwpPass = not useBbwpFilter or (not na(bbwpVal) and bbwpVal >= bbwpMin and bbwpVal <= bbwpMax)
 
 float emaVal     = ta.ema(close, emaLen)
@@ -1391,7 +1411,7 @@ float _mfiRng = _mfiH - _mfiL
 // Vlakke bar -> geen range -> geen uitspraak. nz() zou hier een 0 verzinnen, en 0 telt in
 // dit veto als richting.
 float _mfiCV  = _mfiRng == 0 ? na : (_mfiC - _mfiO) / _mfiRng
-float mfiVal  = ta.hma(nz(_mfiCV, nz(_mfiCV[1], 0)), mfiPeriod) * -1
+float mfiVal  = useMfiFilter ? (ta.hma(nz(_mfiCV, nz(_mfiCV[1], 0)), mfiPeriod) * -1) : na
 bool  mfiLongOK  = not useMfiFilter or mfiVal > 0
 bool  mfiShortOK = not useMfiFilter or mfiVal < 0
 
@@ -2268,16 +2288,24 @@ plot(showPending and pendingActive ? pendStop : na, "Planned Stop", color=color.
 plot(showTradeLevels and not flatNow ? curStop : na, "Active Stop", color=color.new(color.red, 0), style=plot.style_linebr, linewidth=2)
 plot(showTradeLevels and not flatNow ? curLimit : na, "Take Profit", color=color.new(color.green, 0), style=plot.style_linebr, linewidth=2)
 plot(showTradeLevels and not flatNow ? entryAvg : na, "Entry", color=color.new(color.blue, 0), style=plot.style_linebr, linewidth=1)
-// Overlay-filters: alleen tekenen als ze in deze configuratie ook echt filteren. MFI, BBWP
-// en ATR staan er bewust niet bij - dat zijn oscillatoren en die horen niet op de prijsas.
-plot(useVwapVeto ? vwapVal : na, "VWAP", color=color.new(color.purple, 30), linewidth=1)
-plot(useEmaFilter ? emaVal : na, "EMA filter", color=close > emaVal ? color.new(vPOS, 20) : color.new(vNEG, 20), linewidth=2)
-plot(usePocFilter ? pocLevel : na, "Volume profile", color=color.new(color.orange, 20), linewidth=1, style=plot.style_linebr)
-_pDpHi  = plot(useDpFilter ? _dpHi : na, "Range high", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)
-_pDpLo  = plot(useDpFilter ? _dpLo : na, "Range low", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)
-_pDpMid = plot(useDpFilter ? _dpLo + (_dpHi - _dpLo) * dpMid / 100.0 : na, "Range mid", color=color.new(vText, 50), linewidth=1, style=plot.style_linebr)
-fill(_pDpMid, _pDpHi, color=useDpFilter ? color.new(vNEG, 95) : na, title="Premium")
-fill(_pDpLo, _pDpMid, color=useDpFilter ? color.new(vPOS, 95) : na, title="Discount")
+// Overlay-indicatoren. LET OP het onderscheid: deze schakelaars bepalen of je de lijn ZIET,
+// niet of de strategie erop FILTERT. Dat waren ze eerst aan elkaar geknoopt, en omdat alle
+// zes de filters default uit staan zag je dus niets op de chart. De tabel laat wel zien
+// welke er echt filteren. MFI, BBWP en ATR staan er niet bij: oscillatoren horen niet op
+// de prijsas.
+showVwapLine = input.bool(true,  "VWAP", inline="ov1", group=GROUP_VIS, display=display.none)
+showEmaLine  = input.bool(true,  "EMA",  inline="ov1", group=GROUP_VIS, display=display.none)
+showPocLine  = input.bool(false, "Volume profile", inline="ov2", group=GROUP_VIS, display=display.none)
+showDpBand   = input.bool(false, "Discount/Premium", inline="ov2", group=GROUP_VIS,
+     tooltip="Tekenen is los van filteren. Volume profile staat default uit omdat het profiel intrabar-data ophaalt en dat is de duurste post in het script - zet hem alleen aan als je hem nodig hebt.")
+plot(showVwapLine ? vwapVal : na, "VWAP", color=color.new(color.purple, 30), linewidth=1)
+plot(showEmaLine ? emaVal : na, "EMA " + str.tostring(emaLen), color=close > emaVal ? color.new(vPOS, 20) : color.new(vNEG, 20), linewidth=2)
+plot(showPocLine ? pocLevel : na, "Volume profile", color=color.new(color.orange, 20), linewidth=1, style=plot.style_linebr)
+_pDpHi  = plot(showDpBand ? _dpHi : na, "Range high", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)
+_pDpLo  = plot(showDpBand ? _dpLo : na, "Range low", color=color.new(vText, 70), linewidth=1, style=plot.style_linebr)
+_pDpMid = plot(showDpBand ? _dpLo + (_dpHi - _dpLo) * dpMid / 100.0 : na, "Range mid", color=color.new(vText, 50), linewidth=1, style=plot.style_linebr)
+fill(_pDpMid, _pDpHi, color=showDpBand ? color.new(vNEG, 95) : na, title="Premium")
+fill(_pDpLo, _pDpMid, color=showDpBand ? color.new(vPOS, 95) : na, title="Discount")
 // === v6.0: FULL-LOGIC GATE VISUALISATION ====================================
 bool gateLongOpen  = canTrade and bullCvdPass and sigLongOK and canLong  and vetoLongOK  and sweepLongOK
 bool gateShortOpen = canTrade and bearCvdPass and sigShortOK and canShort and vetoShortOK and sweepShortOK
@@ -2347,7 +2375,7 @@ if not flatNow and posSize != 0
 // erboven. WELKE vensters: bij "All sessions" alle negen, anders die je in groep 3 hebt
 // aangevinkt - ook onder Liquidity Core, want daar wil je zien wat je geselecteerd hebt
 // en niet een vaste drie (besluit Ferry 25-08).
-showGateBoxes = input.bool(false, "Draw the time-gate windows", inline="gw", group=GROUP_VIS, display=display.none)
+showGateBoxes = input.bool(true, "Draw the time-gate windows", inline="gw", group=GROUP_VIS, display=display.none)
 gateBoxKeep   = input.int(6, "keep", minval=1, maxval=40, inline="gw", group=GROUP_VIS,
      tooltip="Box van high naar low over de duur van het venster, met de naam erbij. Het getal is hoeveel vensters er blijven staan, over alle vensters samen.")
 var array<bool>  gwWasIn  = array.new_bool(9, false)

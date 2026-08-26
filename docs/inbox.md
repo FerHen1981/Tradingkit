@@ -3670,3 +3670,55 @@ trading-middleware te hebben neergezet. `README.md` en `CLAUDE.md` noemen hem al
 dezelfde dode wegwijzer als de default branch uit D-58. Beslis het in jullie map — ik pas
 `CLAUDE.md` en `README.md` aan zódra jullie beslist hebben, niet eerder, anders spreekt de
 documentatie de repo tegen.
+
+---
+
+## 26-08 · Pine Dev → Scrum Master + iedereen: v3.2.0 staat op alle dertien scripts
+
+**De vloot is uitgerold.** EL REY MNQ PROD EOD was de template op v3.2.0; de andere twaalf stonden
+op v2.3.2. Alle dertien staan nu op v3.2.0. `pine_lint` is schoon op alle dertien.
+
+**Geen enkele engine-parameter is aangeraakt.** Ik heb alle dertien scripts uitgelezen en gekruist
+tegen `frozen-engines.md` — contractgrootte, FVG-range, CVD-lengte, stop, R-multiple en expiry
+komen overal exact overeen. v3.2.0 is een weergave-, alert- en snelheidsrelease. Het overzicht dat
+Ferry heeft goedgekeurd staat in `docs/handoff/FLEET_SETTINGS_v3.md`.
+
+**Wat er praktisch verandert:** drie-laags dashboard met vandaag-stats en een TRADE-laag die altijd
+zichtbaar is · één tekstblok per trade · time-gate vensters ingetekend met hun naam · ARMED-alert
+zodra een venster opengaat · trade-annotaties op een eigen tekenvenster (default de hele history,
+caps van 40/80 naar 480) · overlay-indicatoren met eigen schakelaar · `routeMiddleware` is geen knop
+meer maar een constante.
+
+**Snelheid — relevant voor wie op laadtijd stuurt.** Elf van de dertien scripts doen nu **nul**
+`request.*`-aanroepen. EL PATRON en EL TESORO houden er twee, omdat hun delta-motor onder D-66 een
+openstaande onderzoeksvraag is (optie C, besluit Ferry 25-08): de dropdown én de
+`ta.requestVolumeDelta`-tak blijven daar staan. **Die twee laden daardoor merkbaar trager dan de
+rest, en dat is inherent aan die keuze** — niet iets wat ik er nog uit kan optimaliseren zolang
+D-66 open staat.
+
+### 🟠 Voor de Scrum Master: EL TORO stond op de verkeerde trailing drawdown
+
+De vier EL TORO-scripts draaien met `useFirmPreset = false`, dus hun handmatige `acctTrailDD` is
+wat er écht telt — en die stond op **$2.500**. Hun eigen programmasleutel (`apex_50k_intraday_eval`
+/ `apex_50k_eod_eval`) draagt in de registry sinds D-67 **$2.000 met lock $2.100**, de Apex
+4.0-waarde. Op een 4.0-eval was $2.500 dus te ruim: het script rekende speling waar de firma al
+gebreacht heeft. **Rechtgezet naar $2.000**, met een tooltip die zegt dat je hem op een *legacy*
+eval handmatig terug op 2500 moet zetten. Ferry akkoord 26-08.
+
+Let op de asymmetrie met D-67: daar bleek `propfirms.json` fout en de scripts goed. Hier was het
+andersom voor de vier TORO's. **De negen funded scripts waren wél goed** — die draaien met de
+preset aan en lezen de registry.
+
+### 🟡 Melding buiten mijn map
+
+Ik heb twee bestanden in `docs/handoff/` gezet: `FLEET_SETTINGS_v3.md` (het door Ferry goedgekeurde
+instellingenoverzicht per script) en `MEX_Rolverdeling_vloot_2026-08-26.pdf` (een rapport op Ferry's
+verzoek: welke strategie doel heeft en waar hij tot zijn recht komt). Het PDF-bouwscript staat in
+mijn eigen map, `pine/tools/build_fleet_role_pdf.py`, zodat het reproduceerbaar is.
+
+**Het rapport claimt niets nieuws.** Het staat volledig op de sweep van 25-08 en op
+`validation/FLEET_sweep_20260825.md`, neemt de open poorten van LEON en REY over als **ongeldig**
+(niet "indicatief"), houdt het MGC-voorbehoud op PATRON en TESORO overeind inclusief de afwijzing,
+en zet in het slot expliciet dat er geen out-of-sample bewijs, geen geldige rangorde en geen
+aangetoonde decorrelatie is. Als jullie vinden dat er toch iets in staat dat verder gaat dan de
+bewijstoestand toelaat: zeg het, dan haal ik het eruit.

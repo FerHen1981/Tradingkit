@@ -130,6 +130,12 @@
 //   conform de spec: richting, size @ entry, TP / SL, BE / Trail en open PnL. Een
 //   niet-opgepikte limietorder toont zijn entry en stop maar nog geen TP - die bestaat
 //   op dat moment ook niet.
+// v3.2.0 (26-08): trades blijven veel langer op de chart staan. Er waren twee limieten en
+//   allebei knepen ze. Het tekenvenster is nu gesplitst: FVG-boxen en sessievensters houden
+//   het korte venster (die ontstaan met tientallen per dag en zijn de dure post), de
+//   trade-zones, het tekstblok en de exit-labels krijgen hun eigen venster met default 0 =
+//   de hele history. En de harde caps van 40 boxen / 80 labels - met drie labels per trade
+//   zag je maar zo'n 26 trades terug - staan nu op 480, net onder wat Pine toestaat.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -137,7 +143,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.1.1"
+var string currentVersion = "v3.2.0"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -954,6 +960,12 @@ color bullColor    = color.new(color.green, 85)
 color bearColor    = color.new(color.red, 85)
 color testedColor  = color.new(color.gray, 88)
 bool  inDrawWin    = drawLast <= 0 or (last_bar_index - bar_index) <= drawLast
+// Twee vensters, want het zijn twee heel verschillende kosten. FVG-boxen en sessievensters
+// ontstaan met tientallen per dag - die houden we kort. Trade-annotaties ontstaan alleen bij
+// een trade, dus die mogen veel verder terug: dat is wat je wil terugzien op je chart.
+tradeDrawLast = input.int(0, "Trade annotations: last N bars (0 = all)", minval=0, group=GROUP_VIS,
+     tooltip="Geldt voor de trade-zones, het tekstblok en de exit-labels. 0 = de hele history. Staat los van het korte venster dat de FVG-boxen en de sessievensters begrenst; die ontstaan met tientallen per dag en zijn wél de dure post.")
+bool  inTradeDrawWin = tradeDrawLast <= 0 or (last_bar_index - bar_index) <= tradeDrawLast
 
 
 // === v5.5: THEMA-PALET =======================================================
@@ -1854,7 +1866,7 @@ f_journal(string _event, int _dir, string _status, float _entry, float _stop, fl
 // ============================================================================
 var array<box> unfilledBoxes = array.new<box>()
 f_markUnfilled(_fromBar, _px, _replaced) =>
-    if showExpired and inDrawWin and not na(_px)
+    if showExpired and inTradeDrawWin and not na(_px)
         _b = box.new(_fromBar, _px + 2 * syminfo.mintick, bar_index, _px - 2 * syminfo.mintick,
              border_color=_replaced ? color.new(color.orange, 30) : color.new(color.gray, 30),
              border_style=line.style_dashed, bgcolor=color.new(color.gray, 90),
@@ -2028,12 +2040,15 @@ if strategy.closedtrades > lastClosedSeen
     lastClosedSeen := strategy.closedtrades
 var array<box>   drawHistB = array.new<box>()
 var array<label> drawHistL = array.new<label>()
+// Dit was de echte begrenzing: 40 boxen en 80 labels, en met drie labels per trade zag je
+// dus maar zo'n 26 trades terug. Pine staat er 500 toe en die gebruiken we nu, met de
+// oudste die als eerste sneuvelt.
 f_capDrawings() =>
-    while array.size(drawHistB) > 40
+    while array.size(drawHistB) > 480
         box.delete(array.shift(drawHistB))
-    while array.size(drawHistL) > 80
+    while array.size(drawHistL) > 480
         label.delete(array.shift(drawHistL))
-if showExitLabels and flatNow and nz(posSize[1]) != 0 and strategy.closedtrades > 0 and inDrawWin
+if showExitLabels and flatNow and nz(posSize[1]) != 0 and strategy.closedtrades > 0 and inTradeDrawWin
 
     int   _ti  = strategy.closedtrades - 1
     float _xp  = strategy.closedtrades.exit_price(_ti)
@@ -2348,10 +2363,10 @@ if inDrawWin and barstate.isconfirmed
         f_evtLabel("🪤 Trail armed · exit $" + str.tostring(nz(rgExitLvl, riskDayPeak - dayTrailGivebackEff), "#"), color.new(color.teal, 20))
 // === v5.5: TRADE-ZONES (licht gevulde entry<->SL en entry<->TP banden) ======
 if (newLong or newShort)
-    if showTradeZones and inDrawWin
+    if showTradeZones and inTradeDrawWin
         zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
         zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)
-    if showTradeLabels and inDrawWin
+    if showTradeLabels and inTradeDrawWin
         tradeEntryDiag := sigDiag + "|SL" + str.tostring(math.round(math.abs(entryAvg - curStop) / syminfo.mintick)) + "t"
         tradeExitDiag  := ""
         tradeInfo := label.new(bar_index + 2, entryAvg, "", style=label.style_none, textcolor=vText, size=size.small, textalign=text.align_left)

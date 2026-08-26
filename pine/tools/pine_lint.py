@@ -231,8 +231,11 @@ def effective_delta_engine(src: str) -> str:
         return "n/a"          # dit bestand heeft geen delta-motor
     m = re.search(r'cvdEngine\s*=\s*input\.string\("([^"]+)"', src)
     if m is None:
-        # Geen dropdown: er is maar een tak. Kijk welke.
-        return "proxy" if re.search(r'^bool bullDirOk = proxyDir', src, re.M) else "tv-delta"
+        # Geen dropdown. Dan is er een constante, of maar een tak: kijk welke.
+        c = re.search(r'string cvdEngine\s*=\s*"([^"]+)"', src)
+        if c is not None:
+            return "proxy" if c.group(1).startswith("Research") else "tv-delta"
+        return "proxy" if re.search(r'bullDirOk\s*:?=\s*proxyDir', src) else "tv-delta"
     return "proxy" if m.group(1).startswith("Research") else "tv-delta"
 
 

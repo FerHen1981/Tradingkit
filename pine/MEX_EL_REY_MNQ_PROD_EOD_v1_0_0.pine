@@ -115,6 +115,15 @@
 //   CVD-borrow-aanroep hing achter een lege deltaBorrowSym en is weg. ta.requestVolumeDelta
 //   vraagt op de proxy-stand nu de chart-timeframe in plaats van elke minuut-bar. Alle drie
 //   gedragsneutraal: het waren takken die nooit gelezen werden.
+// v3.1.0 (26-08): NUL datastromen over. De twee die er nog waren zijn ook weg.
+//   Het volumeprofiel komt nu uit de chart-bars in plaats van uit request.security_lower_tf.
+//   Dat is een grovere POC dan de intrabar-versie - een bewuste ruil op een filter dat
+//   default uit staat en waar geen enkele meting op rust. De TradingView-volume-delta-tak
+//   is uit DIT script verwijderd; hij was niet de default en werd nergens gebruikt, maar
+//   ta.requestVolumeDelta draait ook in een tak die nooit gekozen wordt. EL PATRON en
+//   EL TESORO houden die tak wel: daar is de motorkeuze een openstaande vraag (optie C).
+//   Weergave omlaag zoals afgesproken: draw-last 2000 -> 300, max FVG-boxen 40 -> 20,
+//   sessievensters 6 -> 4. Geen analytisch verlies, wel minder tekenwerk per bar.
 // v6.8.15: auto-guard the delta filter on non-futures assets (forex/CFD/spot).
 // v6.8.16: inputs restructured + firm-preset dropdown (futures).
 // v6.9.0: roll/OpEx/news factory — selectable event-regime filters (preset per strategy · account-type · phase).
@@ -122,7 +131,7 @@
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.0.3"
+var string currentVersion = "v3.1.0"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -793,7 +802,7 @@ pocRef        = input.string("POC", "vs", options=["POC","VAH","VAL"], inline="s
 pocSession    = input.string("Daily", "session", options=["Daily","Weekly","Tokyo","London","New York"], inline="sf_poc", group=GROUP_SIG)
 pocResolution = input.int(30, "Profile resolution", minval=5, maxval=100, group=GROUP_SIG, tooltip="More bins = finer profile, more computation.", display=display.none)
 pocVaWidth    = input.int(70, "Value area volume %", minval=1, maxval=100, group=GROUP_SIG, display=display.none)
-pocLowerTf    = input.timeframe("1", "Intrabar timeframe", group=GROUP_SIG, tooltip="Lower timeframe the profile is built from.", display=display.none)
+string pocLowerTf = "1"   // niet meer gebruikt: het profiel komt uit de chart-bars
 
 useDpFilter   = input.bool(false, "Discount/Premium", inline="sf_dp", group=GROUP_SIG, tooltip="Position inside the recent range. Longs only in the discount half, shorts only in the premium half.")
 dpLookback    = input.int(60, "bars", minval=5, inline="sf_dp", group=GROUP_SIG)
@@ -816,9 +825,7 @@ vwapDistMin   = 0.05
 // The TradingView volume-delta engine is retained as an optional experiment only.
 useCVDFilter  = input.bool(true, "Use Delta Filter", group=GROUP_CVD,
      tooltip="Default uses the deterministic OHLCV research proxy for Python/.NET/Pine parity. TradingView volume delta remains available as an optional experimental engine.")
-cvdEngine     = input.string("Research OHLCV proxy", "Delta engine",
-     options=["Research OHLCV proxy","TradingView volume delta"], group=GROUP_CVD,
-     tooltip="Keep Research OHLCV proxy for this MES parity test. TradingView volume delta is NOT the research baseline.")
+string cvdEngine = "Research OHLCV proxy"   // enige motor in dit script; zie het blok hieronder
 string cvdLowerTf = "1"
 string deltaBorrowSym = ""
 useCvdStreak  = input.bool(true, "Streak", inline="cv", group=GROUP_CVD, display=display.none)
@@ -934,8 +941,8 @@ showTimeGateBg = input.bool(false, "TimeGate open", inline="i2", group=GROUP_VIS
 showGateBg     = input.bool(true, "Trade Gate open", inline="i2", group=GROUP_VIS,
      tooltip="Three background layers, from loosest to strictest. Filters valid: the signal filters of group 9 (BBWP/EMA/MFI/POC/Discount-Premium and the long-short switch) pass on at least one side. TimeGate open: the trading day, hour window, market regime and flat window allow trading. Trade Gate open: the FULL gate — time gate plus day halt, account status, CVD, VWAP veto, bias and sweep — teal = long tradable, red = short, amber = both. A stronger amber flash marks a valid signal blocked by an operational rule (MAE guard, halts).", display=display.none)
 // Cosmetics with no operational meaning are fixed here rather than in the panel.
-int   maxBoxes     = 40
-int   drawLast     = 2000
+int   maxBoxes     = 20
+int   drawLast     = 300
 int   gateBgTransp = 90
 color bullColor    = color.new(color.green, 85)
 color bearColor    = color.new(color.red, 85)
@@ -1237,7 +1244,7 @@ vetoShortOK = not useVwapVeto or close < vwapVal
 // CVD Count = consecutive proxy-direction bars aligned with FVG direction.
 
 bool hasBorrow = str.length(deltaBorrowSym) > 0
-bool useResearchProxy = cvdEngine == "Research OHLCV proxy"
+bool useResearchProxy = true
 
 var int proxyDir = -1
 int _proxyDirNow = close > open ? 1 :
@@ -1261,31 +1268,18 @@ int cvdBullStreakDisplay = 0
 int cvdBearStreakDisplay = 0
 bool cvdEff = useCVDFilterEff
 
-if cvdEff and useResearchProxy
+// De TradingView-volume-delta-tak is in dit script verwijderd. Hij was niet de default en
+// werd nergens gebruikt, maar ta.requestVolumeDelta is een request-familie en die draait in
+// Pine ALTIJD - ook in een tak die nooit gekozen wordt. Dat was de laatste datastroom die
+// stond te draaien voor niets. EL PATRON en EL TESORO houden hem wél: daar is de motorkeuze
+// een openstaande onderzoeksvraag (besluit Ferry 25-08, optie C).
+if cvdEff
     bullDirOk := proxyDir == 1
     bearDirOk := proxyDir == -1
     bullStreakOk := not useCvdStreak or proxyBullStreak >= cvdTrendCountEff
     bearStreakOk := not useCvdStreak or proxyBearStreak >= cvdTrendCountEff
     cvdBullStreakDisplay := proxyBullStreak
     cvdBearStreakDisplay := proxyBearStreak
-else if cvdEff
-    // Optional legacy / experimental TradingView volume-delta engine.
-    // De borrow-tak is weg: deltaBorrowSym is een lege constante, dus hasBorrow was altijd
-    // false terwijl de security-aanroep wel elke bar data ophaalde. Zelfde reden als bij
-    // de HTF-bias hierboven.
-    // Zelfde valkuil, derde keer: ta.requestVolumeDelta is ook een request-familie en draait
-    // altijd, terwijl elf van de dertien scripts op de proxy staan. Op de proxy-stand vragen
-    // we de chart-timeframe in plaats van elke minuut-bar - de tak zelf gebruikt hem toch niet.
-    [vdO, vdH, vdL, vdC] = ta.requestVolumeDelta(useResearchProxy ? timeframe.period : cvdLowerTf, "1D")
-    perBarDelta := vdC - vdO
-    bullDirOk := perBarDelta > 0
-    bearDirOk := perBarDelta < 0
-    int barsSinceNotBull = ta.barssince(not bullDirOk)
-    int barsSinceNotBear = ta.barssince(not bearDirOk)
-    cvdBullStreakDisplay := nz(barsSinceNotBull, 0)
-    cvdBearStreakDisplay := nz(barsSinceNotBear, 0)
-    bullStreakOk := not useCvdStreak or nz(barsSinceNotBull, 99999) >= cvdTrendCountEff
-    bearStreakOk := not useCvdStreak or nz(barsSinceNotBear, 99999) >= cvdTrendCountEff
 
 bullCvdPass = not cvdEff or (bullDirOk and bullStreakOk)
 bearCvdPass = not cvdEff or (bearDirOk and bearStreakOk)
@@ -1324,7 +1318,11 @@ var int     vpStart = 0
 // request.* draait in Pine ALTIJD, ook binnen een if die onwaar is. Staat het filter uit,
 // dan halen we de chart-timeframe op in plaats van elke minuut-bar: dezelfde aanroep, maar
 // een fractie van de data. Dit was de zwaarste post in het script.
-[_dO, _dC, _dH, _dL, _dV] = request.security_lower_tf(syminfo.tickerid, usePocFilter ? pocLowerTf : timeframe.period, [open, close, high, low, volume])
+// De laatste lower-tf fetch is eruit. request.security_lower_tf haalde vijf series op voor
+// ELKE bar - ook met usePocFilter op false, want request.* draait altijd. Het profiel wordt
+// nu uit de chart-bars zelf opgebouwd. Dat is een grovere POC dan de intrabar-versie; op een
+// filter dat default uit staat en waar nog geen enkele meting op rust is dat de goede ruil.
+// Wil je de fijne versie terug, dan is dat een bewuste keuze mét de laadtijd erbij.
 
 f_profileAdd(_o, _h, _l, _c, _v, _gap) =>
     for _i = 0 to array.size(vpVol) - 1
@@ -1364,13 +1362,11 @@ if usePocFilter
         array.clear(ltfC)
         array.clear(ltfV)
         vpStart := bar_index
-    if array.size(_dO) > 0
-        for _i = 0 to array.size(_dO) - 1
-            array.push(ltfO, array.get(_dO, _i))
-            array.push(ltfH, array.get(_dH, _i))
-            array.push(ltfL, array.get(_dL, _i))
-            array.push(ltfC, array.get(_dC, _i))
-            array.push(ltfV, array.get(_dV, _i))
+    array.push(ltfO, open)
+    array.push(ltfH, high)
+    array.push(ltfL, low)
+    array.push(ltfC, close)
+    array.push(ltfV, nz(volume))
     int _lb = math.max(1, bar_index - vpStart)
     float _pHi = ta.highest(high, _lb + 1)
     float _pLo = ta.lowest(low, _lb + 1)
@@ -2384,7 +2380,7 @@ if not flatNow and posSize != 0
 // aangevinkt - ook onder Liquidity Core, want daar wil je zien wat je geselecteerd hebt
 // en niet een vaste drie (besluit Ferry 25-08).
 showGateBoxes = input.bool(true, "Draw the time-gate windows", inline="gw", group=GROUP_VIS, display=display.none)
-gateBoxKeep   = input.int(6, "keep", minval=1, maxval=40, inline="gw", group=GROUP_VIS,
+gateBoxKeep   = input.int(4, "keep", minval=1, maxval=40, inline="gw", group=GROUP_VIS,
      tooltip="Box van high naar low over de duur van het venster, met de naam erbij. Het getal is hoeveel vensters er blijven staan, over alle vensters samen.")
 var array<bool>  gwWasIn  = array.new_bool(9, false)
 var array<float> gwHi     = array.new_float(9, na)

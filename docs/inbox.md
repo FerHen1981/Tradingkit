@@ -3564,3 +3564,58 @@ Drie plekken, en de derde is de vervelendste:
 Die laatste faalt niet, hij liegt zachtjes. **Maak er een harde fout van.** En lees alle drie uit de
 registry, met een expliciete fout als het programma er niet in staat — dezelfde regel die D-08 voor
 Pine vastlegde.
+
+---
+
+## 32 — Pine Dev → Scrum Master + Backtest Setup · D-66 is minder erg dan hij lijkt: 11 van de 13 zijn wél canoniek
+
+Ik heb dit zelf aangezwengeld (inbox 24) voor PATRON en TESORO, en de opschaling naar
+"9 van de 9" klopt niet. Dat wil ik rechtzetten voordat er cijfers op worden ingetrokken.
+
+### De meting telt de verkeerde dingen
+
+`grep ta.requestVolumeDelta` vindt in élk script drie treffers, en twee daarvan zijn géén
+motor:
+
+1. `// Research parity rule: canonical CVD is ... NOT ta.requestVolumeDelta().` — de
+   commentaarregel die de canonieke regel uitlegt.
+2. `// IMPORTANT: this is intentionally independent of ta.requestVolumeDelta().`
+3. de aanroep zelf, in de **niet-default tak** van de dubbele motor.
+
+De naam van de functie staat dus in de scripts *omdat* ze de regel volgen.
+
+### Wat wél telt: wat voedt `bullDirOk` op de default-stand
+
+| lijn | scripts | motor bij default |
+|---|---|---|
+| EL TORO | 4 | **proxy — er is niet eens een tweede tak** (`bool bullDirOk = proxyDir == 1`) |
+| REY ×2, LEON ×3, MATADOR, BANDIDO | 7 | **proxy** — `cvdEngine` default `"Research OHLCV proxy"` |
+| PATRON, TESORO | 2 | TV-delta — **bewust**, besluit Ferry 25-08 (optie C) |
+
+**11 van de 13 canoniek.** En dit is niet iets dat mijn v2.2.0-port heeft rechtgezet: op
+`810531c~1`, dus vóór die port, stond REY's `cvdEngine` al op `"Research OHLCV proxy"`.
+Geverifieerd in git, niet uit het hoofd.
+
+### Wat dat betekent voor de cijfers
+
+> ➡️ **MATADOR draait canoniek. De $30,59 wordt hier niet door geraakt.**
+
+De vraag versmalt tot de MGC-bucket — PATRON en TESORO — en die staat sowieso al onder het
+twin-voorbehoud. Er hoeft dus geen enkel index-cijfer op deze grond te vervallen.
+
+### Vastgezet als poort, zodat dit niet opnieuw op een naam-grep hoeft
+
+`pine/tools/pine_lint.py` meet nu de **effectieve default-motor** per script en faalt op elk
+script dat niet canoniek is. PATRON en TESORO staan in `NON_CANONICAL_BY_DESIGN`, dus hun
+afwijking blijft zichtbaar in de uitvoer in plaats van weggemoffeld:
+
+```
+delta   MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine        tv-delta (bewust, besluit Ferry 25-08)
+delta   MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine        tv-delta (bewust, besluit Ferry 25-08)
+```
+
+Regressietest: zet ik REY's default op TV-delta, dan faalt de linter met de naam erbij.
+
+**Scrum Master:** ik heb D-66 op `review` gezet met de Pine-kant erin. De Backtest-kant van
+de vraag — of de sweep en de scripts hetzelfde filter draaien — is hiermee beantwoord voor
+elf scripts en blijft open voor de twee MGC-engines.

@@ -3,7 +3,7 @@
 
 //@version=6
 // ============================================================================================
-//  MPT Suite v1.1 — de context-indicatoren van de MEX-vloot in één script
+//  MPT Suite v1.2 — de context-indicatoren van de MEX-vloot in één script
 // ============================================================================================
 //  Zes modules, elk los aan of uit:
 //
@@ -29,8 +29,17 @@
 //  vulcontrole leest daarvoor niet meer de rechterrand van de box maar de bar waarop de
 //  gap ontstond - anders zou een doorlopende box zichzelf nooit meer als gevuld zien.
 //  Sessions is nieuw: per venster een box van high naar low met de naam erbij.
+//
+//  v1.2 (25-08): de FVG-module opgetrokken naar wat het losse "Fair Value Gap [MΞX]"-script
+//  doet, maar zelf geschreven - dat script staat onder CC BY-NC-SA en die licentie past
+//  niet op deze repo, dus overnemen van code kon niet. Wat er nu in zit: mitigatie in
+//  plaats van alleen "geraakt" (Touched of Closed through), een relatieve Threshold %
+//  met Auto-stand naast het tick-filter, stippellijnen op de N jongste openstaande
+//  randen, en teller plus mitigatiepercentage in de tabel. De detectie blijft default
+//  die van de vloot; "Confirmed close" is er als alternatief en is expliciet NIET wat
+//  de strategie neemt.
 // ============================================================================================
-indicator("MPT Suite v1.1", "MPT Suite", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("MPT Suite v1.2", "MPT Suite", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // === 0 · SUITE ==============================================================
 var string G_SUITE = "0 · SUITE — modules"
@@ -105,14 +114,23 @@ dpMid      = input.float(50, "mid %", minval=1, maxval=99, step=1, inline="d1", 
 dpShade    = input.bool(true, "Shade the halves", group=G_DP, display=display.none)
 
 // === 5 · FVG ================================================================
-fvgFillMode = input.string("Both", "Show", options=["Filled","Unfilled","Both"], inline="f1", group=G_FVG)
+fvgDetect = input.string("Fleet (strategy)", "Detection", options=["Fleet (strategy)","Confirmed close"], group=G_FVG,
+     tooltip="Fleet = exact de formule van de strategieen: low >= high[2] voor bullish. Confirmed close eist er bovendien op dat de middelste bar VOORBIJ de gap sluit; dat geeft minder en schonere gaps, maar het is NIET wat de strategie neemt. Zet je hem om, dan kijk je naar een andere set dan waarop gehandeld wordt.")
+fvgMitig  = input.string("Touched", "Mitigated when", options=["Touched","Closed through"], group=G_FVG,
+     tooltip="Touched = zodra prijs de gap raakt, wat de strategie 'getest' noemt. Closed through = pas als een bar helemaal voorbij de andere kant sluit; dat houdt gaps langer levend.")
+fvgFillMode = input.string("Both", "Show", options=["Mitigated","Unmitigated","Both"], inline="f1", group=G_FVG)
 fvgSizeMode = input.string("All", "", options=["In range","All"], inline="f1", group=G_FVG,
      tooltip="In range = alleen gaps binnen het size-venster hieronder, dus wat de strategie zou kunnen nemen. All = elke gap.")
 fvgMinT = input.float(2,  "Min size (ticks)", minval=0, inline="f2", group=G_FVG)
 fvgMaxT = input.float(8,  "Max", minval=0.01, inline="f2", group=G_FVG,
      tooltip="Alleen gebruikt als het filter links op In range staat. Defaults volgen EL REY MNQ.")
-fvgExtend = input.bool(true, "Extend the boxes to the right until they fill", group=G_FVG,
-     tooltip="Uit = de gap blijft drie bars breed, zoals de strategie hem intern bijhoudt. Aan = hij loopt door tot hij gevuld is, en dat is wat je op een chart wilt zien.")
+fvgThrPct  = input.float(0, "Threshold %", minval=0, maxval=100, step=0.1, inline="f3", group=G_FVG)
+fvgThrAuto = input.bool(false, "Auto", inline="f3", group=G_FVG,
+     tooltip="Relatief size-filter naast het tick-filter: de gap moet groter zijn dan dit percentage van de prijs. Auto gebruikt de gemiddelde bar-range over de hele history in plaats van een vast getal. 0 en Auto uit = geen drempel.")
+fvgExtend = input.bool(true, "Extend the boxes to the right until they mitigate", group=G_FVG,
+     tooltip="Uit = de gap blijft drie bars breed, zoals de strategie hem intern bijhoudt. Aan = hij loopt door tot hij gemitigeerd is, en dat is wat je op een chart wilt zien.")
+fvgLevels = input.int(0, "Draw the last N unmitigated levels", minval=0, maxval=20, group=G_FVG,
+     tooltip="Een stippellijn op de rand die nog niet geraakt is: bij een bullish gap de onderkant, bij een bearish de bovenkant. 0 = geen lijnen.")
 fvgMax  = input.int(60, "Max boxes on the chart", minval=1, maxval=200, group=G_FVG, display=display.none)
 
 // === 6 · LEVELS =============================================================
@@ -264,34 +282,50 @@ pMid = plot(dpMidPx, "Range mid", color=pMuted, linewidth=1, style=plot.style_li
 fill(pMid, pHi, color=useDP and dpShade ? color.new(NEG, 94) : na, title="Premium")
 fill(pLo, pMid, color=useDP and dpShade ? color.new(POS, 94) : na, title="Discount")
 
-// === 5 · FVG — dezelfde detectie als de strategieën =========================
+// === 5 · FVG — motor ========================================================
+// De Fleet-tak is letterlijk de formule uit de strategieen. De Confirmed-tak eist er de
+// close van de middelste bar bij: leest schoner op een chart, maar is NIET wat er
+// gehandeld wordt, en dat zegt de tooltip er ook bij.
+float fvgThr = fvgThrAuto ? ta.cum((high - low) / low) / math.max(bar_index, 1) : fvgThrPct / 100.0
 int fvgDir = 0
 float fvgTop = na
 float fvgBot = na
 if useFvg and bar_index >= 2
-    fvgDir := low[2] >= high ? -1 : low >= high[2] ? 1 : 0
+    bool _bull = fvgDetect == "Confirmed close" ? (low > high[2] and close[1] > high[2]) : low >= high[2]
+    bool _bear = fvgDetect == "Confirmed close" ? (high < low[2] and close[1] < low[2]) : low[2] >= high
+    fvgDir := _bear ? -1 : _bull ? 1 : 0
     fvgTop := fvgDir > 0 ? low : fvgDir < 0 ? low[2] : na
     fvgBot := fvgDir > 0 ? high[2] : fvgDir < 0 ? high : na
 float fvgSize = na(fvgTop) ? na : math.abs(fvgTop - fvgBot)
 bool fvgInRange = not na(fvgSize) and fvgSize >= fvgMinT * syminfo.mintick and fvgSize <= fvgMaxT * syminfo.mintick and fvgSize > 0
-bool fvgDraw = useFvg and fvgDir != 0 and (fvgSizeMode == "All" or fvgInRange)
+bool fvgThrOK = fvgThr <= 0 or (not na(fvgSize) and fvgBot > 0 and fvgSize / fvgBot > fvgThr)
+bool fvgDraw = useFvg and fvgDir != 0 and fvgThrOK and (fvgSizeMode == "All" or fvgInRange)
 
 var array<box>  fvgBoxes  = array.new<box>()
 var array<int>  fvgDirs   = array.new<int>()
 var array<bool> fvgFilled = array.new<bool>()
 // De bar waarop de gap ontstond, apart bijgehouden: zodra de box naar rechts doorloopt is
-// zijn rechterrand niet meer bruikbaar om "is hij al getest?" aan af te lezen.
+// zijn rechterrand niet meer bruikbaar om "is hij al geraakt?" aan af te lezen.
 var array<int>  fvgBirth  = array.new<int>()
+var int fvgBull = 0
+var int fvgBear = 0
+var int fvgBullMit = 0
+var int fvgBearMit = 0
 if fvgDraw and barstate.isconfirmed
     array.push(fvgBoxes, box.new(bar_index - 2, fvgTop, bar_index, fvgBot, border_color=na, bgcolor=na))
     array.push(fvgDirs, fvgDir)
     array.push(fvgFilled, false)
     array.push(fvgBirth, bar_index)
+    if fvgDir > 0
+        fvgBull := fvgBull + 1
+    else
+        fvgBear := fvgBear + 1
     if array.size(fvgBoxes) > fvgMax
         box.delete(array.shift(fvgBoxes))
         array.shift(fvgDirs)
         array.shift(fvgFilled)
         array.shift(fvgBirth)
+
 int fvgOpen = 0
 if useFvg and barstate.isconfirmed and array.size(fvgBoxes) > 0
     for i = 0 to array.size(fvgBoxes) - 1
@@ -299,19 +333,41 @@ if useFvg and barstate.isconfirmed and array.size(fvgBoxes) > 0
         _d = array.get(fvgDirs, i)
         bool _fl = array.get(fvgFilled, i)
         if not _fl and bar_index > array.get(fvgBirth, i)
-            _fl := _d > 0 ? low <= box.get_top(_b) : high >= box.get_bottom(_b)
-            if _fl
+            bool _hit = fvgMitig == "Closed through" ? (_d > 0 ? close < box.get_bottom(_b) : close > box.get_top(_b)) : (_d > 0 ? low <= box.get_top(_b) : high >= box.get_bottom(_b))
+            if _hit
+                _fl := true
                 array.set(fvgFilled, i, true)
+                if _d > 0
+                    fvgBullMit := fvgBullMit + 1
+                else
+                    fvgBearMit := fvgBearMit + 1
         if not _fl
             fvgOpen := fvgOpen + 1
-            // Een gap van drie bars breed zie je niet staan. Doortrekken tot hij gevuld is
-            // maakt hem bruikbaar; de gevulde blijven staan waar ze dichtgingen.
+            // Een gap van drie bars breed zie je niet staan. Doortrekken tot hij mitigeert
+            // maakt hem bruikbaar; de gemitigeerde blijven staan waar ze dichtgingen.
             if fvgExtend
                 box.set_right(_b, bar_index + 1)
-        bool _vis = fvgFillMode == "Both" or (fvgFillMode == "Filled" and _fl) or (fvgFillMode == "Unfilled" and not _fl)
+        bool _vis = fvgFillMode == "Both" or (fvgFillMode == "Mitigated" and _fl) or (fvgFillMode == "Unmitigated" and not _fl)
         color _base = _d > 0 ? color.new(POS, 85) : color.new(NEG, 85)
         box.set_bgcolor(_b, not _vis ? na : _fl ? color.new(color.gray, 88) : _base)
         box.set_border_color(_b, not _vis ? na : color.new(_base, 40))
+
+// Stippellijn op de rand die nog niet geraakt is, van de N jongste openstaande gaps.
+var array<line> fvgLines = array.new<line>()
+if useFvg and barstate.islast
+    for _ln in fvgLines
+        line.delete(_ln)
+    array.clear(fvgLines)
+    int _drawn = 0
+    if fvgLevels > 0 and array.size(fvgBoxes) > 0
+        for i = array.size(fvgBoxes) - 1 to 0
+            if _drawn < fvgLevels and not array.get(fvgFilled, i)
+                _bx = array.get(fvgBoxes, i)
+                _dr = array.get(fvgDirs, i)
+                float _px = _dr > 0 ? box.get_bottom(_bx) : box.get_top(_bx)
+                array.push(fvgLines, line.new(array.get(fvgBirth, i), _px, bar_index + 10, _px, color=_dr > 0 ? POS : NEG, style=line.style_dashed, width=1))
+                _drawn := _drawn + 1
+
 
 // === 6 · LEVELS =============================================================
 // Vorige periode: [1] plus lookahead is de non-repainting vorm — de waarde van een
@@ -442,7 +498,7 @@ int rVwap = rMA   + (useMA   ? 2 : 0)
 int rGate = rVwap + (useVwap ? 2 : 0)
 int rDP   = rGate + (useGate ? 2 : 0)
 int rFvg  = rDP   + (useDP   ? 1 : 0)
-int rLvl  = rFvg  + (useFvg  ? 1 : 0)
+int rLvl  = rFvg  + (useFvg  ? 2 : 0)
 int rows  = rLvl  + (useLvl  ? 2 : 0)
 
 var table panel = na
@@ -468,7 +524,10 @@ if barstate.islast and showTable and rows > 0
         table.cell(panel, 1, rDP, na(dpPos) ? "—" : str.tostring(dpPos, "#.#") + "%", text_color=inDiscount or inPremium ? color.white : pText, bgcolor=inDiscount ? color.new(POS, 15) : inPremium ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
     if useFvg
         table.cell(panel, 0, rFvg, "FVG open", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
-        table.cell(panel, 1, rFvg, str.tostring(fvgOpen), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        table.cell(panel, 1, rFvg, str.tostring(fvgOpen) + "  (" + str.tostring(fvgBull) + "▲ " + str.tostring(fvgBear) + "▼)", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+        float _mitPct = fvgBull + fvgBear <= 0 ? na : 100.0 * (fvgBullMit + fvgBearMit) / (fvgBull + fvgBear)
+        table.cell(panel, 0, rFvg + 1, "FVG mitigated", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+        table.cell(panel, 1, rFvg + 1, na(_mitPct) ? "—" : str.tostring(_mitPct, "#.#") + "%", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
     if useLvl
         table.cell(panel, 0, rLvl, "PDH / PDL", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
         table.cell(panel, 1, rLvl, na(pdH) ? "—" : str.tostring(pdH, format.mintick) + " / " + str.tostring(pdL, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)

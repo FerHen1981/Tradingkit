@@ -3,7 +3,7 @@
 
 //@version=6
 // ============================================================================================
-//  MPT Suite v1.0 — de context-indicatoren van de MEX-vloot in één script
+//  MPT Suite v1.1 — de context-indicatoren van de MEX-vloot in één script
 // ============================================================================================
 //  Zes modules, elk los aan of uit:
 //
@@ -13,6 +13,7 @@
 //    4  DISCOUNT/PREMIUM positie in de recente range
 //    5  FVG              dezelfde detectie als de strategieën, filled/unfilled/beide
 //    6  LEVELS           vorige dag/week/maand H-L-mid + de high/low van de sessie
+//    7  SESSIONS         per venster een box met de naam erbij, de laatste N sessies
 //
 //  SOURCE OF TRUTH IS DE STRATEGIE. De vensters (18:00-19:00 Globex, 02:00-05:00 London,
 //  07:00-12:00 US, ...) en de FVG-formule zijn letterlijk overgenomen uit de v1_0_0-vloot,
@@ -21,8 +22,15 @@
 //
 //  Vervangt als bundel: MPT_EMA, MPT_TIME_GATE en MPT_DISCOUNT_PREMIUM. Die blijven los
 //  bestaan voor wie er maar één wil laden.
+//
+//  v1.1 (25-08): FVG stond default UIT en de boxen waren drie bars breed - daardoor zag je
+//  ze niet. Nu default AAN, "Both" en "All" (dus elke gap, niet alleen de maat die de
+//  strategie neemt), en ze lopen door naar rechts tot ze gevuld zijn. Let op: de
+//  vulcontrole leest daarvoor niet meer de rechterrand van de box maar de bar waarop de
+//  gap ontstond - anders zou een doorlopende box zichzelf nooit meer als gevuld zien.
+//  Sessions is nieuw: per venster een box van high naar low met de naam erbij.
 // ============================================================================================
-indicator("MPT Suite v1.0", "MPT Suite", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+indicator("MPT Suite v1.1", "MPT Suite", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 // === 0 · SUITE ==============================================================
 var string G_SUITE = "0 · SUITE — modules"
@@ -32,15 +40,17 @@ var string G_GATE  = "3 · TIME GATE"
 var string G_DP    = "4 · DISCOUNT / PREMIUM"
 var string G_FVG   = "5 · FVG"
 var string G_LVL   = "6 · LEVELS"
-var string G_TBL   = "7 · TABLE"
-var string G_THEME = "8 · THEME"
+var string G_SESS  = "7 · SESSIONS"
+var string G_TBL   = "8 · TABLE"
+var string G_THEME = "9 · THEME"
 
 useMA   = input.bool(true,  "Moving average", inline="m1", group=G_SUITE)
 useVwap = input.bool(true,  "VWAP",           inline="m1", group=G_SUITE)
 useGate = input.bool(true,  "Time gate",      inline="m1", group=G_SUITE)
 useDP   = input.bool(false, "Discount/Premium", inline="m2", group=G_SUITE)
-useFvg  = input.bool(false, "FVG",            inline="m2", group=G_SUITE)
-useLvl  = input.bool(false, "Levels",         inline="m2", group=G_SUITE,
+useFvg  = input.bool(true,  "FVG",            inline="m2", group=G_SUITE)
+useLvl  = input.bool(false, "Levels",         inline="m2", group=G_SUITE)
+useSess = input.bool(true,  "Sessions",       inline="m2", group=G_SUITE,
      tooltip="Elke module tekent en rekent alleen als hij hier aanstaat. Uit = geen plot, geen tabelregel, geen rekenwerk dat je chart vertraagt.")
 tzIn    = input.string("America/New_York", "Reference timezone",
      options=["America/New_York","America/Chicago","America/Denver","America/Los_Angeles","Europe/London","Europe/Amsterdam","Asia/Tokyo","Asia/Shanghai","Australia/Sydney","UTC"],
@@ -95,13 +105,15 @@ dpMid      = input.float(50, "mid %", minval=1, maxval=99, step=1, inline="d1", 
 dpShade    = input.bool(true, "Shade the halves", group=G_DP, display=display.none)
 
 // === 5 · FVG ================================================================
-fvgFillMode = input.string("Unfilled", "Show", options=["Filled","Unfilled","Both"], inline="f1", group=G_FVG)
+fvgFillMode = input.string("Both", "Show", options=["Filled","Unfilled","Both"], inline="f1", group=G_FVG)
 fvgSizeMode = input.string("All", "", options=["In range","All"], inline="f1", group=G_FVG,
      tooltip="In range = alleen gaps binnen het size-venster hieronder, dus wat de strategie zou kunnen nemen. All = elke gap.")
 fvgMinT = input.float(2,  "Min size (ticks)", minval=0, inline="f2", group=G_FVG)
 fvgMaxT = input.float(8,  "Max", minval=0.01, inline="f2", group=G_FVG,
      tooltip="Alleen gebruikt als het filter links op In range staat. Defaults volgen EL REY MNQ.")
-fvgMax  = input.int(30, "Max boxes on the chart", minval=1, maxval=200, group=G_FVG, display=display.none)
+fvgExtend = input.bool(true, "Extend the boxes to the right until they fill", group=G_FVG,
+     tooltip="Uit = de gap blijft drie bars breed, zoals de strategie hem intern bijhoudt. Aan = hij loopt door tot hij gevuld is, en dat is wat je op een chart wilt zien.")
+fvgMax  = input.int(60, "Max boxes on the chart", minval=1, maxval=200, group=G_FVG, display=display.none)
 
 // === 6 · LEVELS =============================================================
 lvlDay   = input.bool(true,  "Prev day",   inline="l1", group=G_LVL)
@@ -112,7 +124,17 @@ lvlSess  = input.bool(true,  "High/low of the current gate window", inline="l2",
      tooltip="De extremen sinds het actieve tijdvenster openging. Staat Market regime op All sessions, dan is dat de handelsdag.")
 lvlLabels = input.bool(true, "Labels", group=G_LVL, display=display.none)
 
-// === 7 · TABLE ==============================================================
+// === 7 · SESSIONS ===========================================================
+sessBack   = input.int(6, "Keep the last N sessions", minval=1, maxval=60, group=G_SESS,
+     tooltip="Geldt over alle aangevinkte vensters samen. Drie vensters aan en N=6 is dus ongeveer twee dagen.")
+sessBoxes  = input.bool(true, "Box",   inline="s1", group=G_SESS)
+sessLabels = input.bool(true, "Name",  inline="s1", group=G_SESS)
+sessMids   = input.bool(true, "Midpoint", inline="s1", group=G_SESS,
+     tooltip="De box loopt van de high naar de low van dat venster. WELKE vensters getekend worden volgt de negen vinkjes in groep 3 - ook als Market regime daar op All sessions of Liquidity Core staat.")
+sessBoxCol = input.color(color.new(#2F80ED, 88), "Box", inline="s2", group=G_SESS)
+sessTxtCol = input.color(color.new(#B2B5BE, 20), "Text / midpoint", inline="s2", group=G_SESS)
+
+// === 8 · TABLE ==============================================================
 showTable  = input.bool(true, "Table", inline="t", group=G_TBL)
 panelPosIn = input.string("Middle right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=G_TBL,
      tooltip="Twee tabellen op dezelfde positie overlappen elkaar: Pine tekent elke tabel op zijn eigen plek en er is geen offset. Geef elke geladen indicator zijn eigen hoek.")
@@ -257,26 +279,35 @@ bool fvgDraw = useFvg and fvgDir != 0 and (fvgSizeMode == "All" or fvgInRange)
 var array<box>  fvgBoxes  = array.new<box>()
 var array<int>  fvgDirs   = array.new<int>()
 var array<bool> fvgFilled = array.new<bool>()
+// De bar waarop de gap ontstond, apart bijgehouden: zodra de box naar rechts doorloopt is
+// zijn rechterrand niet meer bruikbaar om "is hij al getest?" aan af te lezen.
+var array<int>  fvgBirth  = array.new<int>()
 if fvgDraw and barstate.isconfirmed
     array.push(fvgBoxes, box.new(bar_index - 2, fvgTop, bar_index, fvgBot, border_color=na, bgcolor=na))
     array.push(fvgDirs, fvgDir)
     array.push(fvgFilled, false)
+    array.push(fvgBirth, bar_index)
     if array.size(fvgBoxes) > fvgMax
         box.delete(array.shift(fvgBoxes))
         array.shift(fvgDirs)
         array.shift(fvgFilled)
+        array.shift(fvgBirth)
 int fvgOpen = 0
 if useFvg and barstate.isconfirmed and array.size(fvgBoxes) > 0
     for i = 0 to array.size(fvgBoxes) - 1
         _b = array.get(fvgBoxes, i)
         _d = array.get(fvgDirs, i)
         bool _fl = array.get(fvgFilled, i)
-        if not _fl and bar_index > box.get_right(_b)
+        if not _fl and bar_index > array.get(fvgBirth, i)
             _fl := _d > 0 ? low <= box.get_top(_b) : high >= box.get_bottom(_b)
             if _fl
                 array.set(fvgFilled, i, true)
         if not _fl
             fvgOpen := fvgOpen + 1
+            // Een gap van drie bars breed zie je niet staan. Doortrekken tot hij gevuld is
+            // maakt hem bruikbaar; de gevulde blijven staan waar ze dichtgingen.
+            if fvgExtend
+                box.set_right(_b, bar_index + 1)
         bool _vis = fvgFillMode == "Both" or (fvgFillMode == "Filled" and _fl) or (fvgFillMode == "Unfilled" and not _fl)
         color _base = _d > 0 ? color.new(POS, 85) : color.new(NEG, 85)
         box.set_bgcolor(_b, not _vis ? na : _fl ? color.new(color.gray, 88) : _base)
@@ -325,6 +356,82 @@ if useLvl and lvlSess
         sessLo := math.min(nz(sessLo, low), low)
 f_lvl(lvlSess, sessHi, "Gate H", ACC)
 f_lvl(lvlSess, sessLo, "Gate L", ACC)
+
+// === 7 · SESSIONS — tekenwerk ===============================================
+// Per venster de high/low bijhouden zolang het loopt, en bij het sluiten een box met de
+// naam erbij zetten. WELKE vensters getekend worden volgt dezelfde negen vinkjes als de
+// poort, ook als Market regime op All sessions staat - anders zou je de vinkjes twee keer
+// moeten zetten voor hetzelfde venster.
+var array<bool>  sWasIn  = array.new_bool(9, false)
+var array<float> sHi     = array.new_float(9, na)
+var array<float> sLo     = array.new_float(9, na)
+var array<int>   sStart  = array.new_int(9, na)
+var array<box>   sBoxes  = array.new<box>()
+var array<line>  sMidLn  = array.new<line>()
+var array<label> sLabels = array.new<label>()
+
+f_sessName(int _i) =>
+    switch _i
+        0 => "Globex reopen"
+        1 => "Asia"
+        2 => "London"
+        3 => "US"
+        4 => "Initial balance"
+        5 => "NY AM"
+        6 => "Lunch"
+        7 => "NY PM"
+        => "Power hour"
+
+if useSess and barstate.isconfirmed
+    for i = 0 to 8
+        bool _on = switch i
+            0 => wGlobex
+            1 => wAsia
+            2 => wLondon
+            3 => wUs
+            4 => wInitBal
+            5 => wNyAm
+            6 => wLunch
+            7 => wNyPm
+            => wPower
+        bool _in = switch i
+            0 => _wGlobex
+            1 => _wAsia
+            2 => _wLondon
+            3 => _wUs
+            4 => _wInitBal
+            5 => _wNyAm
+            6 => _wLunch
+            7 => _wNyPm
+            => _wPower
+        bool _now = _on and _in
+        bool _was = array.get(sWasIn, i)
+        if _now and not _was
+            array.set(sStart, i, bar_index)
+            array.set(sHi, i, high)
+            array.set(sLo, i, low)
+        else if _now
+            array.set(sHi, i, math.max(nz(array.get(sHi, i), high), high))
+            array.set(sLo, i, math.min(nz(array.get(sLo, i), low), low))
+        else if _was
+            float _h = array.get(sHi, i)
+            float _l = array.get(sLo, i)
+            int   _b0 = array.get(sStart, i)
+            if not na(_h) and not na(_b0)
+                if sessBoxes
+                    array.push(sBoxes, box.new(_b0, _h, bar_index - 1, _l, border_color=color.new(sessBoxCol, 40), bgcolor=sessBoxCol))
+                if sessMids
+                    array.push(sMidLn, line.new(_b0, (_h + _l) / 2, bar_index - 1, (_h + _l) / 2, color=sessTxtCol, style=line.style_dotted, width=1))
+                if sessLabels
+                    array.push(sLabels, label.new(int(math.avg(_b0, bar_index - 1)), _h, f_sessName(i),
+                         style=label.style_label_down, color=color.new(sessBoxCol, 100), textcolor=sessTxtCol, size=size.tiny))
+                while array.size(sBoxes) > sessBack
+                    box.delete(array.shift(sBoxes))
+                while array.size(sMidLn) > sessBack
+                    line.delete(array.shift(sMidLn))
+                while array.size(sLabels) > sessBack
+                    label.delete(array.shift(sLabels))
+        array.set(sWasIn, i, _now)
 
 // === TABEL ==================================================================
 // Rij-indexen vooraf uitrekenen: een Pine-functie mag geen variabele uit de omliggende

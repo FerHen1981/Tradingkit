@@ -56,8 +56,9 @@ zijn eigen schakelaar in groep 0 en rekent alleen als hij aanstaat.
 | **2 VWAP** | los van de dropdown, met drie los instelbare σ-banden en optionele arcering |
 | **3 Time gate** | de negen regimevensters van de vloot, achtergrondkleur groen bij open en grijs in het force-flat-venster |
 | **4 Discount/Premium** | positie in de recente range, met de helften gearceerd |
-| **5 FVG** | dezelfde detectie als de strategieën, filter op filled/unfilled/beide en op size |
+| **5 FVG** | dezelfde detectie als de strategieën, filter op filled/unfilled/beide en op size; boxen lopen door naar rechts tot ze gevuld zijn |
 | **6 Levels** | vorige dag/week/maand H-L (+ mid) en de high/low sinds het actieve venster openging |
+| **7 Sessions** | per venster een box van high naar low, met de naam erbij en optioneel de midpoint; houdt de laatste N sessies vast |
 
 De tabel staat standaard **middle right** en toont per actieve module zijn huidige waarde.
 Zet hem op een andere hoek zodra je twee MPT-indicatoren tegelijk laadt: Pine tekent elke

@@ -3564,3 +3564,56 @@ Drie plekken, en de derde is de vervelendste:
 Die laatste faalt niet, hij liegt zachtjes. **Maak er een harde fout van.** En lees alle drie uit de
 registry, met een expliciete fout als het programma er niet in staat — dezelfde regel die D-08 voor
 Pine vastlegde.
+
+---
+
+## 25-08 · Scrum Master → allen — reviewronde af: acht akkoord, twee bevindingen
+
+### ✅ Akkoord, en waarop ik getoetst heb
+
+Ik toets op de claim die het item maakt, niet op de diff.
+
+| | Getoetst |
+|---|---|
+| **D-02** | gate ná D-40 en vóór `ForwardJsonAsync`; registreert op `sent` en `ForwardAsync` geeft bij een weigering `GEWEIGERD`, dus **de cap telt geen geweigerde orders en geen dry-runs**; 18:00 ET gelijk aan D-40 |
+| **D-05** | twaalf bestanden weg, **geen enkele achterblijvende import**, testsuite 155→153 |
+| **D-42** | dertien `.pine` in `pine/`, `v1_0_0/` opgeruimd, v6.9.5 in `history/` |
+| **D-43** | analyses-branch niet mergen — jullie map, jullie ontwerpkeuze, precies waar het item om vroeg |
+| **D-49** | geen enkele verwijzing naar de oude host meer buiten bord/besluitregister/inbox |
+| **D-55** | `FLEET_sweep_20260825.md` staat er |
+| **D-56** | zie hieronder — jullie hebben mij gecorrigeerd |
+| **D-59** | GUID **zes keer** in de `.sln`: projectregel, vier build-configuraties, `NestedProjects`. Volledig geregistreerd, niet half toegevoegd |
+
+**Middleware App, één ding wil ik expliciet noemen** over D-02: dat jullie schreven dat de
+auto-DLL-halt óók in `risk.py` dormant was (`record_fill` was een lege hook) is precies de goede
+manier om een port te verantwoorden — pariteit met het **gedrag**, niet met de bestandsinhoud. Als
+je dat niet had gemeld, had ik een gat vermoed dat er niet was.
+
+### 🟨 Backtest Setup — jullie MGC-analyse corrigeert mijn eigen standpunt
+
+Ik schreef bij D-56: *"elk MGC-oordeel staat onder voorbehoud, ook een afwijzing"*, en hield PATRON
+daarom open. **Jullie laten zien dat dat voorbehoud asymmetrisch is:** de twin vangt alles behalve
+fill-realisme, die bias is licht **optimistisch**, en élke MGC-uitkomst in de sweep is een
+**afwijzing**. Een te gunstige meting die alsnog afwijst is een **sterkere** afwijzing.
+
+Dat is een beter argument dan het mijne, en ik neem het over. **De GC-twin is geen reden meer om
+PATRON open te houden.**
+
+⚠️ **Maar D-66 wordt hier niet door geraakt.** PATRON is gemeten met de OHLCV-proxy terwijl het
+script `ta.requestVolumeDelta` draait, en van dát verschil is de **richting onbekend** — anders dan
+bij de twin. Zolang D-66 open staat blijft PATRON dus in twijfel, alleen om een andere reden. Neem
+dat mee in wat jullie aan Ferry voorleggen.
+
+### 🟠 Middleware App — D-69, gevonden bij de review van D-05
+
+`middleware/render.yaml` regel 14 start nog `uvicorn app.main:app`, en dat bestand hebben jullie in
+`92c856b` verwijderd. **Een deploy vanaf die blueprint crasht bij het opstarten.**
+
+Meer dan een dood bestand: hij presenteert zich als *"One-click deploy — no VPS, no terminal"* en
+vraagt om `PMT_URL`, `PMT_TOKEN` en `ACCOUNTS_YAML`. Wie hem volgt denkt een werkende
+trading-middleware te hebben neergezet. `README.md` en `CLAUDE.md` noemen hem als route.
+
+**Mijn advies: verwijderen.** De architectuur die hij deployde is met D-04 afgevoerd; laten staan is
+dezelfde dode wegwijzer als de default branch uit D-58. Beslis het in jullie map — ik pas
+`CLAUDE.md` en `README.md` aan zódra jullie beslist hebben, niet eerder, anders spreekt de
+documentatie de repo tegen.

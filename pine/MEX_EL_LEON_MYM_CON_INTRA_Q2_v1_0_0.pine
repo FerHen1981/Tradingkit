@@ -142,8 +142,25 @@
 // v6.9.1: "→ Middleware" route — emits a lean signal to the fan-out middleware (one alert per strategy).
 // v6.9.13 MES scratch Production: 6 MES · FVG10-22t · proxy-CVD6 · SL120t · 1.75R · expiry6 · all sessions · daily OFF · EOD PA.
 // Research parity rule: canonical CVD is deterministic OHLCV polarity, NOT ta.requestVolumeDelta().
+// v3.3.0 (26-08): vier dingen die uit Ferry's live alert-log en accountschermen kwamen.
+//   CONFIG-KAART - het CONFIG-blok stond als if/else-if: Journal aan onderdrukte de
+//   Discord-kaart stilzwijgend, dus je zag nergens dat de alert leefde. Journal en Discord
+//   zijn twee kanalen en geen alternatieven; ze worden nu allebei aangeroepen, net als bij
+//   een trade-event, waar elke f_* zijn eigen route al bewaakt.
+//   PAYOUT-DAGTELLERS - "qualDays >= 5" stond hardgecodeerd terwijl f_firmDays al door de
+//   generator werd uitgeschreven en nergens werd aangeroepen. Een firma draait TWEE tellers
+//   en het zijn niet dezelfde getallen: apex_50k_legacy_pa vraagt 8 dagen MET fills EN 5
+//   kwalificerende dagen, apex_50k_eod_pa 5 en 5. Op een legacy PA meldde de tabel dus drie
+//   handelsdagen te vroeg "payout ready". Er is nu een tweede teller (tradedDays) die dagen
+//   met een fill telt, binnen dezelfde payout-cyclus als qualDays, en de winstdrempel voor
+//   een kwalificerende dag is math.max(jouw input, de registrywaarde) - de strengste wint.
+//   TORO DISCORD-NAAM - de vier EL TORO's stuurden geen username mee, waardoor hun kaarten
+//   in Discord onder de naam van de WEBHOOK landden ("Captain Hook") in plaats van onder het
+//   script. De negen funded scripts vielen al terug op SCRIPT_NAME; deze vier nu ook.
+//   TORO CONFIG-INHOUD - hun cfgStr droeg geen firm, ddModel, trailDD of paDLL, dus je kon
+//   uit de alert-stream niet zien met welke accountregels een eval draaide. Nu wel.
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON INTRA Q2"
-var string currentVersion = "v3.2.0"
+var string currentVersion = "v3.3.0"
 strategy("MΞX EL LEON · MYM CON INTRA Q2 · " + currentVersion, shorttitle="LEO-YM-CI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -756,6 +773,16 @@ if useFirmPreset
     acctDLL := pfDLL
     consistencyPct := pfCons
 
+// Dagtellers uit de registry. Een firma draait er TWEE en het zijn niet dezelfde getallen:
+// dagen MET fills en dagen die de winstdrempel haalden. apex_50k_legacy_pa vraagt 8 en 5,
+// apex_50k_eod_pa 5 en 5. Dit stond hardgecodeerd op "qualDays >= 5", dus op een legacy PA
+// meldde de tabel drie handelsdagen te vroeg dat een payout klaar was. f_firmDays werd al
+// gegenereerd maar nergens aangeroepen - nu wel. Zonder preset blijft 5/5/50 staan.
+[_fdM, _fdP, _fdQ] = f_firmDays(firmPreset)
+int   fdMinDays  = useFirmPreset and _fdM > 0 ? _fdM : 5
+int   fdProfDays = useFirmPreset and _fdP > 0 ? _fdP : 5
+float fdQualUSD  = useFirmPreset and _fdQ > 0 ? _fdQ : 50.0
+
 // ============================================================================
 // === MEX POLICY LAYER — Fleet Config Matrix v1.1 (autogen, niet handmatig wijzigen)
 // ============================================================================
@@ -779,6 +806,8 @@ var float acctHwm = na
 var float profitSince = 0.0
 var float bestDaySince = 0.0
 var int   qualDays = 0
+var int   tradedDays  = 0     // dagen waarop daadwerkelijk een fill stond - de tweede teller
+var bool  tradedToday = false
 var int   paBreachCount = 0
 var int   paMilkCount   = 0
 var int   paResetCount  = 0
@@ -1465,8 +1494,13 @@ if isNewTradingDay
         if _yday > 0
             profitSince += _yday
             bestDaySince := math.max(bestDaySince, _yday)
-            if _yday >= minQualDayUSD
+            if _yday >= math.max(minQualDayUSD, fdQualUSD)
                 qualDays += 1
+        // Een handelsdag telt ook als hij verlies draaide - het is een ANDERE teller dan
+        // qualDays. Wel binnen dezelfde cyclus geteld, anders lopen de twee uiteen.
+        if tradedToday
+            tradedDays += 1
+    tradedToday := false
     if phaseOn and ddModel == "EOD"
         acctHwm := math.max(nz(acctHwm, math.max(acctPnlOffset, acctHwmOffset)), acctPnlOffset + strategy.netprofit - paResetPnLPrev)
     riskBaseNetProfit := strategy.netprofit
@@ -1545,7 +1579,7 @@ f_ladderCap(_n) =>
     _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
 int   effPayoutNr = (isPA and paBacktestModeEff) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
 float curLadderCap = f_ladderCap(effPayoutNr)
-bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= 5 and consistencyOK
+bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
 pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap
 pmtBlockReason := "PAYOUT CAP REACHED — request payout, then raise payout number"
@@ -1561,6 +1595,7 @@ if phaseOn and not acctHalted
             profitSince   := 0.0
             bestDaySince  := 0.0
             qualDays      := 0
+            tradedDays    := 0
             paPayoutsThisCycle := 0
         else
             acctHalted := true
@@ -1584,6 +1619,7 @@ if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
     profitSince   := 0.0
     bestDaySince  := 0.0
     qualDays      := 0
+    tradedDays    := 0
     if paPayoutsThisCycle >= 6
         paMilkCount += 1
         paResetCount += 1
@@ -1806,12 +1842,17 @@ if barstate.isfirst
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
     cfgSent := true
+    // Journal en Discord zijn twee KANALEN, geen alternatieven. Dit stond als if/else-if,
+    // waardoor een aangevinkte Journal de Discord-CONFIG-kaart stilzwijgend onderdrukte: de
+    // alert leefde, maar je zag nergens dat hij leefde. Een trade-event doet het al goed -
+    // f_journal() en f_sendDiscord() bewaken allebei hun eigen route - en CONFIG volgt nu
+    // datzelfde patroon. Twee alert()-aanroepen op dezelfde bar is geen probleem; het alert-log
+    // van 24-08 laat drie losse afleveringen op eenzelfde seconde zien.
     if useJournal and not execInstance
         string _cfgRow = str.format("{0,date,yyyy-MM-dd HH:mm:ss}", timenow) + "," + accountID + "," + jrnlAcct + "," + syminfo.ticker + ",CONFIG,-,-,-,-,-,-,-,-," + cfgStr
         alert(jrnlJsonWrap ? "{\"type\":\"config\",\"csv\":\"" + _cfgRow + "\"}" : _cfgRow, alert.freq_once_per_bar)
-    else if useDiscord
-        f_sendDiscord("⚙️ " + syminfo.ticker + " CONFIG", jrnlAcct + " | " + cfgStr)
-    else if plainAlertsOK
+    f_sendDiscord("⚙️ " + syminfo.ticker + " CONFIG", jrnlAcct + " | " + cfgStr)
+    if plainAlertsOK
         alert(f_msgHead() + " | CONFIG | " + cfgStr, alert.freq_once_per_bar)
 
 var bool payoutDiscordSent = false
@@ -2017,6 +2058,7 @@ if newLong or newShort
     if newShort
         strategy.exit("XS", from_entry="Short", stop=curStop, limit=curLimit, alert_message=f_orderMsg("EXIT", -1, entryAvg, curStop, curLimit, math.abs(posSize)))
     f_journal("FILL", newLong ? 1 : -1, "FILLED", entryAvg, curStop, curLimit, math.abs(posSize), float(na), evalStarted, evalBal, distTarget, distFail, useRegime, regimeFav)
+    tradedToday := true
     if notifyFills
         posTrailOn := false
         posRecovOn := false

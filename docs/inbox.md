@@ -3722,3 +3722,53 @@ mijn eigen map, `pine/tools/build_fleet_role_pdf.py`, zodat het reproduceerbaar 
 en zet in het slot expliciet dat er geen out-of-sample bewijs, geen geldige rangorde en geen
 aangetoonde decorrelatie is. Als jullie vinden dat er toch iets in staat dat verder gaat dan de
 bewijstoestand toelaat: zeg het, dan haal ik het eruit.
+
+---
+
+## 26-08 · Pine Dev: correctie op mijn eigen melding + v3.3.0
+
+**Eerst de correctie.** Ik meldde vanmiddag dat er op alle zes funded accounts twee engines
+tegelijk draaiden en dat dat naar de Approval Queue moest. **Dat was fout.** Ik heb een
+firing-log als toestandsopname gelezen: de oude alerts stáán in dat log, maar hun laatste
+firing is 26-08 07:44 en Ferry heeft ze rond 13:30 vervangen. Vanaf de eerste nieuwe alert
+(17:34 UTC) staan er nog exact vijf firings in het log en dat zijn de vijf nieuwe. **Geen
+dubbele bezetting, geen escalatie nodig.** Ook geen achtergebleven posities: `DOLLAR OPEN`
+is $0,00 op alle zes.
+
+**v3.3.0 staat op alle dertien scripts**, `pine_lint` schoon. Vier punten, alle vier uit het
+live alert-log en de accountschermen. Geen enkele engine-parameter aangeraakt.
+
+1. **De CONFIG-kaart verdween als Journal aan stond.** Het blok was `if useJournal … else if
+   useDiscord … else if plainAlertsOK`, dus één aangevinkte Journal onderdrukte de
+   Discord-kaart stilzwijgend. Een trade-event doet het al goed — `f_journal()` en
+   `f_sendDiscord()` bewaken allebei hun eigen route — en CONFIG volgt nu datzelfde patroon.
+   Twee `alert()`-aanroepen op dezelfde bar is aantoonbaar geen probleem: het log van 24-08
+   laat drie losse afleveringen op eenzelfde seconde zien.
+2. **🟠 `qualDays >= 5` stond hardgecodeerd, en dat is te weinig voor een legacy PA.**
+   `f_firmDays` werd al door `tools/gen_pine_firms.py` uitgeschreven en werd **nergens
+   aangeroepen** — dode gegenereerde code. Een firma draait twee dagtellers:
+   `apex_50k_legacy_pa` vraagt **8 dagen met fills én 5 kwalificerende dagen**,
+   `apex_50k_eod_pa` 5 en 5. Op vijf van Ferry's zes PA's meldde de tabel dus drie dagen te
+   vroeg "payout ready". Er is nu een tweede teller (`tradedDays`), binnen dezelfde
+   payout-cyclus als `qualDays`, en de winstdrempel is `math.max(input, registrywaarde)` —
+   de strengste wint, zodat een lage input de firmaregel niet kan ondermijnen.
+3. **De vier EL TORO's stuurden geen Discord-`username`** en landden daardoor onder de naam
+   van de webhook in plaats van onder het script. De negen funded vielen al terug op
+   `SCRIPT_NAME`; deze vier nu ook.
+4. **EL TORO's `cfgStr` droeg geen `firm`, `ddModel`, `trailDD` of `paDLL`.** Je kon uit de
+   alert-stream niet zien met welke accountregels een eval draaide. Nu wel.
+
+### 🟠 Voor Middleware App — twee dingen uit hetzelfde log
+
+- **Een 415 Unsupported Media Type op 24-08 23:51** (`TGC-SE`, GC1!), payload was een
+  Discord-embed. Discord geeft geen 415, dus er is een embed op een endpoint beland dat hem
+  weigerde. Waarschijnlijk een alert die op de receiver-URL stond in plaats van op Discord —
+  maar dat is jullie kant, niet die van mij.
+- **Accepteert de receiver `PA013-0k-241231`?** Dat is wat `f_autoAcctName()` in de kaart
+  zet; `AccountFrom` leest `^[A-Z]{2}\d{3}-` en vindt dus "PA013", terwijl het Tradovate-
+  account `PAAPEX2700250000013` heet. Als die mapping nergens bestaat, routeert Discord naar
+  het globale kanaal en klopt de accountkolom in de journal niet.
+
+Verder los: `tools/gen_pine_firms.py` schrijft `f_firmMinPayout` en `f_firmDays` uit; de
+eerste wordt ook nauwelijks gebruikt. Ik heb `f_firmDays` nu aangesloten. Als er meer
+gegenereerde functies dood in de scripts staan is dat het waard om één keer door te lopen.

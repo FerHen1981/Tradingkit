@@ -160,6 +160,42 @@ def check_shared(paths):
     return findings
 
 
+# D-09 legt vast dat de canonieke CVD de deterministische OHLCV-polariteitsproxy is en
+# NIET ta.requestVolumeDelta. Grep op de functienaam meet dat NIET: die naam staat ook in
+# de commentaarregel die de regel uitlegt, en in de niet-default tak van de dubbele motor.
+# Wat telt is wat `bullDirOk` op de DEFAULT-stand voedt. Deze check meet dat.
+#
+# PATRON en TESORO staan bewust op de TV-motor (besluit Ferry 25-08, optie C): dat is wat
+# ze altijd draaiden, en omzetten is een onderzoeksronde. Ze staan hier als uitzondering
+# zodat de afwijking zichtbaar blijft in plaats van te verdwijnen.
+NON_CANONICAL_BY_DESIGN = {"MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine",
+                           "MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine"}
+
+
+def effective_delta_engine(src: str) -> str:
+    """Welke motor voedt bullDirOk als je niets aan de inputs verandert?"""
+    m = re.search(r'cvdEngine\s*=\s*input\.string\("([^"]+)"', src)
+    if m is None:
+        # Geen dropdown: er is maar een tak. Kijk welke.
+        return "proxy" if re.search(r'^bool bullDirOk = proxyDir', src, re.M) else "tv-delta"
+    return "proxy" if m.group(1).startswith("Research") else "tv-delta"
+
+
+def check_delta_engines(paths):
+    findings = []
+    for p in paths:
+        eng = effective_delta_engine(open(p).read())
+        name = p.split("/")[-1]
+        if eng == "proxy":
+            continue
+        if name in NON_CANONICAL_BY_DESIGN:
+            print(f"delta   {name:44} tv-delta (bewust, besluit Ferry 25-08)")
+        else:
+            findings.append(f"{name}: default delta-motor is ta.requestVolumeDelta, "
+                            f"niet de canonieke OHLCV-proxy (D-09)")
+    return findings
+
+
 def main(argv):
     paths = []
     for a in argv or ['pine/**/*.pine']:
@@ -168,6 +204,7 @@ def main(argv):
         print("geen bestanden"); return 1
     bad = 0
     shared = check_shared(paths) if len(paths) > 1 else []
+    shared += check_delta_engines(paths)
     for f in shared:
         bad += 1
         print(f"FOUT  gedeeld blok\n        {f}")

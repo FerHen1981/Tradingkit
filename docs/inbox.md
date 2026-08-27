@@ -3772,3 +3772,72 @@ live alert-log en de accountschermen. Geen enkele engine-parameter aangeraakt.
 Verder los: `tools/gen_pine_firms.py` schrijft `f_firmMinPayout` en `f_firmDays` uit; de
 eerste wordt ook nauwelijks gebruikt. Ik heb `f_firmDays` nu aangesloten. Als er meer
 gegenereerde functies dood in de scripts staan is dat het waard om één keer door te lopen.
+
+---
+
+## 27-08 · Pine Dev → Scrum Master + Backtest Setup: de vlootmaatstaf staat verkeerd om
+
+**Aanleiding: correctie van Ferry, en hij heeft gelijk.** Het doel is snel naar opneembaar saldo
+in stappen van $1.500–$3.000, en dan opnieuw. Niet een strategie die statistisch meerdere jaren
+meegaat. De bevroren vloot doet met een handvol trades per week over álle engines samen te weinig
+om dat doel te halen — en dat is geen smaakverschil, het is te meten.
+
+**Wat ik gemeten heb.** Ferry's MGC-export van 27-08 (599 trades, 64 sessies, 28 mei – 26 aug,
+2 contracten, PF 1,21) door de volledige Apex-cyclus gehaald: verse PA, trailing drawdown,
+vergrendeling op +$100, DLL, minimum handelsdagen, consistency, uitbetalingsladder, en na de
+zesde uitbetaling opnieuw.
+
+| | $/account-dag | dag → eerste payout |
+|---|---|---|
+| Deze config, 3 MGC, Apex 4.0 | **$156** | **dag 18** |
+| EL MATADOR MES, 1 ct (sweep 25-08) | $30,59 | dag 85 |
+| EL LEON MYM, 1 ct | $17,48 | dag 118 |
+| EL REY MNQ, 1 ct | $13,21 | dag 161 |
+
+**🔑 Het mechanisme, en het is niet wat je zou verwachten.** Deze configuratie heeft een
+**slechtere** PF dan MATADOR — 1,21 tegen 1,82. Per trade is hij minder goed. Toch komt hij vijf
+keer zo snel aan geld, en de reden is de **wedloop naar de vergrendeling**:
+
+| Contracten | dag → +$2.600 | diepste dal ervóór | marge tot breach |
+|---|---|---|---|
+| 1 | 40 | −$1.188 | $1.312 |
+| 2 | 21 | −$2.376 | $124 |
+| **3** | **11** | −$1.816 | **$684** |
+| 4 | 8 | −$2.421 | $79 |
+| 5 | 7 | −$3.027 | **breekt** |
+
+Drie contracten is **veiliger dan twee**, want je staat half zo lang blootgesteld voordat de floor
+op +$100 vastzit. **Handelsfrequentie koopt contractgrootte, en contractgrootte koopt snelheid.**
+599 kleine trades geven een equity-curve die glad genoeg is om 3 contracten te dragen op een vers
+account; de bevroren engines kunnen hun eigen bevroren grootte helemaal niet dragen (dat is D-53,
+en het staat er al) en funderen alleen op 1 contract — met P1 op dag 85 tot 161.
+
+### 🟠 Voorstel: verander de selectiemaatstaf van de vloot
+
+`CLAUDE.md` zegt al dat het doel gebankte payout-$ per bezette account-dag is. **Dat wordt nog
+nergens als selectiecriterium gebruikt.** Ik stel voor er één getal bij te zetten dat alles
+daarna bepaalt: **op hoeveel contracten kan een engine een vers account dragen, en op welke dag
+staat zijn floor vast.** Trap 7/8 meet de eerste helft al; de tweede helft is nieuw en goedkoop
+toe te voegen.
+
+### 🟡 Nevenbevinding voor accounttoewijzing
+
+**De consistency-regel bindt harder dan de drawdown.** Op 3 contracten bankt een Apex 4.0-account
+$10.000 en een legacy-account $7.314 — terwijl legacy de *ruimere* drawdown heeft ($2.500 tegen
+$2.000). Het verschil zit volledig in 30% tegen 50% consistency: op legacy werden tien
+uitbetalingen geblokkeerd omdat één dag te groot was. **Voor een engine met grote dagen is een
+4.0-account beter dan een legacy-account.** Dat draait mijn advies van 26-08 gedeeltelijk om en
+raakt `docs/handoff/ACCOUNT_ALLOCATIE_2026-08-26.md`.
+
+### ⚠️ Wat dit niet is
+
+Drie maanden, één instrument, één pad, volledig binnen het validatievenster, op parameters die
+Ferry net zelf gekozen heeft. De marges in de wedloop-tabel ($124 op 2 ct, $79 op 4 ct) zijn
+één steekproef. De vergelijking met $30,59 is niet één-op-één: dat komt uit de volledige pijplijn
+over drie jaar, dit uit een TradingView-export over 64 sessies. **De richting vertrouw ik, de
+verhouding niet.** Vier bevroren parameters staan los (FVG-band, delta-filter, R, stop), dus dit
+is een nieuwe engine en geen tweak — trap 1 t/m 9, met echte MGC-data in plaats van de GC-twin.
+
+Volledige analyse met de nultoets op de dagpiek en de contrafeitelijke rasters: de gepubliceerde
+pagina (link bij Ferry). Rekencode staat in de scratchpad, niet in de repo — die draait op een
+geüploade export en is niet reproduceerbaar zonder dat bestand.

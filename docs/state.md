@@ -3,16 +3,76 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-08-11 (Analyses & Data chat)_
+_Last updated: 2026-08-28 (Analyses & Data chat)_
 
 ## Live settings
 
-| Account | Firm | Phase | Strategy | Asset | Volume | Since | Dataset behind it |
-|---|---|---|---|---|---|---|---|
-| _TBD_ | | | | | | | |
+Per-account sizing en day-target/DLL zijn **buffer-gedreven** (D-43). DLL en
+day-target worden **hard in Tradovate** ingesteld, niet via de Pine risk-gate.
+Basisstrategie: El Tesoro MGC1! met Fixed TP 85t, Fixed Stop 100t, BE/Trail off,
+Day-trail activation $500 / giveback $100, Day-cap hard $750 (Pine-instellingen
+zoals in backtest `91469a71` — de "afgelopen 2 weken haal je target op de mediaan
+al" run).
 
-> Not yet filled. Until this table is real, "this week looks like last week" is a
-> feeling, not a finding.
+| Account | Balance | Buffer (Dist Liq) | Modus | Qty | Day Target ↑ | DLL ↓ |
+|---|---:|---:|---|---:|---:|---:|
+| PA013 | $54.164 | $4.064 | payout-buildup (34.9% cons., nog $1.042) | 6 | +$500 | −$500 |
+| PA015 | $50.478 | $581 🚨 | herstel — krap | 2 | +$200 | −$200 |
+| PA017 | $49.338 | $785 🚨 | herstel — krap | 2 | +$250 | −$300 |
+| PA018 | $53.479 | $3.379 | payout-buildup | 5 | +$450 | −$450 |
+| PA021 | $49.243 | $1.096 | opbouw — voorzichtig | 3 | +$300 | −$350 |
+| PA022 | $50.069 | $2.014 | normale | 4 | +$400 | −$400 |
+
+**Herzien op deze triggers**, niet op tijd:
+- Payout uitbetaald → qty terug naar basis van nieuwe buffer, cyclus opnieuw
+- Buffer < $1.000 → qty naar 2, target $200, DLL $200
+- Buffer $1.000-2.000 → qty 3, target $300, DLL $300-350
+- Buffer $2.000-4.000 → qty 4-5, target $400-450, DLL $400-450
+- Buffer > $4.000 → qty 5-6, target $500, DLL $500
+- Buffer > $5.000 EN payout-eligible → payout nemen, nieuwe cyclus
+
+## D-43 — Buffer-gedreven per-account sizing + hard Tradovate-limits (28 aug 2026)
+
+**Waarom.** Fleet-optimalisatie-analyse op de MGC1! 1-jaars backtest (config
+`91469a71`, TP 85t Fixed) laat zien: mediaan-dag ligt op qty 5-6 tussen $400-500
+= precies in target. Netto/jaar wordt niet gedood door lage winrate maar door
+~1-op-10 tilt-dagen van −$3k tot −$6k. Concreet voorbeeld: 2 weken 14-28 aug
+2026 leverden qty 5 in totaal +$1.826 op — maar 10 van de 11 handelsdagen waren
+gemiddeld +$568 (in target). Eén dag (17 aug, −$3.862) at 10 winstdagen op.
+
+**Beslissing.** Twee dingen tegelijk:
+1. **Day-target en DLL worden hard in Tradovate ingesteld** (niet via de Pine
+   `Daily risk-gate`). Reden: Ferry heeft controle in het broker-platform, geen
+   afhankelijkheid van Pine-phase (Developer vs Apex PA). Verlies daarmee wél de
+   simulatie-mogelijkheid in de backtester — accepteren, want live-fills wegen
+   toch al 2× (evidence-weighting hoger in dit document).
+2. **Sizing is per-account, gedreven door DIST TO AUTO LIQ** (= runway naar
+   trailing-DD-liq). Formule staat hierboven onder "Live settings". Kern: qty
+   moet zó laag zijn dat één full-loss trade (`qty × 100t × $1`) niet meer dan
+   ~40% van de dagelijkse DLL raakt.
+
+**Waarom niet DLL uit en discount-accounts vervangen.** Discount-accounts kosten
+$19/stuk (Ferry heeft pipeline). Reset-kosten dus niet de bottleneck. Maar
+opportunity-cost is dat wél: elk gebreached account levert 0 payout ipv de
+$16-41k/jaar per overlevend account. DLL AAN verlaagt breach-rate van ~50-60%
+naar ~5-15% op basis van Python-sim over de 1-jaars data. Delta = $18-22k/maand
+fleet-winst. Discount-economics vervangen dat niet.
+
+**Waarom niet één vaste qty over alle 6 accounts.** PA015 met qty 6 = één SL
+van $600 op $581 buffer = instant breach. Uniform sizen negeert de spread in
+buffer-staat en verspilt de kleinere accounts. Buffer-modes maken elke account
+op zijn eigen tempo bruikbaar.
+
+**Openstaande validatie.** Deze regels zijn afgeleid uit één 1-jaars backtest
+en één 2-weken live-slice. Herzien na 2 handelsweken live (uiterlijk 11 sep
+2026): klopt de mediaan-dag met de backtest-verwachting per qty? Zo nee — de
+regels aanpassen, geen nieuwe fleet-uitrol tot de discrepantie verklaard is.
+
+**Niet in scope:** BE-lock / trail-tick-parameters. Vorige poging (backtest
+`4d22f520`) toonde dat die knoppen de edge doden (jaar-netto −$302k op MGC).
+Blijven uit.
+
+## Datasets
 
 ## Datasets
 

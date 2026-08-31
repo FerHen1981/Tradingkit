@@ -1,0 +1,20 @@
+# MEX Tradovate Fills scraper — downloads per-account Fills CSVs (headless).
+# Runs the browser under the persistent ~/.mex-browser profile (log in once headful first).
+# Install on mex-mw-01:
+#   1. Deploy middleware/ and: cd middleware/scraper && npm install
+#   2. Log in once:  MEX_HEADFUL=1 node scrape.mjs   (session saved to ~/.mex-browser)
+#   3. Adjust WorkingDirectory/ExecStart/Environment paths below to match.
+#   4. sudo cp deploy/mex-scrape.{service,timer} /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-scrape.timer
+[Unit]
+Description=MEX Tradovate Fills scraper (download CSVs for the Trade Journal)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware/scraper
+Environment=MEX_EXPORT_DIR=/root/exports
+Environment=MEX_PROFILE_DIR=/root/.mex-browser
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+ExecStart=/usr/bin/node scrape.mjs

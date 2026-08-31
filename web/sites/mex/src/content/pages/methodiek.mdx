@@ -1,0 +1,56 @@
+---
+title: Methodiek
+description: >-
+  Hoe een strategie bij MEX Traders van idee naar productie gaat: validatie
+  out-of-sample, gecontroleerde uitvoering en reconciliatie tot op de tick.
+eyebrow: Werkwijze
+lead: >-
+  Een edge die alleen in een backtest bestaat is geen edge. Onze methodiek is
+  erop ingericht om dat verschil zo vroeg mogelijk vast te stellen — en zo goedkoop
+  mogelijk.
+order: 20
+draft: false
+noindex: false
+---
+
+## 1. Validatie voordat er geld aan te pas komt
+
+Elke strategie doorloopt een vaste reeks tests. De parameters worden gekozen op
+de eerste helft van de historie; het oordeel valt op de tweede helft, die tijdens
+het kalibreren niet is gezien. Een strategie die alleen in de eerste helft werkt,
+krijgt geen funded kapitaal. Dat klinkt vanzelfsprekend en is in de praktijk de zeef die de
+meeste ideeën tegenhoudt.
+
+Daarbovenop draait een walk-forward-analyse: het model wordt herhaaldelijk
+opnieuw gekalibreerd op een verschuivend venster en telkens beoordeeld op de
+periode erna. Dit benadert wat er in werkelijkheid gebeurt — je kiest je
+instellingen altijd zonder de toekomst te kennen.
+
+Daar hoort één eerlijke beperking bij. Een venster verliest zijn onafhankelijkheid zodra je er keuzes op hebt gebaseerd: hoe vaker je erop toetst, hoe meer het een tweede kalibratieset wordt. Wij houden daarom bij hoe vaak een periode is gebruikt, en beschouwen een uitkomst pas als bevestiging wanneer zij op ongebruikte jaren staat.
+
+## 2. Gecontroleerde uitvoering
+
+Eén signaal gaat naar een centrale laag die bepaalt welke rekeningen het
+ontvangen, in welke omvang en via welke tegenpartij. Die scheiding is bewust: de
+strategie weet niets van rekeningen, en de uitvoering neemt geen
+handelsbeslissingen. Daartussen zitten harde beveiligingen — een noodstop, een
+risicolimiet per rekening en bescherming tegen dubbel uitgevoerde orders.
+
+## 3. Reconciliatie tot op de tick
+
+Na afloop wordt vastgesteld wat er werkelijk is gebeurd. Elke bedoelde order
+wordt gekoppeld aan de daadwerkelijke uitvoering, per tegenpartij, en het
+verschil wordt uitgedrukt in ticks en in vertraging.
+
+Dat verschil is geen administratieve nabrander. Over duizenden trades is
+uitvoeringskwaliteit vaak groter dan het verschil tussen twee redelijke
+strategieën. Het is de reden dat wij resultaten in ticks publiceren: het is de
+eenheid waarin de winst daadwerkelijk wordt gemaakt of verspeeld.
+
+## Waarom units en geen bedragen
+
+Een bedrag zegt alleen iets in combinatie met de omvang van de rekening en het
+genomen risico. Een tick zegt iets over de uitvoering, en een R-multiple zegt
+iets over het rendement per eenheid risico — ongeacht de omvang. Voor wie de
+kwaliteit van een handelsoperatie wil beoordelen, zijn dat de bruikbare
+grootheden.

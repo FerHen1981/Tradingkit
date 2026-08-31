@@ -1,0 +1,76 @@
+---
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import StatStrip from "@mex/brand/components/StatStrip.astro";
+import MarketTable from "@mex/brand/components/MarketTable.astro";
+import EquityCurve from "@mex/brand/components/EquityCurve.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+
+import stats from "../data/public-stats.json";
+import { headlineTiles, statsSource, type PublicStats } from "../lib/stats";
+
+const s = stats as PublicStats;
+const tiles = headlineTiles(s);
+---
+
+<Base
+  title="Resultaten"
+  description="Historische handelsresultaten van MEX Traders, gepubliceerd in units — ticks en R-multiples. Geen bedragen, geen rekeninggegevens."
+>
+  <Hero
+    eyebrow="Resultaten"
+    headline="Wat de cijfers wél zeggen"
+    lead="Alles op deze pagina staat in units. Een tick is de kleinste prijsbeweging van een contract en is de eenheid waarin uitvoeringskwaliteit ontstaat. Een R-multiple is de opbrengst per eenheid genomen risico, en daarmee de enige grootheid die je over verschillende markten heen mag optellen."
+    size="md"
+  />
+
+  <Section>
+    {s.sample && (
+      <Callout variant="warning" title="Voorbeelddata">
+        Deze pagina toont nog een placeholder-momentopname. De equity-reeks is
+        illustratief; de marktregels bevatten de werkelijke unit-cijfers uit het
+        handelsjournaal. Zodra de publicatietaak op de server draait, wordt dit
+        bestand automatisch vervangen en verdwijnt deze melding.
+      </Callout>
+    )}
+
+    <StatStrip items={tiles} source={statsSource(s)} />
+  </Section>
+
+  <Section
+    eyebrow="Verloop"
+    title="Cumulatieve R over de looptijd"
+    lead="Elke trade telt mee als veelvoud van het risico dat ervoor is aangegaan. Daardoor is de curve optelbaar over markten heen én volledig los van rekeningomvang — er hoeft geen saldo aan te pas te komen om het verloop te kunnen lezen."
+  >
+    <EquityCurve
+      points={s.equity}
+      title="Cumulatieve R"
+      valueSuffix="R"
+      baseline={0}
+      caption="Som van de gerealiseerde R-multiples per periode, cumulatief vanaf de start. Samengesteld uit gereconcilieerde, gesloten transacties; kosten en commissies zijn verwerkt. Openstaande posities tellen niet mee."
+    />
+  </Section>
+
+  <Section
+    eyebrow="Per markt"
+    title="Waar het resultaat vandaan komt"
+    lead="Netto resultaat staat per markt in de eigen eenheid van die markt. Die kolom wordt bewust niet opgeteld: een goud-tick en een S&P-tick zijn verschillende bedragen, dus een totaal eronder zou een rekenfout zijn met een officieel uiterlijk."
+    raised
+  >
+    <MarketTable
+      markets={s.markets}
+      caption="Status noemt het type rekening waarop de markt draait — funded of evaluatie. Dat is een operationele keuze, geen oordeel over de kwaliteit van het model. Slippage is het verschil tussen de bedoelde prijs en de werkelijke fill, gemiddeld per trade en uitgedrukt in ticks."
+    />
+  </Section>
+
+  <Section narrow>
+    <Callout variant="legal">
+      Historische resultaten van handelsrekeningen van de onderneming zelf. Geen
+      indicatie voor toekomstige resultaten. Handelen in futures brengt een
+      aanzienlijk risico op verlies met zich mee. Deze pagina is een weergave van
+      bedrijfsresultaten en vormt geen aanbod, advies of uitnodiging tot enige
+      transactie. Zie de <a href="/juridisch/disclaimer">volledige disclaimer</a>.
+    </Callout>
+  </Section>
+</Base>

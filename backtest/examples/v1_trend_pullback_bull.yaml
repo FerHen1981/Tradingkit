@@ -1,0 +1,12 @@
+# Framework demo · variant 1 — TREND-PULLBACK, gated to bull regimes.
+# Trades a moving-average pullback with a VWAP location filter, ONLY in
+# Strong/Controlled Bull Trend (the regime gate). Contrast with v2 (ungated).
+name: v1_trend_pullback_bull
+base_asset: NQ
+base_preset: EL_TORO
+setup_class: trend_pullback
+regime_filter: [Strong Bull Trend, Controlled Bull Trend]
+groups:
+  moving_average: {}
+  vwap: {}
+  swing_stops: {}

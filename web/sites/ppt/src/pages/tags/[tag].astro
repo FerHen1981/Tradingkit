@@ -1,0 +1,54 @@
+---
+import type { GetStaticPaths } from "astro";
+
+import Base from "../../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import PostCard from "@mex/brand/components/PostCard.astro";
+
+import { allPosts, postPath, tagCloud, readingTime } from "../../lib/posts";
+
+export const getStaticPaths = (async () => {
+  const posts = await allPosts();
+  return tagCloud(posts).map(({ tag }) => ({
+    params: { tag },
+    props: { tag, posts: posts.filter((p) => p.data.tags.includes(tag)) },
+  }));
+}) satisfies GetStaticPaths;
+
+const { tag, posts } = Astro.props;
+---
+
+<Base
+  title={`#${tag}`}
+  description={`Alle posts over ${tag} op Pips & Palm Trees.`}
+>
+  <Hero
+    eyebrow="Onderwerp"
+    headline={`#${tag}`}
+    lead={`${posts.length} ${posts.length === 1 ? "post" : "posts"} over dit onderwerp.`}
+    size="md"
+  />
+
+  <Section>
+    <div class="feed">
+      {posts.map((post) => (
+        <PostCard
+          title={post.data.title}
+          href={postPath(post)}
+          summary={post.data.summary}
+          date={post.data.date}
+          tags={[...post.data.tags]}
+          series={post.data.series}
+          readingTime={readingTime(post.body)}
+        />
+      ))}
+    </div>
+  </Section>
+</Base>
+
+<style>
+  .feed {
+    border-top: 1px solid var(--line);
+  }
+</style>

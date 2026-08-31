@@ -153,20 +153,49 @@ def _program_from_json(rec: dict) -> Program:
         as_of=rec["meta"].get("as_of", ""))
 
 
-def _load_json_registry() -> dict:
-    """Load data/propfirms.json (the single source of truth) if present; else the
-    built-in seed. The JSON is the canonical registry consumed by the Pine
-    generator and the middleware too."""
+def _load_doc() -> dict:
+    """The registry JSON as-is ({} if missing/unreadable). Kept alongside the slim
+    Program view for consumers that need fields the dataclass doesn't carry
+    (payout ladder, min-profitable-days, min payout — used by funded.py)."""
     import json as _json
     import os as _os
     path = _os.path.join(_os.path.dirname(__file__), "..", "data", "propfirms.json")
     try:
         with open(path) as f:
-            doc = _json.load(f)
-        progs = [_program_from_json(r) for r in doc["programs"]]
-        return {p.key: p for p in progs}
-    except (FileNotFoundError, KeyError, ValueError):
-        return {p.key: p for p in _SEED}
+            return _json.load(f)
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+_DOC = _load_doc()
+
+
+def raw_programs(firm: str = None, stage: str = None, size: int = None) -> list[dict]:
+    """Raw registry program records (dicts straight from data/propfirms.json),
+    optionally filtered. Empty list when the registry file is absent."""
+    out = []
+    for r in _DOC.get("programs", []):
+        if firm and str(r.get("firm", "")).lower() != firm.lower():
+            continue
+        if stage and r.get("stage") != stage:
+            continue
+        if size is not None and int(((r.get("account") or {}).get("size")) or 0) != int(size):
+            continue
+        out.append(r)
+    return out
+
+
+def _load_json_registry() -> dict:
+    """Programs from data/propfirms.json (the single source of truth) if present;
+    else the built-in seed. The JSON is the canonical registry consumed by the
+    Pine generator and the middleware too."""
+    try:
+        if _DOC.get("programs"):
+            progs = [_program_from_json(r) for r in _DOC["programs"]]
+            return {p.key: p for p in progs}
+    except (KeyError, ValueError):
+        pass
+    return {p.key: p for p in _SEED}
 
 
 REGISTRY = _load_json_registry()
@@ -224,5 +253,7 @@ def to_overlay(p: Program) -> dict:
         "acct_trail_dd": p.drawdown,
         "acct_goal": p.profit_target if p.profit_target else 3_000.0,
         "acct_dll": p.max_daily_loss if p.max_daily_loss else 1_000.0,
-        "consistency_pct": p.consistency_pct if p.consistency_pct else 50.0,
+        # 0 = no rule. Consistency is a funded-account rule: an evaluation has none, so
+        # defaulting it to 50 puts a ceiling on the overlay that the firm never set.
+        "consistency_pct": p.consistency_pct or (0.0 if p.stage == "eval" else 50.0),
     }

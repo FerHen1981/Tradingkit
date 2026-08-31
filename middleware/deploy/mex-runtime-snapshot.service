@@ -1,0 +1,16 @@
+# MEX runtime snapshot — D-31. Schrijft docs/runtime-snapshot.md in de repo.
+#
+# Install op mex-mw-01:
+#   sudo cp deploy/mex-runtime-snapshot.{sh,service,timer} /etc/systemd/system/   # .sh naar /usr/local/bin
+#   sudo install -m755 deploy/mex-runtime-snapshot.sh /usr/local/bin/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mex-runtime-snapshot.timer
+#   Controle: systemctl start mex-runtime-snapshot; journalctl -u mex-runtime-snapshot -n40
+[Unit]
+Description=MEX runtime snapshot (welke versie draait er echt)
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=SNAPSHOT_REPO=/root/mex-journal
+Environment=RECEIVER_SRC=/root/mex-middleware-b/src/Mex.Journal.Receiver
+ExecStart=/usr/local/bin/mex-runtime-snapshot.sh

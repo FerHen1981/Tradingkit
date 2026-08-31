@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 
 from . import data as data_mod
@@ -19,11 +20,35 @@ from .funnel import run_funnel, summarize
 from .metrics import kpis, trades_frame
 
 
-def run_one(df, cfg, research: bool):
+def _emit_progress(done: int, total: int, note: str = "") -> None:
+    """Machine-readable progress line the Lab job-runner parses into a % bar.
+    Harmless noise on a plain terminal."""
+    print(f"PROGRESS {done} {total} {note}", flush=True)
+
+
+# Regime tagging shares indicators.regime_labels — one source of truth for the
+# engine's regime gate, the run record's regime tag, and edge attribution (all
+# classify on a 15m resample above 400k bars: same labels, ~47s -> ~2s on 20y 1m).
+def _regime_labels(dtf, cfg):
+    return ind_mod.regime_labels(dtf, cfg)
+
+
+def run_one(df, cfg, research: bool, progress=None, ind_progress=None):
     t0 = time.time()
-    ind = ind_mod.compute(df, cfg)
-    eng = Engine(cfg, df, ind, research_mode=research)
-    res = eng.run()
+    ind = ind_mod.compute(df, cfg, progress=ind_progress)
+    # diag=True on the single-run path (cheap counters; not the parallel mill) so
+    # every run carries its own data-derived explanation (phases 1+2).
+    eng = Engine(cfg, df, ind, research_mode=research, diag=True)
+    res = eng.run(progress=progress)
+    try:
+        from .diagnose import diagnose_trades, diagnose_signals
+        from .funded import account_drawdown
+        from .metrics import trades_frame
+        dd = account_drawdown(cfg.initial_capital or 50_000)
+        res.diagnosis = {"trades": diagnose_trades(trades_frame(res), cfg, drawdown=dd),
+                         "signals": diagnose_signals(ind, cfg, res.veto_counts)}
+    except Exception as e:
+        res.diagnosis = {"error": repr(e)}
     dt = time.time() - t0
     return res, dt
 
@@ -56,27 +81,219 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True)
     ap.add_argument("--preset", choices=list(PRESETS))
+    ap.add_argument("--spec", help="path to a strategy spec YAML (validated against registry.yaml)")
     ap.add_argument("--all", action="store_true", help="run both presets")
     ap.add_argument("--firm", help="prop-firm program key (e.g. apex_100k_eod, topstep_50k_eval) — overlays that firm's account rules; see backtest/firms.py")
     ap.add_argument("--symbol", help="contract spec to use (NQ, ES, GC, CL, 6E, ...); default NQ")
+    ap.add_argument("--regime-filter", default="",
+                    help="finetune: comma-separated regimes to trade ONLY in "
+                         "(e.g. 'Strong Bull Trend,Controlled Bull Trend'); empty = all regimes")
     ap.add_argument("--unit-mode", choices=["Ticks", "Points", "%", "ATR"],
                     help="override distance unit (use ATR to port a config across instruments)")
+    ap.add_argument("--tf", help="timeframe(s) to aggregate the 1m source to; comma-list sweeps "
+                    "(e.g. 5m,15m,1h). Choices: 1m,5m,10m,15m,30m,1h,2h,3h,4h,1d")
     ap.add_argument("--research", action="store_true", help="disable account halts (pure signal stats)")
     ap.add_argument("--funnel", action="store_true", help="walk-forward eval funnel (pass rate) instead of one run")
+    ap.add_argument("--funded", action="store_true", help="funded-account payout overlay (3rd lens): simulate payouts over time")
+    ap.add_argument("--window", choices=["full", "recent3y"], default="full",
+                    help="recent3y = iterate on the prepared last-3-years slice (fast, "
+                         "low memory — the smooth size for a small box); full = the whole "
+                         "history (validation; minutes on 20y 1m)")
+    ap.add_argument("--since", help="only use data on/after this date (YYYY-MM-DD)")
+    ap.add_argument("--until", help="only use data before this date (YYYY-MM-DD)")
+    ap.add_argument("--holdout-days", type=int, default=0,
+                    help="hold out the last N days as out-of-sample")
+    ap.add_argument("--segment", choices=["all", "is", "oos"], default="all",
+                    help="with --holdout-days: run in-sample (is), out-of-sample (oos), or all")
+    ap.add_argument("--micro", action="store_true",
+                    help="also run each job on the micro twin (MNQ/MES/MGC/...) — same data, 1/10 multiplier")
     ap.add_argument("--funnel-step", type=int, default=5, help="sessions between fresh eval starts")
     ap.add_argument("--funnel-horizon", type=int, default=20, help="sessions per eval before TIMEOUT")
     ap.add_argument("--trades-out", help="write the trade list CSV to this path")
     ap.add_argument("--json-out", help="write KPIs JSON to this path")
+    ap.add_argument("--lab", action="store_true",
+                    help="register each run in the Lab data room ($LAB_DIR) with a run_id")
     args = ap.parse_args()
 
     print(f"loading {args.data} ...")
-    df = data_mod.load(args.data)
-    print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    if args.window == "recent3y":
+        _emit_progress(0, 100, "loading recent-3y slice (prepared; fast)")
+        df = data_mod.load_window(args.data, years=3)
+        print(f"  window=recent3y: {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}  "
+              f"(iteration slice — validate the final pick on --window full)")
+    else:
+        _emit_progress(0, 100, "loading FULL history (validation run — first load parses the "
+                               "CSV, ~1 min on 20y 1m; cached after that)")
+        df = data_mod.load(args.data)
+        print(f"  {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
 
-    presets = list(PRESETS) if args.all else [args.preset]
+    # Date window / in-sample vs out-of-sample split (the generator searches on
+    # IS and verifies once on the OOS holdout).
+    if args.since or args.until:
+        df = data_mod.slice_dates(df, args.since, args.until)
+        print(f"  windowed -> {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+    _segment = "all"
+    if args.holdout_days and args.segment != "all":
+        is_df, oos_df, cut = data_mod.holdout_split(df, args.holdout_days)
+        df = is_df if args.segment == "is" else oos_df
+        _segment = args.segment
+        print(f"  segment={args.segment} (holdout {args.holdout_days}d, cutoff {cut}) "
+              f"-> {len(df):,} bars  {df['et'].iloc[0]} -> {df['et'].iloc[-1]}")
+
+    # Build the list of (name, cfg) jobs — either from a spec or from presets.
+    if args.spec:
+        from .spec import validate_file, spec_to_config
+        rspec = validate_file(args.spec)
+        spec_cfg, unmapped = spec_to_config(rspec)
+        if unmapped:
+            print(f"  NOTE: spec set params the engine does not yet wire (ignored): "
+                  f"{', '.join(unmapped)}")
+        jobs = [(spec_cfg.name, spec_cfg)]
+    else:
+        names = list(PRESETS) if args.all else [args.preset]
+        if names == [None]:
+            ap.error("provide one of --preset NAME, --all, or --spec PATH")
+        jobs = [(n, PRESETS[n]) for n in names]
+
+    # --micro: add a micro-twin variant of each job (same data, 1/10 multiplier).
+    if args.micro:
+        from .config import micro_twin
+        twins = []
+        for bn, cfg in jobs:
+            tw = micro_twin(cfg.contract.symbol)
+            if tw:
+                twins.append((bn, cfg.with_(contract=contract(tw))))
+        jobs = jobs + twins
+
+    # Timeframe(s) to run: --tf wins; else a spec's timeframe; else 1m. A
+    # comma-list sweeps (e.g. --tf 5m,15m,1h) — one job per (strategy x timeframe).
+    from .config import TIMEFRAMES
+    if args.tf:
+        tfs = [t.strip().lower() for t in args.tf.split(",") if t.strip()]
+    elif args.spec and rspec.timeframe:
+        tfs = [str(rspec.timeframe).lower()]
+    else:
+        tfs = ["1m"]
+    for t in tfs:
+        if t not in TIMEFRAMES:
+            ap.error(f"unknown timeframe {t!r}; known: {list(TIMEFRAMES)}")
+
+    # Resample the 1m source once per distinct timeframe (cached).
+    _dfcache: dict[str, "object"] = {}
+    def df_for(tf):
+        if tf not in _dfcache:
+            d = df if tf == "1m" else data_mod.resample_tf(df, tf)
+            print(f"  [{tf}] {len(d):,} bars")
+            _dfcache[tf] = d
+        return _dfcache[tf]
+
+    # Expand jobs across timeframes; label with @tf when sweeping >1.
+    tag = (lambda name, tf: f"{name}@{tf}") if len(tfs) > 1 else (lambda name, tf: name)
+    expanded = [(tag(bn, tf), bn, cfg, tf) for bn, cfg in jobs for tf in tfs]
+    single = len(expanded) == 1
+
+    # Data date range (same span across timeframes; recorded on every run).
+    try:
+        _window = {"first": str(df["et"].iloc[0])[:19], "last": str(df["et"].iloc[-1])[:19],
+                   "bars_1m": int(len(df))}
+    except Exception:
+        _window = {}
+
+    def _settings(cfg):
+        """Curated snapshot of the indicators + mechanics a run actually used
+        (works for specs AND presets, so every run is transparent)."""
+        return {
+            "unit_mode": cfg.unit_mode,
+            "filters": {"gap_filter": cfg.use_gap_filter, "gap_min_ticks": cfg.gap_min_ticks,
+                        "gap_max_ticks": cfg.gap_max_ticks, "cvd_filter": cfg.use_cvd_filter,
+                        "cvd_streak": cfg.use_cvd_streak, "cvd_trend_count": cfg.cvd_trend_count,
+                        "vwap_veto": cfg.use_vwap_veto},
+            "structure": {"stop_swing": cfg.stop_swing, "pivot_k": cfg.pivot_k,
+                          "swing_buf_ticks": cfg.swing_buf_ticks, "max_stop_ticks": cfg.max_stop_ticks},
+            "entry": {"limit_mode": cfg.entry_limit_mode, "expiry_bars": cfg.expiry_bars},
+            "tp": {"mode": cfg.tp_mode, "r_multiple": cfg.r_multiple, "tp_fixed_ticks": cfg.tp_fixed_ticks,
+                   "breakeven": cfg.use_breakeven, "trail": cfg.use_trail},
+            "sizing": {"mode": cfg.sizing_mode, "contract_size": cfg.contract_size},
+            "account": {"initial_capital": cfg.initial_capital, "phase": cfg.phase},
+        }
+
+    def _record(base_name, cfg, tf, lens, kpi_obj, trades_csv, res=None):
+        """Register one run in the Lab data room with a recognizable run_id."""
+        if not args.lab:
+            return
+        from datetime import datetime, timezone
+        from .lab.runs import fingerprint, make_run_id, record_run
+        from .spec import describe_config
+        asset = cfg.contract.symbol
+        if args.spec:
+            fp_src, source = {"groups": rspec.groups, "base_preset": rspec.base_preset}, f"spec:{args.spec}"
+            kind = "spec"
+        else:
+            fp_src, source = {"preset": base_name}, f"preset:{base_name}"
+            kind = "preset"
+        # dataset_id, NOT basename: every Lab dataset's file is "canonical.csv", so
+        # basename made runs on different datasets fingerprint-collide and
+        # silently overwrite each other's records.
+        fp = fingerprint({**fp_src, "asset": asset, "tf": tf, "lens": lens, "segment": _segment,
+                          "unit_mode": cfg.unit_mode, "data": data_mod.dataset_id(args.data),
+                          "window": args.window})
+        rid = make_run_id(asset, base_name, tf, lens, fp)
+        meta = {"run_id": rid, "asset": asset, "strategy": base_name, "timeframe": tf,
+                "lens": lens, "segment": _segment, "holdout_days": args.holdout_days or 0,
+                "source": source, "kind": kind,
+                "data_file": os.path.basename(args.data),
+                "dataset": data_mod.dataset_id(args.data), "window": _window,
+                "data_window": args.window,
+                "settings": _settings(cfg), "desc": describe_config(cfg),
+                "created_at": datetime.now(timezone.utc).isoformat(), "kpis": kpi_obj}
+        if res is not None and getattr(res, "diagnosis", None):
+            meta["diagnosis"] = res.diagnosis   # phases 1+2: data-derived "why"
+        try:                                   # objective L1 regime tag for this run
+            labels = _regime_labels(df_for(tf), cfg)
+            meta["regime"] = ind_mod.regime_summary(labels)
+            if res is not None:                # unbiased discovery: realized edge per regime
+                from .metrics import edge_by_regime
+                meta["edge_by_regime"] = edge_by_regime(res, labels)
+        except Exception as e:
+            meta["regime"] = {"error": str(e)}
+        try:                                   # sharpen the setup score with the run's regime
+            from .scoring import score_strategy
+            dom = meta["regime"].get("dominant") if isinstance(meta.get("regime"), dict) else None
+            meta["desc"]["score"] = score_strategy(meta["desc"], regime=dom)
+        except Exception:
+            pass
+        if args.spec:
+            meta["groups"] = rspec.groups
+        artifacts = {"kpis.json": json.dumps(kpi_obj, indent=2, default=str)}
+        if trades_csv:
+            artifacts["trades.csv"] = trades_csv
+        d = record_run(meta, artifacts)
+        print(f"  recorded run {rid} -> {d}")
+
     out = {}
-    for name in presets:
-        cfg = PRESETS[name]
+    njobs = len(expanded)
+    for jidx, (name, base_name, cfg, tf) in enumerate(expanded):
+        # Per-job progress mapped onto an overall 0..(njobs*100) scale so the UI
+        # bar advances smoothly across a multi-job run (e.g. GC then MGC twin).
+        _sym = cfg.contract.symbol
+        _lbl = f"{name} {_sym}@{tf}" + (f" · job {jidx+1}/{njobs}" if njobs > 1 else "")
+        # within one job's 0..100 slice: indicators 0-12%, engine bar-loop 12-98%,
+        # finalizing 99% — so the ~35s indicator build shows movement too.
+        def _prog_ind(done, total, _jidx=jidx, _lbl=_lbl):
+            frac = (done / total) if total else 0.0
+            _emit_progress(_jidx * 100 + int(frac * 12), njobs * 100,
+                           f"{_lbl} · computing indicators {done}/{total}")
+        def _prog(done, total, _jidx=jidx, _lbl=_lbl):
+            frac = (done / total) if total else 0.0
+            _emit_progress(_jidx * 100 + 12 + int(frac * 86), njobs * 100,
+                           f"{_lbl} · bar {done:,}/{total:,}")
+        def _fin(msg, _jidx=jidx, _lbl=_lbl):
+            # the bar-loop is done; keep the bar alive through the (silent, heavy)
+            # tail — overlay + regime classification + recording — so it never
+            # looks frozen at 99%.
+            _emit_progress(_jidx * 100 + 99, njobs * 100, f"{_lbl} · {msg}")
+        _emit_progress(jidx * 100, njobs * 100, f"{_lbl} · computing indicators …")
+        dtf = df_for(tf)
         if args.firm:
             from .firms import program, to_overlay
             p = program(args.firm)
@@ -90,22 +307,53 @@ def main():
             cfg = cfg.with_(contract=contract(args.symbol))
         if args.unit_mode:
             cfg = cfg.with_(unit_mode=args.unit_mode)
+        if args.regime_filter:
+            cfg = cfg.with_(regime_filter=frozenset(
+                r.strip() for r in args.regime_filter.split(",") if r.strip()))
         if args.funnel:
-            ind = ind_mod.compute(df, cfg)
+            ind = ind_mod.compute(dtf, cfg)
             t0 = time.time()
-            outs = run_funnel(cfg, df, ind, step_sessions=args.funnel_step,
+            _fin("walk-forward funnel …")
+            outs = run_funnel(cfg, dtf, ind, step_sessions=args.funnel_step,
                               horizon_sessions=args.funnel_horizon)
             s = summarize(outs)
+            _fin("recording …")
             print(f"\n{'='*70}\n{name}  [EVAL FUNNEL]  ({time.time()-t0:.1f}s)")
             print(f"  fresh eval every {args.funnel_step} sessions, {args.funnel_horizon}-session horizon")
             print(f"  starts={s['starts']}  PASS={s['pass']} ({s['pass_rate_pct']}%)  "
                   f"BREACH={s['breach']}  TIMEOUT={s['timeout']}  median trades={s['median_trades_to_resolve']}")
             out[name] = s
+            _record(base_name, cfg, tf, "eval", s, None)
             continue
-        res, dt = run_one(df, cfg, args.research)
+        if args.funded:
+            from .funded import daily_from_trades, simulate_funded, summarize as fsum
+            t0 = time.time()
+            res, _ = run_one(dtf, cfg, research=True, progress=_prog, ind_progress=_prog_ind)   # no halts; overlay applied post-hoc
+            _fin("funded overlay …")
+            fr = simulate_funded(daily_from_trades(res.trades),
+                                 account_size=cfg.initial_capital or 50_000)
+            # merge the underlying trade KPIs into the record (key sets are
+            # disjoint) so a funded run still shows trades/PF/net in the Runs
+            # table instead of empty columns.
+            s = {**kpis(res), **fsum(fr)}
+            _fin("recording …")
+            print(f"\n{'='*70}\n{name}  [FUNDED OVERLAY]  ({time.time()-t0:.1f}s)")
+            print(f"  payouts={s['payouts']}  withdrawn=${s['withdrawable']:,.0f}  "
+                  f"~${s['per_month']:,.0f}/mo over {s['months']} mo  "
+                  f"{'BREACHED: '+s['breach_reason'] if s['breached'] else 'survived'}")
+            print(f"  trading days={s['trading_days']} (qual {s['qualifying_days']})  "
+                  f"first payout after {s['days_to_first_payout']} days")
+            out[name] = s
+            _record(base_name, cfg, tf, "funded", s, None, res=res)
+            continue
+        res, dt = run_one(dtf, cfg, args.research, progress=_prog, ind_progress=_prog_ind)
+        _fin("regime + recording …")
         _print_report(name, res, args.research, dt)
         out[name] = kpis(res)
-        if args.trades_out and len(presets) == 1:
+        lens = "classic" if args.research else "native"
+        _record(base_name, cfg, tf, lens, out[name],
+                trades_frame(res).to_csv(index=False) if args.lab else None, res=res)
+        if args.trades_out and single:
             trades_frame(res).to_csv(args.trades_out, index=False)
             print(f"  trades written to {args.trades_out}")
     if args.json_out:

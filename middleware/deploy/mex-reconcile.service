@@ -1,0 +1,29 @@
+# MEX reconciliation — intended (routed-log) vs actual (Fills export) -> LifeOS Reconciliation.
+#
+# D-03: the engine existed but had no trigger. `POST /reconcile` lives on app.main, which is
+# not the live path, so the Notion Reconciliation DB stayed empty. This is that trigger.
+#
+# Install on mex-mw-01:
+#   1. NOTION_TOKEN + NOTION_RECON_DB in the EnvironmentFile below.
+#   2. Leave RECONCILE_APPLY unset for a dry run first — it logs what it would write.
+#      Set RECONCILE_APPLY=1 once the counts look right.
+#   3. sudo cp deploy/mex-reconcile.{service,timer} /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-reconcile.timer
+#   Check: journalctl -u mex-reconcile -n20
+[Unit]
+Description=MEX reconciliation (intended vs actual fills -> Notion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+Environment=EXPORTS_DIR=/root/exports
+Environment=ROUTED_DIR=/root/intent-store
+Environment=RECON_DAYS=3
+# 209 has an incomplete Fills export — keep it out of the rollup until re-exported.
+Environment=DASH_SKIP=209
+# Dry by default. Flip to 1 in the EnvironmentFile when the dry-run counts are right.
+# Environment=RECONCILE_APPLY=1
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.reconcile_run

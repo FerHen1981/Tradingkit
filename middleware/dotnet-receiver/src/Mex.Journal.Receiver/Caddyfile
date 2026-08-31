@@ -1,0 +1,5 @@
+# Caddy regelt automatisch Let's Encrypt TLS voor dit subdomein.
+# Reverse-proxy naar het .NET-endpoint dat lokaal op poort 5000 draait.
+mw.mex-traders.com {
+    reverse_proxy localhost:5000
+}

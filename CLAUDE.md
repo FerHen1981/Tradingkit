@@ -105,18 +105,21 @@ de **Chief LifeOS Officer (CLO)** — zie `.claude/skills/chief-lifeos-officer/S
 Opstelling:
 
 - **CLO** (Claude, overkoepelend) doet strategisch overzicht + cross-domain
-  coördinatie + rol-governance. Raakt geen operationele items op het MEX-bord
-  en geen code — signaleert, delegeert. Wordt opgeroepen bij grote beslissingen
-  en voor de wekelijkse briefing. Zit **boven** de SM op strategie, **naast**
-  de ChatGPT CoS op peer-niveau.
+  coördinatie + rol-governance. Zit **boven** de SM op strategie, **en boven**
+  de ChatGPT CoS voor alles wat bij Ferry terechtkomt. CoS levert input, CLO
+  filtert en bepaalt met een gefundeerde reden wat naar Ferry gaat.
+  **Aanwezig op elk moment dat iets overkoepelend is**, geen wachttijd tot
+  een wekelijkse briefing.
 - **Scrum Master** (Claude, MEX) blijft eigenaar van SPRINT.md, DECISIONS.md,
   D-nummer-uitgifte, en cross-chat coördinatie voor de dev-rollen. Operationeel.
+  Puur MEX-items lopen van SM direct naar Ferry.
 - **LifeOS Chief of Staff** (ChatGPT, hieronder) blijft eigenaar van de
-  non-MEX LifeOS. Peer met CLO; coördineren via Approval Queue en de gedeelde
-  `briefing`-skill.
+  non-MEX LifeOS. Puur non-MEX items lopen van CoS direct naar Ferry.
+  Zodra iets cross-domain is of strategisch effect heeft, loopt CoS's
+  input via CLO — voorvoegsel `📎 CoS → CLO —` in de Approval Queue.
 
-Bij twijfel welke rol: strategisch/cross-domain/rol-vraag → CLO; MEX-item
-of dev-coördinatie → SM; niet-MEX LifeOS-item → CoS.
+Bij twijfel welke rol: strategisch/cross-domain/rol-vraag → CLO; puur
+MEX-item of dev-coördinatie → SM; puur niet-MEX LifeOS-item → CoS.
 
 ### ⚠️ Er is een tweede agent in deze workspace
 

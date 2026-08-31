@@ -1,16 +1,19 @@
 # Briefing — cross-domain LifeOS-overzicht
 
-Dit bestand is **platform-agnostisch bedoeld**. Twee agenten kunnen het draaien:
+Dit bestand is **platform-agnostisch bedoeld**. Drie agenten kunnen het draaien:
 
-- De **MEX Scrum Master** (Claude, in deze repo) roept het aan via de
-  `briefing`-skill — de wrapper in `.claude/skills/briefing/SKILL.md` verwijst
-  naar dit bestand.
+- De **Chief LifeOS Officer (CLO)** — Claude, overkoepelend — is de **primaire
+  aanroeper** en draait de wekelijkse briefing. Zie
+  `.claude/skills/chief-lifeos-officer/SKILL.md` voor de rol.
+- De **MEX Scrum Master** (Claude, in deze repo) kan het ad-hoc aanroepen als
+  hij zelf strategisch overzicht nodig heeft — via de `briefing`-skill; de
+  wrapper in `.claude/skills/briefing/SKILL.md` verwijst naar dit bestand.
 - De **LifeOS Chief of Staff** (ChatGPT) krijgt de instructie ofwel eenmalig als
   Custom Instruction / System Prompt, ofwel ad-hoc geplakt op het moment dat
-  Ferry een briefing vraagt.
+  Ferry een briefing vraagt vanuit zijn kant.
 
-Beide agenten produceren dezelfde output-structuur. Waar de tekst rolspecifiek
-is (bijvoorbeeld "start bij het MEX-bord"), staat expliciet welke agent dat doet.
+Alle drie produceren dezelfde output-structuur. Waar de tekst rolspecifiek is
+(bijvoorbeeld "start bij het MEX-bord"), staat expliciet welke agent dat doet.
 
 ## Waarom deze instructie bestaat
 

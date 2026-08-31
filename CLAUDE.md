@@ -98,6 +98,26 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - ⚠️ Deze id's zijn deels dood: *MEX Reconciliation* heeft 0 rijen (geverifieerd 19-08) —
   de laag is gebouwd maar heeft nooit geschreven. Fleet Performance en Trade Journal nog
   ongecontroleerd. Zie `docs/SPRINT.md` D-20.
+### Rolstructuur — CLO, SM, en de ChatGPT CoS (25-08)
+
+Sinds 25-08 zit er boven de MEX Scrum Master een overkoepelende Claude-rol:
+de **Chief LifeOS Officer (CLO)** — zie `.claude/skills/chief-lifeos-officer/SKILL.md`.
+Opstelling:
+
+- **CLO** (Claude, overkoepelend) doet strategisch overzicht + cross-domain
+  coördinatie + rol-governance. Raakt geen operationele items op het MEX-bord
+  en geen code — signaleert, delegeert. Wordt opgeroepen bij grote beslissingen
+  en voor de wekelijkse briefing. Zit **boven** de SM op strategie, **naast**
+  de ChatGPT CoS op peer-niveau.
+- **Scrum Master** (Claude, MEX) blijft eigenaar van SPRINT.md, DECISIONS.md,
+  D-nummer-uitgifte, en cross-chat coördinatie voor de dev-rollen. Operationeel.
+- **LifeOS Chief of Staff** (ChatGPT, hieronder) blijft eigenaar van de
+  non-MEX LifeOS. Peer met CLO; coördineren via Approval Queue en de gedeelde
+  `briefing`-skill.
+
+Bij twijfel welke rol: strategisch/cross-domain/rol-vraag → CLO; MEX-item
+of dev-coördinatie → SM; niet-MEX LifeOS-item → CoS.
+
 ### ⚠️ Er is een tweede agent in deze workspace
 
 **LifeOS Chief of Staff** (Operating Spec v1.4, 21-08) beheert de **non-MEX** LifeOS:

@@ -12,6 +12,90 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 33. 🎩 CLO → Web + Middleware App — publicatie-semantiek per account-type
+**CLO → Web + Middleware App / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+
+**Aanleiding (Ferry, 05-09):** *"we publiceren nu saldo's van eval accounts, die bedragen zeggen niets. Voor evals alleen aantallen (passed/breached) en winrate; voor funded (PA) accounts saldo + winrate, en die moeten bij benadering met de broker overeenkomen. Zonder API, dus met een aanvink-optie in de UI."*
+
+**Wat er moet gebeuren, in twee delen:**
+
+- **Middleware App** — voeg per account een `account_type` (`eval` / `funded`) toe aan de account-datamodel. Twee metrieken per type:
+  - **Eval**: pass-teller + breached-teller + nog-lopend, **genormaliseerd naar 50k-equivalent** (300k pass = 6, 100k pass = 2, factor = grootte/50 000). Winrate = passed / (passed + breached).
+  - **Funded**: saldo + winrate op basis van saldo. Toont ALLEEN als het account een `verified_amount` + `verified_at` binnen X dagen draagt. Anders: onderdrukt of gemarkeerd als "ongeverifieerd".
+  - UI-toggle-set in de viewer (schets zit in de flow-conversatie van 05-09): eval ☐ / funded ☐ · aantallen ○ · saldo's ○ · gecombineerd ○ · 50k-genormaliseerd ☐ · alleen geverifieerd ☐ · verberg spook-trades ☐.
+  - Widget-label: elke view draagt onder het bedrag een korte tekst (`50k-eq · N=12` voor evals, `✓ verified <datum>` voor funded).
+- **Web** — publieke `resultaten.astro` + `public-stats.json` volgen zodra Middleware App het genormaliseerde eval-format publiceert. Bedragen van evals mogen niet meer op de site. `mex_units.roles.for_public()` (units-only) is de bestaande gate; uitbreiden met een `for_public_evals()` (aantallen genormaliseerd).
+
+**Waarom overkoepelend en niet zomaar SM-scope:** dit raakt Middleware, Web én de publieke claims (D-34). CLO houdt zicht op de consistentie; SM en Web voeren uit binnen hun eigen scope.
+
+**Blocked-by:** de gate-flow-doc van item 30 (die de metriek per gate expliciet maakt). Zonder die basis is dit vervanging bouwen op impliciete aannames. **Volgorde: item 30 eerst, dan dit.**
+
+---
+
+### 32. 🎩 CLO → Middleware App + Legacy — PMT-echo op exit + notificatie-taxonomie
+**CLO → Middleware App + Legacy / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+
+**Aanleiding (Ferry, 05-09):** *"een winst is pas een winst als PMT een 'close' teruggeeft die geen fout geeft"* + *"als een hard stop entry weigert om een andere reden dan breached, wil ik weten wat de reden was óf blokkeer je op voorhand."*
+
+**Wat er moet gebeuren, in drie delen:**
+
+1. **Middleware App — grep-check eerst.** Draai over `/root/intent-store/routed_*.jsonl`: **produceert PMT een `sent 200`-regel bij bracket-exits (TP/SL)?** Antwoord bepaalt de bouwbaarheid van de rest.
+   - Ja → punt 2 kan met huidige middelen.
+   - Nee → exit-verifikatie is niet via PMT beschikbaar, en de enige route is Fills-CSV of Rithmic. Meld dat expliciet terug.
+2. **Middleware App (Python: `routed_journal.py`) — PMT-echo op exit-kant.** Analoog aan D-46b's entry-poort: geen PMT-close-echo binnen `PMT_MATCH_WINDOW_S` → EXIT-card wordt `unconfirmed`, geen boeking in de LIVE-tab, wel gemarkeerd zichtbaar. Nieuwe test dekt de fail-closed keuze.
+3. **Legacy (.NET-receiver `Program.cs`) — notificatie-taxonomie.** De huidige "⛔ Order NIET geplaatst" krijgt een prefix per reden: `[BREACHED]` / `[DLL]` / `[TARGET]` / `[RATE-LIMIT]` / `[NETWORK]` / `[IP-POOL]` / `[UNKNOWN]`. Categorie leidt uit dezelfde reply-inhoud die `Rejected()` na de 05-09-fix al leest. Voordeel: Ferry ziet de reden in de Discord-scroll zonder de body te openen.
+
+**Waarom overkoepelend:** de kernregel *"trade telt pas als PMT bevestigt"* raakt zowel de journal-laag (Python) als de dispatch-laag (.NET). Één kant fixen zonder de andere = spook-P&L blijft.
+
+**Blocked-by:** flow-doc van item 30 (moet expliciet maken hoe de exit-echo in de gate-tabel past). Grep-check kan wél al vandaag — dat is puur data-lezen.
+
+---
+
+### 31. 🎩 CLO → Pine Dev — één centrale time-gate (validFrom + validUntil) per script
+**CLO → Pine Dev / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+
+**Aanleiding (Ferry, 05-09):** *"ik ben overgestapt naar hardcoded logica omdat ik de scripts niet vertrouwde — meerdere datums op meerdere plekken, ik wil er maar één die de handel beperkt in backtest, live én forward."*
+
+**Wat er moet gebeuren:**
+
+- **Pine Dev** — vervang de huidige verspreide datum-inputs (`Start date/time (measure from)`, `Backtesting range`, eventuele scriptspecifieke einddatum) door **één input met twee velden per script**: `validFrom` en `validUntil` (datum + uur + ET-tijdzone). Alle bestaande temporele logica leest uit die twee. Backtester, forward-test en live handelen alle drie tegen dezelfde grenzen.
+- Gedrag bij passeren van `validUntil`:
+  - **Entries**: hard-stop, geen signaal meer.
+  - **Exits**: rolling grace van 24 uur — openstaande posities mogen nog netjes sluiten.
+  - **Grens zelf**: soft-notify (één Discord-melding "PA015-TESORO expiration reached, entries blocked").
+- Ferry's huidige hardcoded logica mag eruit zodra deze input werkt en getest is.
+- **Middleware App (parallelle scope)** — bouwt een dubbelslot: env `MEX_ACCOUNT_ACTIVE_UNTIL=<account>=<ISO-tijd>,…` per account, receiver weigert signalen buiten venster ongeacht wat Pine doet. Beide sloten dicht.
+- **Backtest Setup (leest-consumer)** — haakt automatisch aan zodra Pine's input er is; hun runner leest dezelfde tabel.
+
+**Waarom overkoepelend:** deze verandering raakt Pine + Middleware + Backtest, en de aanleiding zit in operationele frustratie die niemand alleen kan wegnemen. CLO bewaakt dat alle drie de kanten dezelfde bron respecteren.
+
+**Blocked-by:** niets — Pine Dev kan starten. Middleware App volgt zodra Pine's input-shape gepubliceerd is.
+
+---
+
+### 30. 🎩 CLO → Scrum Master — flow-document als basis onder alles
+**CLO → Scrum Master (CLO schrijft eerste versie)** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+
+**Aanleiding (Ferry, 05-09):** *"maak de flow zo dat het gecontroleerd is; laten we eerst de basis leggen over wat we doorlaten en op welke manier."*
+
+**Wat er moet gebeuren:**
+
+- **CLO schrijft de eerste versie** van `docs/execution-flow.md`. Structuur:
+  - Kernregel bovenaan: **"trade telt pas als PMT bevestigt"** (Ferry, 05-09).
+  - **Tabel 1 — gate-flow** met per gate: naam · plek in de code · criterium · pass-log · reject-log · wie mag hem wijzigen. Volgorde: `time-gate` (#0), auth, dedup, kill-switch, blocked-gate (D-40), risk-gate (D-02), auto-DLL/target-halt (nieuw), Rejected() na forward.
+  - **Tabel 2 — publicatie-semantiek per account-type** (haakt aan bij item 33). Eval → aantallen genormaliseerd (50k-eq); funded → geverifieerd saldo. Bevat de UI-toggle-mogelijkheden en widget-labels.
+  - **Sectie "bron-van-waarheid per fase"** — expliciet welke fases broker-truth zijn en welke leunen op Pine-of-PMT-echo.
+  - **Sectie "bekende blinde vlekken"** — wat we niet zien zonder API (handmatige acties bij de broker vallen buiten; Ferry heeft 05-09 bevestigd dat hij niet handmatig ingrijpt, dus die blinde vlek is bewust geaccepteerd).
+  - **Route-check-uitkomst** (uit item 32) verwerkt: bestaat PMT-close-echo of niet.
+
+- **Scrum Master controleert en corrigeert** waar de code afwijkt van hoe CLO het uitschrijft. Zodra SM akkoord: het document is de canonical basis voor items 31, 32 en 33.
+
+**Waarom CLO schrijft (en niet SM):** dit gaat over rolgrenzen heen — Pine, .NET, Python, publicatie. Neutrale eerste versie voorkomt dat één kant zijn eigen conventies dominant maakt. SM heeft finale zeggenschap op de codelaag-details.
+
+**Blocked-by:** niets — CLO gaat direct beginnen zodra dit inbox-item een D-nummer heeft.
+
+---
+
 ### 29. Bug in `Rejected()` — succesvolle PMT-orders worden als GEWEIGERD gelogd
 **Middleware App → Ferry / Scrum Master** · 2026-08-25 · status: FIX GEPUSHT, WACHT OP BOUW
 

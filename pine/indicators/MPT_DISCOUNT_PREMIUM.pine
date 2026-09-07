@@ -1,0 +1,93 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT Discount / Premium v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  Where price sits inside its own recent range. 0% = the low of the lookback, 100% = the high.
+//  The strategy allows longs only in the discount half and shorts only in the premium half,
+//  with the split at the mid input.
+//
+//  Default follows EL REY MNQ PROD EOD: 60 bars, mid 50%.
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its calculation for inspection.
+// ============================================================================================
+indicator("MPT Discount / Premium v1.0", "MPT D/P", overlay=true)
+
+// === INPUTS =================================================================
+var string GROUP_CALC = "1 · CALCULATION"
+var string GROUP_VIS  = "2 · VISUALS"
+var string GROUP_TBL  = "3 · TABLE"
+var string GROUP_THEME = "4 · THEME"
+
+dpLookback = input.int(60, "Lookback bars", minval=5, inline="c", group=GROUP_CALC)
+dpMid      = input.float(50, "mid %", minval=1, maxval=99, step=1, inline="c", group=GROUP_CALC,
+     tooltip="Split between discount and premium. 50 = the midpoint of the range.")
+
+showRange = input.bool(true, "Range high / low", inline="v", group=GROUP_VIS)
+showMid   = input.bool(true, "Mid", inline="v", group=GROUP_VIS)
+showZones = input.bool(true, "Shade the halves", group=GROUP_VIS)
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+
+// === CALCULATION (mirrors the strategy) =====================================
+float dpHi  = ta.highest(high, dpLookback)
+float dpLo  = ta.lowest(low, dpLookback)
+float dpMidPx = dpLo + (dpHi - dpLo) * dpMid / 100.0
+float dpPos = dpHi - dpLo <= 0 ? na : 100.0 * (close - dpLo) / (dpHi - dpLo)
+bool inDiscount = not na(dpPos) and dpPos <= dpMid
+bool inPremium  = not na(dpPos) and dpPos >= dpMid
+
+// === PLOT ===================================================================
+p_hi  = plot(showRange ? dpHi : na, "Range high", color=pMuted, linewidth=1)
+p_lo  = plot(showRange ? dpLo : na, "Range low", color=pMuted, linewidth=1)
+p_mid = plot(showMid ? dpMidPx : na, "Mid", color=pBorder, linewidth=1, style=plot.style_linebr)
+fill(p_hi, p_mid, color=showZones ? color.new(NEG, 94) : na, title="Premium")
+fill(p_mid, p_lo, color=showZones ? color.new(POS, 94) : na, title="Discount")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 3, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "Position", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, na(dpPos) ? "—" : str.tostring(dpPos, "#.#") + "%", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "Range", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 1, str.tostring(dpLo, format.mintick) + " – " + str.tostring(dpHi, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Side allowed", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    string sideTxt = inDiscount and inPremium ? "BOTH" : inDiscount ? "LONG" : inPremium ? "SHORT" : "—"
+    color  sideBg  = inDiscount and inPremium ? pNeutralBg : inDiscount ? color.new(POS, 15) : inPremium ? color.new(NEG, 15) : pNeutralBg
+    table.cell(panel, 1, 2, sideTxt, text_color=sideTxt == "LONG" or sideTxt == "SHORT" ? color.white : pText, bgcolor=sideBg, text_size=textSize, text_halign=text.align_center)

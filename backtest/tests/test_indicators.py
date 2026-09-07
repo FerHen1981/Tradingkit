@@ -86,3 +86,52 @@ def test_vwap_resets_each_session():
     ind = compute(df, EL_DORADO)
     assert abs(ind["vwap"].iloc[0] - 100) < 1e-9
     assert abs(ind["vwap"].iloc[1] - 200) < 1e-9   # reset, not blended
+
+
+# --- L1 regime classifier (framework §1/§6) -------------------------------- #
+def _regime_frame(close, off=1.0):
+    return pd.DataFrame({"High": close + off, "Low": close - off, "Close": close})
+
+
+def test_regime_uptrend_is_bull():
+    from backtest.config import Config
+    from backtest.indicators import classify_regime, regime_summary
+    up = np.linspace(100, 300, 600)
+    s = regime_summary(classify_regime(_regime_frame(up), Config(name="T"))["regime"])
+    assert "Bull" in s["dominant"]                 # a monotonic rise is a bull trend
+    assert s["distribution"].get("Strong Bull Trend", 0) > 0.5
+
+
+def test_regime_downtrend_is_bear():
+    from backtest.config import Config
+    from backtest.indicators import classify_regime, regime_summary
+    dn = np.linspace(300, 100, 600)
+    s = regime_summary(classify_regime(_regime_frame(dn), Config(name="T"))["regime"])
+    assert "Bear" in s["dominant"]
+
+
+def test_regime_chop_is_range_and_warmup_indecision():
+    from backtest.config import Config
+    from backtest.indicators import classify_regime, regime_summary, REGIME_LABELS
+    n = 600
+    rng = np.random.default_rng(1)
+    chop = 100 + (np.arange(n) % 2) * 0.3 + rng.normal(0, 0.15, n)  # whipsaw, no drift
+    reg = classify_regime(_regime_frame(chop, 0.5), Config(name="T"))
+    labels = list(reg["regime"])
+    # warm-up (before the slow MA / percentile window) is Indecision, never a trade tag
+    assert all(x == "Indecision" for x in labels[:199])
+    assert set(labels).issubset(set(REGIME_LABELS))
+    s = regime_summary(labels)
+    range_share = sum(v for k, v in s["distribution"].items()
+                      if "Range" in k or k == "Compression")
+    assert range_share > 0.5                        # choppy = range/compression, not trend
+
+
+def test_regime_adx_high_on_trend_low_on_chop():
+    from backtest.indicators import _adx
+    up = np.linspace(100, 300, 400)
+    rng = np.random.default_rng(2)
+    chop = 100 + (np.arange(400) % 2) * 0.3 + rng.normal(0, 0.1, 400)
+    adx_up = float(np.mean(_adx(up + 1, up - 1, up, 14)[-100:]))
+    adx_chop = float(np.mean(_adx(chop + 0.5, chop - 0.5, chop, 14)[-100:]))
+    assert adx_up > 25 and adx_chop < 25            # ADX separates trend from chop

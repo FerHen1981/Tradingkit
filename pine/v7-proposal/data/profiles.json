@@ -1,0 +1,102 @@
+{
+  "_comment": "PROPOSAL DRAFT. Replaces the 8 .pine files. Every value below is LIFTED VERBATIM from the current scripts - nothing invented. asset x posture. Codegen -> pine/lib/Profiles.pine + backtest Config.",
+  "_schema_version": 1,
+  "_postures": {
+    "grind": "Protect the open trade: break-even + trail armed, no confirmation delay. Was: the 4 'funded' scripts.",
+    "push":  "Reach the target: BE/trail off so a runner runs, 2-bar confirmation on entry. Was: the 4 'eval' scripts."
+  },
+  "_note_units": "All distances are TICKS (unitMode='Ticks' in every current script). One tick = $10 on GC, $12.50 on ES, $5 on NQ - so identical numbers are NOT identical risk. See SPEC.md sec. 7.",
+
+  "GC": {
+    "instrument": "GC",
+    "base": {
+      "entryMode": "Limit @ 50% FVG", "expiryBars": 12,
+      "stopMode": "Fixed (legacy)", "slSizeLegacy": 100, "maxStopSize": 100,
+      "pivotK": 3, "swingBufSize": 2,
+      "useGapFilter": true, "gapMinSize": 9, "gapMaxSize": 15,
+      "useVwapVeto": true, "useCVDFilter": false, "useCvdStreak": true, "cvdTrendCount": 4,
+      "useFillCheck": true,
+      "sizingMode": "Fixed contracts", "contractSize": 1, "riskValue": 250, "maxQty": 100,
+      "tpMode": "R-multiple", "tpSize": 122,
+      "eventPreset": "none",
+      "sessionProfile": "futures_eth"
+    },
+    "postures": {
+      "grind": { "was": "MEX_EL_TESORO", "rMultIn": 2.5, "confirmBarsIn": 0, "useBreakEven": true,  "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": true,  "trailStartSize": 48, "trailBufferSize": 24 },
+      "push":  { "was": "MEX_EL_MINERO", "rMultIn": 1.5, "confirmBarsIn": 2, "useBreakEven": false, "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": false, "trailStartSize": 48, "trailBufferSize": 24 }
+    },
+    "provenance": {
+      "status": "funded",
+      "claim": "Robust workhorse; both OOS halves PF above 1. No event filter - GC is regime-robust.",
+      "oos_window": null, "pf_h1": null, "pf_h2": null, "trades": null,
+      "TODO": "fill from backtest/funnel.py output before this profile may be promoted"
+    },
+    "open_question": "rMultIn 2.5 on grind vs 1.5 on push. ES uses 1.5 on both. Validated or drift?"
+  },
+
+  "ES": {
+    "instrument": "ES",
+    "base": {
+      "entryMode": "Limit @ 50% FVG", "expiryBars": 12,
+      "stopMode": "Fixed (legacy)", "slSizeLegacy": 100, "maxStopSize": 100,
+      "pivotK": 3, "swingBufSize": 2,
+      "useGapFilter": true, "gapMinSize": 9, "gapMaxSize": 15,
+      "useVwapVeto": true, "useCVDFilter": false, "useCvdStreak": true, "cvdTrendCount": 4,
+      "useFillCheck": true,
+      "sizingMode": "Fixed contracts", "contractSize": 1, "riskValue": 250, "maxQty": 100,
+      "tpMode": "R-multiple", "tpSize": 122,
+      "eventPreset": "es_roll_and_week_after_opex",
+      "sessionProfile": "futures_eth"
+    },
+    "postures": {
+      "grind": { "was": "MEX_EL_REY",  "rMultIn": 1.5, "confirmBarsIn": 0, "useBreakEven": true,  "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": true,  "trailStartSize": 48, "trailBufferSize": 24 },
+      "push":  { "was": "MEX_EL_LEON", "rMultIn": 1.5, "confirmBarsIn": 2, "useBreakEven": false, "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": false, "trailStartSize": 48, "trailBufferSize": 24 }
+    },
+    "provenance": {
+      "status": "funded",
+      "claim": "Strongest OOS after the event factory: funded H2 lifted 1.00 -> 1.16 by avoiding the quarterly roll window (news-override) and the week after monthly OpEx.",
+      "oos_window": "3y", "pf_h1": null, "pf_h2": 1.16, "trades": null,
+      "TODO": "fill h1 / trade count from funnel"
+    }
+  },
+
+  "NQ": {
+    "instrument": "NQ",
+    "base": {
+      "entryMode": "Limit @ 50% FVG", "expiryBars": 12,
+      "stopMode": "Swing structure", "slSizeLegacy": 28, "maxStopSize": 72,
+      "pivotK": 3, "swingBufSize": 2,
+      "useGapFilter": true, "gapMinSize": 9, "gapMaxSize": 15,
+      "useVwapVeto": true, "useCVDFilter": true, "useCvdStreak": true, "cvdTrendCount": 4,
+      "useFillCheck": true,
+      "sizingMode": "Fixed contracts", "contractSize": 2, "riskValue": 250, "maxQty": 100,
+      "tpMode": "R-multiple", "tpSize": 122,
+      "eventPreset": "block_fomc",
+      "sessionProfile": "futures_eth"
+    },
+    "postures": {
+      "grind": { "was": "MEX_EL_DORADO + MEX_EL_PATRON", "contractSize": 2, "gapMaxSize": 12, "rMultIn": 2.5, "confirmBarsIn": 0, "useBreakEven": true,  "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": true,  "trailStartSize": 48, "trailBufferSize": 24 },
+      "push":  { "was": "MEX_EL_TORO + MEX_EL_MATADOR", "contractSize": 5, "gapMaxSize": 15, "tpMode": "Fixed (units)", "tpSize": 122, "rMultIn": 2.5, "confirmBarsIn": 2, "useBreakEven": false, "beTriggerSize": 20, "beOffsetSize": 8, "useTrail": false, "trailStartSize": 48, "trailBufferSize": 24 }
+    },
+    "provenance": {
+      "status": "eval_only",
+      "claim": "No funded edge - H2 approx 1.00 across 3y OOS. Variance lottery ticket for eval attempts only; never compound on a funded account.",
+      "oos_window": "3y", "pf_h1": null, "pf_h2": 1.00, "trades": null,
+      "TODO": "fill from funnel"
+    }
+  },
+
+  "_session_profiles": {
+    "futures_eth": { "session": "1800-1655:23456", "flat_window": "1655-1800", "skip_monday_open": true, "day_boundary": "Exchange session" },
+    "futures_rth": { "session": "0930-1600:23456", "flat_window": "1600-0930", "skip_monday_open": false, "day_boundary": "Exchange session" },
+    "fx_24_5":     { "session": "1700-1700:23456", "flat_window": "1655-1700", "skip_monday_open": true, "day_boundary": "Calendar day (timezone)" },
+    "crypto_24_7": { "session": "0000-2400:1234567", "flat_window": "", "skip_monday_open": false, "day_boundary": "Calendar day (timezone)" }
+  },
+
+  "_event_presets": {
+    "none":                        { "avoid_roll": false, "roll_days": 10, "roll_news_override": false, "avoid_witching": false, "avoid_week_after_opex": false, "block_fomc": false, "block_nfp": false },
+    "es_roll_and_week_after_opex": { "avoid_roll": true,  "roll_days": 10, "roll_news_override": true,  "avoid_witching": false, "avoid_week_after_opex": true,  "block_fomc": false, "block_nfp": false },
+    "ym_roll_and_witching":        { "avoid_roll": true,  "roll_days": 10, "roll_news_override": true,  "avoid_witching": true,  "avoid_week_after_opex": false, "block_fomc": false, "block_nfp": false },
+    "block_fomc":                  { "avoid_roll": false, "roll_days": 10, "roll_news_override": false, "avoid_witching": false, "avoid_week_after_opex": false, "block_fomc": true,  "block_nfp": false }
+  }
+}

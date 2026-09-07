@@ -1,0 +1,277 @@
+{
+ "TORO_EVAL": {
+  "is_research": {
+   "trades": 4782,
+   "pf": 0.96,
+   "win": 23.9,
+   "net": -149146.0,
+   "maxdd": 185988.0
+  },
+  "years": {
+   "Y1": {
+    "trades": 1856,
+    "pf": 0.92,
+    "win": 23.0,
+    "net": -107780.5,
+    "maxdd": 144842.0
+   },
+   "Y2": {
+    "trades": 1908,
+    "pf": 0.99,
+    "win": 24.7,
+    "net": -19899.0,
+    "maxdd": 78219.5
+   },
+   "Y3": {
+    "trades": 1940,
+    "pf": 1.0,
+    "win": 24.9,
+    "net": 4817.5,
+    "maxdd": 100332.5
+   }
+  },
+  "recent12m": {
+   "trades": 1952,
+   "pf": 1.0,
+   "win": 24.9,
+   "net": 1269.0,
+   "maxdd": 100332.5
+  },
+  "obj_is": {
+   "starts": 126,
+   "passr": 32.5,
+   "breach": 67.5,
+   "timeout": 0.0
+  },
+  "obj_r12": {
+   "starts": 48,
+   "passr": 37.5,
+   "breach": 62.5,
+   "timeout": 0.0
+  },
+  "obj_oos": {
+   "starts": 22,
+   "passr": 36.4,
+   "breach": 63.6,
+   "timeout": 0.0
+  },
+  "oos_research": {
+   "trades": 921,
+   "pf": 1.04,
+   "win": 26.0,
+   "net": 27024.5,
+   "maxdd": 58173.0
+  },
+  "mc_p5_maxdd_oos": 98501.75,
+  "oos_trades_n": 921
+ },
+ "DORADO_PA": {
+  "is_research": {
+   "trades": 5541,
+   "pf": 0.93,
+   "win": 60.0,
+   "net": -49631.7,
+   "maxdd": 58988.5
+  },
+  "years": {
+   "Y1": {
+    "trades": 2171,
+    "pf": 0.86,
+    "win": 59.3,
+    "net": -40635.2,
+    "maxdd": 40699.0
+   },
+   "Y2": {
+    "trades": 2164,
+    "pf": 0.96,
+    "win": 59.8,
+    "net": -12464.3,
+    "maxdd": 25078.0
+   },
+   "Y3": {
+    "trades": 2205,
+    "pf": 1.0,
+    "win": 60.5,
+    "net": -1481.0,
+    "maxdd": 20329.5
+   }
+  },
+  "recent12m": {
+   "trades": 2218,
+   "pf": 0.99,
+   "win": 60.5,
+   "net": -3054.1,
+   "maxdd": 20329.5
+  },
+  "obj_is": {
+   "banked": 13500.0,
+   "breaches": 65,
+   "milk": 0,
+   "bpb": 208.0
+  },
+  "obj_r12": {
+   "banked": 11000.0,
+   "breaches": 20,
+   "milk": 0,
+   "bpb": 550.0
+  },
+  "obj_oos": {
+   "banked": 6500.0,
+   "breaches": 10,
+   "milk": 0,
+   "bpb": 650.0
+  },
+  "oos_research": {
+   "trades": 999,
+   "pf": 0.97,
+   "win": 59.2,
+   "net": -4948.8,
+   "maxdd": 15305.7
+  },
+  "mc_p5_maxdd_oos": 30256.810000000147,
+  "oos_trades_n": 999
+ },
+ "PATRON_PA": {
+  "is_research": {
+   "trades": 5541,
+   "pf": 0.93,
+   "win": 60.0,
+   "net": -49631.7,
+   "maxdd": 58988.5
+  },
+  "years": {
+   "Y1": {
+    "trades": 2171,
+    "pf": 0.86,
+    "win": 59.3,
+    "net": -40635.2,
+    "maxdd": 40699.0
+   },
+   "Y2": {
+    "trades": 2164,
+    "pf": 0.96,
+    "win": 59.8,
+    "net": -12464.3,
+    "maxdd": 25078.0
+   },
+   "Y3": {
+    "trades": 2205,
+    "pf": 1.0,
+    "win": 60.5,
+    "net": -1481.0,
+    "maxdd": 20329.5
+   }
+  },
+  "recent12m": {
+   "trades": 2218,
+   "pf": 0.99,
+   "win": 60.5,
+   "net": -3054.1,
+   "maxdd": 20329.5
+  },
+  "obj_is": {
+   "banked": 16000.0,
+   "breaches": 55,
+   "milk": 0,
+   "bpb": 291.0
+  },
+  "obj_r12": {
+   "banked": 13000.0,
+   "breaches": 20,
+   "milk": 0,
+   "bpb": 650.0
+  },
+  "obj_oos": {
+   "banked": 6500.0,
+   "breaches": 10,
+   "milk": 0,
+   "bpb": 650.0
+  },
+  "oos_research": {
+   "trades": 999,
+   "pf": 0.97,
+   "win": 59.2,
+   "net": -4948.8,
+   "maxdd": 15305.7
+  },
+  "mc_p5_maxdd_oos": 30256.810000000147,
+  "oos_trades_n": 999
+ },
+ "perturbations_IS": {
+  "base_passr": 32.5,
+  "variants": {
+   "gap_7_10": {
+    "starts": 126,
+    "passr": 29.4,
+    "breach": 70.6,
+    "timeout": 0.0
+   },
+   "gap_11_14": {
+    "starts": 126,
+    "passr": 31.7,
+    "breach": 68.3,
+    "timeout": 0.0
+   },
+   "stop_58": {
+    "starts": 126,
+    "passr": 32.5,
+    "breach": 67.5,
+    "timeout": 0.0
+   },
+   "stop_86": {
+    "starts": 126,
+    "passr": 35.7,
+    "breach": 64.3,
+    "timeout": 0.0
+   },
+   "confirm_0": {
+    "starts": 126,
+    "passr": 31.0,
+    "breach": 69.0,
+    "timeout": 0.0
+   },
+   "confirm_4": {
+    "starts": 126,
+    "passr": 33.3,
+    "breach": 66.7,
+    "timeout": 0.0
+   },
+   "SENS_delta_ON": {
+    "starts": 126,
+    "passr": 27.0,
+    "breach": 73.0,
+    "timeout": 0.0
+   }
+  }
+ },
+ "stress_OOS": {
+  "TORO_EVAL": {
+   "starts": 22,
+   "passr": 36.4,
+   "breach": 63.6,
+   "timeout": 0.0
+  },
+  "DORADO_PA": {
+   "banked": 3000.0,
+   "breaches": 16,
+   "milk": 0,
+   "bpb": 188.0
+  },
+  "PATRON_PA": {
+   "banked": 3000.0,
+   "breaches": 16,
+   "milk": 0,
+   "bpb": 188.0
+  }
+ },
+ "correlations": {
+  "TORO_vs_GC": {
+   "corr": -0.03,
+   "overlap_days": 701
+  },
+  "TORO_vs_ES": {
+   "corr": 0.038,
+   "overlap_days": 650
+  }
+ }
+}

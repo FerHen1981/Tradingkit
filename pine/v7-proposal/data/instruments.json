@@ -1,0 +1,69 @@
+{
+  "_comment": "PROPOSAL DRAFT - not wired to anything. Single source of truth for market/instrument facts. Codegen -> pine/lib/Instruments.pine + backtest Contract registry. Specs mirror backtest/config.py CONTRACTS; sessions/costs are new.",
+  "_schema_version": 1,
+
+  "GC": {
+    "market": "futures", "exchange": "COMEX", "root": "GC",
+    "mintick": 0.10, "pointvalue": 100.0, "tickvalue": 10.0,
+    "qty_step": 1, "fractional_qty": false,
+    "session": "1800-1700:23456", "tz": "America/New_York",
+    "roll_family": "quarterly_GJMQVZ", "roll_notice_days": 5,
+    "cost": { "commission_per_side": 1.75, "spread_ticks": 1.0, "slippage_ticks_market": 1.0, "slippage_ticks_limit": 0.0, "swap_per_night": 0.0 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "" }
+  },
+  "ES": {
+    "market": "futures", "exchange": "CME", "root": "ES",
+    "mintick": 0.25, "pointvalue": 50.0, "tickvalue": 12.50,
+    "qty_step": 1, "fractional_qty": false,
+    "session": "1800-1700:23456", "tz": "America/New_York",
+    "roll_family": "quarterly_HMUZ", "roll_notice_days": 8,
+    "cost": { "commission_per_side": 1.55, "spread_ticks": 1.0, "slippage_ticks_market": 1.0, "slippage_ticks_limit": 0.0, "swap_per_night": 0.0 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "" }
+  },
+  "NQ": {
+    "market": "futures", "exchange": "CME", "root": "NQ",
+    "mintick": 0.25, "pointvalue": 20.0, "tickvalue": 5.0,
+    "qty_step": 1, "fractional_qty": false,
+    "session": "1800-1700:23456", "tz": "America/New_York",
+    "roll_family": "quarterly_HMUZ", "roll_notice_days": 8,
+    "cost": { "commission_per_side": 1.55, "spread_ticks": 1.0, "slippage_ticks_market": 1.0, "slippage_ticks_limit": 0.0, "swap_per_night": 0.0 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "" }
+  },
+  "YM": {
+    "market": "futures", "exchange": "CBOT", "root": "YM",
+    "mintick": 1.0, "pointvalue": 5.0, "tickvalue": 5.0,
+    "qty_step": 1, "fractional_qty": false,
+    "session": "1800-1700:23456", "tz": "America/New_York",
+    "roll_family": "quarterly_HMUZ", "roll_notice_days": 8,
+    "cost": { "commission_per_side": 1.55, "spread_ticks": 1.0, "slippage_ticks_market": 1.0, "slippage_ticks_limit": 0.0, "swap_per_night": 0.0 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "" }
+  },
+
+  "EURUSD": {
+    "market": "forex", "exchange": "FX", "root": "EURUSD",
+    "mintick": 0.00001, "pointvalue": 100000.0, "tickvalue": 1.0,
+    "qty_step": 0.01, "fractional_qty": true,
+    "session": "1700-1700:23456", "tz": "America/New_York",
+    "roll_family": "none", "roll_notice_days": 0,
+    "cost": { "commission_per_side": 3.50, "spread_ticks": 8.0, "slippage_ticks_market": 3.0, "slippage_ticks_limit": 0.0, "swap_per_night": -0.60 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "CME_MINI:6E1!" }
+  },
+  "XAUUSD": {
+    "market": "spot", "exchange": "FX", "root": "XAUUSD",
+    "mintick": 0.01, "pointvalue": 100.0, "tickvalue": 1.0,
+    "qty_step": 0.01, "fractional_qty": true,
+    "session": "1700-1700:23456", "tz": "America/New_York",
+    "roll_family": "none", "roll_notice_days": 0,
+    "cost": { "commission_per_side": 3.50, "spread_ticks": 25.0, "slippage_ticks_market": 10.0, "slippage_ticks_limit": 0.0, "swap_per_night": -1.20 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "COMEX:GC1!" }
+  },
+  "BTCUSDT": {
+    "market": "crypto", "exchange": "SPOT/PERP", "root": "BTCUSDT",
+    "mintick": 0.10, "pointvalue": 1.0, "tickvalue": 0.10,
+    "qty_step": 0.001, "fractional_qty": true,
+    "session": "0000-2400:1234567", "tz": "Etc/UTC",
+    "roll_family": "none", "roll_notice_days": 0,
+    "cost": { "commission_per_side": 0.0, "commission_bps": 4.0, "spread_ticks": 2.0, "slippage_ticks_market": 5.0, "slippage_ticks_limit": 0.0, "funding_bps_8h": 1.0 },
+    "delta": { "lower_tf": "1", "borrow_symbol": "" }
+  }
+}

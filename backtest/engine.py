@@ -58,6 +58,11 @@ class Result:
     bars: int = 0
     first_time: Optional[pd.Timestamp] = None
     last_time: Optional[pd.Timestamp] = None
+    resolve_bar: int = -1                   # bar where the account halted (pass/breach), -1 = never
+    veto_counts: Optional[dict] = None      # phase-2 signal-veto attribution (diag mode)
+    order_counts: Optional[dict] = None     # limit-order lifecycle (always on)
+    placements: Optional[list] = None       # every limit we placed (bar, dir, time, px)
+    diagnosis: Optional[dict] = None        # phase-1/2 data-derived explanation of the run
 
 
 def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
@@ -84,16 +89,48 @@ def extract(df: pd.DataFrame, ind: pd.DataFrame) -> dict:
         "bear_cvd": ind["bear_cvd"].to_numpy(bool),
         "veto_long": ind["veto_long"].to_numpy(bool),
         "veto_short": ind["veto_short"].to_numpy(bool),
+        "bbwp_pass": (ind["bbwp_pass"].to_numpy(bool) if "bbwp_pass" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
+        "mfi_long": (ind["mfi_long"].to_numpy(bool) if "mfi_long" in ind.columns
+                     else np.ones(len(df), dtype=bool)),
+        "mfi_short": (ind["mfi_short"].to_numpy(bool) if "mfi_short" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
+        "regime_ok": (ind["regime_ok"].to_numpy(bool) if "regime_ok" in ind.columns
+                      else np.ones(len(df), dtype=bool)),
+        "vwap": ind["vwap"].to_numpy() if "vwap" in ind else np.full(len(df), np.nan),
+        "ema_cross_dir": ind["ema_cross_dir"].to_numpy() if "ema_cross_dir" in ind
+        else np.zeros(len(df), dtype=np.int64),
+        "bos_dir": ind["bos_dir"].to_numpy() if "bos_dir" in ind
+        else np.zeros(len(df), dtype=np.int64),
+        **{k: (ind[k].to_numpy() if k in ind else np.zeros(len(df), dtype=np.int64))
+           for k in ("choch_dir", "liq_dir", "cvddiv_dir", "ob_dir", "mom_dir",
+                     "macd_dir", "rsi_dir", "don_dir", "mapb_dir", "bb_dir", "st_dir")},
     }
 
 
 class Engine:
     def __init__(self, cfg: Config, df: pd.DataFrame = None, ind: pd.DataFrame = None,
-                 research_mode: bool = False, start_bar: int = 0, arrays: dict = None):
+                 research_mode: bool = False, start_bar: int = 0, arrays: dict = None,
+                 diag: bool = False):
         self.cfg = cfg
         self.research = research_mode
         self.c = cfg.contract
         self.start_bar = start_bar
+        # Opt-in signal-veto attribution (phase 2). Off by default so the mill's
+        # parallel workers keep the zero-overhead hot path.
+        self.diag = diag
+        # Order lifecycle. veto_counts explains why a SIGNAL never became an
+        # order; this explains where an order went once placed — which is the
+        # other half of "why does the simulator take fewer trades than Pine".
+        # Every placement, so a trade Pine took can be classified as "we placed
+        # a limit there and it never filled" versus "we never had a signal there".
+        # Those are different failures with different fixes.
+        self.placements = []
+        self.order_counts = {"placed": 0, "replaced": 0, "filled": 0,
+                             "expired": 0, "cancelled_flat": 0,
+                             "cancelled_halt": 0, "open_at_end": 0}
+        self.veto_counts = {"primary": 0, "cvd": 0, "vwap": 0, "regime": 0,
+                            "time": 0, "confluence": 0, "passed": 0} if diag else None
 
         a = arrays if arrays is not None else extract(df, ind)
         self.open = a["open"]; self.high = a["high"]; self.low = a["low"]; self.close = a["close"]
@@ -104,6 +141,24 @@ class Engine:
         self.piv_low = a["piv_low"]; self.piv_high = a["piv_high"]; self.atr = a["atr"]
         self.bull_cvd = a["bull_cvd"]; self.bear_cvd = a["bear_cvd"]
         self.veto_long = a["veto_long"]; self.veto_short = a["veto_short"]
+        self.bbwp_pass = a.get("bbwp_pass")
+        self.mfi_long = a.get("mfi_long"); self.mfi_short = a.get("mfi_short")
+        if self.bbwp_pass is None:
+            self.bbwp_pass = np.ones(len(self.close), dtype=bool)
+        if self.mfi_long is None:
+            self.mfi_long = np.ones(len(self.close), dtype=bool)
+        if self.mfi_short is None:
+            self.mfi_short = np.ones(len(self.close), dtype=bool)
+        self.regime_ok = a["regime_ok"]
+        self.ema_cross_dir = a.get("ema_cross_dir")
+        self.bos_dir = a.get("bos_dir")
+        self.choch_dir = a.get("choch_dir"); self.liq_dir = a.get("liq_dir")
+        self.cvddiv_dir = a.get("cvddiv_dir"); self.ob_dir = a.get("ob_dir")
+        self.mom_dir = a.get("mom_dir"); self.macd_dir = a.get("macd_dir")
+        self.rsi_dir = a.get("rsi_dir"); self.don_dir = a.get("don_dir")
+        self.mapb_dir = a.get("mapb_dir"); self.bb_dir = a.get("bb_dir")
+        self.st_dir = a.get("st_dir")
+        self.vwap = a.get("vwap")
 
         self.n = len(self.close)
         self._reset_state()
@@ -163,6 +218,40 @@ class Engine:
 
         self._cur_i = self.start_bar
         self.trades: list[Trade] = []
+
+        # Pluggable entry generators, in priority order, chosen by the spec.
+        # Each returns (dir, entry_ref, stop_up, stop_down); filters (CVD/VWAP)
+        # and stop/TP/sizing are applied by the engine on top, so adding a
+        # generator never touches the risk machinery.
+        cfg = self.cfg
+        roster = [
+            (cfg.use_fvg_entry, self._entry_fvg),
+            (cfg.use_ema_cross, self._entry_ema),
+            (cfg.use_bos_entry, self._entry_bos),
+            (cfg.use_choch_entry, self._entry_choch),
+            (cfg.use_liq_sweep, self._entry_liq),
+            (cfg.use_cvd_div, self._entry_cvddiv),
+            (cfg.use_order_block, self._entry_ob),
+            (cfg.use_momentum, self._entry_mom),
+            (cfg.use_macd_cross, self._entry_macd),
+            (cfg.use_rsi_rev, self._entry_rsi),
+            (cfg.use_donchian, self._entry_don),
+            (cfg.use_ma_pullback, self._entry_mapb),
+            (cfg.use_bb_revert, self._entry_bb),
+            (cfg.use_supertrend, self._entry_st),
+        ]
+        gens = [m for on, m in roster if on]
+        self._gens = tuple(gens) or (self._entry_fvg,)   # never empty
+
+        # Confluence layer (Level C): a single primary trigger gated by required
+        # conditions. Bypasses the OR-roster above when cfg.use_confluence is set.
+        prim_map = {"fvg": self._entry_fvg, "bos": self._entry_bos,
+                    "ema": self._entry_ema, "liq": self._entry_liq}
+        self._primary_gen = prim_map.get(cfg.confl_primary, self._entry_fvg)
+        self._confl_arrays = {"liq_sweep": self.liq_dir, "cvd_div": self.cvddiv_dir,
+                              "bos": self.bos_dir}
+        self._last_up = {}       # mechanism -> last bar it fired +1
+        self._last_dn = {}       # mechanism -> last bar it fired -1
 
     # --------------------------------------------------------------- helpers
     def _dist(self, units: float) -> float:
@@ -228,12 +317,18 @@ class Engine:
         return (cur >= s and cur < e) if e > s else (cur >= s or cur < e)
 
     # ------------------------------------------------------------------ run
-    def run(self, end_bar: Optional[int] = None) -> Result:
+    def run(self, end_bar: Optional[int] = None, progress=None) -> Result:
         end = self.n if end_bar is None else min(end_bar, self.n)
+        # Optional progress callback (single-run UI only). Workers pass nothing,
+        # so the hot loop keeps its zero-overhead path. ~50 ticks over the span.
+        total = end - self.start_bar
+        step = max(1, total // 50) if progress else 0
         for i in range(self.start_bar, end):
             self._cur_i = i
             self._broker(i)
             self._strategy(i)
+            if step and (i - self.start_bar) % step == 0:
+                progress(i - self.start_bar, total)
             if self.acct_halted and self.pos == 0 and self.pend_dir == 0:
                 # Eval account is done; stop simulating further bars.
                 break
@@ -252,13 +347,22 @@ class Engine:
         res.bars = end - self.start_bar
         res.first_time = pd.Timestamp(self.time[self.start_bar])
         res.last_time = pd.Timestamp(self.time[min(end - 1, self.n - 1)])
+        res.resolve_bar = i if self.acct_halted else -1
+        if self.pend_dir != 0:
+            self.order_counts["open_at_end"] += 1
+        res.order_counts = dict(self.order_counts)
+        res.placements = list(self.placements)
+        res.veto_counts = self.veto_counts
         return res
 
     # --------------------------------------------------------------- broker
     def _broker(self, i: int):
         """Fills that use orders resting from prior bars."""
-        # 1) resting limit entry
-        if self.pos == 0 and self.pend_dir != 0 and self.cfg.entry_limit_mode:
+        # 1) resting limit entry — also honour the regime gate at FILL time, so a
+        # limit placed in an allowed regime that only fills after the regime flips
+        # is not taken (keeps the gate consistent with edge_by_regime, which
+        # attributes by entry_bar = the fill bar).
+        if self.pos == 0 and self.pend_dir != 0 and self.cfg.entry_limit_mode and self.regime_ok[i]:
             if i > self.pend_bar:  # earliest fill is the bar after placement
                 if self.pend_dir == 1 and self.low[i] <= self.pend_limit:
                     self._fill_entry(i, self.pend_limit)
@@ -269,6 +373,7 @@ class Engine:
             self._check_bracket(i)
 
     def _fill_entry(self, i: int, px: float):
+        self.order_counts["filled"] += 1
         self.pos = self.pend_dir * self.pend_qty
         self.entry_avg = px
         self.entry_bar = i
@@ -417,8 +522,9 @@ class Engine:
         long_sig, short_sig = long0, short0
         sig_mid, sig_top, sig_bot = mid, top, bot
 
-        # FVG confirmation memory
-        if cfg.confirm_bars > 0:
+        # FVG confirmation memory (skipped under confluence — it would re-arm an
+        # FVG signal outside the confluence gate)
+        if cfg.confirm_bars > 0 and not cfg.use_confluence:
             long_sig, short_sig, sig_mid, sig_top, sig_bot = self._memory(
                 i, can_trade, long0, short0)
 
@@ -428,7 +534,10 @@ class Engine:
 
         # --- pending expiry ---
         if self.pos == 0 and self.pend_dir != 0 and not placed:
-            if (i - self.pend_bar > cfg.expiry_bars) or flat_win or day_halted:
+            aged = (i - self.pend_bar) > cfg.expiry_bars
+            if aged or flat_win or day_halted:
+                self.order_counts["expired" if aged else
+                                  ("cancelled_flat" if flat_win else "cancelled_halt")] += 1
                 self.pend_dir = 0
                 self.pend_limit = np.nan
                 self.pend_stop = np.nan
@@ -484,7 +593,16 @@ class Engine:
         # day exit conditions
         dex_trail = cfg.day_exit_mode in ("Day-trail (keep peak)", "Trail + cap")
         dex_cap = cfg.day_exit_mode in ("Day-cap (hard target)", "Trail + cap")
-        day_trail_hit = dex_trail and self.risk_day_peak > cfg.day_trail_usd and running <= self.risk_day_peak - cfg.day_trail_usd
+        # Two day-trail models (Pine parity). Legacy: one number is both the arming
+        # level and the giveback. Activation + giveback: arm at +activation, then
+        # stop the day after giving back `giveback` from the running peak.
+        if cfg.day_trail_model.startswith("Activation"):
+            armed = self.risk_day_peak >= cfg.day_trail_activation_usd
+            give = cfg.day_trail_giveback_usd
+        else:
+            armed = self.risk_day_peak > cfg.day_trail_usd
+            give = cfg.day_trail_usd
+        day_trail_hit = dex_trail and armed and running <= self.risk_day_peak - give
         day_cap_hit = dex_cap and self.risk_day_peak >= cfg.day_cap_usd
         dll_hit = (cfg.is_pa or (cfg.is_eval and cfg.dd_model == "EOD")) and running <= -cfg.acct_dll
         if not self.day_halted and (day_trail_hit or day_cap_hit or dll_hit):
@@ -503,7 +621,8 @@ class Engine:
         acct_floor = 100.0 if acct_locked else self.acct_hwm - cfg.acct_trail_dd
         self.dd_room = acct_pnl - acct_floor          # runway before a trailing breach
 
-        consistency_ok = self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0
+        consistency_ok = cfg.consistency_pct <= 0 or (                      # <= 0 = no such rule
+            self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0)
         eff_nr = min(self.pa_payouts_this_cycle + 1, 6)
         cap = ladder_cap(eff_nr)
         withdrawable = acct_realized - (cfg.acct_trail_dd + 100)
@@ -580,13 +699,134 @@ class Engine:
             self.acct_halt_reason = "CHALLENGE PASSED"
 
     # -------------------------------------------------------------- signals
-    def _signal(self, i: int, can_trade: bool):
-        d = self.fvg_dir[i]
-        if not self.fvg_pass[i] or d == 0:
+    def _entry_fvg(self, i: int):
+        """Entry generator #1 — Fair Value Gap. Returns (dir, entry_ref, stop_up, stop_down)."""
+        if not self.fvg_pass[i]:
+            return 0, np.nan, np.nan, np.nan
+        d = int(self.fvg_dir[i])
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.fvg_mid[i], self.fvg_top[i], self.fvg_bot[i]
+
+    def _entry_ema(self, i: int):
+        """Entry generator — EMA fast/slow crossover. Market-style entry at the
+        cross bar close; no gap edge, so stops fall back to swing/fixed."""
+        d = int(self.ema_cross_dir[i]) if self.ema_cross_dir is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan       # entry_ref = close; stops via swing/fixed
+
+    def _entry_bos(self, i: int):
+        """Entry generator — break of market structure (BOS). Momentum/continuation
+        entry when the close breaks the last confirmed swing (long above the swing
+        high, short below the swing low). No gap edge; returning NaN edges lets the
+        engine's swing-stop logic anchor the stop on the opposite pivot."""
+        d = int(self.bos_dir[i]) if self.bos_dir is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan
+
+    def _mkt(self, arr, i: int):
+        """Shared shape for the market-at-close generators: read a per-bar dir
+        array, enter at the close, and leave the stop to the swing/fixed logic."""
+        d = int(arr[i]) if arr is not None else 0
+        if d == 0:
+            return 0, np.nan, np.nan, np.nan
+        return d, self.close[i], np.nan, np.nan
+
+    def _entry_choch(self, i):   return self._mkt(self.choch_dir, i)    # reversal (structure flip)
+    def _entry_liq(self, i):     return self._mkt(self.liq_dir, i)      # liquidity sweep + reclaim
+    def _entry_cvddiv(self, i):  return self._mkt(self.cvddiv_dir, i)   # price/CVD divergence
+    def _entry_ob(self, i):      return self._mkt(self.ob_dir, i)       # order-block mitigation
+    def _entry_mom(self, i):     return self._mkt(self.mom_dir, i)      # displacement/impulse bar
+    def _entry_macd(self, i):    return self._mkt(self.macd_dir, i)     # MACD line/signal cross
+    def _entry_rsi(self, i):     return self._mkt(self.rsi_dir, i)      # RSI OB/OS reversion
+    def _entry_don(self, i):     return self._mkt(self.don_dir, i)      # Donchian channel break
+    def _entry_mapb(self, i):    return self._mkt(self.mapb_dir, i)     # MA trend pullback
+    def _entry_bb(self, i):      return self._mkt(self.bb_dir, i)       # Bollinger reversion
+    def _entry_st(self, i):      return self._mkt(self.st_dir, i)       # supertrend ATR-band flip
+
+    def _update_confl_mem(self, i: int):
+        """Record, per confluence mechanism, the last bar it fired each way."""
+        for name, arr in self._confl_arrays.items():
+            v = int(arr[i]) if arr is not None else 0
+            if v == 1:
+                self._last_up[name] = i
+            elif v == -1:
+                self._last_dn[name] = i
+
+    def _confluence_ok(self, cond: str, i: int, d: int) -> bool:
+        """Is one required confluence condition satisfied for a direction-`d` entry?"""
+        if cond in self._confl_arrays:              # a same-direction event within lookback
+            last = self._last_up if d == 1 else self._last_dn
+            j = last.get(cond)
+            return j is not None and (i - j) <= self.cfg.confl_lookback
+        if cond == "bias_vwap":                     # stateless: on the right side of VWAP
+            if self.vwap is None or np.isnan(self.vwap[i]):
+                return True
+            return (self.close[i] > self.vwap[i]) if d == 1 else (self.close[i] < self.vwap[i])
+        return True                                 # unknown condition -> don't block
+
+    def _signal_confluence(self, i: int, can_trade: bool):
+        """One primary trigger, only accepted when every required condition holds
+        (AND + light sequence). The primary supplies the entry price/stop refs;
+        the base CVD/VWAP filters still apply on top, exactly as for the roster."""
+        self._update_confl_mem(i)
+        d, entry_ref, stop_up, stop_down = self._primary_gen(i)
+        if d == 0:
             return False, False, np.nan, np.nan, np.nan
-        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and can_trade)
-        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and can_trade)
-        return long0, short0, self.fvg_mid[i], self.fvg_top[i], self.fvg_bot[i]
+        for cond in self.cfg.confl_require:
+            if not self._confluence_ok(cond, i, d):
+                if self.diag:
+                    self.veto_counts["primary"] += 1
+                    self.veto_counts["confluence"] += 1
+                return False, False, np.nan, np.nan, np.nan
+        long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.bbwp_pass[i]
+                 and self.mfi_long[i] and self.regime_ok[i] and can_trade)
+        short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.bbwp_pass[i]
+                  and self.mfi_short[i] and self.regime_ok[i] and can_trade)
+        if self.diag:
+            self._attribute_veto(i, d, can_trade, long0 or short0)
+        return long0, short0, entry_ref, stop_up, stop_down
+
+    def _signal(self, i: int, can_trade: bool):
+        """Ask the enabled entry generators (priority order); the first with a
+        direction wins. Filters (CVD streak + VWAP veto) gate the direction, and
+        the generator's refs become entry/stop hints. With only FVG enabled this
+        reproduces the original FVG signal exactly."""
+        if self.cfg.use_confluence:
+            return self._signal_confluence(i, can_trade)
+        for gen in self._gens:
+            d, entry_ref, stop_up, stop_down = gen(i)
+            if d == 0:
+                continue
+            long0 = (d == 1 and self.bull_cvd[i] and self.veto_long[i] and self.bbwp_pass[i]
+                     and self.mfi_long[i] and self.regime_ok[i] and can_trade)
+            short0 = (d == -1 and self.bear_cvd[i] and self.veto_short[i] and self.bbwp_pass[i]
+                      and self.mfi_short[i] and self.regime_ok[i] and can_trade)
+            if self.diag:
+                self._attribute_veto(i, d, can_trade, long0 or short0)
+            return long0, short0, entry_ref, stop_up, stop_down
+        return False, False, np.nan, np.nan, np.nan
+
+    def _attribute_veto(self, i: int, d: int, can_trade: bool, passed: bool):
+        """Phase 2: a primary entry signal fired at bar i — record which base
+        filter(s) killed it, so the diagnostic can say WHERE the signals go."""
+        vc = self.veto_counts
+        vc["primary"] += 1
+        if passed:
+            vc["passed"] += 1
+            return
+        cvd_ok = self.bull_cvd[i] if d == 1 else self.bear_cvd[i]
+        vwap_ok = self.veto_long[i] if d == 1 else self.veto_short[i]
+        if not cvd_ok:
+            vc["cvd"] += 1
+        if not vwap_ok:
+            vc["vwap"] += 1
+        if not self.regime_ok[i]:
+            vc["regime"] += 1
+        if not can_trade:
+            vc["time"] += 1
 
     def _memory(self, i: int, can_trade: bool, long0: bool, short0: bool):
         cfg = self.cfg
@@ -604,7 +844,7 @@ class Engine:
                 m = self.mem[k]
                 age = i - m["bar"]
                 if 1 <= age <= cb:
-                    ok = (self.bull_cvd[i] and self.veto_long[i]) if m["dir"] == 1 else (self.bear_cvd[i] and self.veto_short[i])
+                    ok = self.regime_ok[i] and ((self.bull_cvd[i] and self.veto_long[i]) if m["dir"] == 1 else (self.bear_cvd[i] and self.veto_short[i]))
                     if ok:
                         mem_dir, mem_mid, mem_top, mem_bot = m["dir"], m["mid"], m["top"], m["bot"]
                         self.mem.pop(k)
@@ -624,16 +864,18 @@ class Engine:
         entry_px = mid if cfg.entry_limit_mode else self.close[i]
         if is_long:
             if cfg.stop_swing:
-                piv = self.piv_low[i]
-                base = min(piv, bot) if not np.isnan(piv) else bot
-                stop_px = base - self._dist(cfg.swing_buf_ticks)
+                cands = [v for v in (self.piv_low[i], bot) if not np.isnan(v)]
+                base = min(cands) if cands else np.nan   # NaN when a generator gives no edge (e.g. EMA)
+                stop_px = (base - self._dist(cfg.swing_buf_ticks) if not np.isnan(base)
+                           else entry_px - self._dist(cfg.fixed_stop_ticks))
             else:
                 stop_px = entry_px - self._dist(cfg.fixed_stop_ticks)
         else:
             if cfg.stop_swing:
-                piv = self.piv_high[i]
-                base = max(piv, top) if not np.isnan(piv) else top
-                stop_px = base + self._dist(cfg.swing_buf_ticks)
+                cands = [v for v in (self.piv_high[i], top) if not np.isnan(v)]
+                base = max(cands) if cands else np.nan
+                stop_px = (base + self._dist(cfg.swing_buf_ticks) if not np.isnan(base)
+                           else entry_px + self._dist(cfg.fixed_stop_ticks))
             else:
                 stop_px = entry_px + self._dist(cfg.fixed_stop_ticks)
 
@@ -656,6 +898,12 @@ class Engine:
         if np.isnan(tp_px) or (is_long and tp_px <= entry_px + self.c.mintick) or (not is_long and tp_px >= entry_px - self.c.mintick):
             return False
 
+        if self.pend_dir != 0:
+            self.order_counts["replaced"] += 1
+        self.order_counts["placed"] += 1
+        self.placements.append({"bar": i, "dir": int(d),
+                                "time": self.time[i],
+                                "limit": float(entry_px)})
         self.pend_dir = d
         self.pend_bar = i
         self.pend_limit = entry_px if cfg.entry_limit_mode else np.nan

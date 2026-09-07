@@ -1,0 +1,151 @@
+---
+/**
+ * Het merkteken en het woordmerk.
+ *
+ * De M is één doorlopende koerslijn: omhoog naar een top, terugval naar een
+ * niveau, retest die 0,067 cap lager ligt, en het niveau dat houdt. De paden
+ * komen ongewijzigd uit het merkpakket (svg/mex-mark-dark.svg, genormaliseerd
+ * naar een 100×100 kader) — ze zijn opgebouwd uit vaste verhoudingen van de
+ * cap-hoogte, dus er valt niets aan bij te stellen zonder de constructie te
+ * breken.
+ *
+ * Twee regels uit de merkgids die hier in code staan:
+ *
+ * * Het merkteken ís de M. In het woordmerk staat er daarom geen tweede M in
+ *   hetzelfde gewicht naast; `wordmark="EX TRADERS"` is de standaard.
+ * * MEX claimt (800), TRADERS beschrijft (400, +0,10em). Nooit in hetzelfde
+ *   gewicht.
+ */
+interface Props {
+  variant?: "horizontal" | "stacked" | "mark";
+  /** `mono` gebruikt sand in plaats van goud — voor foto's en drukke vlakken. */
+  tone?: "gold" | "mono";
+  /** Hoogte van het merkteken in px. */
+  size?: number;
+  /** Zet false wanneer het logo al in een gelabelde link zit. */
+  labelled?: boolean;
+  class?: string;
+}
+
+const {
+  variant = "horizontal",
+  tone = "gold",
+  size = 26,
+  labelled = true,
+  class: className,
+} = Astro.props;
+
+// Meerdere logo's op één pagina delen anders hun verloop-id.
+const uid = `mex-${Math.random().toString(36).slice(2, 9)}`;
+---
+
+<span class:list={["logo", `logo--${variant}`, `logo--${tone}`, className]}>
+  <svg
+    class="logo__mark"
+    viewBox="0 0 100 100"
+    width={size}
+    height={size}
+    role={labelled ? "img" : undefined}
+    aria-label={labelled ? "MEX Traders" : undefined}
+    aria-hidden={labelled ? undefined : "true"}
+  >
+    {tone === "gold" && (
+      <defs>
+        <linearGradient id={uid} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="var(--brand-gold)" />
+          <stop offset="1" stop-color="var(--brand-gold-deep)" />
+        </linearGradient>
+      </defs>
+    )}
+
+    {/* Het niveau. Loopt links buiten het kader door: het lag er al voordat de
+        koers er kwam. */}
+    <path
+      class="logo__level"
+      d="M-10.55,69.29 L100.15,69.29 L100.15,72.93 L-10.55,72.93 Z"
+    />
+
+    {/* De koerslijn zelf. */}
+    <path
+      class="logo__line"
+      d="M16.85,78.00 L21.65,41.87 L40.46,69.29 L51.20,69.29 L78.00,42.03 L83.10,78.00 L94.92,78.00 L86.27,16.94 L46.29,57.59 L46.63,57.59 L14.07,10.13 L5.05,78.00 Z"
+      fill={tone === "gold" ? `url(#${uid})` : "currentColor"}
+    />
+  </svg>
+
+  {variant !== "mark" && (
+    <span class="logo__word">
+      <span class="logo__claim">EX</span><em class="logo__desc">TRADERS</em>
+    </span>
+  )}
+</span>
+
+<style>
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.34em;
+    line-height: 1;
+    color: var(--ink);
+  }
+
+  .logo--stacked {
+    flex-direction: column;
+    gap: 0.7em;
+    text-align: center;
+  }
+
+  .logo__mark {
+    display: block;
+    flex: none;
+    /* Het niveau loopt links buiten het kader; dat hoort afgesneden te worden. */
+    overflow: hidden;
+  }
+
+  .logo__level {
+    fill: var(--brand-sand);
+    opacity: 0.42;
+  }
+
+  /* Op een lichte ondergrond blijft het merkteken goud, maar het niveau moet
+     naar abyss — anders verdwijnt een zandkleurige lijn in het vlak. */
+  :global(:root[data-theme="light"]) .logo__level {
+    fill: var(--brand-abyss);
+    opacity: 0.32;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root:not([data-theme="dark"])) .logo__level {
+      fill: var(--brand-abyss);
+      opacity: 0.32;
+    }
+  }
+
+  .logo--mono .logo__level {
+    fill: currentColor;
+    opacity: 0.42;
+  }
+
+  .logo__word {
+    font-family: var(--display);
+    font-size: calc(var(--logo-size, 1rem) * 1);
+    white-space: nowrap;
+  }
+
+  .logo__claim {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .logo__desc {
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    margin-left: 0.4em;
+    color: var(--muted);
+  }
+
+  .logo--stacked .logo__word {
+    font-size: 0.72em;
+  }
+</style>

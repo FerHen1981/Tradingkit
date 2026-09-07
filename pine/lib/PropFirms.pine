@@ -12,26 +12,61 @@ export rules(string preset) =>
     float dll = 0.0
     float consPct = 0.0
     float acctSize = 0.0
-    if preset == "apex_50k_eod_eval"
+    if preset == "apex_250k_legacy_eval"
+        ddType := "Intraday"
+        maxLoss := 6500.0
+        goal := 15000.0
+        dll := 1000.0
+        consPct := 0.0
+        acctSize := 250000.0
+    else if preset == "apex_25k_legacy_eval"
+        ddType := "Intraday"
+        maxLoss := 1500.0
+        goal := 1500.0
+        dll := 1000.0
+        consPct := 0.0
+        acctSize := 25000.0
+    else if preset == "apex_50k_eod_eval"
         ddType := "EOD"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_eod_pa"
         ddType := "EOD"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 50.0
         acctSize := 50000.0
     else if preset == "apex_50k_intraday_eval"
         ddType := "Intraday"
-        maxLoss := 2500.0
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 0.0
+        acctSize := 50000.0
+    else if preset == "apex_50k_intraday_pa"
+        ddType := "Intraday"
+        maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
         consPct := 50.0
+        acctSize := 50000.0
+    else if preset == "apex_50k_legacy_eval"
+        ddType := "Intraday"
+        maxLoss := 2500.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 0.0
+        acctSize := 50000.0
+    else if preset == "apex_50k_legacy_pa"
+        ddType := "EOD"
+        maxLoss := 2500.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 30.0
         acctSize := 50000.0
     else if preset == "daytraders_s2f_25k_instant"
         ddType := "EOD"
@@ -73,14 +108,14 @@ export rules(string preset) =>
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "takeprofittrader_50k_eval"
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "the5ers_hypergrowth_5k"
         ddType := "Static"
@@ -94,7 +129,7 @@ export rules(string preset) =>
         maxLoss := 2000.0
         goal := 3000.0
         dll := 1000.0
-        consPct := 50.0
+        consPct := 0.0
         acctSize := 50000.0
     else if preset == "tradeify_advanced_25k_instant"
         ddType := "EOD"
@@ -106,4 +141,4 @@ export rules(string preset) =>
     [ddType, maxLoss, goal, dll, consPct, acctSize]
 
 // Preset keys (for the strategy's input.string options=[...]):
-// "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundingpips_10k_eval", "mffu_50k_eval", "takeprofittrader_50k_eval", "the5ers_hypergrowth_5k", "topstep_50k_eval", "tradeify_advanced_25k_instant"
+// "apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundingpips_10k_eval", "mffu_50k_eval", "takeprofittrader_50k_eval", "the5ers_hypergrowth_5k", "topstep_50k_eval", "tradeify_advanced_25k_instant"

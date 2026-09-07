@@ -1,0 +1,14 @@
+# Runs the LIVE Trade Journal sync every minute → trades land in Notion as they happen.
+# Steady-state stays light: an incremental state file skips rows whose status hasn't changed.
+# Enable with: sudo systemctl enable --now mex-routed-journal.timer
+[Unit]
+Description=Run the MEX live Trade Journal sync every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Unit=mex-routed-journal.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

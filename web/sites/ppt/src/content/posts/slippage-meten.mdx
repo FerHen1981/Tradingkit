@@ -1,0 +1,36 @@
+---
+title: Meet je slippage, of je edge is fictie
+summary: >-
+  De meest onderschatte cijferreeks in mijn hele administratie: het verschil
+  tussen de order die ik bedoelde en de fill die ik kreeg. Hier staat hoe ik het
+  bijhoud en wat het opleverde.
+date: 2026-02-11
+tags:
+  - trading
+  - tips
+draft: false
+---
+
+Een backtest gaat ervan uit dat je krijgt wat je vraagt. De werkelijkheid rekent
+per order af in ticks, en over duizenden orders wordt dat een bedrag dat groter
+is dan het verschil tussen twee redelijke strategieën.
+
+## Wat ik vastleg
+
+Bij elk signaal wordt de bedoelde prijs weggeschreven. Bij elke uitvoering de
+werkelijke fill, het tijdstip en de tegenpartij. Achteraf worden die twee aan
+elkaar gekoppeld en blijft er per trade over: verschil in ticks, vertraging in
+seconden, en verschil in aantal contracten.
+
+## Wat eruit kwam
+
+De verrassing zat niet in het gemiddelde maar in de spreiding: bepaalde
+momenten van de dag en bepaalde tegenpartijen waren structureel duurder. Dat is
+bruikbare informatie — je kunt niet sturen op een gemiddelde dat je nooit
+uitsplitst.
+
+## De les
+
+Als je uitvoering niet meet, weet je niet of je een edge hebt of een
+rapportagefout. Het is bovendien het enige deel van je resultaat dat je direct
+kunt verbeteren zonder je strategie aan te raken.

@@ -1,0 +1,17 @@
+# Change of Character (CHoCH) — structure-reversal entry (Level B).
+# market_structure mode:choch enters on the first close back through the opposite
+# swing (regime flip). Reversal, so NO trend filters (CVD streak / VWAP veto),
+# which would fight a counter-trend entry. Swing stop on the opposite pivot.
+name: CHoCH_Reversal
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: true
+  max_active_groups: 3
+groups:
+  market_structure:
+    pivot_k: 3
+    mode: choch
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

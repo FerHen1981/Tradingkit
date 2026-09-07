@@ -1,0 +1,32 @@
+# MEX charts-crawler — outlook + recap
+#
+# Installeren:  crontab -l > /tmp/cur; cat deploy/charts-crawler.cron >> /tmp/cur; crontab /tmp/cur
+# Controleren:  crontab -l
+#
+# CRON_TZ zet de tijdzone voor ALLE regels die erna komen. Zonder deze regel
+# draait cron op UTC en verschuift elke opname een uur bij de overgang naar
+# wintertijd — de charts zouden dan in november ineens 07:00 ET zijn.
+# Werkt op cronie en op Debian/Ubuntu's vixie-cron. Controleer na installatie
+# met `crontab -l` dat de regel er staat; verdwijnt hij, gebruik dan de
+# systemd-variant onderaan.
+CRON_TZ=America/New_York
+
+MEX_CONTENTHUB_DB=766bf9ae63674a7f9b8e99169cbddc55
+MEX_CHARTS_ROOT=/var/www/charts
+
+# 08:00 ET — outlook. 90 minuten vóór de RTH-open: de overnight-sessie is
+# afgelopen en de pre-market is op gang, maar de open is nog niet geweest.
+# (Stond op 02:45 ET; dat is midden in de Aziatische sessie, zeven uur te vroeg.)
+0 8 * * 1-5 cd /root/mex-charts && /usr/bin/node charts.js --set outlook >> /var/log/mex-charts.log 2>&1
+
+# 17:05 ET — recap. Ná de auto-flat om 16:55 en ná het begin van de dagelijkse
+# CME-onderbreking om 17:00, zodat de dag echt afgesloten is.
+5 17 * * 1-5 cd /root/mex-charts && /usr/bin/node charts.js --set recap >> /var/log/mex-charts.log 2>&1
+
+# --- systemd-alternatief (als CRON_TZ niet blijkt te werken) ------------------
+# /etc/systemd/system/mex-charts-outlook.timer
+#   [Timer]
+#   OnCalendar=Mon..Fri 08:00
+#   Timezone=America/New_York
+#   Persistent=true
+# en idem mex-charts-recap.timer met OnCalendar=Mon..Fri 17:05

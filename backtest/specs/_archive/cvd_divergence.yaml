@@ -1,0 +1,17 @@
+# CVD divergence — order-flow reversal entry (Level B).
+# Long when price makes a lower low but CVD makes a higher low (selling exhausts);
+# short mirror. osc_source:cvd is what wires the divergence entry. Reversal, so no
+# trend filters. Swing stop on the confirmed pivot.
+name: CVD_Divergence
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: true
+  max_active_groups: 3
+groups:
+  divergence:
+    osc_source: cvd
+    pivot_lookback_left: 5
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

@@ -1,0 +1,24 @@
+---
+term: Profit factor
+short: "De bruto winst gedeeld door het bruto verlies; boven de 1 is de strategie per saldo winstgevend."
+category: risico
+aliases:
+  - PF
+authority: false
+sources: []
+related:
+  - expectancy
+  - win-rate
+  - backtest
+updated: 2026-08-15
+draft: false
+---
+
+Tel alle winnende trades bij elkaar op en alle verliezende, en deel de eerste door
+de absolute waarde van de tweede. Een profit factor van 1,4 betekent dat je voor
+elke euro die je verloor 1,40 terugkreeg.
+
+Bereken hem bij voorkeur in R en niet in geld, anders vertekent een periode waarin
+je grotere posities nam het resultaat. Wees ook voorzichtig met hoge waarden op een
+kleine steekproef: bij vijftig trades zegt een profit factor van 3 vooral iets over
+toeval.

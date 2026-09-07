@@ -18,6 +18,39 @@ def trades_frame(res: Result) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def edge_by_regime(res: Result, regime_labels) -> dict:
+    """Realized edge broken down by the OBJECTIVE regime at each trade's ENTRY
+    bar. `regime_labels` is the causal per-bar tag from indicators.classify_regime
+    (no look-ahead), aligned to the same frame the engine ran on, so the label at
+    a trade's entry_bar is what was knowable AT entry.
+
+    This is the unbiased discovery: the data reveals where a strategy's edge
+    actually lives, instead of us assuming it via the §6 matrix. Returns
+    {regime: {trades, net, profit_factor, expectancy, win_rate_pct}} sorted by
+    trade count, plus the fraction of trades whose regime could be resolved."""
+    labels = np.asarray(regime_labels, dtype=object)
+    n_bars = len(labels)
+    buckets: dict[str, list] = {}
+    for t in res.trades:
+        i = int(t.entry_bar)
+        reg = labels[i] if 0 <= i < n_bars else "Unknown"
+        buckets.setdefault(str(reg), []).append(float(t.net))
+    out = {}
+    for reg, nets in sorted(buckets.items(), key=lambda kv: -len(kv[1])):
+        arr = np.asarray(nets, dtype=float)
+        wins = arr[arr > 0]
+        gw = float(wins.sum())
+        gl = float(-arr[arr <= 0].sum())
+        out[reg] = {
+            "trades": int(len(arr)),
+            "net": round(float(arr.sum()), 2),
+            "profit_factor": (round(gw / gl, 2) if gl > 0 else (float("inf") if gw > 0 else 0.0)),
+            "expectancy": round(float(arr.mean()), 2),
+            "win_rate_pct": round(100 * len(wins) / len(arr), 1),
+        }
+    return out
+
+
 def kpis(res: Result) -> dict:
     df = trades_frame(res)
     n = len(df)

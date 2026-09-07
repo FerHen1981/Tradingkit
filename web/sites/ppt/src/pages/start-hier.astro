@@ -1,0 +1,212 @@
+---
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import Button from "@mex/brand/components/Button.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+
+import { allGuides, guidePath, topicLabel } from "../lib/guides";
+import { allPosts, postPath } from "../lib/posts";
+import { allTerms } from "../lib/glossary";
+
+const guides = await allGuides();
+const posts = await allPosts();
+const terms = await allTerms();
+
+/**
+ * Een gecureerd pad, geen tweede archief. De volgorde is de volgorde waarin de
+ * vragen zich in de praktijk aandienen — niet de volgorde waarin ik ze
+ * geschreven heb.
+ */
+const path = [
+  {
+    step: "01",
+    title: "Begrijp waar je aan begint",
+    body: "Voordat je iets regelt: wat vraagt dit werkelijk aan tijd, papierwerk en liquiditeit? Begin bij het stappenplan, want de volgorde van de stappen is belangrijker dan elke stap afzonderlijk.",
+    guide: guides.find((g) => g.id === "emigreren-als-daytrader-stappenplan"),
+  },
+  {
+    step: "02",
+    title: "Zorg dat je kunt handelen",
+    body: "Een structuur zonder bankrelatie is geen structuur. Dit is in de praktijk het kritieke pad en de reden dat plannen uitlopen.",
+    guide: guides.find((g) => g.id === "bankrelatie-voor-een-handelsbedrijf"),
+  },
+  {
+    step: "03",
+    title: "Weet wanneer je fiscaal vertrokken bent",
+    body: "Uitschrijven is geen bewijs. Wat er wél toe doet, en welk dossier je vanaf dag één bijhoudt.",
+    guide: guides.find((g) => g.id === "fiscale-woonplaats-wanneer-ben-je-vertrokken"),
+  },
+  {
+    step: "04",
+    title: "Zorg dat je vestiging klopt",
+    body: "Drie partijen kijken met een andere bril naar dezelfde vraag: ben je hier werkelijk gevestigd.",
+    guide: guides.find((g) => g.id === "substance-wat-je-vestiging-moet-dragen"),
+  },
+  {
+    step: "05",
+    title: "Reken je handelsplan door",
+    body: "Prop firm of eigen kapitaal is geen geloofskwestie maar een rekensom. Zet de regels om naar R en toets ze tegen je eigen historie.",
+    guide: guides.find((g) => g.id === "prop-firm-of-eigen-kapitaal"),
+  },
+  {
+    step: "06",
+    title: "Meet wat er werkelijk gebeurt",
+    body: "Het enige deel van je resultaat dat je kunt verbeteren zonder je strategie aan te raken.",
+    guide: guides.find((g) => g.id === "je-uitvoering-meten"),
+  },
+].filter((s) => s.guide);
+
+const featured = posts.slice(0, 3);
+---
+
+<Base
+  title="Start hier"
+  description="Een gecureerd pad door alles op deze site: van de eerste oriëntatie op emigreren als handelaar tot het meten van je eigen uitvoering."
+>
+  <Hero
+    eyebrow="Nieuw hier"
+    headline="Start hier"
+    lead="Deze site is in de loop van de tijd gegroeid en staat verder op datum. Als je nieuw bent, is dit de volgorde waarin het het meeste oplevert — opgebouwd zoals de vragen zich in de praktijk aandienen."
+    size="md"
+  >
+    <Button slot="actions" href="/gidsen">Alle gidsen</Button>
+    <Button slot="actions" href="/begrippen" variant="secondary">
+      Begrippenlijst ({terms.length})
+    </Button>
+  </Hero>
+
+  <Section eyebrow="Het pad" title="Zes stappen, in deze volgorde">
+    <ol class="path">
+      {path.map((item) => (
+        <li class="step">
+          <span class="step__num" aria-hidden="true">{item.step}</span>
+          <div class="step__body">
+            <h3 class="step__title">
+              <a href={guidePath(item.guide!)}>{item.title}</a>
+            </h3>
+            <p class="step__text">{item.body}</p>
+            <p class="step__meta">
+              {item.guide!.data.title} · {topicLabel(item.guide!.data.topic)}
+            </p>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </Section>
+
+  <Section
+    eyebrow="Naslag"
+    title="Loop je vast op een woord?"
+    lead={`De begrippenlijst legt ${terms.length} termen uit, van tick en R-multiple tot substance en vergunningplicht. Waar een toezichthouder, beurs of wet het begrip definieert, staat die bron erbij.`}
+    raised
+  >
+    <Button href="/begrippen">Naar de begrippenlijst</Button>
+  </Section>
+
+  {featured.length > 0 && (
+    <Section eyebrow="Uit de praktijk" title="En wat er onderweg gebeurde">
+      <ul class="posts">
+        {featured.map((post) => (
+          <li>
+            <a href={postPath(post)}>{post.data.title}</a>
+            <span>{post.data.summary}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )}
+
+  <Section narrow>
+    <Callout variant="legal">
+      Alles op deze site is persoonlijke ervaring en algemene uitleg — geen
+      beleggings-, fiscaal, juridisch of emigratieadvies, en geen aanbod van welke
+      dienst dan ook.
+    </Callout>
+  </Section>
+</Base>
+
+<style>
+  .path {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-5);
+    counter-reset: step;
+  }
+
+  .step {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    gap: var(--sp-4);
+    align-items: start;
+    padding-bottom: var(--sp-5);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  }
+
+  .step:last-child { border-bottom: 0; padding-bottom: 0; }
+
+  .step__num {
+    font-family: var(--mono);
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1.2;
+  }
+
+  .step__title {
+    font-size: var(--t-h3);
+    margin-bottom: var(--sp-2);
+  }
+
+  .step__title a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .step__title a:hover { color: var(--accent); }
+
+  .step__text {
+    color: var(--muted);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .step__meta {
+    margin: var(--sp-3) 0 0;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .posts {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-4);
+  }
+
+  .posts li {
+    display: grid;
+    gap: var(--sp-1);
+    padding-bottom: var(--sp-4);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  }
+
+  .posts a {
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+  }
+
+  .posts a:hover { color: var(--accent); }
+
+  .posts span {
+    color: var(--muted);
+    font-size: 0.9375rem;
+  }
+</style>

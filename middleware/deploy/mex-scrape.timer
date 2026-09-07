@@ -1,0 +1,13 @@
+# Downloads fresh Fills CSVs every 15 min; mex-journal-sync then upserts them to Notion.
+# Enable with: sudo systemctl enable --now mex-scrape.timer
+[Unit]
+Description=Run the MEX Tradovate Fills scraper every 15 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Unit=mex-scrape.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

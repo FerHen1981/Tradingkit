@@ -1,0 +1,20 @@
+# MEX Trade Journal sync — Fills-CSV -> Notion (near-real-time)
+# Install on mex-mw-01:
+#   1. Deploy the middleware/ folder (e.g. /root/mex-journal/middleware) + a venv:
+#        python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+#   2. Create .env there with (at least):
+#        NOTION_TOKEN=...            NOTION_JOURNAL_DB=1ddb61ea444d813294f8e4eac39809e4
+#        EXPORTS_DIR=/root/exports   INTENT_DIR=/root/intent-store
+#   3. Adjust WorkingDirectory/EnvironmentFile/ExecStart paths below to match.
+#   4. sudo cp deploy/mex-journal-sync.{service,timer} /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-journal-sync.timer
+[Unit]
+Description=MEX Trade Journal sync (Tradovate Fills CSV -> Notion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.journal_sync

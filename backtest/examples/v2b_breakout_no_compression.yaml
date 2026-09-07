@@ -1,0 +1,12 @@
+# Finetune of v2 — same breakout, but EXCLUDE Compression (where v2 bled -$42k).
+# regime_filter is an allow-list: every regime except Compression (+ Indecision).
+# The honest test: does dropping Compression lift OOS PF, or was it in-sample noise?
+name: v2b_breakout_no_compression
+base_asset: NQ
+base_preset: EL_TORO
+setup_class: breakout
+regime_filter: [Strong Bull Trend, Controlled Bull Trend, Strong Bear Trend, Controlled Bear Trend, Low-Volatility Range, High-Volatility Range]
+groups:
+  donchian: {}
+  cvd_delta: {}
+  swing_stops: {}

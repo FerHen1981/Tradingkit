@@ -159,8 +159,29 @@
 //   script. De negen funded scripts vielen al terug op SCRIPT_NAME; deze vier nu ook.
 //   TORO CONFIG-INHOUD - hun cfgStr droeg geen firm, ddModel, trailDD of paDLL, dus je kon
 //   uit de alert-stream niet zien met welke accountregels een eval draaide. Nu wel.
+// v3.4.0 (07-09, item 31): één centraal handelsvenster per script.
+//   Er stonden vier datum-inputs op twee plekken -- "No entries before start date",
+//   "Start date/time (measure from)", "Use end date" en de einddatum -- plus de tester-range
+//   van TradingView zelf. Welke van die vier de handel begrensde was van buiten niet te zien,
+//   en dat is de reden dat Ferry naar hardcoded logica uitweek. Ze zijn alle vier weg.
+//   ERVOOR IN DE PLAATS: validFrom + validUntil in groep 1, en verder niets. Backtest,
+//   forward-test en live lezen alle drie ditzelfde venster.
+//   GEDRAG OP DE GRENS, vastgelegd en bewust geen knop: entries stoppen hard op validUntil
+//   en een reeds neergelegde limietorder wordt daar geannuleerd (anders is de stop geen stop);
+//   openstaande posities houden 24 uur grace om netjes te sluiten; daarna wordt er eenmalig
+//   platgemaakt. Op de grens gaat er één Discord-melding uit.
+//   ZICHTBAAR: de ACCOUNT-laag van de tabel heeft een regel "Window" die de stand toont --
+//   not started / open until <datum> / EXPIRED met resterende grace-uren / CLOSED. Het venster
+//   staat ook in de CONFIG-kaart (validFrom, validUntil, graceH), zodat de middleware zijn
+//   dubbelslot tegen dezelfde grenzen kan zetten.
+//   LET OP: de datumkiezer van TradingView interpreteert in de EXCHANGE-tijdzone van de chart.
+//   De defaults staan expliciet in America/New_York en de tabel toont de grenzen terug in je
+//   referentietijdzone, zodat je kunt zien wat er echt staat.
+//   NIET meegenomen: "Last payout (consistency anchor)" blijft een eigen input. Dat is geen
+//   handelsvenster maar het startpunt van de consistency- en kwalificerende-dagentellers;
+//   samenvoegen zou die tellers stukmaken.
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON INTRA Q2"
-var string currentVersion = "v3.3.0"
+var string currentVersion = "v3.4.0"
 strategy("MΞX EL LEON · MYM CON INTRA Q2 · " + currentVersion, shorttitle="LEO-YM-CI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -187,7 +208,7 @@ var string GROUP_SIG   = "9 · SIGNAL — Filters"
 var string GROUP_CVD   = "9 · SIGNAL — Filters"
 var string GROUP_FVG   = "9 · SIGNAL — Filters"
 var string GROUP_TIME  = "3 · TIME GATE"
-var string GROUP_TZ    = "1 · TIME — Reference timezone"
+var string GROUP_TZ    = "1 · TIME — Validity window"
 var string GROUP_BND   = "2 · TIME — Trading boundary"
 var string GROUP_VIS   = "12 · VISUALS — Indicators"
 var string GROUP_DASH  = "11 · VISUALS — Strategy"
@@ -240,6 +261,25 @@ input_tz = input.string("America/New_York", "Reference Timezone",
      options=["Pacific/Honolulu","America/Anchorage","America/Los_Angeles","America/Denver","America/Chicago","America/New_York","America/Sao_Paulo","Etc/UTC","Europe/London","Europe/Berlin","Europe/Amsterdam","Europe/Athens","Europe/Moscow","Asia/Dubai","Asia/Karachi","Asia/Dhaka","Asia/Bangkok","Asia/Singapore","Asia/Tokyo","Australia/Sydney","Pacific/Auckland"],
      group=GROUP_TZ, tooltip="Timezone for the time gate, flat window and day boundary. Keep America/New_York — all", display=display.none)
 string activeTz = input_tz
+
+// === TIME-GATE #0 — de ENIGE bron voor het handelsvenster van dit script =====
+// Item 31 (CLO, 05-09). Er stonden drie losse datums op drie plekken -- "No entries before
+// start date", "Start date/time (measure from)" en "Use end date" + einddatum -- plus de
+// tester-range van TradingView zelf. Niemand kon zien welke de handel nu echt begrensde, en
+// dat is precies waarom Ferry naar hardcoded logica uitweek. Er is er nu nog EEN:
+// [validFrom, validUntil]. Backtest, forward-test en live lezen alle drie ditzelfde venster.
+// LET OP: de datumkiezer van TradingView interpreteert in de EXCHANGE-tijdzone van de chart,
+// niet in ET. De defaults hieronder staan expliciet in America/New_York, en het dashboard
+// toont de grenzen terug in je referentietijdzone -- zo zie je wat er ECHT staat.
+validFrom  = input.time(timestamp("America/New_York", 2026, 1, 1, 0, 0, 0), "Valid from", group=GROUP_TZ,
+     tooltip="Vóór dit moment neemt het script geen enkele entry. Indicatoren warmen wel op over de volle historie, dus de signalen veranderen niet -- je backtest begint hier alleen te handelen. Zelfde grens voor backtest, forward-test en live.")
+validUntil = input.time(timestamp("America/New_York", 2027, 1, 1, 0, 0, 0), "Valid until", group=GROUP_TZ,
+     tooltip="Ná dit moment: geen entries meer, hard. Openstaande posities mogen nog 24 uur netjes sluiten; daarna wordt er eenmalig platgemaakt. Je krijgt één Discord-melding op de grens. Zet dit op de datum waarop dit account of deze configuratie afloopt.")
+// Het gedrag op de grens ligt vast in item 31 en is bewust GEEN knop: één regel, overal gelijk.
+int  EXIT_GRACE_MS = 24 * 60 * 60 * 1000
+bool inValidWindow = time >= validFrom and time <= validUntil
+bool windowExpired = time > validUntil
+bool exitGraceOpen = time <= validUntil + EXIT_GRACE_MS
 dayBoundaryMode = input.string("Exchange session (ETH)", "Trading day boundary",
      options=["Exchange session (ETH)","Regular hours (RTH)","Calendar day (timezone)"], group=GROUP_BND, tooltip="Where the trading day rolls over. Exchange session (default) = 18:00 ET futures session open, matching Apex and the research engine. Calendar day: midnight in the reference timezone.", display=display.none)
 
@@ -1016,13 +1056,10 @@ var string GROUP_EVAL = "13 · DEVELOPER — Settings"
 // daarmee dood; hij wordt in een aparte ronde gestript zodra niets hem meer leest.
 bool evalTrack    = false
 bool evalTrailEod = true
-tradeFromStart  = input.bool(true, "No entries before start date", group=GROUP_EVAL, tooltip="Gates ENTRIES on the same start date below: before that moment the strategy takes no trades, so the backtester, dashboard and TV key stats reflect ONLY this account. Indicators still warm up on full history. Turn OFF on research charts where you want the full-history backtest. With the default (past) date this toggle has no effect.", display=display.none)
-evalStartTime   = input.time(timestamp("01 Jan 2025 00:00 -0400"), "Start date/time (measure from)", group=GROUP_EVAL,
-     tooltip="Measurement starts here. PnL from before this moment does NOT count. The date picker interprets in your chart/exchange timezone. NOTE: this is the lightweight tracker (use either this or group 8, not both).", display=display.none)
-evalUseEnd      = input.bool(false, "Use end date (exact tester match)", group=GROUP_EVAL,
-     tooltip="OFF (live): the tracker keeps counting to the latest bar — what you want live. ON (verification): counts only up to the end date below, to match a bounded backtester window exactly.", display=display.none)
-evalEndTime     = input.time(timestamp("01 Jan 2027 00:00 -0400"), "End date/time (measure through)", group=GROUP_EVAL,
-     tooltip="Only active when 'Use end date' is on. Set equal to your backtester period end date for an exact match.", display=display.none)
+// De vier datum-inputs die hier stonden zijn weg (item 31): "No entries before start date",
+// "Start date/time (measure from)", "Use end date" en de einddatum. Ze zijn vervangen door het
+// ene venster [validFrom, validUntil] in groep 1; alles wat hieronder nog een datumgrens nodig
+// heeft leest daaruit.
 evalStartBal    = input.float(0, "Start balance ($)", step=100, group=GROUP_EVAL,
      tooltip="Balance at the start date. Use when tracking an account already underway (e.g. a PA at +$800). On day 1 = peak; floor = start - trailing DD.", display=display.none)
 evalProfitTgt   = acctGoal
@@ -1054,7 +1091,7 @@ f_autoAcctName() =>
     string _pfx = _n >= 2 ? str.upper(str.substring(_id, 0, 2)) : str.upper(_id)
     string _sfx = _n >= 3 ? str.substring(_id, _n - 3, _n) : _id
     string _bal = str.tostring(math.round(evalStartBal / 1000), "#") + "k"
-    string _dt = str.format_time(evalStartTime, "yyMMdd", "America/New_York")
+    string _dt = str.format_time(validFrom, "yyMMdd", "America/New_York")
     _pfx + _sfx + "-" + _bal + "-" + _dt
 string jrnlAcct = str.length(jrnlAcctName) > 0 ? jrnlAcctName : f_autoAcctName()
 // D-41: de routing per kanaal leest het account uit de EERSTE kolom van de description en
@@ -1645,12 +1682,12 @@ var bool  regimeFav  = false
 var bool acctStartArmed = false
 var bool startNotified = false
 if not acctStartArmed
-    bool _dateOK = not tradeFromStart or time >= evalStartTime
+    bool _dateOK = time >= validFrom
     bool _regOK  = not startNeedRegime or not useRegime or regimeFav
     if _dateOK and _regOK
         acctStartArmed := true
-bool preStartBlock = (tradeFromStart or startNeedRegime) and not acctStartArmed
-canTrade = timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
+bool preStartBlock = not acctStartArmed
+canTrade = inValidWindow and timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
 
 
 // ============================================================================
@@ -1837,7 +1874,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";rg=" + (useRiskGate ? str.tostring(rgDLL, "#") + "/" + str.tostring(rgTriggerT, "#") + "/" + str.tostring(rgBufferB, "#") : "off") + ";filters=" + (useBbwpFilter ? "bbwp" : "") + (useEmaFilter ? "ema" : "") + (useMfiFilter ? "mfi" : "") + (usePocFilter ? "poc" : "") + (useDpFilter ? "dp" : "") + (allowLongs and allowShorts ? "" : allowLongs ? "L" : "S") + ";tz=" + activeTz
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSizeEff, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSizeEff, "#") + "-" + str.tostring(gapMaxSizeEff, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSizeEff, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilterEff ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCountEff) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";mktRegime=" + marketRegimeMode + ";dayTrailModel=" + dayTrailModel + ";dayTrailAct=" + str.tostring(dayTrailActivationUSDEff, "#") + ";dayTrailGive=" + str.tostring(dayTrailGivebackEff, "#") + ";dayScale=" + dailyScaleMode + ";rg=" + (useRiskGate ? str.tostring(rgDLL, "#") + "/" + str.tostring(rgTriggerT, "#") + "/" + str.tostring(rgBufferB, "#") : "off") + ";filters=" + (useBbwpFilter ? "bbwp" : "") + (useEmaFilter ? "ema" : "") + (useMfiFilter ? "mfi" : "") + (usePocFilter ? "poc" : "") + (useDpFilter ? "dp" : "") + (allowLongs and allowShorts ? "" : allowLongs ? "L" : "S") + ";tz=" + activeTz + ";validFrom=" + str.format_time(validFrom, "yyyy-MM-dd HH:mm", activeTz) + ";validUntil=" + str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + ";graceH=24"
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -2011,7 +2048,9 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
              jrnlAcct + " | " +
              "Entry " + str.tostring(sigEntryPx, format.mintick) + " | Stop " + str.tostring(pendStop, format.mintick) + " | TP " + str.tostring(t_tpPx, format.mintick) + " (" + tpMode + ")" + " | Qty " + str.tostring(t_qty) + " | " + phase + f_evalTail(evalStarted, distTarget, distFail, jrnlAcct))
 
-if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow or dayHalted)
+// Item 31: een limietorder die vóór validUntil is neergelegd mag er daarna niet alsnog
+// invallen -- dan is de entry-stop geen harde stop. Hij wordt op de grens geannuleerd.
+if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow or dayHalted or windowExpired)
     strategy.cancel("Long")
     strategy.cancel("Short")
     f_markUnfilled(pendBar, pendLimit, false)
@@ -2216,6 +2255,27 @@ if barstate.isconfirmed and inFlatWindow and not flattenedToday
         exitReasonNext := "AUTO-FLAT"
     f_sendDiscord("🕔 " + syminfo.ticker + " AUTO FLAT", jrnlAcct + " | " + "Forced flat @ ~" + str.tostring(close, format.mintick))
 
+// === TIME-GATE #0 — grens van het geldigheidsvenster ========================
+// Item 31. Entries zijn al hard dicht via canTrade; hier zit alleen wat er OM de grens
+// gebeurt. Eén soft-notify zodra hij gepasseerd wordt, en na de 24-uurs grace nog één keer
+// netjes plat. Zonder dat laatste is een grace geen grace maar een open eind.
+var bool expiryNotified = false
+if windowExpired and not expiryNotified and barstate.isconfirmed
+    expiryNotified := true
+    f_sendDiscord("⏳ " + syminfo.ticker + " EXPIRATION REACHED",
+         jrnlAcct + " | " + SCRIPT_NAME + " | entries blocked | valid until " +
+         str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + " " + activeTz +
+         " | open positions may still close for 24h")
+var bool graceFlatDone = false
+if windowExpired and not exitGraceOpen and not graceFlatDone and barstate.isconfirmed
+    graceFlatDone := true
+    if posSize != 0
+        strategy.close_all(comment="WINDOW-EXPIRED")
+        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        exitReasonNext := "WINDOW-EXPIRED"
+        f_sendDiscord("⛔ " + syminfo.ticker + " WINDOW CLOSED",
+             jrnlAcct + " | 24h grace expired — flattened @ ~" + str.tostring(close, format.mintick))
+
 var bool haltCloseSent = false
 if isNewTradingDay
     haltCloseSent := false
@@ -2297,7 +2357,7 @@ var bool  evalPassed    = false
 var bool  evalFailed    = false
 var bool  paReached     = false
 
-bool evalAtStart = evalTrack and not evalStarted and time >= evalStartTime
+bool evalAtStart = evalTrack and not evalStarted and time >= validFrom
 if evalAtStart
     evalStarted   := true
     evalPeak      := evalStartBal
@@ -2309,11 +2369,11 @@ var int   evalLastCount = 0
 if evalStarted and strategy.closedtrades > evalLastCount
     for i = evalLastCount to strategy.closedtrades - 1
         float _xt = strategy.closedtrades.exit_time(i)
-        if _xt >= evalStartTime and (not evalUseEnd or _xt <= evalEndTime)
+        if _xt >= validFrom and _xt <= validUntil
             evalClosedPnL := evalClosedPnL + strategy.closedtrades.profit(i)
     evalLastCount := strategy.closedtrades
 
-float evalOpenPnL = (evalStarted and strategy.position_size != 0 and strategy.opentrades > 0 and strategy.opentrades.entry_time(0) >= evalStartTime) ? strategy.openprofit : 0.0
+float evalOpenPnL = (evalStarted and strategy.position_size != 0 and strategy.opentrades > 0 and strategy.opentrades.entry_time(0) >= validFrom) ? strategy.openprofit : 0.0
 
 evalBal := evalStarted ? evalStartBal + evalClosedPnL + evalOpenPnL : na
 
@@ -2558,7 +2618,7 @@ int rIndHdr = 1
 int rInd    = rIndHdr + 1
 int rAccHdr = rInd + nInd
 int rAcc    = rAccHdr + 1
-int rTrdHdr = rAcc + 3
+int rTrdHdr = rAcc + 4     // +1 t.o.v. v3.3: de ACCOUNT-laag heeft er een Window-regel bij (item 31)
 int rTrd    = rTrdHdr + 1
 int dashRows = rTrd + 4
 
@@ -2628,6 +2688,15 @@ if showDashboard and barstate.islast
     // Zonder live-sync zijn balance/payout/breach simulatiegetallen. Dan een streepje, geen getal:
     // op een live chart is een verkeerd accountsaldo erger dan geen accountsaldo.
     table.cell(dash, 1, rAcc + 2, not _sync ? "—" : (na(_bufPct) ? "—" : str.tostring(_bufPct, "#") + "% · $" + str.tostring(_toBreach, "#") + " to breach" + (na(_toPayout) ? "" : " · $" + str.tostring(_toPayout, "#") + " to payout")), text_color=not _sync ? txtColor : na(_bufPct) ? txtColor : _bufPct < 25 ? vNegTxt : vPosTxt, text_size=txtSize, text_halign=text.align_right)
+    // Item 31: het geldigheidsvenster hoort zichtbaar te zijn, niet alleen instelbaar. Ferry
+    // stapte over op hardcoded logica omdat hij niet kon zien welke datum de handel begrensde.
+    string _winTxt = time < validFrom ? "not started · from " + str.format_time(validFrom, "dd MMM", activeTz) :
+         not windowExpired ? "open · until " + str.format_time(validUntil, "dd MMM HH:mm", activeTz) :
+         exitGraceOpen ? "EXPIRED · exits only, " + str.tostring(math.ceil((validUntil + EXIT_GRACE_MS - time) / 3600000.0), "#") + "h grace" :
+         "CLOSED · window passed"
+    color _winCol = time < validFrom ? txtColor : not windowExpired ? txtColor : vNegTxt
+    table.cell(dash, 0, rAcc + 3, "Window", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+    table.cell(dash, 1, rAcc + 3, _winTxt, text_color=_winCol, text_size=txtSize, text_halign=text.align_right)
 
     // ---- laag 3: TRADE ------------------------------------------------------
     int   _d    = inTrade ? (posSize > 0 ? 1 : -1) : inOrder ? pendDir : 0

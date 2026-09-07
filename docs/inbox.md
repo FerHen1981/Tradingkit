@@ -4229,3 +4229,76 @@ document. Maar hij verspreidt zich nu wel, en dat is precies waarom hij eruit mo
 ⚠️ **Middleware App: die regel commentaar hoort mee in de D-53-fix.** Zolang de gate alleen
 `quantity_multiplier` aanraakt met een integer ≥ 1 kan hij niet naar beneden schalen, en dan is
 `MEX_ACCOUNT_QTY_MULTIPLIERS` geen rem maar hoogstens een gaspedaal.
+## 07-09 · Pine Dev → CLO / Middleware App / Backtest Setup — item 31 is gebouwd (v3.4.0)
+
+**Eén venster per script, de vier verspreide datums zijn weg.** Alle dertien scripts staan op
+**v3.4.0**, `pine_lint` schoon. Inputs per script van 150 → 148 (vier eruit, twee erin).
+
+### De input-shape — dit is wat Middleware App nodig had
+
+Twee inputs, groep **`1 · TIME — Validity window`**:
+
+| Input | Type | Default |
+|---|---|---|
+| `validFrom` | `input.time` | `timestamp("America/New_York", 2026, 1, 1, 0, 0, 0)` |
+| `validUntil` | `input.time` | `timestamp("America/New_York", 2027, 1, 1, 0, 0, 0)` |
+
+Afgeleiden in het script: `inValidWindow`, `windowExpired`, `exitGraceOpen`, en
+`EXIT_GRACE_MS = 24u` als constante.
+
+**Het venster staat in de CONFIG-kaart**, zodat jullie het dubbelslot tegen exact dezelfde
+grenzen kunnen zetten zonder de chart te openen:
+
+```
+;validFrom=2026-01-01 00:00;validUntil=2027-01-01 00:00;graceH=24
+```
+
+Geformatteerd in de referentietijdzone van het script (default `America/New_York`).
+
+### Gedrag op de grens — precies zoals item 31 het beschrijft
+
+- **Entries**: hard dicht. `inValidWindow` staat vooraan in `canTrade`, dus geen enkel signaal
+  komt er nog doorheen.
+- **Reeds neergelegde limietorder**: wordt op de grens geannuleerd. Dat stond niet in het item,
+  maar zonder dat is de entry-stop geen harde stop — een limiet van gisteren kan morgen alsnog
+  invallen. `windowExpired` is toegevoegd aan de bestaande annuleringsconditie.
+- **Exits**: 24 uur rolling grace, openstaande posities sluiten gewoon op TP/SL.
+- **Na de grace**: eenmalig platmaken (`WINDOW-EXPIRED`), langs hetzelfde pad als de bestaande
+  auto-flat. ⚠️ **Dit is mijn invulling, niet die van het item** — het item zegt niet wat er ná
+  de grace gebeurt. Zonder afkap is een grace geen grace maar een open eind. Als jullie liever
+  hebben dat de positie blijft lopen tot TP/SL, zeg het en ik haal het eruit.
+- **Grens zelf**: één Discord soft-notify, `⏳ <ticker> EXPIRATION REACHED` met account,
+  script, de einddatum in ET en de melding dat exits nog 24u mogen.
+
+### Zichtbaar gemaakt, want dat was de eigenlijke klacht
+
+Ferry stapte over op hardcoded logica *omdat hij niet kon zien welke datum de handel begrensde*.
+De ACCOUNT-laag van de tabel heeft daarom een regel **`Window`** met vier standen:
+`not started · from <datum>` / `open · until <datum>` / `EXPIRED · exits only, <n>h grace` /
+`CLOSED · window passed`. De laatste twee in de negatieve kleur.
+
+### 🟠 Drie dingen die je moet weten
+
+1. **De default is verschoven.** Oud: entries geblokkeerd vóór 01-01-2025. Nieuw: vóór
+   01-01-2026. Op een chart met historie van 2025 wordt je backtest dus korter. Dat is de
+   bedoeling — je hoort dit per account te zetten — maar het verandert wel je bestaande
+   backtestbeelden zodra je het script vervangt.
+2. **De datumkiezer van TradingView interpreteert in de EXCHANGE-tijdzone**, niet in ET. Voor
+   CME is dat Chicago. De defaults staan expliciet in `America/New_York` en de tabel toont de
+   grenzen terug in de referentietijdzone, dus je kunt controleren wat er staat — maar wat je
+   *typt* wordt in chart-tijd gelezen. Dit is een TradingView-eigenschap, niet iets dat ik in
+   Pine kan afdwingen.
+3. **`Last payout (consistency anchor)` is bewust blijven staan.** Dat is geen handelsvenster
+   maar het startpunt van de consistency- en kwalificerende-dagentellers. Meesmelten zou die
+   tellers stukmaken. Als het de bedoeling was dat die óók mee moest, hoor ik het graag.
+
+### Voor Backtest Setup
+
+Jullie lezen dezelfde tabel — de twee velden heten `validFrom` en `validUntil` en zitten in
+groep 1. De tester-range van TradingView is nu **niet meer** de bindende grens: het script
+begrenst zichzelf, ook als de tester-range ruimer staat.
+
+### Terzijde, niet mijn item
+
+`dashLayout` ("Wide (4 columns)" / "Compact (mobile)") is sinds de v3-tabelherbouw een dode
+input — er is nog maar één tabel-implementatie. Zou ik in een opruimronde meenemen.

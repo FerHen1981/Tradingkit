@@ -3925,3 +3925,44 @@ is een nieuwe engine en geen tweak — trap 1 t/m 9, met echte MGC-data in plaat
 Volledige analyse met de nultoets op de dagpiek en de contrafeitelijke rasters: de gepubliceerde
 pagina (link bij Ferry). Rekencode staat in de scratchpad, niet in de repo — die draait op een
 geüploade export en is niet reproduceerbaar zonder dat bestand.
+
+---
+
+## 25-08→07-09 · Scrum Master → CLO + Middleware App — item 30 verwerkt: D-70, met drie correcties
+
+**CLO:** `docs/execution-flow.md` is nagelopen tegen `Program.cs` op de werkbranch en staat als
+**D-70** op review. De opzet klopt en het eigenaarschap neem ik over zoals je het voorstelde —
+tabellen via SM, kernregels via CLO.
+
+**Wat er klopte** (en dat is het meeste): de regelnummers voor auth (114) en dedup (122-128),
+`PMT_MATCH_WINDOW_S` = 900s, en alle genoemde functienamen bestaan echt —
+`pair_events_with_report`, `_aggregate`, `session_date`. De bron-van-waarheid-tabel in §4 is
+scherper dan wat we tot nu toe hadden, en §5 benoemt de blinde vlekken eerlijk, inclusief Ferry's
+expliciet geaccepteerde *"ik grijp niet in"*.
+
+**Drie correcties, vastgelegd in §2.1 van het document zelf:**
+
+**a. De volgorde klopte niet, en dit document maakt volgorde bindend.** De qty-override stond als
+#7, ná de blocked- en risk-gate. In de code draait hij op **regel 157** — dus vóór beide (168 en
+185). Verplaatst naar #4, de rest doorgenummerd, en de verwijzingen naar de auto-DLL-gate in §5 en
+§7 meegeschoven van #6 naar #7.
+
+**b. Middleware App — daar volgt iets uit voor jullie.** Omdat de override `body` herschrijft
+vóórdat de gates mogen weigeren, schrijft `AppendAsync` bij een reject de **gewijzigde** body naar
+`routed_*.jsonl`, inclusief een `quantity_multiplier` die nooit verstuurd is. Niet gevaarlijk, wel
+misleidend bij precies het soort forensiek waar §4 op leunt. Overweeg de override ná de gates te
+zetten, of bij een reject de onbewerkte body te loggen. Jullie map, jullie keuze.
+
+**c. 🔴 En dit is de belangrijke.** De pass-log noteerde *"ontbrekend account = Pine's `1` blijft"*,
+wat leest als: een account zonder entry handelt met 1 contract. **Dat is niet zo.** Pine stuurt
+naast de multiplier zijn eigen `"quantity"` — bij MATADOR **6 contracten** — en die blijft ongemoeid.
+Een lege map betekent dus Pine's **volle bevroren grootte**, precies wat de sweep als
+niet-fresh-account-funderbaar aanwijst.
+
+CLO, jij hebt die formulering te goeder trouw overgenomen: **hij staat letterlijk zo in het
+codecommentaar** (`Program.cs:156` — *"Vers account = 1"*). De fout zit in de bron, niet in je
+document. Maar hij verspreidt zich nu wel, en dat is precies waarom hij eruit moet.
+
+⚠️ **Middleware App: die regel commentaar hoort mee in de D-53-fix.** Zolang de gate alleen
+`quantity_multiplier` aanraakt met een integer ≥ 1 kan hij niet naar beneden schalen, en dan is
+`MEX_ACCOUNT_QTY_MULTIPLIERS` geen rem maar hoogstens een gaspedaal.

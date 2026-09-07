@@ -45,16 +45,55 @@ niets bijzonders; `reject` = gate stopt de flow en registreert een reden.
 | **1** | Auth | `.NET Program.cs:114` | `token == MEX_WEBHOOK_SECRET` | *(geen)* | HTTP 401 | Middleware App |
 | **2** | Deduplicatie | `.NET Program.cs:122-128` | body-hash niet in 5s-window | *(geen)* | `duplicate` | Middleware App |
 | **3** | Kill-switch | `Runtime.Armed` | `Armed == true` én signaal is entry (buy/sell) | *(geen)* | `blocked: kill-switch` | Ferry (env) |
-| **4** | Blocked-gate (D-40) | `AccountBlockGate` in `Program.cs` | account niet op slot na eerdere PMT-weigering met day-cap/DLL/payout-cap marker; reset op 18:00 ET | *(geen)* | `GEWEIGERD lokaal — day-cap/DLL blokkade actief (eerder: <marker>)` + Discord `⛔ Order NIET geplaatst` | Middleware App |
-| **5** | Risk-gate (D-02) | `AccountRiskGate` in `Program.cs` | account niet in `MEX_HALTED_ACCOUNTS`, entry-cap niet overschreden voor huidige sessiedag (18:00 ET roll) | `RegisterEntry` na succesvolle forward | `GEWEIGERD lokaal — risk-gate: <reden>` + Discord | Ferry (env) + Middleware App |
-| **6** | Auto-DLL/target halt | **⚠️ te bouwen** — leest firm-registry (`firms.py`) + PMT-fills-som per sessiedag; halt bij X% van cap; hard halt bij 100% | binnen firm-caps voor huidige sessiedag | *(geen)* | `[DLL]` / `[TARGET]` / `[PAYOUT-CAP]` + Discord | Middleware App + Legacy. **Openstaand: item 32 in `inbox.md`, gate #6 in de exit-echo-scope** |
-| **7** | Qty-override (D-53) | `AccountQtyMap` in `Program.cs` | er is een `MEX_ACCOUNT_QTY_MULTIPLIERS`-entry voor dit account | body `multiple_accounts[0].quantity_multiplier` wordt overschreven | *(geen — ontbrekend account = Pine's `1` blijft)* | Ferry (env) + Middleware App |
+| **4** | Qty-override (D-53) | `AccountQtyMap` in `Program.cs:157` | er is een `MEX_ACCOUNT_QTY_MULTIPLIERS`-entry voor dit account | body `multiple_accounts[0].quantity_multiplier` wordt overschreven; `body` wordt herbouwd en die gewijzigde versie gaat verder de keten in | *(geen reject — deze gate stopt nooit)* | Ferry (env) + Middleware App |
+| **5** | Blocked-gate (D-40) | `AccountBlockGate` in `Program.cs` | account niet op slot na eerdere PMT-weigering met day-cap/DLL/payout-cap marker; reset op 18:00 ET | *(geen)* | `GEWEIGERD lokaal — day-cap/DLL blokkade actief (eerder: <marker>)` + Discord `⛔ Order NIET geplaatst` | Middleware App |
+| **6** | Risk-gate (D-02) | `AccountRiskGate` in `Program.cs` | account niet in `MEX_HALTED_ACCOUNTS`, entry-cap niet overschreden voor huidige sessiedag (18:00 ET roll) | `RegisterEntry` na succesvolle forward | `GEWEIGERD lokaal — risk-gate: <reden>` + Discord | Ferry (env) + Middleware App |
+| **7** | Auto-DLL/target halt | **⚠️ te bouwen** — leest firm-registry (`firms.py`) + PMT-fills-som per sessiedag; halt bij X% van cap; hard halt bij 100% | binnen firm-caps voor huidige sessiedag | *(geen)* | `[DLL]` / `[TARGET]` / `[PAYOUT-CAP]` + Discord | Middleware App + Legacy. **Openstaand: item 32 in `inbox.md`, gate #7 in de exit-echo-scope** |
 | **8** | Routing (Tradovate/Rithmic) | `Program.cs` | account in `MEX_PMT_RITHMIC_ACCOUNTS`? dan Rithmic, anders Tradovate | *(geen)* | *(geen — altijd één doel)* | Ferry (env) |
 | **9** | Forward | `ForwardJsonAsync` in `Program.cs` | HTTP POST naar PMT slaagt (< 400) | *(status wordt aan Rejected() gegeven)* | HTTP 4xx/5xx of netwerk-error → `error …` | Middleware App |
 | **10** | Rejected() na forward | `Rejected()` in `Program.cs` (na fix 25-08) | reply bevat expliciete fout-indicator (`error:true` / non-lege error-string / `success:false` / `status:false` / tekst-marker) | `sent 200 (poging N)` | `GEWEIGERD 200 door doelserver: <reply>` + Discord | Middleware App |
 | **11** | Executiepoort (D-46b) | `routed_journal.pair_events_with_report()` | voor een FILL-card is er een PMT-record met `sent 200` binnen `PMT_MATCH_WINDOW_S` (900s) op zelfde account + symbool + richting | trade komt in `trades`-lijst | fill komt in `unconfirmed`-lijst — geen boeking in LIVE-tab | Middleware App |
 | **12** | Exit-echo (⚠️ te bouwen) | `routed_journal.pair_events_with_report()` — nieuwe uitbreiding | voor elke EXIT-card is er een PMT-close-record binnen `PMT_MATCH_WINDOW_S` | trade `closed = true`, P&L geboekt | trade blijft `closed = false`, EXIT-card markeert `pending-echo` — geen P&L-boeking | Middleware App. **Openstaand: item 32 in `inbox.md`. Vóór bouw: grep-check of PMT `sent 200` überhaupt op bracket-exits schrijft** |
 | **13** | Sessie-bucket | `dashboard_state._aggregate()` + `fills_pairing.session_date()` | sessiedag rolt om 18:00 ET; trade telt in de sessie waarin hij CLOSED is | trade in `today`/`yesterday`/`week` window | trade in oudere periode | Middleware App |
+
+### 2.1 SM-correcties op de eerste versie (07-09)
+
+Getoetst tegen `Program.cs` op de werkbranch. Drie dingen weken af; de rest van de
+tabel klopte, inclusief de regelnummers voor auth (114) en dedup (122-128), de
+`PMT_MATCH_WINDOW_S` van 900s, en alle genoemde functienamen
+(`pair_events_with_report`, `_aggregate`, `session_date`).
+
+**a. De volgorde klopte niet, en dit document maakt de volgorde bindend.**
+De qty-override stond als #7, ná de blocked-gate en de risk-gate. In de code draait
+hij op **regel 157** — dus vóór de blocked-gate (168) en vóór de risk-gate (185).
+Hij is verplaatst naar **#4** en de gates daarachter zijn doorgenummerd; de
+verwijzingen naar de auto-DLL-gate in §5 en §7 zijn meegeschoven van #6 naar #7.
+
+**b. Gevolg van die volgorde, en het is geen cosmetisch punt.** De qty-override
+herschrijft `body` vóórdat de blocked- en risk-gate mogen weigeren. Weigert een van
+die twee, dan schrijft `AppendAsync` de **gewijzigde** body naar `routed_*.jsonl` —
+inclusief een `quantity_multiplier` die nooit verstuurd is. Wie later dat journaal
+leest ziet een order-grootte die niet bestaan heeft. Niet gevaarlijk, wel misleidend
+bij precies het soort forensiek waar §4 op leunt. **Melden bij Middleware App:
+overweeg de override ná de gates te zetten, of de onbewerkte body te loggen bij een
+reject.**
+
+**c. 🔴 De pass-log van de qty-override beweerde iets onwaars, en dat is de
+belangrijke correctie.** De eerste versie noteerde *"ontbrekend account = Pine's `1`
+blijft"*, wat leest als: een account zonder entry in de map handelt met 1 contract.
+**Dat is niet zo.** Pine stuurt naast de multiplier zijn eigen `"quantity"` — bij
+MATADOR **6 contracten** — en die wordt door deze gate niet aangeraakt. De multiplier
+op 1 laten betekent dus **Pine's volle bevroren grootte**, precies de grootte die de
+vloot-sweep als niet-fresh-account-funderbaar aanwijst.
+
+De formulering komt uit het codecommentaar zelf (`Program.cs:156`: *"Vers account =
+1"*), dus CLO heeft hem te goeder trouw overgenomen — de fout zit in de bron. Die
+staat sinds 25-08 als openstaande review-bevinding bij D-53: de gate kan met een
+integer-multiplier ≥ 1 alleen gelijkhouden of verhogen, nooit naar beneden schalen.
+
+⚠️ **Zolang D-53 niet gefixt is, is `MEX_ACCOUNT_QTY_MULTIPLIERS` geen rem maar
+hoogstens een gaspedaal.** Zet die env-var niet in de veronderstelling dat een vers
+account er klein mee handelt.
 
 Notify-kaarten (Discord, Telegram, tier-A/B/C) lopen door dezelfde pipeline maar
 zijn geen executie — die zitten in tabel 3 van `middleware/docs/D-28-NOTIFY-CHANNEL.md`
@@ -149,7 +188,7 @@ per ongeluk vergeten.
 - **Cross-firm-consistentie in metrieken.** Als jij morgen MFFU/TPT/Day Traders erbij
   neemt, respecteert de gate-flow dat automatisch (broker-agnostisch); de publicatie-
   semantiek van tabel 2 óók (50k-normalisering geldt per firm-grootte). Als één firm
-  een andere DLL-semantiek heeft, moet gate #6's registry-lookup dat weerspiegelen.
+  een andere DLL-semantiek heeft, moet gate #7's registry-lookup dat weerspiegelen.
 
 ---
 

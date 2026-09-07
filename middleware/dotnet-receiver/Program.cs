@@ -173,9 +173,10 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         // Exits gaan er NOOIT doorheen geblokkeerd worden — zelfde regel als de kill-switch.
         if (isEntry && AccountGate.Blocked(acct, out var gateReason))
         {
+            var gateKind = RejectKind.Of(gateReason);
             var gateMsg = "GEWEIGERD door poort — " + gateReason;
-            await AppendAsync(storePath, "pmt", body, gateMsg, acct);
-            await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+            await AppendAsync(storePath, "pmt", body, $"{gateMsg} [{gateKind}]", acct);
+            await DiscordNotifier.PostAsync(discordEnv, $"⛔ [{gateKind}] Order NIET geplaatst",
                 $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{gateMsg}", 14701138);
             return Results.Ok(new { accepted = true, handled = false, kind = "pmt",
                                     account = Tail(acct), reason = gateMsg });
@@ -187,7 +188,11 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         var target = useRithmic && !string.IsNullOrEmpty(pmtRithmicUrl) ? pmtRithmicUrl : pmtUrl;
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
-        await AppendAsync(storePath, "pmt", body, res, acct);
+        // Item 32/3 — categorie achteraan, nooit vooraan: het journaal wordt elders op
+        // prefix gematcht ("GEWEIGERD…", "sent 200…"), en die parsers mogen niet breken.
+        var kind = Rejected(res) || res.StartsWith("error") ? RejectKind.Of(res) : "";
+        await AppendAsync(storePath, "pmt", body,
+                          kind.Length > 0 ? $"{res} [{kind}]" : res, acct);
 
         // D-40 — weigert PMT op een account-halt (daglimiet, drawdown, account op slot),
         // dan is dat de échte stand en sluiten we het account tot 18:00 ET. Bewust een
@@ -199,7 +204,7 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         // Een geweigerde order is stil: er komt geen fill, geen exit, geen kaart.
         // Zonder melding merk je het pas als je het bij de broker gaat zoeken.
         if (res.StartsWith("GEWEIGERD") || res.StartsWith("error"))
-            await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
+            await DiscordNotifier.PostAsync(discordEnv, $"⛔ [{kind}] Order NIET geplaatst",
                 $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{res}", 14701138);
 
         return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = res });
@@ -424,6 +429,45 @@ public static class Runtime
 // Alleen state in het geheugen: bij een herstart is de poort open, en dat is de veilige
 // kant — een gemiste blokkade kost één geweigerde order, een blijvende blokkade kost
 // een handelsdag.
+// Item 32/3 — notificatie-taxonomie. Eén classificatie voedt zowel de Discord-prefix als
+// de poort van D-40, zodat er geen tweede markerlijst ontstaat die uit de pas gaat lopen.
+// Leest dezelfde reply-inhoud die Rejected() na de 05-09-fix al beoordeelt.
+public static class RejectKind
+{
+    /// Volgorde is bewust: specifiek vóór algemeen. "not found in pool" bevat ook
+    /// "not found", en een rate-limit komt soms terug als generiek "rejected".
+    public static string Of(string reply)
+    {
+        if (string.IsNullOrWhiteSpace(reply)) return "UNKNOWN";
+        var r = reply.ToLowerInvariant();
+
+        // Eerst de drie die NIET over het account gaan maar over de verbinding.
+        if (Has(r, "not found in pool", "ip not found", "invalid ip")) return "IP-POOL";
+        if (Has(r, "429", "too many requests", "rate limit", "ratelimit")) return "RATE-LIMIT";
+        if (Has(r, "timeout", "timed out", "socketexception", "httprequestexception",
+                   "taskcanceledexception", "retries op", "connection refused",
+                   "connection reset")) return "NETWORK";
+
+        // Dan de drie die het account raken.
+        if (Has(r, "daily loss", "day loss", "loss limit", "max loss")) return "DLL";
+        if (Has(r, "drawdown", "breach", "blown", "account locked", "account is locked",
+                   "trading disabled", "not allowed to trade")) return "BREACHED";
+        if (Has(r, "profit target", "target reached", "payout", "cap reached",
+                   "goal reached")) return "TARGET";
+
+        return "UNKNOWN";
+    }
+
+    /// Zegt deze categorie "dit account handelt vandaag niet meer"? IP-POOL, RATE-LIMIT en
+    /// NETWORK horen daar niet bij: dat zijn problemen van de verbinding, niet van het
+    /// account, en die mogen nooit een handelsdag kosten — een IP-fout raakt álle accounts.
+    /// TARGET sluit bewust niet: doelbereik is geen overtreding, en of het account daarna
+    /// stil moet vallen is een besluit voor de Scrum Master, niet voor deze poort.
+    public static bool ClosesAccount(string kind) => kind is "DLL" or "BREACHED";
+
+    static bool Has(string r, params string[] markers) => markers.Any(m => r.Contains(m));
+}
+
 public static class AccountGate
 {
     static readonly ConcurrentDictionary<string, (DateTime UntilUtc, string Reason)> Blocks = new();
@@ -436,15 +480,14 @@ public static class AccountGate
     {
         if (string.IsNullOrWhiteSpace(reply)) return false;
         var r = reply.ToLowerInvariant();
+        // Handmatige lijst wint, zodat je zonder herbouw kunt bijsturen als PMT's
+        // bewoordingen tegenvallen. Anders beslist de taxonomie van item 32/3 — één
+        // lijst voor de Discord-prefix én voor deze poort.
         var custom = Environment.GetEnvironmentVariable("MEX_PMT_HALT_MARKERS") ?? "";
-        var markers = custom.Length > 0
-            ? custom.Split(',').Select(x => x.Trim().ToLowerInvariant()).Where(x => x.Length > 0).ToArray()
-            : new[]
-            {
-                "daily loss", "day loss", "loss limit", "max loss", "drawdown",
-                "account locked", "account is locked", "trading disabled", "not allowed to trade",
-            };
-        return markers.Any(m => r.Contains(m));
+        if (custom.Length > 0)
+            return custom.Split(',').Select(x => x.Trim().ToLowerInvariant())
+                         .Where(x => x.Length > 0).Any(m => r.Contains(m));
+        return RejectKind.ClosesAccount(RejectKind.Of(reply));
     }
 
     public static void Block(string account, string reason)

@@ -11,6 +11,83 @@ executiepad hebt gewijzigd. Nieuwste bovenaan. Afgehandeld? Regel laten staan me
 
 ---
 
+## 2026-09-07 · Item 32/3 — notificatie-taxonomie in de .NET-receiver (KLAAR, LIVE PAD)
+
+Scope zoals toegewezen: alleen de `Program.cs`-kant. **Niets gebouwd in de exit-echo** —
+dat is Python en ligt bij Middleware App.
+
+### Wat er nu gebeurt
+
+De Discord-melding heet niet meer kaal "⛔ Order NIET geplaatst" maar draagt de reden in
+de titel: `⛔ [DLL] Order NIET geplaatst`. Beide meldpunten zijn gedekt — de poort van
+D-40 én de weigering ná het doorsturen. Ferry ziet de reden dus in de scroll, zonder de
+body te openen.
+
+De categorie komt uit dezelfde reply-inhoud die `Rejected()` na de 05-09-fix beoordeelt;
+die fix (`"error":false` short-circuit) is intact gelaten en meegetest.
+
+### Eén classificatie, geen tweede lijst
+
+`RejectKind.Of()` voedt zowel de Discord-prefix als de poort van D-40. De aparte
+markerlijst in `AccountGate.IsAccountHalt` is weg: die riep om twee lijsten die uit de pas
+gaan lopen, precies wat werkafspraak 3 verbiedt. `MEX_PMT_HALT_MARKERS` blijft werken en
+wint nog steeds, zodat je zonder herbouw kunt bijsturen.
+
+**Welke categorieën sluiten een account?** Alleen `DLL` en `BREACHED`. `IP-POOL`,
+`RATE-LIMIT` en `NETWORK` bewust niet: dat zijn problemen van de verbinding, niet van het
+account, en een IP-fout raakt álle accounts tegelijk. Getest, zie hieronder.
+
+### Drie dingen die de SM moet wegen
+
+**1 — kleine gedragswijziging op het live pad.** De blokkeerset bevat nu ook `breach` en
+`blown` (via `BREACHED`); die stonden niet in de oude markerlijst. Een account waarvan PMT
+zegt dat het breached is, krijgt nu geen entries meer tot 18:00 ET. Ik vind dat juister,
+maar het is een wijziging die niet in de opdracht stond — draai hem terug als je dat liever
+hebt.
+
+**2 — `TARGET` sluit het account NIET.** Doelbereik is geen overtreding. Of een account na
+het raken van zijn target stil moet vallen is een besluit voor jullie, niet voor deze poort.
+Eén regel werk zodra het besluit er is.
+
+**3 — auth-weigeringen vallen in `UNKNOWN`.** `unauthorized` en `forbidden` passen in geen
+van de zeven opgegeven categorieën. Ze zijn familie van `IP-POOL` (PMT weigert ons, niet het
+account), maar ik heb er geen achtste categorie bij verzonnen. Als CLO een `[AUTH]` wil, is
+dat één regel.
+
+### Waar de categorie NIET voor staat
+
+In het journaal komt hij **achteraan** (`GEWEIGERD 200 … [DLL]`), nooit vooraan. De
+journal-sync en het dashboard matchen op prefix (`GEWEIGERD…`, `sent 200…`); een label
+ervóór zou die parsers breken. Dat was de waarschuwing uit mijn melding van 19-08 en die
+geldt nog steeds.
+
+### Getest — gebouwd én gedraaid, tegen een stub met zeven antwoorden
+
+| antwoord van PMT | categorie |
+|---|---|
+| "Daily loss limit reached" | `DLL` ✔ |
+| "Account drawdown breached" | `BREACHED` ✔ |
+| "Profit target reached, payout pending" | `TARGET` ✔ |
+| "Too many requests, rate limit exceeded" | `RATE-LIMIT` ✔ |
+| "valid ip not found in pool" | `IP-POOL` ✔ |
+| dode poort → `HttpRequestException` | `NETWORK` ✔ |
+| "Something we have never seen before" | `UNKNOWN` ✔ |
+| `{"res":"Successfully send","error":false}` | géén label ✔ |
+
+En de poort-eigenschappen apart:
+
+| geval | tweede poging | verwacht |
+|---|---|---|
+| DLL | geblokkeerd ✔ | account dicht |
+| IP-POOL | doorgelaten ✔ | verbindingsprobleem, geen accountprobleem |
+| NETWORK | doorgelaten ✔ | idem |
+
+Build schoon (0 warnings, 0 errors) met de SDK in mijn sessie via `receiver-src` uit D-06.
+
+### Uitrollen
+
+Zelfde recept als D-40. Geen nieuwe env-var.
+
 ## 2026-08-25 (4) · D-40 LIVE — melding aan de Scrum Master
 
 Uitgerold 25-08 23:20 UTC. Bewijs: `dotnet build src/Mex.Journal.Receiver -c Release`

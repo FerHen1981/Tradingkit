@@ -66,10 +66,11 @@ Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
   index-exposure. Claim geen decorrelatie vóór 20–30 actieve dagen gemeten P&L-correlatie.
 - 🔴 **OOS is forward, niet historisch** (besluit Ferry 25-08, D-18). De drie jaar 2023–2026
   heten **validatie**. Echte out-of-sample loopt **vooruit vanaf het bevriezen van een config**.
-  De `v1_0_0`-vloot was bevroren op 23-08-2026, **maar vijf scripts zijn op 25-08 gedragsmatig
-  gewijzigd**: `skipMonEarly` is eruit in PATRON, TESORO en de vier EL TORO's, dus maandag
-  00:00–02:00 ET handelt daar nu mee (besluit Ferry). **Hun OOS-klok begint dus op 25-08-2026,
-  niet op 23-08.** Voor de overige acht staat de klok op 23-08. Hoe dan ook: dagen, geen jaren.
+  ⚠️ **De klok staat sinds 07-09-2026 op nul voor de HELE vloot.** `v3.4.0` (`9a411b0`, D-71)
+  verving vier verspreide datum-inputs door één `validFrom`/`validUntil`-venster in **dertien**
+  scripts — een gedragswijziging, dus de freeze is opnieuw gezet. Eerdere resets: 23-08
+  (pakket) en 25-08 (`skipMonEarly` eruit in vijf scripts). **Elke config-wijziging zet deze
+  klok opnieuw op nul** — dat is de prijs van de regel, en hij is bewust gekozen.
   **Claim nergens dat deze vloot out-of-sample bewezen is** — niet op de site, niet in een
   rapport, niet tegenover een prop firm. Ook de sweep-cijfers van 25-08 vallen volledig
   binnen het validatievenster.

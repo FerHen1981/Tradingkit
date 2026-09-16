@@ -53,7 +53,7 @@ niets bijzonders; `reject` = gate stopt de flow en registreert een reden.
 | **9** | Forward | `ForwardJsonAsync` in `Program.cs` | HTTP POST naar PMT slaagt (< 400) | *(status wordt aan Rejected() gegeven)* | HTTP 4xx/5xx of netwerk-error → `error …` | Middleware App |
 | **10** | Rejected() na forward | `Rejected()` in `Program.cs` (na fix 25-08) | reply bevat expliciete fout-indicator (`error:true` / non-lege error-string / `success:false` / `status:false` / tekst-marker) | `sent 200 (poging N)` | `GEWEIGERD 200 door doelserver: <reply>` + Discord | Middleware App |
 | **11** | Executiepoort (D-46b) | `routed_journal.pair_events_with_report()` | voor een FILL-card is er een PMT-record met `sent 200` binnen `PMT_MATCH_WINDOW_S` (900s) op zelfde account + symbool + richting | trade komt in `trades`-lijst | fill komt in `unconfirmed`-lijst — geen boeking in LIVE-tab | Middleware App |
-| **12** | Exit-echo (⚠️ te bouwen) | `routed_journal.pair_events_with_report()` — nieuwe uitbreiding | voor elke EXIT-card is er een PMT-close-record binnen `PMT_MATCH_WINDOW_S` | trade `closed = true`, P&L geboekt | trade blijft `closed = false`, EXIT-card markeert `pending-echo` — geen P&L-boeking | Middleware App. **Openstaand: item 32 in `inbox.md`. Vóór bouw: grep-check of PMT `sent 200` überhaupt op bracket-exits schrijft** |
+| **12** | Exit-echo | `routed_journal.pair_events_with_report()` | ⛔ **NIET BOUWBAAR ZOALS BESCHREVEN — route-check beantwoord 07-09 (inbox 34).** PMT geeft **structureel géén** `sent 200` bij bracket-exits: `f_sendExec()` wordt op de close-kant alleen aangeroepen voor de vijf administratieve sluitingen (CAP-LOCK · LIMIT EXPIRED · AUTO FLAT · DAY HALT · ACCOUNT HALT), nooit op een TP- of SL-treffer. Een poort "geen echo ⇒ unconfirmed" zet vrijwel élke echte trade op unconfirmed — **fail-blind, niet fail-closed** | — | — | **Wacht op Ferry: D-72** — (a) poort alléén op de vijf administratieve sluitingen · (b) exit-verificatie op Fills-CSV/Rithmic · (c) kernregel herformuleren |
 | **13** | Sessie-bucket | `dashboard_state._aggregate()` + `fills_pairing.session_date()` | sessiedag rolt om 18:00 ET; trade telt in de sessie waarin hij CLOSED is | trade in `today`/`yesterday`/`week` window | trade in oudere periode | Middleware App |
 
 ### 2.1 SM-correcties op de eerste versie (07-09)
@@ -177,9 +177,18 @@ per ongeluk vergeten.
   bevestigd *"ik grijp nergens op in"* — de blinde vlek is dus bewust geaccepteerd.
   Als dat verandert: dit doc wijzigen én een detectie-workflow inbouwen (halt-first,
   manual-override-knop, of Rithmic).
-- **PMT-close-echo bij bracket-exits.** Onbekend of PMT een `sent 200` schrijft
-  wanneer TP/SL server-side worden uitgevoerd. **Openstaande grep-check in item 32
-  van `inbox.md`.** Antwoord bepaalt of gate #12 met huidige middelen bouwbaar is.
+- **PMT-close-echo bij bracket-exits — BEANTWOORD 07-09, en het antwoord is nee.**
+  PMT schrijft **structureel** geen `sent 200` wanneer TP/SL server-side vullen. Statisch
+  bewezen langs twee kanten: Pine roept `f_sendExec()` op de close-kant alleen aan voor vijf
+  administratieve sluitingen, en `routed_journal.py` r. 29-31 legde dit al vast bij D-46b.
+  **Gevolg: Ferry's kernregel bovenaan dit document is op de huidige route niet
+  implementeerbaar op de exit-kant** — niet omdat er iets stuk is, maar omdat PMT bij een
+  bracket-exit de partij is die de bracket *uitvoert*, niet een partij die erover rapporteert.
+  Dat is een architectuurfeit. **Keuze ligt bij Ferry: D-72.**
+- **`sent 200` op de entry-kant betekent ook minder dan het lijkt.** Het is de HTTP-status van
+  onze POST, niet PMT's oordeel over de order. PMT's antwoordbody wordt vandaag weggegooid
+  terwijl `Rejected()` hem al leest. **D-73** repareert dat — klein, en het maakt de poort die
+  we wél hebben eerlijk.
 - **Tradovate-side weigeringen ná PMT's `sent 200`.** PMT accepteert onze POST,
   Tradovate kan alsnog weigeren (buiten uur, symbool niet beschikbaar, account-issue).
   Vandaag zichtbaar via een latere PMT-callback of via Fills-CSV drift, niet realtime.
@@ -192,9 +201,26 @@ per ongeluk vergeten.
 
 ---
 
-## 6. Route-check (openstaand)
+## 6. Route-check — BEANTWOORD 07-09
 
-**Vóór item 32 gebouwd wordt:** Middleware App draait één grep-check op
+> ✅ **De bouwbaarheidsvraag is beantwoord zonder data** (Web, inbox 34): PMT geeft geen
+> close-echo bij bracket-exits, dus gate #12 is als beschreven niet bouwbaar. Zie §5 en D-72.
+> De vier meetpunten hieronder blijven nuttig als *verificatie* van die analyse, niet meer als
+> voorwaarde om te mogen bouwen.
+>
+> ⚠️ **Meetpunt 3 moet anders gemeten worden dan hieronder staat.** "% EXIT-cards met een
+> PMT-close-echo" over álle exits geeft een misleidend geruststellend getal — het meet vooral
+> hoe vaak er administratief gesloten werd. **Splits op exitreden** (`TP` / `SL` / `TRAIL` /
+> `BE-STOP` / administratief; die staat in de kaart zelf). Dan wordt het een toetsbare
+> voorspelling: **0% voor TP/SL/TRAIL/BE-STOP, >0% voor de administratieve redenen.** Wijkt de
+> meting daarvan af, dan klopt de analyse niet en wint de data. Web leverde een read-only
+> script mee.
+>
+> ⚠️ **Wie dit draait: niet Web.** `/root/intent-store/` staat op mex-mw-01 en die omgeving
+> heeft daar geen toegang. `docs/runtime-snapshot.md` ontbreekt ook — de timer uit **D-31**
+> draait niet of commit niet. Dat is zelf ook informatie.
+
+**Oorspronkelijke opzet:** Middleware App draait één grep-check op
 `/root/intent-store/routed_*.jsonl` (~4 weken data) om te bepalen of PMT `sent 200`
 schrijft bij bracket-exits, en om vier meetpunten te leveren die de kernregel toetsen:
 

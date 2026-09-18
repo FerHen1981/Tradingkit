@@ -96,9 +96,13 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Trade Journal `c3e9d05525404849ad484b648c82fd59`
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
-- ⚠️ Deze id's zijn deels dood: *MEX Reconciliation* heeft 0 rijen (geverifieerd 19-08) —
-  de laag is gebouwd maar heeft nooit geschreven. Fleet Performance en Trade Journal nog
-  ongecontroleerd. Zie `docs/SPRINT.md` D-20.
+- 🔴 **Alle drie de id's kloppen, maar geen van de drie wordt gevuld** (alle drie gemeten
+  18-09, D-20): *Fleet Performance* **0 rijen** · *Trade Journal* **0 rijen** ·
+  *Reconciliation* 334 rijen die **alle van 19-08** zijn, één handmatige schrijfactie en
+  daarna niets. **De LifeOS-schrijfkant heeft nooit automatisch gedraaid.**
+  Gevolg: er is **geen geautomatiseerde saldobron** — dat funded-saldo in D-74 een
+  handmatige `verified_amount` is, volgt hieruit en is geen tijdelijke noodgreep.
+  Zie D-03 (de reconciliatie-timer) en D-74.
 ### Rolstructuur — CLO, SM, en de ChatGPT CoS (25-08)
 
 Sinds 25-08 zit er boven de MEX Scrum Master een overkoepelende Claude-rol:

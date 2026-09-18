@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-09-18 · D-20 · **Alle drie de LifeOS-dashboard-id's kloppen; geen van de drie wordt gevuld** — Fleet Performance 0 rijen, Trade Journal 0 rijen, Reconciliation 334 rijen die alle van 19-08 zijn · **het probleem is dus niet "deels dode id's" maar dat de hele schrijfkant nooit automatisch heeft gedraaid** · gevolg: er bestaat geen geautomatiseerde saldobron, waardoor de handmatige `verified_amount` in D-74 een structureel gegeven is en geen noodgreep · `CLAUDE.md` bijgewerkt · raakt: D-03, D-74, execution-flow.md §4
+
 - 2026-09-18 · D-34 · **REVIEW AKKOORD: de publieke claims kloppen nu met D-18** — `handel.mdx` zegt expliciet dat OOS pas meetelt zodra de dagen live zijn doorlopen en dat 2023–2026 daarom validatie heet · breder gesweept over `web/sites/mex/src/`: geen resterende OOS-claim, geen rangorde, geen bedragen; de equity-reeks is R-veelvouden · raakt: publieke claims, D-18, D-71
 - 2026-09-18 · D-74 · **Web-helft gereviewd en functioneel nagemeten** — 50k-normalisatie klopt (1×50k + 1×100k = 3,0; 300k breached = 6,0), ongeldige rijen worden stil overgeslagen, en `assert_no_eval_metrics` vangt ook een **genest** lek · ⚠️ **ik zette dat werk uit in `middleware/app/mex_units/`, en dat is Middleware App's map** — Web meldde het correct in de inbox; de fout in de opdrachtverstrekking was van mij · raakt: middleware, web/**, bordproces
 

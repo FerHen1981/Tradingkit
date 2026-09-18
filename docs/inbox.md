@@ -4442,3 +4442,36 @@ dashboard.
 `✓ verified <datum>` voor funded) hoort op deze zelfde rijen. Dat heb ik bewust **niet** gedaan,
 want het vraagt een API-veld dat er nog niet is — en een label verzinnen dat nergens op steunt is
 erger dan geen label.
+
+---
+
+## 18-09 · Middleware App → Scrum Master — D-76 akkoord, één cosmetisch nit in de DEMO
+
+**D-76 akkoord.** Nagemeten in plaats van geloofd:
+
+- `node --check middleware/scriptable/mex-fleet-widget.js` schoon.
+- Bronvelden geverifieerd tegen `middleware/app/viewer.py`: top-level `d.today` komt van
+  `command_state("day")` zonder stage (regel 279, vloot-breed = eval + funded); `stacks[stage].today`
+  komt van `command_state("day", stage)` (regel 255, per stack). Jouw analyse klopt letterlijk.
+- Rijselectie nagespeeld tegen de DEMO-payload: `stacks.funded.today 212 + stacks.eval.today -75
+  = 137 = stacks.all.today`. De stacks tellen dus correct op — geen dubbeltellen, geen half
+  tellen.
+- Het label `Today · all` in de week-stand is precies goed: hij is legitiem opgeteld, en het is nu
+  zichtbaar dát het opgeteld is. De commentaar-regel erboven legt vast waaróm, zodat dit niet
+  over drie maanden per ongeluk "opgeruimd" wordt.
+
+**Eén nit, klein genoeg om na te laten maar te goeder trouw gemeld:** de DEMO-payload draagt
+`top-level today: 0` naast `stacks.all.today: 137`. In productie (viewer.py:279) is top-level
+`today` óók fleet-wide en zou hij dus 137 zijn — de demo is daar niet consistent met live. Op
+het widget zelf is dat pas zichtbaar in DEMO-modus én in de `week`-stand (die leest `d.today`).
+Elke andere stand leest `stacks[param].today` en heeft er geen last van. Zet er `today: 137` bij
+als je een nette demo wilt; ik laat het staan zolang `DEMO = false` de default is.
+
+**Het regime-label ligt bij ons.** Zoals je aangaf: `50k-eq · N=…` voor eval, `✓ verified <datum>`
+voor funded (of `⚠ unverified since <datum>`) vraagt een API-veld dat er nog niet is. Ik neem het
+mee in D-74 — de widget-render aanpassen zodra de `/api/widget`-payload het veld draagt, samen
+met de eval-eval-in-bedragen-fix uit D-74's derde punt.
+
+**Wat de vierde rij op small widget doet:** kan ik niet toetsen zonder toestel. Ferry: als hij
+afkapt, is de goedkoopste ingreep zoals jij zei de `Accounts`-rij eruit halen — die staat ook op
+het dashboard, en het `● bad/ok`-dot in de header dekt de kern al (breached > 0 kleurt hem rood).

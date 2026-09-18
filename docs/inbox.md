@@ -13,7 +13,7 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 ## OPEN
 
 ### 34. Web → Middleware App + CLO / Scrum Master — route-check §6: **PMT geeft géén `sent 200` bij bracket-exits**
-**Web → Middleware App + CLO / Scrum Master** · 2026-09-07 · status: OPEN — antwoord op de route-check uit item 32 / execution-flow §6
+**Web → Middleware App + CLO / Scrum Master** · 2026-09-07 · ✅ **VERWERKT 16-09 — D-72 + D-73.** `execution-flow.md` §5, §6 en gate #12 zijn op dit antwoord gecorrigeerd. De vier meetpunten blijven nuttig als verificatie; meetpunt 3 moet op exitreden gesplitst worden, zoals Web voorstelde.
 
 **Antwoord: NEE.** Niet "zelden" — structureel nooit. Dat is statisch te bewijzen, dus de
 grep-check is niet nodig om de bouwbaarheidsvraag te beantwoorden. Twee onafhankelijke kanten
@@ -276,7 +276,7 @@ tweede bron.
 ---
 
 ### 33. 🎩 CLO → Web + Middleware App — publicatie-semantiek per account-type
-**CLO → Web + Middleware App / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+**CLO → Web + Middleware App / Scrum Master** · 2026-09-05 · 🔴 **OPEN — D-74 (uitgegeven 18-09).** Blokkade was item 30, en die is afgerond, dus dit kan starten. Tabel 2 van `docs/execution-flow.md` beschrijft de semantiek al volledig — dit is uitvoering, geen ontwerp.
 
 **Aanleiding (Ferry, 05-09):** *"we publiceren nu saldo's van eval accounts, die bedragen zeggen niets. Voor evals alleen aantallen (passed/breached) en winrate; voor funded (PA) accounts saldo + winrate, en die moeten bij benadering met de broker overeenkomen. Zonder API, dus met een aanvink-optie in de UI."*
 
@@ -296,7 +296,7 @@ tweede bron.
 ---
 
 ### 32. 🎩 CLO → Middleware App + Legacy — PMT-echo op exit + notificatie-taxonomie
-**CLO → Middleware App + Legacy / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+**CLO → Middleware App + Legacy / Scrum Master** · 2026-09-05 · ⚠️ **HERZIEN — D-72 + D-73.** Punt 2 (PMT-echo op exit) is **niet bouwbaar zoals beschreven**: Web bewees in item 34 dat PMT structureel geen close-echo geeft bij bracket-exits, dus de poort zou vrijwel elke echte trade op `unconfirmed` zetten. Keuze tussen drie routes ligt bij Ferry (**D-72**). De losse bevinding — PMT's antwoordbody opslaan — staat als **D-73** en gaat door ongeacht die keuze.
 
 **Aanleiding (Ferry, 05-09):** *"een winst is pas een winst als PMT een 'close' teruggeeft die geen fout geeft"* + *"als een hard stop entry weigert om een andere reden dan breached, wil ik weten wat de reden was óf blokkeer je op voorhand."*
 
@@ -315,7 +315,7 @@ tweede bron.
 ---
 
 ### 31. 🎩 CLO → Pine Dev — één centrale time-gate (validFrom + validUntil) per script
-**CLO → Pine Dev / Scrum Master** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+**CLO → Pine Dev / Scrum Master** · 2026-09-05 · ✅ **AFGEROND — D-71.** Pine Dev leverde `validFrom`/`validUntil` in v3.4.0 (`9a411b0`, 07-09): vier datum-inputs op twee plekken terug naar twee velden. Staat op `review`. ⚠️ Gevolg: gedragswijziging op dertien scripts, dus de OOS-klok staat sinds 07-09 opnieuw op nul.
 
 **Aanleiding (Ferry, 05-09):** *"ik ben overgestapt naar hardcoded logica omdat ik de scripts niet vertrouwde — meerdere datums op meerdere plekken, ik wil er maar één die de handel beperkt in backtest, live én forward."*
 
@@ -337,7 +337,7 @@ tweede bron.
 ---
 
 ### 30. 🎩 CLO → Scrum Master — flow-document als basis onder alles
-**CLO → Scrum Master (CLO schrijft eerste versie)** · 2026-09-05 · status: OPEN — D-nummer gevraagd bij SM
+**CLO → Scrum Master** · 2026-09-05 · ✅ **AFGEROND — D-70.** CLO leverde `docs/execution-flow.md` 07-09 (`f28098f`); SM toetste tegen `Program.cs` en corrigeerde drie dingen (gate-volgorde, de journaliserings-bijwerking daarvan, en de onjuiste pass-log "vers account = 1"). Staat op `review`. Eigenaarschap: tabellen via SM, kernregels via CLO.
 
 **Aanleiding (Ferry, 05-09):** *"maak de flow zo dat het gecontroleerd is; laten we eerst de basis leggen over wat we doorlaten en op welke manier."*
 
@@ -517,7 +517,8 @@ op de VPS als kanariemuis.
 Pushen zodra de code staat.
 
 ---
-### 28. MGC-data: één export sluit het GC-twin-voorbehoud (D-56) — beslissing voor Ferry
+### 28b. MGC-data: één export sluit het GC-twin-voorbehoud (D-56) — beslissing voor Ferry
+_(hernummerd naar 28b door SM 18-09: er stonden twee items 28 in deze lijst.)_
 **Backtest Setup → Ferry / Scrum Master** · 2026-08-25 · status: OPEN
 
 D-56 uitgewerkt in `validation/MGC_twin_assessment_20260825.md`. Kort:

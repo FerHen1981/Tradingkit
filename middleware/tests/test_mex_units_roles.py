@@ -14,7 +14,11 @@ from __future__ import annotations
 import pytest
 
 from app.mex_units import roles as stats, units
-from app.mex_units.roles import assert_no_currency
+from app.mex_units.roles import (
+    assert_no_currency,
+    assert_no_eval_metrics,
+    for_public_evals,
+)
 
 
 #: Every currency amount in the fixture carries non-zero cents, and published
@@ -175,3 +179,70 @@ def test_partner_sees_currency_but_is_labelled_separately(fleet):
 def test_unknown_role_falls_back_to_the_most_restrictive_view(fleet):
     payload = stats.serialise(fleet, "typo-role")  # type: ignore[arg-type]
     assert payload["role"] == "viewer"
+
+
+# --- eval-publicatiepoort (D-74) -------------------------------------------
+
+
+def test_for_public_evals_normalises_to_50k_equivalents():
+    # Een 100k-eval telt als 2 × 50k, een 300k-eval als 6 × 50k.
+    evals = [
+        {"size": 50_000, "state": "passed"},
+        {"size": 100_000, "state": "passed"},   # +2 op passed
+        {"size": 300_000, "state": "breached"}, # +6 op breached
+        {"size": 50_000, "state": "running"},
+        {"size": 50_000, "state": "running"},
+    ]
+    payload = for_public_evals(evals)
+    assert payload["counts_50k_eq"]["passed"] == pytest.approx(3.0)
+    assert payload["counts_50k_eq"]["breached"] == pytest.approx(6.0)
+    assert payload["counts_50k_eq"]["running"] == pytest.approx(2.0)
+    assert payload["n_accounts"] == 5
+    assert payload["unit"] == "50k-equivalent"
+
+
+def test_for_public_evals_payload_carries_no_currency():
+    payload = for_public_evals(
+        [
+            {"size": 50_000, "state": "passed"},
+            {"size": 100_000, "state": "breached"},
+        ]
+    )
+    assert_no_currency(payload)
+
+
+def test_for_public_evals_ignores_invalid_records():
+    # Onbekende status, ontbrekende status en niet-positieve size worden stil
+    # overgeslagen — een gok publiceren is een grotere fout dan een teller die
+    # een rij mist.
+    evals = [
+        {"size": 50_000, "state": "passed"},
+        {"size": 0, "state": "passed"},
+        {"size": -10, "state": "passed"},
+        {"size": 50_000, "state": "unknown"},
+        {"size": 50_000},
+    ]
+    payload = for_public_evals(evals)
+    assert payload["counts_50k_eq"] == {"passed": 1.0, "breached": 0.0, "running": 0.0}
+    assert payload["n_accounts"] == 1
+
+
+def test_for_public_payload_never_leaks_eval_metrics(fleet):
+    # Vandaag draagt de fleet-payload geen eval-teller — dit is de baseline.
+    assert_no_eval_metrics(stats.for_public(fleet))
+
+
+def test_eval_gate_catches_a_passed_teller_that_would_slip_through(fleet):
+    # Als iemand ooit een eval-teller aan for_public() toevoegt, moet de poort
+    # dicht — analoog aan wat assert_no_currency doet met een dollarveld.
+    payload = stats.for_public(fleet)
+    payload["headline"]["passed_50k_eq"] = 12.0
+    with pytest.raises(ValueError, match="passed_50k_eq"):
+        assert_no_eval_metrics(payload)
+
+
+def test_eval_gate_catches_a_breached_teller_too(fleet):
+    payload = stats.for_public(fleet)
+    payload["headline"]["breached_50k_eq"] = 3.0
+    with pytest.raises(ValueError, match="breached_50k_eq"):
+        assert_no_eval_metrics(payload)

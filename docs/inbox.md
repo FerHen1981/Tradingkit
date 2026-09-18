@@ -4303,3 +4303,60 @@ begrenst zichzelf, ook als de tester-range ruimer staat.
 
 `dashLayout` ("Wide (4 columns)" / "Compact (mobile)") is sinds de v3-tabelherbouw een dode
 input — er is nog maar één tabel-implementatie. Zou ik in een opruimronde meenemen.
+
+## 18-09 · Web → Scrum Master — D-34 uitgevoerd, D-74 (Web-helft: gate + test) mee gedaan
+
+**D-34 af.** De MEX-site claimt nergens meer "3 jaar out-of-sample" of een vlootrangorde;
+"gevalideerd op drie jaar (2023–2026)" blijft toegestaan en is niet meer geïmpliceerd waar
+het niet mag. Drie plekken aangeraakt op de MEX-site:
+
+- `web/sites/mex/src/content/homepage/index.mdx` — "out-of-sample wordt getoetst" → "op
+  onafhankelijke perioden wordt gevalideerd". Beschrijft de methodiek zonder te suggereren
+  dat de huidige vloot forward-OOS-bewijs draagt.
+- `web/sites/mex/src/content/pages/methodiek.mdx` (description) — "validatie out-of-sample"
+  → "validatie op onafhankelijke perioden". Sectie 1 raakte ik verder niet aan: die
+  beschrijft train/test-splitsing en walk-forward zonder een claim over deze vloot.
+- `web/sites/mex/src/content/pillars/handel.mdx` — "in-sample kalibratie, out-of-sample
+  validatie op onafhankelijke jaren" → "in-sample kalibratie, validatie op onafhankelijke
+  perioden". Eén alinea toegevoegd die expliciet zegt dat out-of-sample-in-de-strikte-zin
+  forward loopt vanaf de config-freeze, en dat 2023–2026 daarom validatie heet, niet OOS.
+  Dat is de D-18/D-71-lezing letterlijk uit `CLAUDE.md`.
+
+Wat ik **niet** heb aangeraakt:
+
+- `web/sites/ppt/src/content/glossary/*.mdx` — dat zijn concept-uitleggen ("wat is
+  out-of-sample?") voor de prop-firm-gids, geen MEX-claims. Blijven staan; D-34 zei zelf
+  al "begrippen die het concept validatie uitleggen blijven staan".
+- `web/sites/mex/src/data/public-stats.json` — draagt `sample: true`, wordt weggevangen
+  door de placeholder-callout in `resultaten.astro`, en wordt door Middleware App's
+  publicatietaak vervangen zodra `for_public()` en `for_public_evals()` een echt payload
+  produceren. Zelf niet gemuteerd.
+- `web/sites/mex/src/pages/resultaten.astro` — de kopij daar staat al in units, noemt geen
+  rangorde en geen engine-namen. Niets te snoeien.
+
+**D-74 (jullie-helft, deels).** Zoals gevraagd: alléén de gate en de test, niet de consument.
+
+- `middleware/app/mex_units/roles.py` — `for_public_evals(evals, delay="T+1")` toegevoegd.
+  Neemt records `{"size", "state"}` (state ∈ `passed`/`breached`/`running`), normaliseert
+  op 50 000 (factor = size / 50 000) en publiceert alleen de drie tellers plus
+  `n_accounts` — geen bedragen, geen id's. Rijen met onbekende status of niet-positieve
+  size worden stil overgeslagen; een gok publiceren op het widget is een grotere fout dan
+  een teller die één rij mist.
+- Tweede slot: `assert_no_eval_metrics(payload)`, analoog aan `assert_no_currency`, met
+  `FORBIDDEN_EVAL_KEY_PARTS = ("passed", "breached", "50k_eq", "50keq",
+  "50k_equivalent", "eval_count", "eval_counts", "eval_normalized")`. Werpt `ValueError`
+  zodra een van die sleutels in een payload staat.
+- Tests uitgebreid in `middleware/tests/test_mex_units_roles.py`. Vier nieuwe:
+  50k-normalisering klopt (1 × 50k + 1 × 100k = 3), payload draagt geen currency, ongeldige
+  rijen worden overgeslagen, `for_public(fleet)` passeert `assert_no_eval_metrics` vandaag,
+  en de poort dicht zich zichtbaar als er alsnog een `passed_50k_eq` of `breached_50k_eq`
+  in de fleet-payload gelegd wordt. 27 tests groen (incl. de vier bestaande in
+  `test_public_stats.py`).
+
+**Wat ik expliciet niet gebouwd heb**, per jouw aanwijzing: geen consumer die eval-data
+aanlevert (dat is Middleware App's helft — `account_type`-veld, PASSED/BREACHED-log-taps,
+`public_stats.write` die `for_public_evals()` aanroept), en geen aanpassing aan
+`public-stats.json`/`resultaten.astro` — die volgen zodra Middleware App het format levert.
+
+Review loopt via jou.
+

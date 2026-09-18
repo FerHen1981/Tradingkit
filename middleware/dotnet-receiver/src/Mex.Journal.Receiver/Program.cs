@@ -141,8 +141,17 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         var action = (obj["data"]?.ToString() ?? "").ToLowerInvariant();
         var isEntry = action == "buy" || action == "sell";
         var acct = "";
-        if (obj["multiple_accounts"] is JsonArray arr && arr.Count > 0 && arr[0] is JsonObject a0)
+        // Expliciet gedeclareerd (met initiële null) i.p.v. via `is JsonObject a0` in de
+        // if-conditie: onder .NET 10's strengere definite-assignment-regels wordt de
+        // pattern-variabele buiten de if als "unassigned" gezien, niet als null — en dan
+        // faalt elk latere `a0 is not null`-check op CS0165. Deze vorm compileert onder
+        // álle .NET-versies die de rest van dit project draaien.
+        JsonObject? a0 = null;
+        if (obj["multiple_accounts"] is JsonArray arr && arr.Count > 0 && arr[0] is JsonObject first)
+        {
+            a0 = first;
             acct = a0["account_id"]?.ToString() ?? "";
+        }
 
         if (isEntry && !Runtime.Armed)
         {
@@ -157,11 +166,14 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         if (isEntry && !string.IsNullOrEmpty(acct) && AccountBlockGate.IsBlocked(acct, DateTime.UtcNow))
         {
             var was = AccountBlockGate.ReasonFor(acct);
-            var msg = $"GEWEIGERD lokaal — day-cap/DLL blokkade actief (eerder: {was})";
-            await AppendAsync(storePath, "pmt", body, msg, acct);
+            // Hernoemd van `msg` naar `blockMsg` om schaduw met een gelijknamige variabele
+            // verderop in dezelfde lambda te vermijden — .NET 10 wijst CS0136 aan waar
+            // eerdere versies dat lieten liggen.
+            var blockMsg = $"GEWEIGERD lokaal — day-cap/DLL blokkade actief (eerder: {was})";
+            await AppendAsync(storePath, "pmt", body, blockMsg, acct);
             await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
-                $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{msg}", 14701138);
-            return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = msg, blocked = true });
+                $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{blockMsg}", 14701138);
+            return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = blockMsg, blocked = true });
         }
 
         // D-02 · proactieve risk-gate — port van de oude Python risk.py naar het live pad.
@@ -174,11 +186,12 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             var (allow, reason) = AccountRiskGate.Allow(acct, DateTime.UtcNow);
             if (!allow)
             {
-                var msg = $"GEWEIGERD lokaal — risk-gate: {reason}";
-                await AppendAsync(storePath, "pmt", body, msg, acct);
+                // Zelfde reden als bij blockMsg hierboven — geen `msg` meer.
+                var riskMsg = $"GEWEIGERD lokaal — risk-gate: {reason}";
+                await AppendAsync(storePath, "pmt", body, riskMsg, acct);
                 await DiscordNotifier.PostAsync(discordEnv, "⛔ Order NIET geplaatst",
-                    $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{msg}", 14701138);
-                return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = msg, blocked = true, gate = "risk" });
+                    $"{action.ToUpperInvariant()} · account {Tail(acct)}\n{riskMsg}", 14701138);
+                return Results.Ok(new { accepted = true, kind = "pmt", account = Tail(acct), result = riskMsg, blocked = true, gate = "risk" });
             }
         }
 

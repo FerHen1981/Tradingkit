@@ -27,7 +27,7 @@ import sys
 import time
 from pathlib import Path
 
-from .dashboard_state import _sources
+from .dashboard_state import _sources, eval_records
 from .mex_units import roles
 
 log = logging.getLogger("mex.public_stats")
@@ -64,14 +64,37 @@ def _to_mex_units_trade(t: dict) -> dict:
 
 
 def build_public_payload(delay: str = "T+1") -> dict:
-    """Bouw de publieke payload uit de gezaghebbende trade-bron."""
-    trades, _accounts = _sources()   # accounts publiceren we niet, dus negeren
+    """Bouw de publieke payload uit de gezaghebbende bronnen.
+
+    Twee samenhangende blokken onder één top-level dak:
+    - de bestaande **fleet**-cijfers (units, geen bedragen) uit `for_public()`;
+    - de eval-tellers (aantallen genormaliseerd op 50k-equivalent) uit
+      `for_public_evals()`. D-74 §3 verbiedt bedragen op eval-accounts, dus
+      de eval-blok reist door dezelfde `assert_no_currency`-poort als het
+      fleet-blok — geen tweede regime, geen tweede slot om te vergeten.
+
+    De top-level shape (`generated_at`, `period`, `delay`, `headline`,
+    `markets`, `equity`, …) blijft ongewijzigd zodat de bestaande consument in
+    `resultaten.astro` niet breekt; het nieuwe eval-blok landt onder de sleutel
+    `evals`, en de consument mag hem opnemen wanneer hij daar aan toe is.
+    """
+    trades, accounts = _sources()
     payload_trades = [_to_mex_units_trade(t) for t in trades]
     fleet = roles.build(payload_trades, accounts=None)
     payload = roles.for_public(fleet, delay=delay)
-    # Tweede slot: publicatie mag geen geldveld bevatten.
+    payload["evals"] = roles.for_public_evals(eval_records(accounts), delay=delay)
+    # Tweede slot: publicatie mag geen geldveld bevatten (fleet én evals).
     roles.assert_no_currency(payload)
+    # Derde slot: eval-metrieken (passed/breached/50k_eq) horen alleen in
+    # payload["evals"], nergens anders — de gewone fleet-blok moet daar
+    # schoon van blijven, ook als iemand hem later uitbreidt.
+    roles.assert_no_eval_metrics(_without(payload, "evals"))
     return payload
+
+
+def _without(payload: dict, key: str) -> dict:
+    """Kopie van `payload` zonder één top-level sleutel."""
+    return {k: v for k, v in payload.items() if k != key}
 
 
 def write(path: str | Path | None = None, delay: str | None = None) -> dict:

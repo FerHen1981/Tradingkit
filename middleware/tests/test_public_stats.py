@@ -82,3 +82,63 @@ def test_write_is_atomic_via_tmp_swap(monkeypatch, tmp_path):
     # de tmp mag niet blijven staan na een succesvolle swap
     assert not (out.with_suffix(out.suffix + ".tmp")).exists()
     assert out.exists()
+
+
+# --- D-74: eval-blok naast de fleet-blok -----------------------------------
+
+
+def _fake_account(full: str, size: float, health: str = "OK", status: str | None = None) -> dict:
+    return {"full": full, "size": size, "health": health, "status": status}
+
+
+def test_write_carries_an_evals_block_normalised_to_50k(monkeypatch, tmp_path):
+    trades = [_fake_trade("GC1!", 20.37, dt.date(2026, 6, 15))]
+    accounts = [
+        _fake_account("PAAPEX111", 50_000),                          # funded → passed × 1
+        _fake_account("PAAPEX222", 100_000),                          # funded → passed × 2
+        _fake_account("APEX333", 50_000, health="Breached"),           # eval breached × 1
+        _fake_account("APEX444", 300_000),                             # eval running × 6
+        _fake_account("APEX555", 50_000, status="Active Eval"),        # eval running × 1
+    ]
+    monkeypatch.setattr(public_stats, "_sources", lambda: (trades, accounts))
+    out = tmp_path / "public-stats.json"
+    public_stats.write(out)
+    payload = json.loads(out.read_text())
+    evals = payload["evals"]
+    assert evals["unit"] == "50k-equivalent"
+    assert evals["counts_50k_eq"] == {"passed": 3.0, "breached": 1.0, "running": 7.0}
+    assert evals["n_accounts"] == 5
+
+
+def test_write_evals_block_carries_no_currency_leak(monkeypatch, tmp_path):
+    trades = [_fake_trade("GC1!", 20.37, dt.date(2026, 6, 15))]
+    accounts = [_fake_account("PAAPEX111", 50_000)]
+    monkeypatch.setattr(public_stats, "_sources", lambda: (trades, accounts))
+    out = tmp_path / "public-stats.json"
+    public_stats.write(out)
+    text = out.read_text()
+    # Geen bedragen — ook niet uit accounts.
+    for amount in ("50000", "50_000", "$50", "50,000"):
+        assert amount not in text, f"currency leaked in evals: {amount!r}"
+
+
+def test_write_refuses_when_an_eval_metric_slips_into_the_fleet_block(monkeypatch, tmp_path):
+    """Als for_public() ooit een eval-teller aan headline of markets toevoegt,
+    moet de derde poort (`assert_no_eval_metrics`) weigeren te schrijven."""
+    trades = [_fake_trade("GC1!", 20.37, dt.date(2026, 6, 15))]
+    monkeypatch.setattr(public_stats, "_sources", lambda: (trades, []))
+
+    from app.mex_units import roles
+
+    real_for_public = roles.for_public
+
+    def leaky_for_public(fleet, delay="T+1"):
+        p = real_for_public(fleet, delay)
+        p["headline"]["passed_50k_eq"] = 3.0
+        return p
+
+    monkeypatch.setattr(roles, "for_public", leaky_for_public)
+    out = tmp_path / "public-stats.json"
+    with pytest.raises(ValueError, match="passed_50k_eq"):
+        public_stats.write(out)
+    assert not out.exists()

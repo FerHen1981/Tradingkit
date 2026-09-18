@@ -304,3 +304,66 @@ def test_attention_feed_ranking():
     assert ("013", "Payout ready") in titles
     assert ("214", "Near eval target") in titles                            # 2600 ≥ 0.8·3000
     assert counts["critical"] == 1 and counts["warning"] >= 1
+
+
+# --- D-74: eval-publicatie (account_type / _eval_state / eval_records / _build_eval_stats) ---
+
+
+def test_account_type_splits_on_pa_prefix():
+    assert ds._account_type("PAAPEX111") == "funded"
+    assert ds._account_type("PA123") == "funded"
+    assert ds._account_type("APEX999") == "eval"
+    assert ds._account_type("ap-eval-01") == "eval"
+
+
+def test_eval_state_categorises_records():
+    # funded → passed (Apex/MFFU pad: elke PA is een gepasste eval)
+    assert ds._eval_state({"full": "PAAPEX111"}) == "passed"
+    # eval + Breached health → breached
+    assert ds._eval_state({"full": "APEX222", "health": "Breached"}) == "breached"
+    # eval + status "Breached" → breached (twee bronnen, één taxonomie)
+    assert ds._eval_state({"full": "APEX333", "status": "Breached"}) == "breached"
+    # eval, gezond → running
+    assert ds._eval_state({"full": "APEX444", "health": "Healthy"}) == "running"
+    # zonder id → None (we gokken niet)
+    assert ds._eval_state({"full": ""}) is None
+
+
+def test_eval_records_skips_bad_sizes():
+    accts = [
+        {"full": "PAAPEX111", "size": 50_000},
+        {"full": "APEX222", "size": 100_000, "health": "Breached"},
+        {"full": "APEX333", "size": 0, "health": "OK"},              # geen size
+        {"full": "APEX444", "size": None, "health": "OK"},          # ontbrekend
+        {"full": "APEX555", "size": 300_000, "health": "OK"},
+    ]
+    records = ds.eval_records(accts)
+    # rijen zonder size worden stil overgeslagen, precies zoals for_public_evals
+    assert len(records) == 3
+    assert {(r["state"], r["size"]) for r in records} == {
+        ("passed", 50_000.0), ("breached", 100_000.0), ("running", 300_000.0),
+    }
+
+
+def test_build_eval_stats_normalises_and_computes_win_rate():
+    accts = [
+        {"full": "PAAPEX111", "size": 50_000},                        # +1 passed
+        {"full": "PAAPEX222", "size": 100_000},                       # +2 passed
+        {"full": "APEX333",  "size": 300_000, "health": "Breached"},  # +6 breached
+        {"full": "APEX444",  "size": 50_000, "health": "OK"},         # +1 running
+        {"full": "APEX555",  "size": 50_000, "health": "OK"},         # +1 running
+    ]
+    stats = ds._build_eval_stats(accts)
+    assert stats["unit"] == "50k-equivalent"
+    assert stats["counts_50k_eq"] == {"passed": 3.0, "breached": 6.0, "running": 2.0}
+    assert stats["raw_counts"] == {"passed": 2, "breached": 1, "running": 2}
+    assert stats["n_accounts"] == 5
+    # winrate = passed / (passed + breached) op rauwe tellingen → 2 / (2+1) = 66.7%
+    assert stats["win_rate"] == 66.7
+
+
+def test_build_eval_stats_win_rate_is_none_when_nothing_decided():
+    accts = [{"full": "APEX111", "size": 50_000, "health": "OK"}]
+    stats = ds._build_eval_stats(accts)
+    assert stats["raw_counts"] == {"passed": 0, "breached": 0, "running": 1}
+    assert stats["win_rate"] is None

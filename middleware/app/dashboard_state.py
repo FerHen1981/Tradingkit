@@ -131,6 +131,80 @@ def _phase(account: str) -> str:
     return "Funded" if account.upper().startswith(("PA", "PAAPEX")) else "Eval"
 
 
+def _account_type(account: str) -> str:
+    """Tabel 2 van `docs/execution-flow.md`: publicatie-semantiek splitst
+    account-types op ID-prefix. Alles wat met `PA` begint is een funded
+    (PA) account; de rest is een eval. Dit is een eigenschap van het account,
+    niet van de sessie of het cijfer erachter — vandaar losstaand van `_phase()`,
+    dat sommige oude aggregaties nog in koppen ("Funded" vs "Eval") kleurt."""
+    return "funded" if account.upper().startswith("PA") else "eval"
+
+
+# ---- eval-publicatie ------------------------------------------------------
+#
+# Deze taxonomie hoort in `docs/execution-flow.md` §3 en is hier de bron:
+# - een eval-account met `Breached`-health telt als **breached**;
+# - een eval-account dat nog niet breached is, telt als **running**;
+# - een `PA`-prefixed account telt als **passed** — op Apex/MFFU is dat het
+#   enige pad naar een funded rekening, dus PA-accounts zijn per definitie
+#   evals die pass hebben gehaald. Zou er ooit een firm bij komen die direct-
+#   funded verkoopt, dan moet dit een expliciete flag worden i.p.v. een prefix.
+def _eval_state(account: dict) -> str | None:
+    """Categoriseer één account voor de eval-tellers. Returnt `None` als het
+    account geen categorie draagt (geen size, of onherkenbaar)."""
+    full = account.get("full") or ""
+    if not full:
+        return None
+    if _account_type(full) == "funded":
+        return "passed"
+    # eval-prefix — health of status bepaalt of hij is opgeblazen.
+    health = (account.get("health") or "").strip().lower()
+    status = (account.get("status") or "").strip().lower()
+    if "breached" in health or "breached" in status:
+        return "breached"
+    return "running"
+
+
+def eval_records(accounts: list[dict]) -> list[dict]:
+    """Bouw de input voor `mex_units.roles.for_public_evals()` uit de
+    account-lijst uit `_load_accounts()`. Accounts zonder bruikbare size worden
+    weggelaten — een gok publiceren op het widget is een grotere fout dan een
+    teller die één rij mist (dezelfde regel als in de gate zelf)."""
+    out: list[dict] = []
+    for a in accounts:
+        state = _eval_state(a)
+        if not state:
+            continue
+        size = a.get("size")
+        if not size or size <= 0:
+            continue
+        out.append({"size": float(size), "state": state})
+    return out
+
+
+def _build_eval_stats(accounts: list[dict]) -> dict:
+    """Compacte weergave voor viewer + widget: alleen de normalisatie-tellers en
+    de raw counts per status. Geen bedragen — dit is D-74's kern-eis."""
+    from .mex_units.roles import EVAL_NORM_BASE_USD
+
+    counts_50k_eq = {"passed": 0.0, "breached": 0.0, "running": 0.0}
+    raw = {"passed": 0, "breached": 0, "running": 0}
+    for r in eval_records(accounts):
+        state = r["state"]
+        counts_50k_eq[state] += r["size"] / EVAL_NORM_BASE_USD
+        raw[state] += 1
+    n_accounts = sum(raw.values())
+    decided = raw["passed"] + raw["breached"]
+    win_rate = round(100.0 * raw["passed"] / decided, 1) if decided else None
+    return {
+        "unit": "50k-equivalent",
+        "counts_50k_eq": {k: round(v, 2) for k, v in counts_50k_eq.items()},
+        "raw_counts": raw,
+        "n_accounts": n_accounts,
+        "win_rate": win_rate,   # passed / (passed + breached), in procenten
+    }
+
+
 # The DATABASE id, not the data source (collection) id. Notion split the two when databases
 # gained multiple sources; /v1/databases/{data_source_id}/query has 404'd ever since, which
 # is why the Framework map failed to load while Accounts and Account Types kept working.
@@ -256,6 +330,7 @@ def _load_accounts(token: str) -> list[dict]:
                     "id": full[-3:] or full, "full": full,
                     "firm": (_sel(p.get("Prop Firm")) or "—"),
                     "stage": stage,
+                    "account_type": _account_type(full),   # D-74: eval / funded op ID-prefix
                     "firm_program": firm_program, "firm_program_family": at_family,
                     "current": round(current, 2),
                     "starting": round(starting, 2),
@@ -843,6 +918,12 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
         "assets": assets,
         "firms": firm_rows,
         "eval_passes": eval_passes,
+        # D-74 §3.1 — eval-publicatie in dezelfde vorm die de widget en de
+        # publieke site lezen: aantallen genormaliseerd op 50k, geen bedragen.
+        # `accounts_src` is de complete lijst (vóór filtering op window/stage),
+        # zodat de tellers over de hele vloot lopen ongeacht wat er in de
+        # huidige view zichtbaar is.
+        "eval_stats": _build_eval_stats(accounts_src),
         "heatmap": ag["heatmap"],
         "portfolio": portfolio,
         "calendar": ag["calendar"],

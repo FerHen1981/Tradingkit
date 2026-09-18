@@ -19,13 +19,18 @@ async function getData() {
     const url = ENDPOINT + (TOKEN ? (ENDPOINT.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(TOKEN) : "")
     try { const j = await new Request(url).loadJSON(); if (j && !j.error) return j } catch (e) {}
   }
-  return { goal: 250, dataThrough: "", spark: [30, 45, 38, 60, 52, 70, 64, 82, 78], today: 0,
+  return { goal: 250, dataThrough: "", spark: [30, 45, 38, 60, 52, 70, 64, 82, 78], today: 137,
     week: { net: 620, trades: 14, winrate: 57, pf: 1.85 },
     stacks: {
       all:    { realized: 22088, week: 620, today: 137, trades: 717, winrate: 44, pf: 1.35, accounts: 24, breached: 1, buffer: 58155 },
       funded: { realized: 18259, week: 400, today: 212, trades: 600, winrate: 45, pf: 1.40, accounts: 7,  breached: 0, buffer: 20000 },
       eval:   { realized: 3829,  week: 220, today: -75, trades: 117, winrate: 42, pf: 1.20, accounts: 17, breached: 1, buffer: 38155 },
-    } }
+    },
+    // D-74 §3.1 — genormaliseerde eval-tellers, alleen aantallen, geen bedragen.
+    eval_stats: { unit: "50k-equivalent", counts_50k_eq: { passed: 6.0, breached: 1.0, running: 12.0 },
+                  raw_counts: { passed: 4, breached: 1, running: 12 }, n_accounts: 17, win_rate: 80.0 },
+    // D-74 §3.1 — funded-verified vlag (hand-input, 7-daags venster).
+    funded_verified: { verified: false, verified_at: null, days_ago: null } }
 }
 
 const num = (n, f) => (n === null || n === undefined || isNaN(n)) ? f : n
@@ -60,7 +65,7 @@ function detectMode() {
 const param = detectMode()
 
 // pick the view: all/funded/eval (stage stacks) or week
-let title, lbl, big, breached, rows
+let title, lbl, big, breached, rows, isMoney = true
 if (param === "week") {
   const wk = d.week || {}
   title = "WEEK"; lbl = "This week"; big = num(wk.net, 0); breached = num((d.stacks && d.stacks.all || {}).breached, 0)
@@ -68,6 +73,25 @@ if (param === "week") {
   // eval + funded opgeteld. In de stack-standen hieronder komt Today uit de stack zelf.
   rows = [["Today · all", moneyK(num(d.today, 0))], ["Trades", String(num(wk.trades, 0))],
           ["Win / PF", num(wk.winrate, 0) + "% · " + pfStr(wk.pf)]]
+} else if (param === "eval") {
+  // D-74 §3.1 — de eval-stand rendert AANTALLEN, geen bedragen. `realized` en
+  // `buffer` in dollars vielen precies onder Ferry's opmerking van 05-09
+  // ("we publiceren nu saldo's van eval accounts, die bedragen zeggen niets").
+  // Big number = passed genormaliseerd op 50k; rows dragen breached/running en
+  // een winrate op basis van beslist verkeer (passed / (passed + breached)).
+  const e = d.eval_stats || {}
+  const c50k = e.counts_50k_eq || {}
+  const raw = e.raw_counts || {}
+  title = "EVAL"; lbl = "Passed · 50k-eq"; isMoney = false
+  big = num(c50k.passed, 0)
+  breached = num(raw.breached, 0)
+  const wr = e.win_rate == null ? "—" : (Number(e.win_rate).toFixed(0) + "%")
+  rows = [
+    ["Breached", num(c50k.breached, 0).toFixed(1) + " · " + num(raw.breached, 0) + " raw"],
+    ["Running",  num(c50k.running, 0).toFixed(1)  + " · " + num(raw.running, 0)  + " raw"],
+    ["Win-rate", wr],
+    ["N accounts · unit", num(e.n_accounts, 0) + " · 50k-eq"],
+  ]
 } else {
   const s = (d.stacks || {})[param] || {}
   title = param.toUpperCase(); lbl = "All-time"; big = num(s.realized, 0); breached = num(s.breached, 0)
@@ -76,6 +100,15 @@ if (param === "week") {
   rows = [["Today", moneyK(num(s.today, 0))], ["Week", moneyK(num(s.week, 0))],
           ["Win / PF", num(s.winrate, 0) + "% · " + pfStr(s.pf)],
           ["Accounts", num(s.accounts, 0) + " · " + num(s.breached, 0) + " br"]]
+  // D-74 §3.1 — funded-stack krijgt een verified-label onder All-time, zodat je
+  // ziet of het bedrag brokerwaarheid of Pine-simulatie is. Zonder verified_at
+  // is de default expliciet "⚠ unverified" — geen aanname op ongeziene bron.
+  if (param === "funded") {
+    const fv = d.funded_verified || {}
+    lbl = fv.verified ? ("✓ verified " + fv.verified_at)
+                     : (fv.verified_at ? ("⚠ unverified since " + fv.verified_at)
+                                       : "⚠ unverified")
+  }
 }
 
 const w = new ListWidget()
@@ -92,7 +125,11 @@ const dot = head.addText("●"); dot.font = Font.systemFont(9); dot.textColor = 
 w.addSpacer(4)
 
 const l = w.addText(lbl); l.font = Font.systemFont(9); l.textColor = C.sub
-const pnl = w.addText(money(big)); pnl.font = Font.boldSystemFont(22); pnl.textColor = big >= 0 ? C.ok : C.bad
+// D-74: eval-stand toont een 50k-genormaliseerd getal, geen bedrag — dus geen
+// dollarteken en geen +/-kleuring. De rest blijft geld.
+const bigStr = isMoney ? money(big) : Number(big).toFixed(1)
+const pnl = w.addText(bigStr); pnl.font = Font.boldSystemFont(22)
+pnl.textColor = isMoney ? (big >= 0 ? C.ok : C.bad) : C.gold
 w.addSpacer(4)
 w.addImage(sparkline(d.spark, 120, 18, C.gold))
 w.addSpacer(4)

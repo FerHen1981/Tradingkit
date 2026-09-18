@@ -55,6 +55,40 @@ _PUBLIC_STATS_PATH = os.environ.get("PUBLIC_STATS_PATH", "/root/public-stats.jso
 _STARTED = time.monotonic()                                        # for the system-status uptime
 
 
+# ---- funded verification (D-74 §3.1) ------------------------------------------------
+#
+# Tabel 2 zegt: een funded (PA) saldo mag alleen op de widget/publieke site
+# als het binnen 7 dagen handmatig geverifieerd is. Bron is bewust hand-input
+# (Ferry 07-09, execution-flow.md §4), want een geautomatiseerde saldo-bron
+# hebben we vandaag niet (D-20). Twee env-vars dragen de vlag:
+#   FUNDED_VERIFIED_AT      ISO-datum (YYYY-MM-DD) van de laatste verificatie
+#   FUNDED_VERIFIED_WINDOW  aantal dagen dat de verificatie geldig blijft (default 7)
+# Zonder verified_at draagt de payload `verified: false`, zodat de widget
+# `⚠ unverified` kan renderen i.p.v. een aanname op broker-truth.
+_FUNDED_VERIFIED_WINDOW_DAYS_DEFAULT = 7
+
+
+def _funded_verified() -> dict:
+    """Bouw het funded-verification-blok voor de widget-payload."""
+    raw = (os.environ.get("FUNDED_VERIFIED_AT") or "").strip()
+    if not raw:
+        return {"verified": False, "verified_at": None, "days_ago": None}
+    try:
+        verified_at = dt.date.fromisoformat(raw[:10])
+    except ValueError:
+        return {"verified": False, "verified_at": None, "days_ago": None}
+    try:
+        window = int(os.environ.get("FUNDED_VERIFIED_WINDOW") or _FUNDED_VERIFIED_WINDOW_DAYS_DEFAULT)
+    except ValueError:
+        window = _FUNDED_VERIFIED_WINDOW_DAYS_DEFAULT
+    days_ago = (dt.date.today() - verified_at).days
+    return {
+        "verified": 0 <= days_ago <= window,
+        "verified_at": verified_at.isoformat(),
+        "days_ago": days_ago,
+    }
+
+
 # ---- state from the routed-log -------------------------------------------------------
 
 def _recent_files() -> list[str]:
@@ -269,6 +303,12 @@ class Handler(BaseHTTPRequestHandler):
                 dyall = command_state("day")["fleet"]
                 yall = command_state("yesterday")["fleet"]
                 spark = [c["cum"] for c in allc["equity"]["curve"]][-12:] or [0]
+                # D-74 §3.1 — eval-stack krijgt genormaliseerde tellers i.p.v.
+                # bedragen; funded-stack krijgt een verified-vlag, zodat de
+                # widget kan tonen of hij naar brokerwaarheid of naar Pine's
+                # simulatie kijkt (D-75 leunt hier op).
+                eval_stats = allc.get("eval_stats") or {}
+                funded_verified = _funded_verified()
                 widget = {
                     "goal": float(os.environ.get("WIDGET_GOAL", "0")),
                     "dataThrough": allc.get("status", {}).get("data_through") or "",
@@ -281,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "trades": yall.get("trades") or 0,
                                   "winrate": yall.get("win_rate") or 0,
                                   "pf": yall.get("pf") or 0},
+                    "eval_stats": eval_stats,
+                    "funded_verified": funded_verified,
                 }
                 body = json.dumps(widget).encode()
             except Exception as exc:

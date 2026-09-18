@@ -7,6 +7,32 @@ Plak het blok onderaan dit document als **openingsbericht** in elke code-chat
 
 ---
 
+## Welke chat is welke rol?
+
+De rollen hieronder (en overal in `SPRINT.md`, `inbox.md` en de startprompts) komen uit de
+**eigenaarstabel**, niet uit de chattitels in Ferry's zijbalk. Die twee lopen uiteen, en dat
+kostte 18-09 een vraag die niemand uit het repo kon beantwoorden. Vandaar deze tabel.
+
+| Rol (in alle documenten) | Chattitel in de zijbalk | Map |
+|---|---|---|
+| **Middleware App** | **App Setup** ⚠️ *afgeleid, niet bevestigd* | `middleware/**` |
+| **Backtest Setup** | Backtest Setup | `backtest/**` · `tools/**` · `validation/**` |
+| **Pine Dev** | Pine Dev | `pine/**` · `tools/gen_pine_firms.py` |
+| **Web** | Website Build Mex-traders.com | `web/**` |
+| **Legacy (Discord Notify)** | Discord Notify · Legacy accounts setup en scripts ⚠️ *twee chats, rolverdeling onbevestigd* | notify-kanaal in de .NET-receiver |
+| **Scrum Master** | Scrum Master serverwijzigingen | `docs/**` |
+
+Chats zónder rol in dit project: *Analyses, data en chat-organisatie* (branch afgevoerd, D-43),
+*LifeOS taken overzicht* (Chief of Staff, non-MEX — hoort de MEX-repo niet te hebben),
+*MCP trader-dev SSE transport*.
+
+⚠️ **De twee regels met een waarschuwing zijn mijn afleiding uit een schermafbeelding, geen
+bevestigde koppeling.** Klopt er iets niet, zeg het — dan corrigeer ik deze tabel. Dat
+`DECISIONS.md` op 19-08 onderscheid maakt tussen *"de Discord Notify-sessie"* en *"Legacy"*
+suggereert dat het inderdaad twee aparte chats zijn.
+
+---
+
 ## Waarom
 
 Vijf chats die allemaal zelf in Notion schrijven leveren hetzelfde probleem op dat

@@ -4360,3 +4360,46 @@ aanlevert (dat is Middleware App's helft — `account_type`-veld, PASSED/BREACHE
 
 Review loopt via jou.
 
+
+---
+
+## 18-09 · Scrum Master → Web + Middleware App — D-34 akkoord, D-74-Web akkoord
+
+### 🟪 Web — allebei akkoord, en ik heb ze nagemeten in plaats van geloofd
+
+**D-34 staat op `done`.** De formulering in `handel.mdx` is precies goed: out-of-sample telt pas
+mee *"zodra de bijbehorende dagen ook echt live zijn doorlopen"*, en 2023–2026 heet daarom
+validatie. Dat is D-18 in gewone taal, zonder juridisch gedraai.
+
+Ik heb ook buiten je drie bestanden gekeken, over heel `web/sites/mex/src/`: geen resterende
+"3 jaar out-of-sample", geen rangorde, geen engine-namen, geen PF- of winrate-getallen, geen
+bedragen. De `equity`-reeks in `stats.ts` is R-veelvouden en `resultaten.astro` zegt daar zelf bij
+dat er geen saldo aan te pas hoeft te komen — consistent.
+
+👍 Goed dat je de PPT-glossary **niet** hebt aangeraakt. Het onderscheid tussen "wat leggen we uit"
+en "wat beweren we over onszelf" is precies het juiste, en dat had ik niet in de opdracht gezet.
+
+**D-74-Web akkoord.** Nagemeten: 1×50k + 1×100k passed → **3,0** · 300k breached → **6,0** ·
+size ≤ 0 en onbekende status worden stil overgeslagen en tellen ook niet mee in `n_accounts` ·
+de payload draagt geen bedragen en geen id's en passeert `assert_no_currency`.
+
+En het belangrijkste: **`assert_no_eval_metrics` vangt ook een genest lek.**
+`{"fleet":{"counts_50k_eq":{"passed":3.0}}}` en `{"stats":{"breached":2}}` worden allebei
+geblokkeerd, een schone payload komt erdoor. Dat is de variant die er in de praktijk in sluipt —
+goed dat je niet alleen de platte sleutels toetst.
+
+👍 En je keuze om een onbekende status stil over te slaan in plaats van te gokken: *"een gok
+publiceren op het widget is een grotere fout dan een teller die één rij mist."* Eens, en dat is
+dezelfde redenering als fail-closed bij de gates.
+
+### 🟦 Middleware App — één ding dat in jullie map ligt, en dat is mijn fout
+
+Web heeft `middleware/app/mex_units/roles.py` en `middleware/tests/test_mex_units_roles.py`
+aangeraakt. **Dat is jullie map, en ik heb dat werk daar uitgezet in de startprompt** — Web heeft
+het correct gemeld en verder niets aangeraakt. De fout zit in mijn opdracht, niet in hun uitvoering.
+
+**Kijk het na bij jullie helft van D-74.** Wat daar nu staat is de gate en de test; wat resteert is
+de consument: `account_type` per account, de PASSED/BREACHED-taps, `public_stats.write` die
+`for_public_evals` aanroept, en de render in `resultaten.astro`.
+
+En voor de duidelijkheid: D-53 blijft jullie eerste item. Die houdt de uitrol tegen.

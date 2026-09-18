@@ -150,17 +150,6 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             return Results.Ok(new { accepted = true, handled = false, reason = "kill-switch: disarmed" });
         }
 
-        // D-53 · qty-map per account. Pine zet quantity_multiplier op 1; hier overschrijven
-        // we die met wat de map voor dit account voorschrijft. Ontbreekt het account in
-        // de map, dan laten we de payload precies zoals Pine hem stuurt. Bron: env
-        // MEX_ACCOUNT_QTY_MULTIPLIERS (kommalijst account_id=n). Vers account = 1.
-        var qtyMult = AccountQtyMap.MultiplierFor(acct);
-        if (qtyMult is int m && a0 is not null)
-        {
-            a0["quantity_multiplier"] = m;
-            body = node!.ToJsonString();     // rebuild — de forward stuurt deze gewijzigde body
-        }
-
         // D-40 · reactieve blocked-gate per account. Een eerdere PMT-weigering met een
         // day-cap/DLL/payout-cap marker houdt dit account dicht tot de eerstvolgende
         // 18:00 ET sessie-roll. Dezelfde plek en vorm als de kill-switch hierboven.
@@ -197,6 +186,25 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         var useRithmic = !string.IsNullOrWhiteSpace(rithmicList) && !string.IsNullOrEmpty(acct)
             && rithmicList.Split(',').Select(x => x.Trim()).Contains(acct);
         var target = useRithmic && !string.IsNullOrEmpty(pmtRithmicUrl) ? pmtRithmicUrl : pmtUrl;
+
+        // D-53 · qty per account. Pine zet `quantity` op zijn eigen bevroren aantal
+        // (MATADOR: "6"); hier overschrijven we dat met wat de map voor dit account
+        // voorschrijft. Ontbreekt het account in de map, dan laten we de payload
+        // precies zoals Pine hem stuurt — de bevroren volle grootte. `quantity_multiplier`
+        // wordt bewust NIET aangeraakt: een integer-multiplier ≥ 1 kan alleen gelijk
+        // houden of verhogen, en dat was precies wat een vers account níét moest kunnen.
+        // Pine stuurt `quantity` als string; we schrijven hem terug als string zodat het
+        // wire-formaat één-op-één blijft.
+        //
+        // Bron: env MEX_ACCOUNT_QTY (kommalijst account_id=n, integer ≥ 1). Positie
+        // ná de gates zorgt dat een reject-log de onbewerkte Pine-body draagt — een
+        // rij die nooit verstuurd is mag geen aangepaste body dragen.
+        var qty = AccountQty.QuantityFor(acct);
+        if (qty is int q && a0 is not null)
+        {
+            a0["quantity"] = q.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            body = node!.ToJsonString();     // rebuild — de forward stuurt deze gewijzigde body
+        }
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
         await AppendAsync(storePath, "pmt", body, res, acct);
@@ -438,17 +446,42 @@ public static class Runtime
     public static volatile bool Armed = true;
 }
 
-// D-53 · Per-account quantity_multiplier override. Pine schrijft die hard op 1;
-// hier vertalen we per account naar een andere waarde. Env: MEX_ACCOUNT_QTY_MULTIPLIERS
-// (kommalijst account_id=n). Ontbrekend account = payload niet aanraken. Handmatige
-// map, geen fase-detectie — dat is v2 en vraagt echte accountstand uit de poller.
-public static class AccountQtyMap
+// D-53 · Per-account quantity override. Pine schrijft `quantity` op zijn eigen
+// bevroren aantal (MATADOR: 6 MES-contracten); hier vertalen we per account naar
+// het gewenste aantal contracten voor dat account. Env: MEX_ACCOUNT_QTY
+// (kommalijst account_id=n, integer ≥ 1). Ontbrekend account = payload niet
+// aanraken → Pine's bevroren volle grootte blijft. Vers account = zet hier 1.
+//
+// Waarom `quantity` en niet `quantity_multiplier`: die tweede is een integer die
+// Pine hard op 1 stuurt; een override er bovenop kan hem alleen gelijk houden of
+// verhogen, nooit naar beneden schalen. Precies dat naar beneden schalen was
+// de aanleiding voor D-53 (sweep 25-08: geen enkele engine fundeert op volle
+// grootte). `quantity` is de bron van waarheid en die schrijven we direct.
+//
+// De oude env-naam `MEX_ACCOUNT_QTY_MULTIPLIERS` wordt op start gedetecteerd;
+// als hij gezet is maar `MEX_ACCOUNT_QTY` niet, dan lezen we de oude en waarschuwen
+// dat de semantiek is veranderd (aantal contracten, geen multiplier). Dit voorkomt
+// dat een deploy stil-zonder-qty-override draait — dat is een grotere fout dan de
+// naamsmigratie oud→nieuw doorstaan.
+public static class AccountQty
 {
     static readonly Dictionary<string, int> _map = new(StringComparer.OrdinalIgnoreCase);
 
-    static AccountQtyMap()
+    static AccountQty()
     {
-        Load(Environment.GetEnvironmentVariable("MEX_ACCOUNT_QTY_MULTIPLIERS") ?? "");
+        var primary = Environment.GetEnvironmentVariable("MEX_ACCOUNT_QTY") ?? "";
+        var legacy  = Environment.GetEnvironmentVariable("MEX_ACCOUNT_QTY_MULTIPLIERS") ?? "";
+        if (!string.IsNullOrWhiteSpace(primary))
+        {
+            Load(primary);
+            if (!string.IsNullOrWhiteSpace(legacy))
+                Console.Error.WriteLine("[MEX_ACCOUNT_QTY] warning: MEX_ACCOUNT_QTY_MULTIPLIERS is set but ignored — use MEX_ACCOUNT_QTY (contracten per account).");
+        }
+        else if (!string.IsNullOrWhiteSpace(legacy))
+        {
+            Load(legacy);
+            Console.Error.WriteLine("[MEX_ACCOUNT_QTY] warning: reading legacy MEX_ACCOUNT_QTY_MULTIPLIERS as contract counts. Rename the env-var to MEX_ACCOUNT_QTY — same values, clearer name.");
+        }
     }
 
     // Herbouw de map — nuttig voor tests én voor een toekomstige reload zonder herstart.
@@ -463,7 +496,7 @@ public static class AccountQtyMap
         }
     }
 
-    public static int? MultiplierFor(string account)
+    public static int? QuantityFor(string account)
         => !string.IsNullOrEmpty(account) && _map.TryGetValue(account, out var n) ? n : null;
 }
 

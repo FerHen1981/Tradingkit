@@ -4572,3 +4572,87 @@ commit; laat weten als je liever had gehad dat ik dat losstaand had gedaan.
 
 Zoals afgesproken: D-53 zodra deze op `done` staat. Daarna D-75 (bronvraag Cash_History +
 onderzoek waarom `tradovate.poll_loop` nooit heeft gedraaid).
+
+---
+
+## 18-09 · Middleware App → Scrum Master + Ferry — D-53 fix, LIVE EXECUTIEPAD
+
+**Live-executiepad-melding vooraf, zoals de conventie voorschrijft.** Deze wijziging raakt
+`middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs` — de daadwerkelijk
+draaiende receiver op de VPS. Verandert wat er over de draad gaat naar PMT en dus wat er
+op de broker landt. Ik push, jij bouwt en herstart.
+
+### Wat er verandert
+
+Twee dingen, op één plek.
+
+**1. Overschrijf `quantity` in plaats van `quantity_multiplier`.** De review-bevinding van
+25-08 klopte: de oude code raakte alleen `multiple_accounts[0].quantity_multiplier`, en die
+kan met een integer ≥ 1 alleen gelijkhouden of verhogen. Pine stuurt daarnaast een eigen
+`"quantity"` (MATADOR: `"6"`) die de oude gate níét aanraakte, dus een lege of ontbrekende
+env-vlag = volle bevroren grootte, en een gezette vlag met bijv. `=1` deed niets omdat
+`quantity_multiplier` al 1 was. Naar beneden schalen — precies waar D-53 om ging — was
+onmogelijk. Fix zoals in de bevinding beschreven: schrijf `a0["quantity"]` direct met het
+aantal contracten voor dat account, als **string** (Pine stuurt hem als string, we houden
+het wire-formaat één-op-één). `quantity_multiplier` blijft ongemoeid op wat Pine hem
+zet (1).
+
+**2. Verplaats de override ná de gates.** De CLO-correctie op `execution-flow.md` §2.1
+(D-70) wees er terecht op: de override herschreef `body` vóórdat de blocked- en risk-gate
+mochten weigeren, dus bij een reject schreef `AppendAsync` een gewijzigde body naar
+`routed_*.jsonl` — een rij die nooit verstuurd is, met een payload die niet bestaat. De
+override staat nu tussen de risk-gate en `ForwardJsonAsync`, dus reject-logs dragen de
+onbewerkte Pine-body en success-logs dragen wat er echt over de draad ging.
+
+### Env-var-migratie
+
+De env-naam is `MEX_ACCOUNT_QTY_MULTIPLIERS` → `MEX_ACCOUNT_QTY`. Semantiek staat nu op
+contracten (dat was de crux), niet op multipliers. **Waarden zijn 1-op-1 herbruikbaar** —
+alleen de naam verandert, en de betekenis wordt eerlijk. Backward-compat: als `MEX_ACCOUNT_QTY`
+niet gezet is maar `MEX_ACCOUNT_QTY_MULTIPLIERS` wél, dan lees ik de legacy-naam met een
+`Console.Error` waarschuwing dat hij als contracten wordt geïnterpreteerd — anders zou een
+deploy stil-zonder-qty-override draaien, wat een grotere fout is dan de rename doorstaan.
+Zet je beide, dan wint `MEX_ACCOUNT_QTY` en waarschuwt de log dat de andere genegeerd is.
+
+### Wat Ferry moet doen
+
+Zoals bij D-40/D-53 v1:
+
+    dotnet build src/Mex.Journal.Receiver -c Release
+    # in mex-receiver's EnvironmentFile:
+    #   MEX_ACCOUNT_QTY=PAAPEX2700250000015=1,APEX27002500000214=1,…
+    systemctl restart mex-receiver
+
+De oude env-var mag blijven staan tot de nieuwe erin staat — de warning maakt duidelijk
+dat er iets moet gebeuren, maar het pad blijft functioneel. Beter: bij dezelfde deploy
+hernoem je hem.
+
+### Beperkingen die blijven
+
+- **Nog steeds handmatig.** Fase-detectie (vers → 1, milking → schaal terug op) vraagt een
+  echte bron van accountstand. Dat is `TradovateClient.poll_loop()` (D-75) of Rithmic. Nu
+  is de map handwerk. Vers account = zet hier op 1.
+- **Geen fractionele contracten.** De env-parser accepteert alleen integer ≥ 1. Wie later
+  wél fractioneel wil schalen (bijv. 6 → 1 = 0.167 als multiplier) heeft een andere weg
+  nodig; PMT's tolerantie op niet-gehele waarden is onbekend en dat is geen assumptie waar
+  ik een productie-order op wil zetten.
+- **`Rejected()` in `Program.cs` blijft ongemoeid.** Dat is D-73's terrein.
+
+### Test-status
+
+De .NET-kant heeft geen unit-tests (geen `Mex.Journal.Receiver.Tests`-project in de sln;
+dat is Ferry's bouwpad op de VPS). Ik heb geen `dotnet` in deze sessie, dus wat je krijgt
+is een narrow diff met stevige commentaar, geen groen testkruis. Verificatie na deploy: één
+alert waarbij je in `routed_*.jsonl` ziet dat de body `"quantity":"1"` (of wat je zet)
+draagt in plaats van de bevroren waarde. Reject-logs moeten Pine's originele `"quantity"`
+dragen — die controle is het bewijs dat de volgorde-verplaatsing werkt.
+
+### Wat de bevinding uit D-70 vraagt en wat deze fix niet doet
+
+Er lag nog een tweede suggestie in D-70 §2.1b: *"of de onbewerkte body loggen bij een
+reject"*. Dat is nu redundant — de reject-logs krijgen automatisch de onbewerkte body
+doordat de override erna staat. De alternatieve route (dubbele logregels) is dus niet
+nodig.
+
+Op review. D-53 blijft `wip` tot Ferry deployed heeft en de eerste live-order de nieuwe
+qty draagt.

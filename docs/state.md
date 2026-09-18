@@ -3,33 +3,124 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-08-28 (Analyses & Data chat)_
+_Last updated: 2026-09-18 (Analyses & Data chat)_
 
-## Live settings
+## Live settings — de werkende config (D-75, vervangt D-43)
 
-Per-account sizing en day-target/DLL zijn **buffer-gedreven** (D-43). DLL en
-day-target worden **hard in Tradovate** ingesteld, niet via de Pine risk-gate.
-Basisstrategie: El Tesoro MGC1! met Fixed TP 85t, Fixed Stop 100t, BE/Trail off,
-Day-trail activation $500 / giveback $100, Day-cap hard $750 (Pine-instellingen
-zoals in backtest `91469a71` — de "afgelopen 2 weken haal je target op de mediaan
-al" run).
+Bewezen op live fills 1–14 sep 2026 (PA013/018/021/022/023, 325 trades):
+**60% trade-winrate, 75% winstdagen, mediaan account-dag +$503.** Na het
+uitzetten van de Pine day-trail op 15/9 zakte dit naar het rauwe profiel
+(jaar-backtest: 51-53% winstdagen); op 17/9 teruggezet.
 
-| Account | Balance | Buffer (Dist Liq) | Modus | Qty | Day Target ↑ | DLL ↓ |
-|---|---:|---:|---|---:|---:|---:|
-| PA013 | $54.164 | $4.064 | payout-buildup (34.9% cons., nog $1.042) | 6 | +$500 | −$500 |
-| PA015 | $50.478 | $581 🚨 | herstel — krap | 2 | +$200 | −$200 |
-| PA017 | $49.338 | $785 🚨 | herstel — krap | 2 | +$250 | −$300 |
-| PA018 | $53.479 | $3.379 | payout-buildup | 5 | +$450 | −$450 |
-| PA021 | $49.243 | $1.096 | opbouw — voorzichtig | 3 | +$300 | −$350 |
-| PA022 | $50.069 | $2.014 | normale | 4 | +$400 | −$400 |
+### Pine — TES-MGC-C v3.2.0 op MGC1! 1m (per account één chart/alert)
 
-**Herzien op deze triggers**, niet op tijd:
-- Payout uitbetaald → qty terug naar basis van nieuwe buffer, cyclus opnieuw
-- Buffer < $1.000 → qty naar 2, target $200, DLL $200
-- Buffer $1.000-2.000 → qty 3, target $300, DLL $300-350
-- Buffer $2.000-4.000 → qty 4-5, target $400-450, DLL $400-450
-- Buffer > $4.000 → qty 5-6, target $500, DLL $500
-- Buffer > $5.000 EN payout-eligible → payout nemen, nieuwe cyclus
+| Groep | Input | Waarde |
+|---|---|---|
+| Sessie | Market regime · tz · boundary | All sessions · America/New_York · Exchange session (ETH) |
+| | Force flat 16:55–18:00 · dagen · uren | On · ma–vr · alle uren On behalve 17 |
+| | Sessiefilters | Globex reopen On, Asia Off, London On, US 07-12 On, overige Off |
+| Entry | Entry mode · expiry · FVG fill check | Limit @ 50% FVG · 12 bars · On |
+| | FVG size filter · confirmation | On, 8–23 ticks · 4 bars |
+| | pivK · buf | 3 · 2 |
+| Exit | Stop · max stop | Fixed (legacy) **100t** · 100 |
+| | TP · R-multiple | Fixed (units) **85t** (0,85 : 1) · 1 (inactief) |
+| | Break-even · Trailing | Off · Off |
+| Filters | VWAP side veto · Delta filter (CVD) | On · **Off** (cvd=0) |
+| | Streak · Longs/Shorts · bias · sweep | On, count 5 · On/On · 0 · 0 |
+| Day-guards | **Day-profit exit mode** | **Trail + cap** |
+| | Day-trail model · scale | Activation + giveback · Fixed USD |
+| | **Activation / giveback / hard cap** | **$250 / $100 / $500 per contract** (zie schaalregel) |
+| | Daily risk-gate | Off — DLL zit in Tradovate |
+| Account | Phase · firm · DD-model · trailing DD | Developer · manual (preset apex_50k_legacy_pa niet toegepast) · Intraday · 2000 |
+| | PA DLL · consistency · min payout · qualifying day | 300 (inactief) · 30% · 500 · 250 |
+| | MAE guard · derisk · next payout | off · off · 1 |
+
+NQ (TOR-NQ-HF v1.0.2-NQ-HF-INTRA, eval-only): TP **Fixed 90t** / SL 90t (1:1), expiry 9,
+FVG 4–12, confirmation 2, CVD **On**, streak 3, monFilter On. Op 15/9 stond TP op 122t —
+teruggezet.
+
+### Tradovate Auto Liq — per account (hard, realized + open)
+
+Uit de fills afgeleid (dag eindigt op de trade die het ronde bedrag overschrijdt):
+
+| Account | Qty vóór 15/9 | Daily target | DLL |
+|---|---:|---:|---:|
+| PA013 | 4–6 | $500 → $900 (8 sep) | $700 |
+| PA018 | 2–4 | $900 | $700 |
+| PA021 | 2–3 | $500 | ≥ $560 (niet geraakt) |
+| PA022 | 2–4 | $500 | ≥ $560 (niet geraakt) |
+| PA023 | 3 | $600 | $400 |
+| PA024 | 3 | ~$750 | $500 |
+
+### Schaalregel — guards per contract × qty
+
+Alle $-guards zijn per contract gedefinieerd en schalen lineair met qty.
+Vaste $-bedragen worden bij hogere qty in trade-eenheden strakker: bij qty 4 armt
+de trail na 1 TP, geeft 25t/ct terug, cap = 1,5 TP, DLL = 1,75 SL — de dag is na
+2-3 trades voorbij en de winst/verlies-verhouding klapt om.
+
+| 34 rauwe dagen (3 aug–17 sep), guards 250/100/500 + DLL 700 | qty 1 | qty 2 | qty 3 | qty 4 | qty 6 |
+|---|---:|---:|---:|---:|---:|
+| Vast in $ — net per contract | $4.861 | $2.522 | $941 | $282 | −$57 |
+| Vast in $ — trades/dag · winstdagen | 11,4 · 82% | 6,4 · 79% | 4,3 · 59% | 3,2 · 44% | 2,0 · 59% |
+| Geschaald (×qty) — net per contract | $4.861 | $4.861 | $4.861 | $4.861 | $4.861 |
+| Geschaald — trades/dag · winstdagen | 11,4 · 82% | idem | idem | idem | idem |
+
+Per contract: activation 250 · giveback 100 · cap 500 · DLL 300–700.
+Bij qty 2: **$500 / $200 / $1.000 / $600** (DLL 3×SL; 700/ct is boven de
+testbare grens van de jaardata). Bij qty 1: $250 / $100 / $500 / $300.
+
+**Apex-plafond op de schaling.** De Apex-regels staan in vaste dollars:
+consistency-cap payout-1 = 30% × $4.100 = **$1.230** per dag, trailing DD $2.500.
+Geschaalde cap 500/ct past tot **qty 2** ($1.000; best-day jaar $1.163). Bij
+qty 3 wordt de best-day $1.744 en breekt de consistency; bij qty 4 $2.325.
+**Daarom qty ≤ 2 voor dit profiel.** Na payout 1 daalt de cap naar 30% × het
+cyclus-doel (payout 2 op $2.000 → $600; wachten tot $4.000 houdt $1.200).
+
+### Per-account set nu (18 sep)
+
+| Account | Product | Qty | Pine act/gb/cap | Tradovate target | Tradovate DLL |
+|---|---|---:|---|---:|---:|
+| PA013 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
+| PA018 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
+| PA021 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
+| PA022 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
+| PA023 | Intraday 4.0 | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
+| PA024 | Intraday 4.0 | 1 | 250 / 100 / 500 | $500 | $300 |
+| PA025 | Legacy 50K | 1 | 250 / 100 / 500 | $500 | $300 |
+
+Buffer < $900 → qty 1; buffer ≥ $2.000 → qty 2. Verse account: qty 1 tot ~$600 cushion.
+
+**Alternatief op record (jaar-optimum, strak):** qty 2, geen Pine trail, Tradovate
+target $400 / DLL $300 → 4 payouts/jaar, 9% verse-breach, $16,4k/jaar, 53% winstdagen.
+Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DLL 600),
+$13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
+Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
+
+## D-75 — Werkende live-config vastgelegd + schaalregel guards (18 sep 2026)
+
+Genummerd D-75 om botsing met de board-nummering te vermijden (board zit op D-74);
+de D-43 hieronder is de oudere Analyses-chat-nummering.
+
+**Bewijs.** Fills 35–40 (1–16 sep, 6 accounts, 389 trades): vóór 15/9 60% op trades,
+75% op account-dagen, mediaan +$503, avg verliezer −$126; ná 15/9 (day-trail uit)
+avg verliezer −$237. Alerts-log `ae004`: enige config-verschil vóór/ná 15/9 op MGC =
+Day-profit exit Trail+cap → Off (plus 021/025 op 450/450/900); op NQ TP 90 → 122.
+Backtests `1b4a6` (34d rauw) en `89aa5` (jaar): fixed-$ guards halveren per-contract-
+rendement bij elke qty-stap; geschaald is per contract exact gelijk.
+
+**Beslissing.** (1) Pine day-trail 250/100/500 per contract is het werkende mechanisme —
+blijft aan. (2) Alle $-guards schalen met qty; qty ≤ 2 vanwege de consistency-cap.
+(3) DLL en target blijven hard in Tradovate (middleware-gate is dormant, Pine-gate heeft
+feestdag-resetbug: 8 sep). (4) NQ TP terug op 90t.
+
+**Niet opgelost.** Jaar-niveau breach-risico van het adem-profiel (46% bij qty 2 /
+DLL 600) versus 9% voor het strakke profiel; DLL > 3×SL per contract niet testbaar op
+de jaardata. Sample-check 16 okt 2026: winstdagen, mediaan-dag en breaches per account
+tegen deze tabel.
+
+Bronbestanden (uploads, niet in repo): Fills_35–40.csv, TradingView_Alerts_Log
+2026-09-17 ae004, TES-MGC-C exports 1b4a6 / df588 / ff116 / 89aa5 / 6ae1c.
 
 ## D-43 — Buffer-gedreven per-account sizing + hard Tradovate-limits (28 aug 2026)
 

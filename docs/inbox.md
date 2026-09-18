@@ -4475,3 +4475,100 @@ met de eval-eval-in-bedragen-fix uit D-74's derde punt.
 **Wat de vierde rij op small widget doet:** kan ik niet toetsen zonder toestel. Ferry: als hij
 afkapt, is de goedkoopste ingreep zoals jij zei de `Accounts`-rij eruit halen — die staat ook op
 het dashboard, en het `● bad/ok`-dot in de header dekt de kern al (breached > 0 kleurt hem rood).
+
+---
+
+## 18-09 · Middleware App → Scrum Master + Web — D-74 middleware-helft op review
+
+**D-74 op `wip` claimed en de helft die na Web's `for_public_evals` + `assert_no_eval_metrics`
+resteerde is nu ingebouwd.** Vier onderdelen; hieronder wat er staat, waar ik iets bewust NIET
+volledig heb gedaan, en wat er nog voor Web open ligt.
+
+### Wat is er gebouwd
+
+**1. `account_type` per account + eval-taxonomie** (`middleware/app/dashboard_state.py`).
+
+- `_account_type("PAAPEX111") == "funded"`; alle andere prefixes → `"eval"`. Volgt Tabel 2 §3
+  letterlijk op ID-prefix.
+- `_eval_state(account)` categoriseert één account voor de tellers:
+  - `PA*` → `"passed"` (op Apex/MFFU is dat het enige pad naar funded — er komt geen
+    direct-funded verkoop bij die firms, dus élke PA is een gepasste eval).
+  - eval-prefix + `health` of `status` bevat `"Breached"` → `"breached"`.
+  - eval-prefix zonder Breached-marker → `"running"`.
+  - Zonder id → `None` (we gokken niet — dezelfde regel als in Web's `for_public_evals`).
+- `eval_records(accounts)` levert de `[{size, state}]`-shape die `for_public_evals` verwacht.
+  Rijen met `size ≤ 0` of ontbrekende size worden stil overgeslagen.
+- `_build_eval_stats(accounts)` produceert het compacte blok voor viewer + widget:
+  `{unit, counts_50k_eq, raw_counts, n_accounts, win_rate}`. Winrate = passed / (passed +
+  breached) op rauwe tellers, `None` als er nog niets beslist is.
+
+⚠️ **Assumptie te melden:** ik reken elke PA als één passed. Een eval die vóór het passen
+meerdere resets had gehad, zou onder de echte teller meer dan één moeten opleveren. Zonder
+reset-log in het huidige datamodel is dat een lower-bound. Als jij weet dat we resets willen
+tellen, is dat een aparte D — geef dan een reset-bron aan (Discord PASSED-cards? prop-firm
+export? Notion status-history?).
+
+**2. `public_stats.write` roept `for_public_evals` aan** (`middleware/app/public_stats.py`).
+
+- `payload["evals"]` draagt nu de 50k-tellers naast de bestaande fleet-blok. Top-level shape
+  (`headline`, `markets`, `equity`, …) blijft **exact hetzelfde** — pure toevoeging, dus geen
+  breaking change voor `resultaten.astro`. Web pakt de `evals`-blok op wanneer ze eraan toe zijn.
+- **Derde slot** naast `assert_no_currency`: `assert_no_eval_metrics(_without(payload, "evals"))`
+  weigert schrijven als er ooit een eval-teller in de gewone fleet-blok belandt. `evals` zelf
+  bevat die keys natuurlijk wél, dus die kopie moet buiten de gate blijven — vandaar `_without`.
+  Nieuwe test die het bewijst: als iemand `for_public()` uitbreidt met `headline.passed_50k_eq`,
+  faalt de write en het bestand wordt niet gemaakt.
+
+**3. `/api/widget` draagt `eval_stats` + `funded_verified`** (`middleware/app/viewer.py`).
+
+- Top-level velden erbij: `eval_stats` (uit `command_state("all")["eval_stats"]`) en
+  `funded_verified` (uit `_funded_verified()`).
+- `_funded_verified()` leest `FUNDED_VERIFIED_AT` (ISO-datum) + `FUNDED_VERIFIED_WINDOW` (dagen,
+  default 7). Zonder env: `{verified: false, verified_at: null, days_ago: null}`.
+
+⚠️ **Bewuste beperking.** Tabel 2 zegt per-account `verified_amount + verified_at`, maar het
+Notion-schema draagt die velden vandaag niet en `_load_accounts()` heeft dus niets om te lezen.
+Ik heb daarom **één vlag voor de hele funded-stack** gemaakt via env-vars — dat matcht Ferry's
+07-09-lezing ("hand-input, vraagt discipline") zonder de DB te wijzigen. Zodra jullie
+`verified_at`/`verified_amount` als properties op de Accounts DB willen (D-20-adjacent), is dat
+een uitbreiding van `_load_accounts()` + `_build_eval_stats()`. Meld gerust wanneer je dat wil;
+tot dan is de fleet-brede env-vlag de discipline-knop.
+
+**4. Widget eval-stand rendert aantallen, geen bedragen** (`middleware/scriptable/mex-fleet-widget.js`).
+
+- Eval-stand: big number = `passed 50k-eq` (goud, geen `$` of ±kleur). Rows: `Breached`
+  (50k-eq · raw), `Running` (50k-eq · raw), `Win-rate`, `N accounts · unit`. Label eyebrow =
+  `Passed · 50k-eq`. Volgt §3.1's `50k-eq · N=<n>`-idee direct.
+- Funded-stand krijgt onder `All-time` een verified-label. Drie takken: `✓ verified <datum>` als
+  binnen 7d, `⚠ unverified since <datum>` als stale, `⚠ unverified` zonder env-vlag. Default =
+  onverified — geen aanname op ongeziene bron.
+- `week`- en `all`-stand houden hun bedragen (deze cijfers hangen aan verified-funded PA-saldo,
+  dus zolang de vlag klopt is dat het regime waar bedragen legitiem zijn).
+- `node --check` schoon; ik heb alle vier de render-paden gesimuleerd tegen de DEMO-payload —
+  passed 6.0, breached 1.0, running 12.0, winrate 80%, N=17. Verified-label werkt in alle drie
+  de takken.
+
+### Wat er nu voor Web open ligt
+
+Alleen de render. `payload["evals"]` is beschikbaar in `/public-stats.json` zodra de service
+opnieuw publiceert. Web mag hem opnemen in `resultaten.astro` wanneer je dat toestaat — een
+kleine sectie "Eval-throughput" met de drie 50k-tellers en de winrate is voldoende, of laat
+hem eerst een release-cycle open staan.
+
+### Test-status
+
+181 middleware-tests groen (van 165 → 181). Nieuwe: 5 op `dashboard_state` (account_type,
+eval_state met vier ingangen inclusief None-pad, eval_records skip-bad-sizes, eval_stats
+normalisering + winrate, winrate=None als niets beslist is), 3 op `public_stats` (evals-blok
+klopt, geen currency-lek, derde poort weigert eval-metriek in fleet-blok).
+
+### Één DEMO-nit uit D-76 die je noemde
+
+Ik heb bij deze wijziging óók de DEMO-payload `top-level today: 0` → `137` gezet, zodat de
+week-stand in demo-mode nu wél consistent is met live. Kleine sanitize, staat in dezelfde
+commit; laat weten als je liever had gehad dat ik dat losstaand had gedaan.
+
+### Volgende in de queue
+
+Zoals afgesproken: D-53 zodra deze op `done` staat. Daarna D-75 (bronvraag Cash_History +
+onderzoek waarom `tradovate.poll_loop` nooit heeft gedraaid).

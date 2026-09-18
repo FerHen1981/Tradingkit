@@ -1,5 +1,7 @@
 # Startprompts per chat — ronde 18-09 · **alleen wat nú kan**
 
+> 📱 **Widget-ronde toegevoegd 18-09 (onderaan): App Setup / Middleware App, D-76 → D-74 → D-75.**
+
 _Eigenaar: Scrum Master. Watermerk: `32afd0e`, 18-09._
 
 **Opdracht Ferry 18-09: eerst verwerken wat kan, daarna pas de rest afwikkelen.** Elk blok
@@ -168,4 +170,59 @@ NIET AAN BEGINNEN: het publiceren van het genormaliseerde eval-format zelf — d
 Middleware App het format levert. Schrijf de gate en de test, niet de consument.
 
 Meld het in docs/inbox.md als D-34 af is; de review loopt via de Scrum Master.
+```
+
+
+---
+
+## 📱 App Setup (Middleware App) — widget-ronde, 18-09
+
+_Los blok. Ferry wil de widget-keten afmaken: eerst mijn fix nakijken, dan het label, dan de bron._
+
+```
+git pull origin claude/middleware-setup-guide-afhvtk
+
+Lees docs/SPRINT.md (D-74, D-75, D-76) en de ronde van 18-09 in docs/inbox.md.
+
+VOORAF — D-53 blijft jullie eerste item zodra de widget klaar is. Die qty-fix staat sinds 25-08
+open en houdt de uitrol tegen. Dit widget-blok gaat voor omdat Ferry er nu op stuurt, niet omdat
+D-53 minder belangrijk is geworden.
+
+1. D-76 — REVIEW EERST. Ik heb in jullie map gewerkt (mex-fleet-widget.js), op expliciete
+   opdracht van Ferry. Het is een leeslaag, geen executiepad, maar het blijft jullie bestand.
+   Wat ik deed: de standen all/funded/eval tonen nu een Today-rij uit hun EIGEN stack
+   (s.today = command_state("day", stage)) in plaats van niets; de week-stand houdt zijn
+   vloot-brede getal maar heet nu "Today · all"; sparkline 22->18px en spacer 6->4 om ruimte
+   te maken; de DEMO-payload had today:0 in alle drie de stacks en demonstreerde de splitsing
+   dus niet — nu 137/212/-75.
+   Geverifieerd: node --check schoon, en de rijselectie nagespeeld — funded 212 + eval -75 =
+   137, exact het vloot-brede getal, dus de stacks tellen op.
+   NIET geverifieerd: of de vierde rij op een small widget past. Kapt hij af, haal dan de
+   Accounts-rij eruit; die staat ook op het dashboard.
+
+2. D-74 (jullie helft) — HET LABEL IS HIER HET BELANGRIJKSTE.
+   Twee widgets naast elkaar die allebei een bedrag tonen zonder te zeggen welk regime het is,
+   lossen het half op. execution-flow.md §3.1 schrijft voor: eval -> "50k-eq · N=<aantal>",
+   funded -> "✓ verified <datum>" of "⚠ unverified since <datum>".
+   Dat vraagt een API-veld dat er nog niet is — daarom heb ik het bewust NIET verzonnen.
+   Verder jullie helft: account_type per account, de PASSED/BREACHED-taps, public_stats.write
+   die for_public_evals aanroept (Web leverde die gate al, zie 36f0425), en de render in
+   resultaten.astro.
+   En: de eval-stand van de widget rendert vandaag realized en buffer in dollars. Dat is
+   precies wat D-74 verbiedt. Voor eval horen daar alleen genormaliseerde tellers te staan.
+
+3. D-75 — ACTUALS. Geen bouwwerk, een bronvraag.
+   dashboard_state._load_cash_ledgers() leest *Cash_History*.csv uit EXPORTS_DIR
+   (default /root/exports) en dat IS al de bron van waarheid — Tradovate's echte kassaldo,
+   werkelijke commissies, Trade Paired-P&L, payouts. realized_net draagt niet voor niets het
+   commentaar "ledger truth".
+   Het gat: zonder export valt hij stil terug op het trade-log, dus op Pine's simulatie
+   (day_pnl = a.get("daily_realized") or dict(daily.get(...))). En de widget rendert die twee
+   IDENTIEK — je kunt niet zien welke je bekijkt. Daar slaat het label uit punt 2 op.
+   Route (a), werkt vandaag: Ferry zet Cash_History-exports in /root/exports, de overlay pakt
+   ze automatisch op. Route (b): tradovate.py heeft een volwaardige poll_loop() die NOOIT
+   heeft gedraaid — D-20 stelde 18-09 vast dat Fleet Performance 0 rijen heeft. Zoek uit
+   waarom: credentials, nooit gestart, of stil gefaald. Dat is onderzoek, geen knop.
+
+Claim één item in docs/SPRINT.md vóór je begint. Meld het in docs/inbox.md als D-76 akkoord is.
 ```

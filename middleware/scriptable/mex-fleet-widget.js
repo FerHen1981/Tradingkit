@@ -22,9 +22,9 @@ async function getData() {
   return { goal: 250, dataThrough: "", spark: [30, 45, 38, 60, 52, 70, 64, 82, 78], today: 0,
     week: { net: 620, trades: 14, winrate: 57, pf: 1.85 },
     stacks: {
-      all:    { realized: 22088, week: 620, today: 0, trades: 717, winrate: 44, pf: 1.35, accounts: 24, breached: 1, buffer: 58155 },
-      funded: { realized: 18259, week: 400, today: 0, trades: 600, winrate: 45, pf: 1.40, accounts: 7,  breached: 0, buffer: 20000 },
-      eval:   { realized: 3829,  week: 220, today: 0, trades: 117, winrate: 42, pf: 1.20, accounts: 17, breached: 1, buffer: 38155 },
+      all:    { realized: 22088, week: 620, today: 137, trades: 717, winrate: 44, pf: 1.35, accounts: 24, breached: 1, buffer: 58155 },
+      funded: { realized: 18259, week: 400, today: 212, trades: 600, winrate: 45, pf: 1.40, accounts: 7,  breached: 0, buffer: 20000 },
+      eval:   { realized: 3829,  week: 220, today: -75, trades: 117, winrate: 42, pf: 1.20, accounts: 17, breached: 1, buffer: 38155 },
     } }
 }
 
@@ -64,12 +64,17 @@ let title, lbl, big, breached, rows
 if (param === "week") {
   const wk = d.week || {}
   title = "WEEK"; lbl = "This week"; big = num(wk.net, 0); breached = num((d.stacks && d.stacks.all || {}).breached, 0)
-  rows = [["Today", moneyK(num(d.today, 0))], ["Trades", String(num(wk.trades, 0))],
+  // "· all" is niet cosmetisch: d.today is command_state("day") ZONDER stage, dus
+  // eval + funded opgeteld. In de stack-standen hieronder komt Today uit de stack zelf.
+  rows = [["Today · all", moneyK(num(d.today, 0))], ["Trades", String(num(wk.trades, 0))],
           ["Win / PF", num(wk.winrate, 0) + "% · " + pfStr(wk.pf)]]
 } else {
   const s = (d.stacks || {})[param] || {}
   title = param.toUpperCase(); lbl = "All-time"; big = num(s.realized, 0); breached = num(s.breached, 0)
-  rows = [["Week", moneyK(num(s.week, 0))], ["Win / PF", num(s.winrate, 0) + "% · " + pfStr(s.pf)],
+  // Today komt hier uit de stack (s.today = command_state("day", stage)), niet uit het
+  // top-level d.today — anders toont een FUNDED-widget de som van funded EN eval.
+  rows = [["Today", moneyK(num(s.today, 0))], ["Week", moneyK(num(s.week, 0))],
+          ["Win / PF", num(s.winrate, 0) + "% · " + pfStr(s.pf)],
           ["Accounts", num(s.accounts, 0) + " · " + num(s.breached, 0) + " br"]]
 }
 
@@ -89,8 +94,8 @@ w.addSpacer(4)
 const l = w.addText(lbl); l.font = Font.systemFont(9); l.textColor = C.sub
 const pnl = w.addText(money(big)); pnl.font = Font.boldSystemFont(22); pnl.textColor = big >= 0 ? C.ok : C.bad
 w.addSpacer(4)
-w.addImage(sparkline(d.spark, 120, 22, C.gold))
-w.addSpacer(6)
+w.addImage(sparkline(d.spark, 120, 18, C.gold))
+w.addSpacer(4)
 
 for (const [k, v] of rows) {
   const r = w.addStack(); r.layoutHorizontally()

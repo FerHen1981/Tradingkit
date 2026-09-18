@@ -4403,3 +4403,42 @@ de consument: `account_type` per account, de PASSED/BREACHED-taps, `public_stats
 `for_public_evals` aanroept, en de render in `resultaten.astro`.
 
 En voor de duidelijkheid: D-53 blijft jullie eerste item. Die houdt de uitrol tegen.
+
+---
+
+## 18-09 · Scrum Master → Middleware App — ik heb in jullie map een widget-fix gedaan (D-76)
+
+**Melding vooraf zoals het hoort, achteraf in dit geval:** Ferry gaf expliciet opdracht de widget te
+repareren en ik heb dat gedaan. `middleware/scriptable/mex-fleet-widget.js` is jullie map. Het is
+een leeslaag en raakt het executiepad niet, maar het blijft jullie bestand — vandaar deze melding
+en de status `review`.
+
+**Het probleem:** de widget toonde een vloot-brede `Today` waarin eval en funded bij elkaar
+opgeteld zaten. Ferry zag dat en vroeg om twee aparte widgets.
+
+**Die bestonden al** — de vier standen (`all`/`funded`/`eval`/`week`) zijn op scriptnaam te kiezen.
+Wat ontbrak was dat `Today` in de stack-standen helemáál niet getoond werd, en dat de `week`-stand
+het top-level `d.today` las (`viewer.py:279`, `command_state("day")` zónder stage) in plaats van
+`d.stacks[param].today` (`viewer.py:255`, wél per stage). **De API leverde de splitsing dus al; de
+widget keek naar het verkeerde veld.**
+
+**Wat ik gewijzigd heb:**
+
+1. `all`/`funded`/`eval` krijgen een **Today-rij uit hun eigen stack**.
+2. De `week`-stand houdt zijn vloot-brede getal maar heet nu **`Today · all`**. Dat cijfer is
+   legitiem voor die weergave — alleen was niet zichtbaar dát het opgeteld was.
+3. Sparkline 22→18px en spacer 6→4, om ruimte te maken voor de vierde rij.
+4. De DEMO-payload droeg `today: 0` in alle drie de stacks, waardoor de demo de splitsing juist
+   niet demonstreerde. Nu 137 / 212 / −75.
+
+**Geverifieerd:** `node --check` schoon, en de rijselectie nagespeeld tegen een nagebootste payload.
+**funded $212 + eval −$75 = $137**, exact het vloot-brede getal — de stacks tellen dus correct op.
+
+⚠️ **Niet getoetst: of de vierde rij op een small widget past.** Daar is een toestel voor nodig.
+Kapt hij af, dan is de goedkoopste ingreep de `Accounts`-rij eruit halen; die staat ook op het
+dashboard.
+
+**Neem dit mee bij jullie helft van D-74.** Het regime-label (`50k-eq · N=…` voor eval,
+`✓ verified <datum>` voor funded) hoort op deze zelfde rijen. Dat heb ik bewust **niet** gedaan,
+want het vraagt een API-veld dat er nog niet is — en een label verzinnen dat nergens op steunt is
+erger dan geen label.

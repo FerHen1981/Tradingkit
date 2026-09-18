@@ -371,3 +371,94 @@ def assert_no_currency(payload: object, path: str = "$") -> None:
     elif isinstance(payload, list):
         for i, item in enumerate(payload):
             assert_no_currency(item, f"{path}[{i}]")
+
+
+# ---------------------------------------------------------------------------
+# Eval-publicatiepoort (D-74)
+# ---------------------------------------------------------------------------
+#
+# De publicatie-semantiek per account-type staat in `docs/execution-flow.md`,
+# tabel 2. Kortgezegd: bedragen horen niet op de publieke site, en eval-cijfers
+# horen niet vermengd te raken met de gewone fleet-payload. Dit tweede risico
+# krijgt een tweede slot — analoog aan `assert_no_currency` — zodat een latere
+# uitbreiding van `for_public()` een eval-teller er niet ongemerkt naast kan
+# leggen.
+
+#: Sleutelnamen die op eval-tellers duiden. Aantallen-per-status en de
+#: 50k-normalisering horen thuis in `for_public_evals()`; als ze in de gewone
+#: publieke payload opduiken is dat een lek, geen extra info.
+FORBIDDEN_EVAL_KEY_PARTS = (
+    "passed", "breached", "50k_eq", "50keq", "50k_equivalent",
+    "eval_count", "eval_counts", "eval_normalized",
+)
+
+
+def assert_no_eval_metrics(payload: object, path: str = "$") -> None:
+    """Werp ValueError zodra er een eval-metriek in de fleet-payload staat."""
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            lowered = key.lower()
+            if any(part in lowered for part in FORBIDDEN_EVAL_KEY_PARTS):
+                raise ValueError(
+                    f"eval-metriek {path}.{key} hoort in for_public_evals(), "
+                    f"niet in de gewone publieke payload"
+                )
+            assert_no_eval_metrics(value, f"{path}.{key}")
+    elif isinstance(payload, list):
+        for i, item in enumerate(payload):
+            assert_no_eval_metrics(item, f"{path}[{i}]")
+
+
+#: De grootte waar tegen we normaliseren. Ferry, 07-09: een 100k-eval telt als
+#: 2 × 50k, een 300k-eval als 6 × 50k. Wie een 100k passed heeft, weet
+#: net zoveel over de edge als wie twee 50k's passed heeft — dus telt hij ook
+#: zo op het widget.
+EVAL_NORM_BASE_USD = 50_000.0
+
+#: De drie toegestane eval-states. Alles wat hier niet in zit wordt genegeerd
+#: — een onbekende status geraden publiceren is een grotere fout dan een
+#: teller die één stil mist.
+EVAL_STATES: frozenset[str] = frozenset({"passed", "breached", "running"})
+
+
+def for_public_evals(
+    evals: Iterable[dict[str, Any]], delay: str = "T+1"
+) -> dict[str, Any]:
+    """De publieke payload voor eval-accounts: aantallen, genormaliseerd naar
+    50k-equivalent, zonder één bedrag erin.
+
+    Elke input-rij draagt:
+    - `size` — nominale grootte van het eval-account in USD (50 000, 100 000, …);
+    - `state` — `"passed"`, `"breached"` of `"running"`.
+
+    Rijen met onbekende status of niet-positieve grootte worden overgeslagen
+    (silently drop is veiliger dan de widget een gok laten dragen). De payload
+    passeert bewust dezelfde `assert_no_currency`-poort als `for_public()`: hij
+    verlaat het pand langs dezelfde deur.
+    """
+    counts_50k_eq: dict[str, float] = {"passed": 0.0, "breached": 0.0, "running": 0.0}
+    raw_counts: dict[str, int] = {"passed": 0, "breached": 0, "running": 0}
+
+    for record in evals:
+        state = str(record.get("state", "")).lower()
+        if state not in EVAL_STATES:
+            continue
+        try:
+            size = float(record.get("size") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if size <= 0:
+            continue
+        factor = size / EVAL_NORM_BASE_USD
+        counts_50k_eq[state] += factor
+        raw_counts[state] += 1
+
+    return {
+        "generated_at": datetime.now(tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "delay": delay,
+        "unit": "50k-equivalent",
+        "counts_50k_eq": {k: round(v, 2) for k, v in counts_50k_eq.items()},
+        "n_accounts": sum(raw_counts.values()),
+    }

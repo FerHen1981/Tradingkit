@@ -9,6 +9,8 @@
 
 ---
 
+- 2026-09-18 · D-75 · **Actuals in de widget is een bronvraag, geen bouwvraag** — `dashboard_state._load_cash_ledgers()` leest Tradovate Cash_History-exports uit `EXPORTS_DIR` en dat ís al de bron van waarheid; komt er geen export, dan valt hij **stil terug op het trade-log** (Pine's simulatie) · **het echte probleem is dat de widget die twee identiek rendert**, dus je kunt niet zien welke je bekijkt — daar slaat D-74's `✓ verified`/`⚠ unverified`-label op · route (a) exports in `/root/exports` werkt vandaag zonder code; route (b) de bestaande `tradovate.poll_loop()` heeft nooit gedraaid (D-20: Fleet Performance 0 rijen) en waaróm is niet vastgesteld · raakt: widget, dashboard, D-20, D-74, execution-flow.md §4
+
 - 2026-09-18 · D-20 · **Alle drie de LifeOS-dashboard-id's kloppen; geen van de drie wordt gevuld** — Fleet Performance 0 rijen, Trade Journal 0 rijen, Reconciliation 334 rijen die alle van 19-08 zijn · **het probleem is dus niet "deels dode id's" maar dat de hele schrijfkant nooit automatisch heeft gedraaid** · gevolg: er bestaat geen geautomatiseerde saldobron, waardoor de handmatige `verified_amount` in D-74 een structureel gegeven is en geen noodgreep · `CLAUDE.md` bijgewerkt · raakt: D-03, D-74, execution-flow.md §4
 
 - 2026-09-18 · D-34 · **REVIEW AKKOORD: de publieke claims kloppen nu met D-18** — `handel.mdx` zegt expliciet dat OOS pas meetelt zodra de dagen live zijn doorlopen en dat 2023–2026 daarom validatie heet · breder gesweept over `web/sites/mex/src/`: geen resterende OOS-claim, geen rangorde, geen bedragen; de equity-reeks is R-veelvouden · raakt: publieke claims, D-18, D-71

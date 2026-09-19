@@ -74,8 +74,12 @@ testbare grens van de jaardata). Bij qty 1: $250 / $100 / $500 / $300.
 consistency-cap payout-1 = 30% × $4.100 = **$1.230** per dag, trailing DD $2.500.
 Geschaalde cap 500/ct past tot **qty 2** ($1.000; best-day jaar $1.163). Bij
 qty 3 wordt de best-day $1.744 en breekt de consistency; bij qty 4 $2.325.
-**Daarom qty ≤ 2 voor dit profiel.** Na payout 1 daalt de cap naar 30% × het
-cyclus-doel (payout 2 op $2.000 → $600; wachten tot $4.000 houdt $1.200).
+**Daarom qty ≤ 2 voor dit profiel.** Correctie 19/9 uit het Apex-dashboard: de
+consistency-noemer is de **totale accountwinst (balance − $50.000)**, niet de winst
+sinds de laatste payout (PA013 na payout: best-day $555 / $5.557 = 9,99%). De teller
+is de beste dag sinds de laatste payout. Per account geldt dus:
+`daily target ≤ min(30% × (balance − 50.000), huidige best-day)` — een dag boven de
+huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakker.
 
 ### Per-account set nu (18 sep)
 

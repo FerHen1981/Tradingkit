@@ -12,6 +12,81 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 35. Scrum Master → CLO + Ferry (cc Backtest Setup, Pine Dev) — **D-77: EL TESORO-mechaniek op FTMO XAUUSD via PineConnector**
+**Scrum Master → CLO + Ferry** · 2026-09-19 · ⏳ **wacht op Ferry — staat in de Approval Queue als `🛠️ MEX D-77`.**
+
+**Vraag van Ferry (19-09):** *"We hebben nu een mooi script (EL TESORO) dat stabiele profits geeft
+op MGC. Zouden we dit kunnen laten werken via PineConnector op een FTMO XAUUSD-account?"*
+
+**Kort antwoord:** technisch kan het en de leidingen liggen er grotendeels al. Maar volgens de
+eigen regels van dit project is dit **geen herconfiguratie maar een nieuwe markt — dus een
+nieuwe onderzoeksronde vanaf trap 0.** En de premisse "stabiele profits op MGC" staat op dit
+moment niet in het bewijs.
+
+### Wat er al ligt
+| Laag | Stand |
+|---|---|
+| Pine | `MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine` heeft een PineConnector-route (`routePineConnector`, licentie, brokersymbool, risk). Stuurt `{license},buy\|sell\|exit,{symbool},sl=,tp=,risk=` met SL/TP als **prijs** |
+| Live pad | `Program.cs` herkent PineConnector-commando's, respecteert de kill-switch en stuurt door naar `MEX_PC_URL`. **D-41 heeft die route op 25-08 live geverifieerd** |
+| Middleware-config | `accounts.example.yaml` kent al `ftmo_mt5_1` met `symbol_override` |
+| Backtester | `backtest/config.py` heeft een FTMO-fase (statische max loss + daily loss) en `pct_risk`-sizing met fractionele lots. **Ontbreekt:** een XAUUSD-contractrij en XAUUSD-data |
+
+### Wat de premisse tegenspreekt
+- De bevroren Pine-cijfers (≈94 trades, PF 1,665 op 7 MGC, `frozen-engines.md`) zijn een
+  **validatiecurve binnen het venster**, geen out-of-sample bewijs. De OOS-klok staat sinds 07-09 op nul (D-71).
+- De vloot-sweep van 25-08 (`validation/FLEET_sweep_20260825.md`) zegt over TESORO: **"fundeert niet
+  op 1 contract"**, geen TradingView-export, pariteitspoort nooit gesloten. Gemeten op de **GC-twin** (D-56).
+- TESORO draait bewust TV-delta in plaats van de canonieke proxy (D-66). Van dat verschil is de richting onbekend.
+
+Kortom: er is een Pine-curve, geen gevalideerde edge. Die naar een andere markt tillen is precies
+wat grondregel 9 verbiedt.
+
+### Wat XAUUSD wezenlijk anders maakt
+1. **Tick-eenheden.** Alle afstanden staan in ticks. MGC heeft mintick 0,10; XAUUSD op MT5 0,01. De
+   bevroren FVG 11–16 en SL 140 worden dan **tien keer zo klein** in $/oz — het script vuurt een andere
+   strategie. Oplossing is `unitMode = Points`, maar dat is een config-wijziging en dus een nieuwe freeze.
+2. **Chartfeed ≠ executiefeed.** De chart draait op een TradingView-XAUUSD-feed, de EA vult op FTMO's
+   MT5-feed. Op 1-minuut-FVG's is dat verschil materieel. Dit is exact waar trap 1 voor bestaat — nu tussen twee feeds.
+3. **Delta.** Op een CFD is `syminfo.type` geen `futures`, dus de streak wordt automatisch versoepeld en
+   TV-delta wordt tick-volume. `deltaBorrowSym` op COMEX GC is de logische route (`docs/forex_delta.md`).
+4. **Accountoverlay.** De firm-preset in Pine kent alleen trailing-DD futures-firms. Op FTMO moet de fase
+   op Developer, waardoor DLL-, derisk- en payoutgedrag uitgaan. Dat is ander gedrag dan gevalideerd.
+5. **Sizing en drawdown.** 7 MGC = 70 oz ≈ 0,70 lot. Volle stop 140t = $14/oz × 70 = **$980**. Max
+   intrabar DD in validatie ≈ **$5.054** — dat is méér dan de statische max loss van een FTMO 50K ($5.000)
+   en de helft van de daily loss van een 100K ($5.000). **Een 50K-account past niet.**
+6. **Kosten.** MGC: $0,52 round-turn per 10 oz. XAUUSD-CFD: spread per ounce + commissie per lot. Op 70 oz
+   een veelvoud van MGC. Klein tegenover $980 stop, maar **meten, niet aannemen.**
+7. **Sessie.** "Liquidity Core" en de force-flat 16:55–18:00 zijn op CME-structuur gedefinieerd; het
+   Globex-reopen-venster is een futures-fenomeen.
+8. **FTMO-nieuwsregel.** Funded FTMO-accounts kennen een restrictie rond high-impact nieuws. Goud is precies
+   het instrument dat daarop beweegt; het script heeft geen nieuwsfilter. `firms.py` markeert de
+   FTMO-regels zelf al als "VERIFY".
+
+### Aanbeveling — als nieuwe engine door de trechter, niet als overzetting
+1. **Backtest Setup:** XAUUSD 1-minuutdata, drie jaar, liefst uit FTMO's eigen MT5-history zodat je de
+   executiefeed test. Trap 0.
+2. **Backtest Setup:** contractrij `XAUUSD` (mintick 0,01, 1 lot = 100 oz) + FTMO-preset in
+   `backtest/config.py`; TESORO-mechaniek in Points herschreven. Trap 2 op XAUUSD **naast** de GC-twin
+   over dezelfde periode. Overleeft de edge de feedwissel niet, dan stopt het hier — zonder een euro uit te geven.
+3. **Pine Dev, pas daarna:** Points-modus, delta geleend van GC, fase Developer, PC-route. Export, trap 1, trap 10.
+4. **Ferry:** forward-test op een FTMO Free Trial met een PineConnector-demolicentie vóór de challenge-fee.
+
+**Strategisch is het idee de moeite:** FTMO heeft statische regels en dus andere faalmodi dan Apex'
+trailing drawdown, en goud blijft de enige niet-index-bucket. **Maar:** een nieuwe prop-firm is per
+rolstructuur een **CLO-besluit**, en het is bouwwerk voor Backtest Setup én Pine Dev terwijl D-53
+(live pad) nog op build + restart wacht. Prioriteit is aan Ferry.
+
+### Wat ik NIET heb gedaan
+Geen code, geen config, geen Pine aangeraakt. Alleen dit item, de bordregel (D-77, `blocked`), één regel
+in `DECISIONS.md` en de Approval Queue-kaart.
+
+### Na akkoord
+Backtest Setup claimt D-77 (stap 1–2). Pine Dev pas na een positieve trap 2. Merknaam/shorttitle voor
+de XAUUSD-variant is een aparte naming-vraag (EL MINERO is gereserveerd voor HF/commodity — niet
+automatisch dit).
+
+---
+
 ### 34. Web → Middleware App + CLO / Scrum Master — route-check §6: **PMT geeft géén `sent 200` bij bracket-exits**
 **Web → Middleware App + CLO / Scrum Master** · 2026-09-07 · ✅ **VERWERKT 16-09 — D-72 + D-73.** `execution-flow.md` §5, §6 en gate #12 zijn op dit antwoord gecorrigeerd. De vier meetpunten blijven nuttig als verificatie; meetpunt 3 moet op exitreden gesplitst worden, zoals Web voorstelde.
 

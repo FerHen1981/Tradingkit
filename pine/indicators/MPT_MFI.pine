@@ -1,0 +1,103 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT MFI v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  NOT the classic Money Flow Index. This is the candle-value money-flow variant the fleet
+//  uses: how far a bar closes relative to its own range, smoothed with a Hull moving average.
+//  The SIGN is the whole signal — above zero the strategy allows longs, below zero shorts.
+//
+//  Two deliberate differences from the source indicator, both carried over from the strategy:
+//  - The multiplier is omitted. A positive scale factor cannot change the sign, so for a
+//    direction filter it is a knob that does nothing.
+//  - A flat bar (high == low) yields na, not 0. nz() would invent a zero there, and zero is
+//    a DIRECTION in this filter.
+//
+//  Default follows EL REY MNQ PROD EOD: HMA 60.
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its calculation for inspection.
+// ============================================================================================
+indicator("MPT MFI v1.0", "MPT MFI", overlay=false)
+
+// === INPUTS =================================================================
+var string GROUP_CALC = "1 · CALCULATION"
+var string GROUP_TBL  = "2 · TABLE"
+var string GROUP_THEME = "3 · THEME"
+
+mfiPeriod  = input.int(60, "HMA smoothing", minval=1, group=GROUP_CALC,
+     tooltip="Length of the Hull moving average over the candle value.")
+showZeroBg = input.bool(true, "Tint the pane by side", group=GROUP_CALC,
+     tooltip="Teal while longs are allowed, red while shorts are.")
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+
+// === CALCULATION (mirrors the strategy) =====================================
+float _mfiO   = ohlc4
+float _mfiH   = math.max(high, open, close)
+float _mfiL   = math.min(low, open, close)
+float _mfiC   = (nz(close[1], close) + nz(open[1], open)) / 2
+float _mfiRng = _mfiH - _mfiL
+float _mfiCV  = _mfiRng == 0 ? na : (_mfiC - _mfiO) / _mfiRng
+float mfiVal  = ta.hma(nz(_mfiCV, nz(_mfiCV[1], 0)), mfiPeriod) * -1
+
+bool longSide  = mfiVal > 0
+bool shortSide = mfiVal < 0
+bool flipUp    = ta.crossover(mfiVal, 0)
+bool flipDown  = ta.crossunder(mfiVal, 0)
+
+// === PLOT ===================================================================
+plot(mfiVal, "MFI", color=longSide ? POS : shortSide ? NEG : pMuted, linewidth=2, style=plot.style_area)
+hline(0, "Zero", color=pBorder, linestyle=hline.style_dotted)
+bgcolor(showZeroBg ? (longSide ? color.new(POS, 92) : shortSide ? color.new(NEG, 92) : na) : na, title="Allowed side")
+plotshape(flipUp, "Flip up", shape.triangleup, location.bottom, POS, size=size.tiny)
+plotshape(flipDown, "Flip down", shape.triangledown, location.top, NEG, size=size.tiny)
+
+alertcondition(flipUp, "MFI turns long", "MPT MFI crossed above zero")
+alertcondition(flipDown, "MFI turns short", "MPT MFI crossed below zero")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 3, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "MFI", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, na(mfiVal) ? "—" : str.tostring(mfiVal, "#.####"), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "Bars since flip", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    int sinceFlip = nz(ta.barssince(flipUp or flipDown), 0)
+    table.cell(panel, 1, 1, str.tostring(sinceFlip), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Side allowed", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 2, longSide ? "LONG" : shortSide ? "SHORT" : "—", text_color=longSide or shortSide ? color.white : pText, bgcolor=longSide ? color.new(POS, 15) : shortSide ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)

@@ -1,0 +1,30 @@
+---
+term: Tickwaarde
+short: "Wat één tick in geld waard is, per contract: de tickgrootte vermenigvuldigd met de contractmultiplier."
+category: futures
+aliases:
+  - tick value
+authority: true
+sources:
+  - cme-ticks
+  - cme-emini-sp
+  - cme-rulebook-gold
+related:
+  - tick
+  - punt
+  - r-multiple
+updated: 2026-08-15
+draft: false
+---
+
+De tickgrootte zegt hoe ver de prijs minimaal beweegt; de tickwaarde zegt wat dat
+je kost of oplevert. Je rekent het uit door de tickgrootte te vermenigvuldigen met
+de waarde van één volledig punt.
+
+CME rekent het voor de E-mini S&P 500 zo voor: 0,25 × $50 = $12,50 per tick. Voor
+COMEX-goud volgt het uit het reglement zelf — het contract is honderd troy ounce
+en de minimale fluctuatie is $0,10 per ounce, dus $10 per tick.
+
+Hierdoor is "netto ticks" niet optelbaar over markten heen. Vijftig ticks op goud
+is vijfhonderd dollar; vijftig ticks op de S&P is $625. Wie die twee bij elkaar
+optelt, telt appels bij peren en presenteert het als een totaal.

@@ -1,0 +1,16 @@
+# MEX account health — survival buffers + health back into the LifeOS Accounts DB.
+# Reads balances/rules from the Accounts DB + firms.py, writes DD Buffer $/%, Daily Buffer,
+# Health, Health Reasons, Peak Balance, Buffers Updated per account.
+# Install on mex-mw-01 (needs the venv with httpx + .env with NOTION_TOKEN):
+#   sudo cp deploy/mex-account-health.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mex-account-health.timer
+[Unit]
+Description=MEX account health (survival buffers -> Accounts DB)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.account_health

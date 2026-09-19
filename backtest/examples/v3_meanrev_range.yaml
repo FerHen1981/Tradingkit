@@ -1,0 +1,12 @@
+# Framework demo · variant 3 — MEAN-REVERSION, gated to range regimes.
+# RSI reversion with a VWAP filter, ONLY in Low/High-Volatility Range — where
+# mean-reversion is supposed to work (§6 matrix). The gate makes that testable.
+name: v3_meanrev_range
+base_asset: NQ
+base_preset: EL_TORO
+setup_class: mean_reversion
+regime_filter: [Low-Volatility Range, High-Volatility Range]
+groups:
+  rsi: {}
+  vwap: {}
+  swing_stops: {}

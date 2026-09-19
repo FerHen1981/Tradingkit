@@ -1,0 +1,7 @@
+[Unit]
+Description=Auto-pull + restart the MEX Lab cockpit when the dev branch moves
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/mex-journal/backtest/deploy/autopull.sh

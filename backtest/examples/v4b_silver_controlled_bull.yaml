@@ -1,0 +1,12 @@
+# Finetune of v4 — Silver Bullet gated to Controlled Bull Trend, its ONLY
+# positive regime in-sample (+$18k, PF 1.24). Everything else lost.
+# The honest test: does that single-regime edge survive OOS?
+name: v4b_silver_controlled_bull
+base_asset: NQ
+base_preset: EL_SILVER
+setup_class: confluence
+regime_filter: [Controlled Bull Trend]
+groups:
+  silver_bullet: {}
+  fvg: {}
+  swing_stops: {}

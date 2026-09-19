@@ -1,0 +1,483 @@
+<title>Validatie — Patrón · Matador · Dorado over vijf fleet-slots</title>
+<style>
+  /* MEX-brandtokens (abyss/deep/sand/goud/azuur/rose) uit mexdashboardbrand.pine.
+     Lichte modus staat op :root zodat de standaard "systeem"-stand nooit
+     ongestyled valt; donker wordt tweemaal herdefinieerd (media + stamp). */
+  :root{
+    --ground:#F6F4EE; --surface:#FFFFFF; --raised:#EFECE3;
+    --ink:#0A1730; --ink-2:#41506B; --line:#D9D4C7;
+    --gold:#8A6512; --azure:#1B5AB8; --rose:#A83828; --neutral:#6B7896;
+    --gold-bg:#8A651216; --azure-bg:#1B5AB814; --rose-bg:#A8382814; --neutral-bg:#6B789614;
+    --shadow:0 1px 2px #0a173010, 0 8px 24px #0a173008;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#030F28; --surface:#0A1E44; --raised:#0E2A5E;
+      --ink:#F2EBDA; --ink-2:#9DA9C2; --line:#1B3563;
+      --gold:#E8B54F; --azure:#5AA2FF; --rose:#E0796E; --neutral:#8794AE;
+      --gold-bg:#E8B54F1F; --azure-bg:#5AA2FF1A; --rose-bg:#E0796E1A; --neutral-bg:#8794AE14;
+      --shadow:0 1px 2px #0006, 0 10px 30px #0004;
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#030F28; --surface:#0A1E44; --raised:#0E2A5E;
+    --ink:#F2EBDA; --ink-2:#9DA9C2; --line:#1B3563;
+    --gold:#E8B54F; --azure:#5AA2FF; --rose:#E0796E; --neutral:#8794AE;
+    --gold-bg:#E8B54F1F; --azure-bg:#5AA2FF1A; --rose-bg:#E0796E1A; --neutral-bg:#8794AE14;
+    --shadow:0 1px 2px #0006, 0 10px 30px #0004;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:clamp(28px,5vw,64px) clamp(18px,4vw,40px) 80px;
+        display:flex; flex-direction:column; gap:44px}
+  .mono{font-family:ui-monospace,"Cascadia Mono","JetBrains Mono",Menlo,monospace;
+        font-variant-numeric:tabular-nums}
+  .num{text-align:right}
+
+  header{display:flex; flex-direction:column; gap:14px; border-bottom:1px solid var(--line);
+         padding-bottom:30px}
+  .eyebrow{font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--neutral);
+           font-family:ui-monospace,monospace}
+  h1{margin:0; font-size:clamp(28px,4.2vw,44px); line-height:1.08; letter-spacing:-.022em;
+     font-weight:680; text-wrap:balance}
+  .lede{margin:0; max-width:66ch; color:var(--ink-2); font-size:17px}
+  .meta{display:flex; flex-wrap:wrap; gap:8px 20px; font-size:12.5px; color:var(--neutral);
+        font-family:ui-monospace,monospace}
+
+  h2{margin:0 0 6px; font-size:20px; letter-spacing:-.012em; font-weight:640}
+  section{display:flex; flex-direction:column; gap:16px}
+  section > p{margin:0; max-width:70ch; color:var(--ink-2)}
+  strong{color:var(--ink); font-weight:620}
+
+  /* ---- verdict-matrix: de kern, in twee seconden leesbaar ---- */
+  .scroll{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface);
+          box-shadow:var(--shadow)}
+  table{border-collapse:collapse; width:100%; min-width:760px}
+  .matrix th[scope=col]{font-size:12px; letter-spacing:.09em; text-transform:uppercase;
+       color:var(--neutral); font-weight:600; padding:14px 10px; text-align:center;
+       border-bottom:1px solid var(--line); font-family:ui-monospace,monospace}
+  .matrix th[scope=col] .fresh{display:block; font-size:10px; letter-spacing:.04em;
+       text-transform:none; color:var(--neutral); opacity:.8}
+  .matrix th[scope=row]{text-align:left; padding:14px 16px; border-bottom:1px solid var(--line);
+       vertical-align:middle; white-space:nowrap}
+  .sname{display:block; font-weight:660; font-size:15px}
+  .skind{display:block; font-size:11.5px; color:var(--neutral); font-family:ui-monospace,monospace}
+  td.cell{padding:12px 10px; border-bottom:1px solid var(--line); border-left:1px solid var(--line);
+       text-align:center; min-width:118px}
+  td.cell .gate{font-family:ui-monospace,monospace; font-size:26px; font-weight:640; line-height:1.1}
+  td.cell .state{font-size:10.5px; letter-spacing:.1em; font-family:ui-monospace,monospace;
+       text-transform:uppercase; margin-top:2px}
+  td.cell .det{font-size:11px; color:var(--neutral); font-family:ui-monospace,monospace; margin-top:3px}
+  td.no{background:var(--rose-bg)}   td.no .gate,   td.no .state{color:var(--rose)}
+  td.un{background:var(--neutral-bg)} td.un .gate, td.un .state{color:var(--neutral)}
+  td.ok{background:var(--azure-bg)}  td.ok .gate,  td.ok .state{color:var(--azure)}
+
+  /* ---- de gate-ladder: hier is nummering echt informatie ---- */
+  .ladder{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px}
+  .step{background:var(--surface); border:1px solid var(--line); border-radius:10px;
+        padding:14px 16px; display:flex; flex-direction:column; gap:5px}
+  .step .id{font-family:ui-monospace,monospace; font-size:12px; color:var(--neutral);
+        letter-spacing:.08em}
+  .step .t{font-weight:620; font-size:14.5px}
+  .step .d{font-size:13px; color:var(--ink-2); line-height:1.5}
+  .step.stop{border-color:var(--rose); background:var(--rose-bg)}
+  .step.stop .id{color:var(--rose)}
+
+  .callout{border-left:3px solid var(--gold); background:var(--gold-bg); border-radius:0 10px 10px 0;
+           padding:16px 20px; display:flex; flex-direction:column; gap:8px}
+  .callout h3{margin:0; font-size:15.5px; font-weight:640}
+  .callout p{margin:0; color:var(--ink-2); font-size:14.5px; max-width:72ch}
+  .callout p:first-of-type{color:var(--ink)}
+
+  .data th{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--neutral);
+     font-weight:600; padding:11px 10px; border-bottom:1px solid var(--line); text-align:left;
+     font-family:ui-monospace,monospace; white-space:nowrap}
+  .data td{padding:9px 10px; border-bottom:1px solid var(--line); font-size:13.5px}
+  .data tr:last-child td{border-bottom:none}
+  .data td.neg{color:var(--rose); font-weight:600}
+  .data .dp{font-size:11px; color:var(--neutral)}
+  .t-vers{color:var(--azure)} .t-verbruikt{color:var(--rose)}
+  .data tr.undec td{color:var(--neutral); font-style:italic}
+  .data tr.undec td[colspan]{text-align:left}
+
+  ul{margin:0; padding-left:20px; color:var(--ink-2); display:flex; flex-direction:column; gap:9px;
+     max-width:74ch}
+  li strong{color:var(--ink)}
+  footer{border-top:1px solid var(--line); padding-top:20px; color:var(--neutral); font-size:12.5px;
+         font-family:ui-monospace,monospace}
+  a{color:var(--azure)}
+  @media (prefers-reduced-motion:no-preference){ .step,.cell{transition:background .15s ease} }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Strategy validation pipeline · stages 1-7</div>
+  <h1>Drie scripts, vijf fleet-slots, één gate die ze allemaal tegenhoudt</h1>
+  <p class="lede">Volledige doortest van ΞL PΛTRON, ΞL MΛTΛDOR en ΞL DORΛDO. De parameters komen
+  uit de CONFIG-berichten die de scripts zelf verstuurden — geen reconstructie. De gates zijn vóór
+  de eerste backtest vastgelegd en zijn onderweg niet aangepast.</p>
+  <div class="meta">
+    <span>11 augustus 2026</span><span>pre-registratie: NQFAMILY_stage1-2_20260811</span>
+    <span>data: NQ · ES · GC · YM 1m, 2023-2026</span>
+  </div>
+</header>
+
+<section>
+  <h2>Waar elke combinatie strandt</h2>
+  <p>Elke cel toont de <strong>eerste gate die niet gehaald wordt</strong>. De pipeline stopt daar —
+  een gate die faalt is een geldige uitkomst, geen reden om hem te verruimen.</p>
+  <div class="scroll"><table class="matrix">
+    <thead><tr><th scope="col"></th>
+      <th scope="col">NQ<span class="fresh">OOS verbruikt</span></th>
+      <th scope="col">MNQ<span class="fresh">OOS verbruikt</span></th>
+      <th scope="col">ES<span class="fresh">vers</span></th>
+      <th scope="col">GC<span class="fresh">vers</span></th>
+      <th scope="col">YM<span class="fresh">volledig vers</span></th>
+    </tr></thead>
+    <tbody><tr><th scope="row"><span class="sname">ΞL PΛTRON</span><span class="skind">PA · banked per breach</span></th><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 1.14</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.97</div></td><td class="cell un">
+          <div class="gate">S3</div>
+          <div class="state">ONBESLIST</div>
+          <div class="det">—</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 1.04</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.89</div></td></tr>
+<tr><th scope="row"><span class="sname">ΞL DORΛDO</span><span class="skind">PA · banked per breach</span></th><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 1.1</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.95</div></td><td class="cell un">
+          <div class="gate">S3</div>
+          <div class="state">ONBESLIST</div>
+          <div class="det">—</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.92</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.88</div></td></tr>
+<tr><th scope="row"><span class="sname">ΞL MΛTΛDOR</span><span class="skind">Eval · pass-rate</span></th><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.99</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.85</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.9</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.93</div></td><td class="cell no">
+          <div class="gate">S4</div>
+          <div class="state">FAIL</div>
+          <div class="det">PF 0.9</div></td></tr></tbody>
+  </table></div>
+</section>
+
+<section>
+  <div class="callout">
+    <h3>De uitslag in één zin</h3>
+    <p>Geen enkele combinatie haalt <strong>S4</strong>: de winstfactor over de recente twaalf
+    maanden blijft overal onder de gate van 1,20. De hoogste meting in de hele matrix is
+    <strong>1,04</strong> — Patrón op GC. Dat geldt ook op YM, de enige reeks die nog nooit voor
+    enige parameterkeuze is gebruikt.</p>
+    <p>Dat is dezelfde muur waar de NQ-vloot op 10 augustus tegenaan liep. Het is dus geen
+    NQ-eigenaardigheid en geen kwestie van de verkeerde asset: op contractniveau verdient deze
+    scriptfamilie de kosten niet terug. Dat de Apex-trechter er alsnog geslaagde evaluaties uit
+    haalt, verandert daar niets aan — dat is de structuur van de trechter, niet een edge.</p>
+    <p>Het jaarverloop wijst dezelfde kant op. Op GC en YM staat de winstfactor in jaar 1 nog boven
+    de 1 (1,15 · 1,13 · 1,09 · 1,14) en zakt hij daarna weg naar 0,88-1,04. Dat is het spiegelbeeld
+    van wat je wilt zien: de edge is niet aan het aantrekken, hij is aan het uitdoven.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Wat de nul-trades op ES, GC en YM werkelijk waren</h2>
+  <div class="callout">
+    <h3>Een datakwestie, geen marktuitslag</h3>
+    <p>Patrón en Dorado deden in de eerste run <strong>nul trades</strong> op ES, GC en YM. Dat leek
+    een vernietigend resultaat, maar de oorzaak lag in de data: de kolom <span class="mono">Delta</span>
+    in <span class="mono">ES_norm</span>, <span class="mono">GC_norm</span> en
+    <span class="mono">YM_norm</span> is <strong>identiek nul</strong>. Beide scripts draaien met het
+    CVD-filter aan en een streak-eis van 4 — met een delta die altijd nul is, kan die voorwaarde
+    per definitie nooit waar worden.</p>
+    <p>De perturbatietest bevestigde het van twee kanten: met het CVD-filter uitgezet handelen ze
+    wél (banked per breach 290 en 181 op YM), en Matador — die het filter uit heeft staan — trad
+    juist nul zodra het filter áán ging. Voor GC en YM bestaan aparte bestanden mét echte delta;
+    die cellen zijn opnieuw gedraaid. Voor ES bestaat zo'n bestand niet, dus daar blijft de
+    uitkomst <strong>onbeslist</strong> — niet gezakt.</p>
+  </div>
+</section>
+
+<section>
+  <h2>De gate-ladder</h2>
+  <p>Deze nummering is geen opsmuk: het is een keten waarin elke stap de vorige nodig heeft.</p>
+  <div class="ladder">
+    <div class="step"><span class="id">S3</span><span class="t">Engine-validatie</span>
+      <span class="d">Geen look-ahead, kosten aan, ≥100 IS-trades. Gehaald waar de data compleet is.</span></div>
+    <div class="step stop"><span class="id">S4 — hier stopt alles</span><span class="t">Bulk-backtest</span>
+      <span class="d">PF recente 12 maanden ≥ 1,20 na kosten. Hoogste gemeten waarde: 1,04.</span></div>
+    <div class="step"><span class="id">S5</span><span class="t">Robuustheid</span>
+      <span class="d">WFE ≥ 0,5 · ±20% perturbatie binnen 30% · Monte Carlo p5. Diagnostisch gedraaid.</span></div>
+    <div class="step"><span class="id">S6</span><span class="t">Fleet-fit</span>
+      <span class="d">Correlatie &lt; 0,7. Patrón en Dorado verschillen alleen in break-even en trail.</span></div>
+    <div class="step"><span class="id">S7</span><span class="t">Stress</span>
+      <span class="d">2-tick slippage + dubbele commissie. Diagnostisch gedraaid; zie de tabel.</span></div>
+    <div class="step"><span class="id">S8-S10</span><span class="t">Niet bereikt</span>
+      <span class="d">Risico, live-guardrails en vier weken papertrading komen pas ná een geslaagde S4.</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>Alle metingen</h2>
+  <p>Diagnostisch: de kolommen ná S4 tellen niet mee voor een gate, maar laten wel zien
+  <em>hoe</em> een combinatie zich gedraagt. Doelmetriek is de Apex-lens — banked per breach voor
+  de PA-scripts, pass-rate voor de eval.</p>
+  <div class="scroll"><table class="data">
+    <thead><tr>
+      <th>Script</th><th>Slot</th><th>OOS-status</th><th class="num">IS n</th><th class="num">IS PF</th>
+      <th class="num">PF per jaar</th><th class="num">PF r12m</th><th class="num">OOS n</th>
+      <th class="num">doel IS</th><th class="num">doel OOS</th><th class="num">stress Δ</th>
+    </tr></thead>
+    <tbody><tr>
+      <td>ΞL PΛTRON</td><td class="mono">NQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">1.219</td>
+      <td class="mono num">0.96</td>
+      <td class="mono num">0.83·1.0·1.09</td>
+      <td class="mono num">1.14</td>
+      <td class="mono num">166</td>
+      <td class="mono num">1115</td>
+      <td class="mono num">0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr>
+      <td>ΞL PΛTRON</td><td class="mono">MNQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">1.219</td>
+      <td class="mono num">0.81</td>
+      <td class="mono num">0.69·0.85·0.93</td>
+      <td class="mono num">0.97</td>
+      <td class="mono num">166</td>
+      <td class="mono num">395</td>
+      <td class="mono num">0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr class="undec">
+          <td>ΞL PΛTRON</td><td class="mono">ES</td>
+          <td class="mono t-vers">vers</td>
+          <td class="mono num" colspan="8">geen volume-delta in de reeks — niet te beoordelen</td>
+        </tr>
+<tr>
+      <td>ΞL PΛTRON</td><td class="mono">GC</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">675</td>
+      <td class="mono num">1.08</td>
+      <td class="mono num">1.15·1.05·1.04</td>
+      <td class="mono num">1.04</td>
+      <td class="mono num">222</td>
+      <td class="mono num">900</td>
+      <td class="mono num">500</td>
+      <td class="mono num neg">-100%</td>
+    </tr>
+<tr>
+      <td>ΞL PΛTRON</td><td class="mono">YM</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">938</td>
+      <td class="mono num">0.83</td>
+      <td class="mono num">1.13·0.72·0.9</td>
+      <td class="mono num">0.89</td>
+      <td class="mono num">321</td>
+      <td class="mono num">100</td>
+      <td class="mono num">375</td>
+      <td class="mono num neg">-100%</td>
+    </tr>
+<tr>
+      <td>ΞL DORΛDO</td><td class="mono">NQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">1.214</td>
+      <td class="mono num">0.91</td>
+      <td class="mono num">0.78·0.95·1.1</td>
+      <td class="mono num">1.1</td>
+      <td class="mono num">165</td>
+      <td class="mono num">722</td>
+      <td class="mono num">0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr>
+      <td>ΞL DORΛDO</td><td class="mono">MNQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">1.214</td>
+      <td class="mono num">0.78</td>
+      <td class="mono num">0.66·0.82·0.95</td>
+      <td class="mono num">0.95</td>
+      <td class="mono num">165</td>
+      <td class="mono num">300</td>
+      <td class="mono num">0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr class="undec">
+          <td>ΞL DORΛDO</td><td class="mono">ES</td>
+          <td class="mono t-vers">vers</td>
+          <td class="mono num" colspan="8">geen volume-delta in de reeks — niet te beoordelen</td>
+        </tr>
+<tr>
+      <td>ΞL DORΛDO</td><td class="mono">GC</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">672</td>
+      <td class="mono num">0.95</td>
+      <td class="mono num">1.09·0.99·0.93</td>
+      <td class="mono num">0.92</td>
+      <td class="mono num">221</td>
+      <td class="mono num">300</td>
+      <td class="mono num">500</td>
+      <td class="mono num ">-40%</td>
+    </tr>
+<tr>
+      <td>ΞL DORΛDO</td><td class="mono">YM</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">930</td>
+      <td class="mono num">0.86</td>
+      <td class="mono num">1.14·0.72·0.88</td>
+      <td class="mono num">0.88</td>
+      <td class="mono num">319</td>
+      <td class="mono num">375</td>
+      <td class="mono num">0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr>
+      <td>ΞL MΛTΛDOR</td><td class="mono">NQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">5.710</td>
+      <td class="mono num">0.94</td>
+      <td class="mono num">0.89·0.97·0.98</td>
+      <td class="mono num">0.99</td>
+      <td class="mono num">1.031</td>
+      <td class="mono num">21.4</td>
+      <td class="mono num">54.5</td>
+      <td class="mono num neg">-58%</td>
+    </tr>
+<tr>
+      <td>ΞL MΛTΛDOR</td><td class="mono">MNQ</td>
+      <td class="mono t-verbruikt">verbruikt</td>
+      <td class="mono num">5.710</td>
+      <td class="mono num">0.8</td>
+      <td class="mono num">0.75·0.83·0.84</td>
+      <td class="mono num">0.85</td>
+      <td class="mono num">1.031</td>
+      <td class="mono num">11.1</td>
+      <td class="mono num">22.7</td>
+      <td class="mono num neg">-60%</td>
+    </tr>
+<tr>
+      <td>ΞL MΛTΛDOR</td><td class="mono">ES</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">1.620</td>
+      <td class="mono num">0.87</td>
+      <td class="mono num">0.82·0.86·0.9</td>
+      <td class="mono num">0.9</td>
+      <td class="mono num">605</td>
+      <td class="mono num">12.9</td>
+      <td class="mono num">0.0</td>
+      <td class="mono num ">—</td>
+    </tr>
+<tr>
+      <td>ΞL MΛTΛDOR</td><td class="mono">GC</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">3.298</td>
+      <td class="mono num">0.91</td>
+      <td class="mono num">1.02·0.9·0.93</td>
+      <td class="mono num">0.93</td>
+      <td class="mono num">1.368</td>
+      <td class="mono num">12.0</td>
+      <td class="mono num">27.3</td>
+      <td class="mono num ">-17%</td>
+    </tr>
+<tr>
+      <td>ΞL MΛTΛDOR</td><td class="mono">YM</td>
+      <td class="mono t-vers">vers</td>
+      <td class="mono num">4.385</td>
+      <td class="mono num">0.89</td>
+      <td class="mono num">0.97·0.84·0.9</td>
+      <td class="mono num">0.9</td>
+      <td class="mono num">1.539</td>
+      <td class="mono num">21.6</td>
+      <td class="mono num">18.2</td>
+      <td class="mono num neg">-75%</td>
+    </tr></tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Perturbatie op YM (in-sample)</h2>
+  <p>YM is de enige reeks die nooit eerder is aangeraakt. Een edge die op ±20% parameterwijziging
+  omvalt, was geen edge maar een toevalstreffer.</p>
+  <div class="scroll"><table class="data">
+    <thead><tr><th>Script</th><th class="num">basis</th><th class="num">gap −20%</th>
+      <th class="num">gap +20%</th><th class="num">stop −20%</th><th class="num">stop +20%</th>
+      <th class="num">CVD omgekeerd</th></tr></thead>
+    <tbody><tr><td>ΞL PΛTRON</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td></tr>
+<tr><td>ΞL DORΛDO</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td><td class="mono num">—</td></tr>
+<tr><td>ΞL MΛTΛDOR</td><td class="mono num">21.6</td><td class="mono num ">16.8 <span class="dp">-22%</span></td><td class="mono num neg">4.8 <span class="dp">-78%</span></td><td class="mono num neg">13.6 <span class="dp">-37%</span></td><td class="mono num ">19.2 <span class="dp">-11%</span></td><td class="mono num neg">0.0 <span class="dp">-100%</span></td></tr></tbody>
+  </table></div>
+  <p>Matador verliest <strong>78%</strong> bij een 20% bredere FVG-band. Dat is geen robuuste
+  parameter maar een scherpe piek — precies het profiel van een waarde die op de data is gekozen.</p>
+</section>
+
+<section>
+  <h2>Wat dit niet zegt</h2>
+  <ul>
+    <li><strong>NQ en MNQ tellen niet mee.</strong> Die out-of-sample is op 10 augustus al één keer
+    aangeraakt voor exact deze scripts. Opnieuw draaien met een variant zou p-hacking zijn; de
+    cijfers staan er als referentie, zonder gate-krediet.</li>
+    <li><strong>ES is voor Patrón en Dorado onbeslist</strong>, niet gezakt. Zonder delta-data kan
+    daar geen uitspraak over.</li>
+    <li><strong>De parameters zijn niet per asset opnieuw afgesteld.</strong> Dat was het hele punt:
+    getest is of een op NQ gekozen set ongewijzigd overdraagt. Hertunen per asset is een andere,
+    veel zwakkere claim en vraagt een verse out-of-sample.</li>
+    <li><strong>Matadors CVD-stand is een aanname.</strong> Er zit geen CONFIG-bericht van dat script
+    in het logvenster; "filter uit" komt uit de fleet-notitie. De omgekeerde stand is als
+    sensitiviteit meegedraaid.</li>
+    <li><strong>QQQ en BTC ontbreken.</strong> Daar is geen 1m-dataset voor in de repo.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Wat ik hiermee zou doen</h2>
+  <ul>
+    <li><strong>Niet uitrollen naar nieuwe assets.</strong> De hypothese dat deze edge
+    asset-onafhankelijk is, is getest en niet bevestigd — ook niet op volledig verse data.</li>
+    <li><strong>De S4-gate zelf ter discussie stellen.</strong> Deze scripts zijn gebouwd om via de
+    Apex-trechter te renderen, niet om op contractniveau een PF van 1,2 te halen. Óf de gate past
+    niet bij deze scriptklasse, óf de scripts halen de lat niet. Dat is een keuze die jij maakt,
+    niet de pipeline — maar hij moet expliciet gemaakt worden en vastgelegd, anders schuift de lat
+    elke keer een beetje op.</li>
+    <li><strong>ES-delta aanschaffen</strong> als je die cel wél wilt beslissen.</li>
+    <li><strong>De matrixstatus "geparkeerd/sim-only" voor Dorado en Patrón blijft staan.</strong>
+    Deze run geeft geen enkele reden om die te herzien.</li>
+  </ul>
+</section>
+
+<footer>
+  Gegenereerd uit validation/NQFAMILY_results_20260811.json + _cvdfix_. Kosten altijd aan
+  (commissie per contract + 1 tick slippage; 2 ticks in stress). Systeemplan, geen advies ·
+  mex-traders.com
+</footer>
+</div>

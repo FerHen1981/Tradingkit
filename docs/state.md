@@ -3,7 +3,7 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-09-18 (Analyses & Data chat)_
+_Last updated: 2026-09-23 (Analyses & Data chat)_
 
 ## Live settings — de werkende config (D-75, vervangt D-43)
 
@@ -81,25 +81,66 @@ is de beste dag sinds de laatste payout. Per account geldt dus:
 `daily target ≤ min(30% × (balance − 50.000), huidige best-day)` — een dag boven de
 huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakker.
 
-### Per-account set nu (18 sep)
+### Per-account set nu (23 sep, D-76 — vervangt de tabel van 18 sep)
 
-| Account | Product | Qty | Pine act/gb/cap | Tradovate target | Tradovate DLL |
-|---|---|---:|---|---:|---:|
-| PA013 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
-| PA018 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
-| PA021 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
-| PA022 | Legacy 50K | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
-| PA023 | Intraday 4.0 | 2 | 500 / 200 / 1.000 | $1.000 | $600 |
-| PA024 | Intraday 4.0 | 1 | 250 / 100 / 500 | $500 | $300 |
-| PA025 | Legacy 50K | 1 | 250 / 100 / 500 | $500 | $300 |
+Ruimte = balans − Tradovate "Drawdown auto" (liq-niveau). Regels: qty 1 tot de
+trailing DD gelockt is (balans ≥ $52.600) én ruimte ≥ $2.400, daarna qty 2; DLL =
+4 × SL per contract ($400/ct), maar nooit meer dan ⅓ van de ruimte; target = cap × qty.
 
-Buffer < $900 → qty 1; buffer ≥ $2.000 → qty 2. Verse account: qty 1 tot ~$600 cushion.
+| Account | Product | Balans 23/9 | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Actie |
+|---|---|---:|---:|---:|---|---:|---:|---|
+| PA013 | Legacy 50K | 55.438 | 5.338 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu aanvragen |
+| PA018 | Legacy 50K | 56.607 | 6.507 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu aanvragen |
+| PA021 | Legacy 50K | 51.007 | 907 | 1 | 250 / 100 / 500 | $500 | $300 | onder safety net; qty 2 pas bij lock |
+| PA022 | Legacy 50K | 52.631 | 2.531 | 2 | 500 / 200 / 1.000 | $1.000 | $600 | +$1.469 tot max → 2 cap-dagen, dan $1.500 |
+| PA023 | Intraday 4.0 | 51.651 | 1.551 | 1 | 250 / 100 / 500 | $500 | $400 | TV DLL was $1.000 → $400 |
+| PA024 | Intraday 4.0 | 49.257 | 768 | 1 | 250 / 100 / 500 | $500 | $250 | TV DLL was $1.000 → $250; 3 SL-dagen tot liq |
+| PA025 | Legacy 50K | 49.751 | 2.172 | 1 | 250 / 100 / 500 | $500 | $400 | qty 2 bij balans ≥ 52.600 |
+| PA026 | Legacy 50K | 50.830 | 1.684 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
+| PA027 | Legacy 50K | 49.940 | 2.122 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
+| PA028 | Legacy 50K | 49.933 | 2.221 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
+| PA (ex-239) | Legacy 50K | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | $400 | vers; qty 2 bij lock |
+| 240 / 241 | 50K eval | 50.000 | 2.500 | 5 NQ | geen day-guards (El Toro HF, lottery) | — | — | handoff-profiel |
+| 242 | 50K eval (trail $2.000) | 50.000 | 2.000 | 4 NQ | geen day-guards | — | — | 1 SL minder ruimte dan 240/241 |
+
+Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
+is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.
 
 **Alternatief op record (jaar-optimum, strak):** qty 2, geen Pine trail, Tradovate
 target $400 / DLL $300 → 4 payouts/jaar, 9% verse-breach, $16,4k/jaar, 53% winstdagen.
 Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DLL 600),
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
+
+## D-76 — Day-trail en DLL herijkt op export d8ac1 (23 sep 2026)
+
+**Bewijs.** TES-MGC-C export `d8ac1` (24 jun–23 sep, qty 4, TP R-multiple 1 = 100t,
+exit mode Off, gate Off = rauwe stroom): 1.063 trades, 65 dagen, $26.258, 63%
+winstdagen, best-day $4.293, worst −$3.772, max DD op dagsommen $5.107. Guards
+gesimuleerd op trade-closes (per contract, ×4 op deze run):
+
+| Variant per contract | Totaal/ct | Winstdagen | Best-day/ct | Worst/ct | Max DD/ct |
+|---|---:|---:|---:|---:|---:|
+| rauw | 6.564 | 63% | 1.073 | −943 | 1.277 |
+| 125 / 50 / 250 (= de ingevulde 500/200/1.000 op qty 4) | 4.668 | 78% | 337 | −943 | 1.277 |
+| **250 / 100 / 500** (D-75) | 6.554 | 69% | 594 | −943 | 1.277 |
+| alleen cap 500 | 7.128 | 65% | 594 | −943 | 1.277 |
+| 250 / 100 / 500 + DLL 300 (3 SL) | 4.846 | 62% | 594 | −324 | 1.095 |
+| 250 / 100 / 500 + **DLL 400 (4 SL)** | 5.462 | 68% | 594 | −424 | 822 |
+| 250 / 100 / 500 + DLL 225 (= $900 op qty 4) | 3.939 | 52% | 594 | −220 | 1.430 |
+
+**Beslissing.** (1) Cap $500/ct blijft: kost niets aan totaal en drukt de best-day van
+$1.073 naar $594/ct (consistency). (2) Trail 250/100/500 per contract blijft; lagere
+activation/giveback koopt winstdagen-% voor 25–30% totaal. (3) **DLL van 3 naar 4 SL
+per contract: $400/ct** (qty 2 → $800) — beste totaal/DD-verhouding; DLL ≤ ⅓ van de
+ruimte tot liq gaat vóór. (4) Qty 2 pas na de lock (balans ≥ $52.600) en ruimte ≥ $2.400;
+verse 50K op qty 2 + DLL 300–400/ct overleeft de slechtste start van de reeks (25–26 jun).
+
+**Beperking.** Op qty 4 is één trade ±$400: giveback 100–300 en activation 400–600 zijn
+op trade-closes identiek. Pine's intraday trail (open P&L) is niet reproduceerbaar; de
+sim is een bovengrens. Deze run is TP 100t; live blijft 85t (jaardata `89aa5`).
+
+Bronbestand (upload, niet in repo): TES-MGC-C export `66a9acf3…d8ac1` (23 sep).
 
 ## D-75 — Werkende live-config vastgelegd + schaalregel guards (18 sep 2026)
 

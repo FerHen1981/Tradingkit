@@ -89,8 +89,8 @@ trailing DD gelockt is (balans ≥ $52.600) én ruimte ≥ $2.400, daarna qty 2;
 
 | Account | Product | Balans 23/9 | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Actie |
 |---|---|---:|---:|---:|---|---:|---:|---|
-| PA013 | Legacy 50K | 55.438 | 5.338 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu aanvragen |
-| PA018 | Legacy 50K | 56.607 | 6.507 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu aanvragen |
+| PA013 | Legacy 50K | 55.438 | 5.338 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu; qty 3 bij balans ≥ 55.000, qty 4 bij ≥ 56.700 |
+| PA018 | Legacy 50K | 56.607 | 6.507 | 2 → 3 | 750 / 300 / 1.500 na payout | $1.500 | $1.200 | payout #1 $1.500 nu, daarna qty 3 (winst 5.107 → best-day ≤ 1.532); qty 4 bij ≥ 56.700 |
 | PA021 | Legacy 50K | 51.007 | 907 | 1 | 250 / 100 / 500 | $500 | $300 | onder safety net; qty 2 pas bij lock |
 | PA022 | Legacy 50K | 52.631 | 2.531 | 2 | 500 / 200 / 1.000 | $1.000 | $600 | +$1.469 tot max → 2 cap-dagen, dan $1.500 |
 | PA023 | Intraday 4.0 | 51.651 | 1.551 | 1 | 250 / 100 / 500 | $500 | $400 | TV DLL was $1.000 → $400 |
@@ -105,6 +105,12 @@ trailing DD gelockt is (balans ≥ $52.600) én ruimte ≥ $2.400, daarna qty 2;
 
 Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
 is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.
+
+**Qty-plafond = consistency, niet ruimte.** Best-day ≤ 30% × (balans − 50.000) op het
+moment van aanvragen; cap = $500/ct ⇒ max qty = ⌊0,3 × winst / 500⌋: winst 3.400 → 2,
+5.000 → 3, 6.667 → 4, 8.334 → 5. Ruimte-eis (3 DLL-dagen à $400/ct): qty 2 ≥ 2.400,
+3 ≥ 3.600, 4 ≥ 4.800. Een payout verlaagt de noemer: eerst aanvragen, dán opschalen.
+De 8-dagen-regel is de klok; qty 2 vult elke trede binnen die 8 dagen.
 
 **Alternatief op record (jaar-optimum, strak):** qty 2, geen Pine trail, Tradovate
 target $400 / DLL $300 → 4 payouts/jaar, 9% verse-breach, $16,4k/jaar, 53% winstdagen.

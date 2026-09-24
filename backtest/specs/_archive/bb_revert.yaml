@@ -1,0 +1,17 @@
+# Bollinger-band reversion — mean-reversion / range entry (Level B, classic).
+# Long when the bar pokes below the lower band but closes back inside; short when
+# it pokes above the upper band and closes back inside. Counter-trend, so NO
+# trend filters.
+name: BB_Reversion
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: false
+  max_active_groups: 3
+groups:
+  bollinger_bands:
+    length: 20
+    stddev_mult: 2.0
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

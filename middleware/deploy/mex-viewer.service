@@ -1,0 +1,32 @@
+# MEX owner cockpit — read-only live fleet dashboard (app.mex-traders.com).
+# Stdlib-only web server; reads the routed-log; owner-only behind a password.
+# Install on mex-mw-01:
+#   1. Deploy middleware/ (e.g. /root/mex-journal/middleware).
+#   2. REQUIRED: put VIEWER_PASSWORD (+ optional VIEWER_SECRET, VIEWER_API_TOKEN) in the
+#      EnvironmentFile below — reuse /root/mex-journal/middleware/.env or a dedicated file.
+#      Without VIEWER_PASSWORD the server now REFUSES every request (it used to serve the
+#      whole fleet openly). Check with: journalctl -u mex-viewer | grep auth=
+#      Local dev only, never on a public host: VIEWER_ALLOW_OPEN=1 runs it without auth.
+#   3. sudo cp deploy/mex-viewer.service /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-viewer
+#   4. Front it with TLS (see the app.mex-traders.com block in deploy/Caddyfile).
+[Unit]
+Description=MEX Fleet Cockpit (read-only viewer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+Environment=VIEWER_PORT=8080
+Environment=ROUTED_DIR=/root/intent-store
+Environment=EXPORTS_DIR=/root/exports
+# 209 has an incomplete Fills export — exclude it from the asset rollup until re-exported.
+Environment=DASH_SKIP=209
+# venv python: the /api/command accounts view needs httpx (the live /api/state is stdlib-only).
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.viewer
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

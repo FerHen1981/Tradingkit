@@ -1,0 +1,475 @@
+# ============================================================================
+# Parameter Registry — the governance layer for the Backtest Lab
+# ============================================================================
+# This file is the SINGLE SOURCE OF TRUTH for "which indicators may be used and
+# with which values." A strategy spec (specs/<name>.yaml) picks a subset of these
+# groups and sets values; it is VALIDATED against this registry before any run.
+# The three engines (classic / eval / funded) may only analyse and OPTIMIZE
+# WITHIN the min/max/step declared here — no exact instruction, just a playing field.
+#
+# Per-parameter fields:
+#   default   canonical value (sourced where possible — see `provenance`)
+#   min/max   guardrails the optimizer may explore between
+#   step      optimizer grid step (coarse on lookbacks, finer on thresholds)
+#   type      opt   = optimizable within [min,max]
+#             fixed = a switch/constant you A/B-test, NOT an optimizer free variable
+#   options   enum choices (for categorical params)
+#
+# Per-group fields:
+#   layer          L1..L10 — the group's PRIMARY decision layer (see lab/FRAMEWORK.md).
+#                  The role-composing sampler fills one slot per layer; this is where
+#                  the group competes. L1 regime · L2 bias · L3 structure · L4 location ·
+#                  L5 participation · L6 momentum · L7 volatility · L8 setup ·
+#                  L9 trigger · L10 risk.
+#   role           human name of that layer (regime|bias|structure|location|
+#                  participation|momentum|volatility|setup|trigger|risk).
+#   info_category  redundancy-guard bucket. The sampler/builder allow at most ONE
+#                  confirmation per category, so correlated signals (rsi+stochastic+
+#                  macd) can't be triple-counted. (trend|momentum|volatility|
+#                  participation|location|structure|setup|risk)
+#   secondary      optional list of layers the group ALSO contributes to.
+#   price_action   true  = counts toward the "price-action-only" policy
+#   provenance     sourced | folklore | mixed  (honest label — folklore = convention, no published edge)
+#   engine         implemented | partial | todo  (what backtest/ already computes)
+#   optimize       disposition hint for the optimizer budget
+#
+# HARD CONSTRAINTS (engine enforces, not just ranges) are listed at the bottom.
+# ============================================================================
+
+meta:
+  version: 2   # v2: per-group layer/role/info_category tags (framework); footprint dropped (deep L5)
+  units: "distances in TICKS unless *_atr* (ATR multiples) or *_pct (fraction 0..1)"
+  note: "DEFAULTS are sourced/widely-cited; MIN/MAX/STEP are engineering guardrails, not published ranges."
+
+policy:
+  # A spec may set these; the runner enforces them against the chosen groups.
+  price_action_only: false     # true = reject any group with price_action:false
+  max_active_groups: 8         # overfit guardrail — caps how many indicator blocks a spec may combine
+  optimizer_skips_fixed: true  # never spend optimizer budget on type:fixed params
+
+# ============================================================================
+# FAMILY A — PRICE ACTION / ORDER FLOW
+# ============================================================================
+price_action:
+
+  fvg:
+    desc: "Fair Value Gap (3-candle imbalance). Bull = c1.high < c3.low."
+    layer: L9   # FVG entry; the imbalance is structure
+    role: trigger
+    info_category: structure
+    secondary: [L3]
+    price_action: true
+    provenance: sourced        # gap-size numbers are convention; structure is standard
+    engine: partial            # gap_min/max_ticks exist; the rest is TODO
+    optimize: size_and_mitigation
+    params:
+      gap_min_ticks:         {default: 4,    min: 1,   max: 40,  step: 1,    type: opt}
+      gap_max_ticks:         {default: 40,   min: 10,  max: 200, step: 5,    type: opt}
+      gap_min_atr_mult:      {default: 0.25, min: 0.0, max: 1.0, step: 0.05, type: opt}  # scales across GC/ES
+      displacement_body_atr: {default: 1.0,  min: 0.0, max: 2.5, step: 0.25, type: opt}  # displacement-grade, not drift
+      mitigation_mode:       {default: CE,   options: [touch, CE, full],     type: opt}  # CE = 50% midline
+      price_ref:             {default: wick, options: [wick, close],          type: opt}
+      expiry_bars:           {default: 12,   min: 3,   max: 100, step: 1,    type: opt}
+
+  cvd_delta:
+    desc: "Cumulative Volume Delta as bias/confirmation. Two axes: streak + divergence."
+    layer: L5   # shallow flow only (volume-delta); deep L5 dropped
+    role: participation
+    info_category: participation
+    secondary: [L2]
+    price_action: true
+    provenance: sourced
+    engine: partial            # cvd_trend_count streak exists; divergence/slope TODO
+    optimize: confirmation
+    params:
+      cvd_trend_count:        {default: 3,  min: 1, max: 10, step: 1, type: opt}   # same-sign delta streak
+      cvd_slope_lookback:     {default: 20, min: 5, max: 60, step: 5, type: opt}   # bias slope window
+      cvd_divergence_pivot_k: {default: 5,  min: 2, max: 15, step: 1, type: opt}   # price/CVD divergence pivots
+      cvd_div_tolerance_ticks: {default: 2,  min: 0, max: 10, step: 1, type: opt}
+    note: "CVD divergence ALONE ~45-50% win — a filter, not a signal. Combine, don't solo."
+
+  divergence:
+    desc: "Regular/hidden divergence on an oscillator (RSI/MACD/CVD) vs price. osc_source=cvd enables the divergence entry."
+    layer: L6   # oscillator/CVD divergence
+    role: momentum
+    info_category: momentum
+    secondary: [L5, L9]
+    price_action: true
+    provenance: sourced
+    engine: partial            # CVD-divergence entry wired; RSI/MACD divergence still TODO
+    optimize: pivots
+    params:
+      pivot_lookback_left:    {default: 5,  min: 2,  max: 15,  step: 1, type: opt}
+      pivot_lookback_right:   {default: 5,  min: 1,  max: 10,  step: 1, type: opt}  # = confirmation lag; honor it (no look-ahead)
+      osc_source:             {default: rsi, options: [rsi, macd, cvd],   type: opt}
+      rsi_length:             {default: 14, min: 7,  max: 21,  step: 1, type: opt}  # sourced (Wilder)
+      min_bars_between_pivots: {default: 5,  min: 1,  max: 20,  step: 1, type: opt}
+      max_bars_between_pivots: {default: 60, min: 20, max: 120, step: 5, type: opt}
+
+  market_structure:
+    desc: "BOS (continuation) / CHoCH (reversal) from swing pivots. Presence enables the BOS entry generator."
+    layer: L3   # BOS/CHoCH break is also a trigger
+    role: structure
+    info_category: structure
+    secondary: [L9]
+    price_action: true
+    provenance: mixed
+    engine: partial            # BOS entry wired (close-break); CHoCH + wick-ref still TODO
+    optimize: structure
+    params:
+      pivot_k:                {default: 3,     min: 2, max: 10, step: 1,        type: opt}   # SHARED with swing_stops
+      structure_break_ref:    {default: close, options: [wick, close],         type: opt}   # only 'close' wired; 'wick' TODO
+      mode:                   {default: bos,   options: [bos, choch, both],     type: opt}   # bos=continuation, choch=reversal
+
+  momentum:
+    desc: "Displacement / impulse bar (opening drive). Enter WITH a bar whose body >= x*ATR."
+    layer: L6   # impulse bar doubles as trigger
+    role: momentum
+    info_category: momentum
+    secondary: [L9]
+    price_action: true
+    provenance: sourced
+    engine: implemented        # wired as an entry generator (Level B)
+    optimize: threshold
+    params:
+      body_atr:               {default: 1.0, min: 0.5, max: 3.0, step: 0.25, type: opt}
+
+  liquidity_eqhl:
+    desc: "Equal highs/lows = resting-stop liquidity pools / sweep targets. Presence enables the sweep+reclaim entry."
+    layer: L4   # sweep target
+    role: location
+    info_category: location
+    secondary: [L9]
+    price_action: true
+    provenance: sourced
+    engine: partial            # sweep+reclaim entry wired off the confirmed swing; EQH/EQL tolerance TODO
+    optimize: tolerance
+    params:
+      eqhl_tolerance_ticks:   {default: 2, min: 0, max: 10, step: 1, type: opt}
+      fractal_candles:        {default: 1, min: 1, max: 5,  step: 1, type: opt}
+
+  premium_discount_ote:
+    desc: "Dealing-range location: <0.5 discount (buy), >0.5 premium (sell); OTE 0.62-0.79."
+    layer: L4   # dealing-range zone
+    role: location
+    info_category: location
+    price_action: true
+    provenance: folklore       # OTE 0.705 'ideal' is folklore; the zone gate is the real tunable
+    engine: todo
+    optimize: zone
+    params:
+      equilibrium:            {default: 0.5,   type: fixed}   # by definition
+      ote_low:                {default: 0.62,  min: 0.5,   max: 0.786, step: 0.005, type: opt}
+      ote_high:               {default: 0.79,  min: 0.618, max: 0.886, step: 0.005, type: opt}
+      ote_ideal:              {default: 0.705, type: fixed}   # folklore midpoint
+      require_discount_for_long: {default: true, type: opt}
+
+  order_block:
+    desc: "Last opposite candle before an impulse (OB); failed OB retested = Breaker. Presence enables the OB-mitigation entry."
+    layer: L4   # OB mitigation zone
+    role: location
+    info_category: location
+    secondary: [L3, L9]
+    price_action: true
+    provenance: folklore
+    engine: implemented        # OB-mitigation entry wired (Level B); breaker variant TODO
+    optimize: block
+    params:
+      ob_impulse_min_atr:     {default: 1.0,  min: 0.5, max: 3.0, step: 0.25, type: opt}
+      require_body_close:     {default: true, type: opt}                             # standard breaker rule
+      ob_mitigation_pct:      {default: 0.5,  min: 0.0, max: 1.0, step: 0.1,  type: opt}
+      ob_max_age_bars:        {default: 50,   min: 10,  max: 200, step: 10,   type: opt}
+
+  vwap:
+    desc: "Session-anchored VWAP as directional bias veto."
+    layer: L4   # VWAP-side bias
+    role: location
+    info_category: location
+    secondary: [L2]
+    price_action: true
+    provenance: sourced
+    engine: partial            # session VWAP exists; anchor/deadband TODO
+    optimize: bias
+    params:
+      vwap_anchor:            {default: session, options: [session, prev_high, prev_low], type: opt}
+      vwap_veto:              {default: true, type: opt}
+      vwap_band_ticks:        {default: 0, min: 0, max: 20, step: 2, type: opt}       # neutral deadband
+
+  swing_stops:
+    desc: "Stop beyond the protective swing pivot (below swing low for longs)."
+    layer: L10   # stop placement
+    role: risk
+    info_category: risk
+    price_action: true
+    provenance: sourced
+    engine: partial            # pivot_k + buffer exist; keep aligned with market_structure
+    optimize: stop
+    params:
+      pivot_k:                {default: 3, min: 2, max: 10, step: 1, type: opt}       # SHARED with market_structure
+      stop_buffer_ticks:      {default: 4, min: 0, max: 20, step: 1, type: opt}
+
+  silver_bullet:
+    desc: "Time-gated FVG confluence: within a fixed ET window, bias -> sweep -> displacement FVG -> return-to-gap. Presence switches the engine to confluence mode (Level C)."
+    layer: L8   # composite confluence setup
+    role: setup
+    info_category: setup
+    secondary: [L4, L9]
+    price_action: true
+    provenance: folklore       # the windows are ICT convention, no published edge
+    engine: partial            # confluence gate wired (killzone + prior sweep + VWAP bias); HTF-draw bias + strict sequence-state TODO
+    optimize: gate_only        # optimizable content lives in the fvg block; SB just gates it
+    windows_ET:                # FIXED — test as on/off switches, never optimizer free vars
+      london_sb:  {start: "03:00", end: "04:00", type: fixed}
+      ny_am_sb:   {start: "10:00", end: "11:00", type: fixed}   # most-cited window
+      ny_pm_sb:   {start: "14:00", end: "15:00", type: fixed}
+    params:
+      require_sweep:          {default: true, type: opt}
+      require_bias:           {default: true, type: opt}
+      entry_fill_pct:         {default: 0.5, min: 0.0, max: 1.0, step: 0.1, type: opt}
+      london:                 {default: true, type: opt}   # 03-04 ET window (medium prob)
+      ny_am:                  {default: true, type: opt}   # 10-11 ET window (highest prob per ICT)
+      ny_pm:                  {default: true, type: opt}   # 14-15 ET window (lowest prob)
+
+  kill_zones:
+    desc: "Session windows as coarse regime gates (ET)."
+    layer: L4   # session gate
+    role: location
+    info_category: location
+    price_action: true
+    provenance: folklore
+    engine: todo
+    optimize: gate_only
+    windows_ET:                # FIXED switches, +/-30min varies by source
+      asia:         {start: "20:00", end: "00:00", type: fixed}
+      london_open:  {start: "02:00", end: "05:00", type: fixed}
+      ny_open:      {start: "08:30", end: "11:00", type: fixed}
+      london_close: {start: "10:00", end: "12:00", type: fixed}
+
+# ============================================================================
+# FAMILY B — CLASSIC (long-term analyst) INDICATORS
+# ============================================================================
+# Rule of thumb from the research: analysts rarely tune LOOKBACK LENGTHS, they tune
+# THRESHOLDS/MULTIPLIERS. So lengths get narrow ranges + coarse steps; thresholds/
+# multipliers get the wider ranges. 50/200 MA and Ichimoku are "watched" values —
+# their edge is that everyone uses them, so mark them fixed/low-priority.
+# ============================================================================
+classic:
+
+  ema_cross:
+    desc: "EMA fast/slow crossover ENTRY (enters on the cross; not just a filter)."
+    layer: L2   # the cross is the trigger
+    role: bias
+    info_category: trend
+    secondary: [L9]
+    price_action: false
+    provenance: sourced
+    engine: implemented        # wired as an entry generator (Level B)
+    optimize: coarse_menu
+    params:
+      fast: {default: 20, min: 5,  max: 100, step: 5,  type: opt}
+      slow: {default: 50, min: 20, max: 250, step: 10, type: opt}   # constraint: slow > fast
+
+  moving_average:
+    desc: "SMA/EMA trend + pullback entry. Long-term: 50/200 golden cross (watch on weekly). Presence enables the MA pullback entry."
+    layer: L1   # MA-stack / slope = regime
+    role: regime
+    info_category: trend
+    secondary: [L2]
+    price_action: false
+    provenance: sourced
+    engine: partial            # trend-pullback entry wired (Level B); golden-cross-as-filter TODO
+    optimize: coarse_menu      # prefer the canonical menu over dense 1-step sweeps
+    canonical_menu: [9, 20, 21, 50, 100, 200]
+    classic_pairs: [{fast: 50, slow: 200, name: golden_cross}, {fast: 9, slow: 21, name: short_swing}]
+    params:
+      length_fast: {default: 50,  min: 5,  max: 100, step: 5,  type: opt}   # coarse: 47 vs 50 is noise
+      length_slow: {default: 200, min: 50, max: 250, step: 10, type: opt}
+      type:        {default: EMA, options: [SMA, EMA],          type: opt}
+
+  rsi:
+    desc: "Wilder momentum oscillator (0-100). OB/OS reversion entry + divergence. Presence enables the RSI-reversion entry."
+    layer: L6
+    role: momentum
+    info_category: momentum
+    price_action: false
+    provenance: sourced
+    engine: implemented        # RSI OB/OS reversion entry wired (Level B)
+    optimize: thresholds       # length usually left at 14
+    params:
+      length:     {default: 14, min: 7,  max: 30, step: 1, type: opt}
+      overbought: {default: 70, min: 65, max: 85, step: 5, type: opt}   # 80 in strong trends
+      oversold:   {default: 30, min: 15, max: 35, step: 5, type: opt}
+
+  macd:
+    desc: "(fastEMA - slowEMA), signal EMA, histogram. 12/26/9 near-universal. Presence enables the MACD-cross entry."
+    layer: L6   # trend component = bias
+    role: momentum
+    info_category: momentum
+    secondary: [L2]
+    price_action: false
+    provenance: sourced
+    engine: implemented        # MACD line/signal cross entry wired (Level B)
+    optimize: low_priority     # swing/position traders rarely change it
+    params:
+      fast:   {default: 12, min: 5,  max: 20, step: 1, type: opt}
+      slow:   {default: 26, min: 20, max: 40, step: 1, type: opt}   # constraint: slow > fast
+      signal: {default: 9,  min: 5,  max: 15, step: 1, type: opt}
+
+  bollinger_bands:
+    desc: "20-SMA +/- k*stddev volatility envelope. Presence enables the band-reversion entry."
+    layer: L7   # width + band-reversion
+    role: volatility
+    info_category: volatility
+    secondary: [L4]
+    price_action: false
+    provenance: sourced
+    engine: partial            # band-reversion entry wired (SMA basis); ma_type EMA basis TODO
+    optimize: multiplier
+    params:
+      length:      {default: 20,  min: 10,  max: 50,  step: 5,    type: opt}
+      stddev_mult: {default: 2.0, min: 1.5, max: 3.0, step: 0.25, type: opt}
+      ma_type:     {default: SMA, options: [SMA, EMA],            type: opt}
+
+  adx_dmi:
+    desc: "ADX = trend STRENGTH (0-100); +DI/-DI = direction."
+    layer: L1   # trend strength gate
+    role: regime
+    info_category: trend
+    price_action: false
+    provenance: sourced
+    engine: todo
+    optimize: threshold        # length left at 14; cutoff floats 20-25
+    params:
+      length:          {default: 14, min: 7,  max: 30, step: 1, type: opt}
+      trend_threshold: {default: 25, min: 15, max: 40, step: 5, type: opt}
+
+  atr:
+    desc: "Wilder volatility unit for stops/sizing."
+    layer: L7   # feeds stop sizing
+    role: volatility
+    info_category: volatility
+    secondary: [L10]
+    price_action: false
+    provenance: sourced
+    engine: implemented        # ATR already computed in indicators.py
+    optimize: multiplier       # length left at 14; multiplier scales with horizon
+    params:
+      length:         {default: 14,  min: 7,   max: 30,  step: 1,   type: opt}
+      stop_multiplier: {default: 2.5, min: 1.5, max: 4.0, step: 0.5, type: opt}
+
+  stochastic:
+    desc: "%K position in n-period range; %D = SMA of %K. Full 14/3/3."
+    layer: L6
+    role: momentum
+    info_category: momentum
+    price_action: false
+    provenance: sourced
+    engine: todo
+    optimize: thresholds
+    params:
+      k_length:   {default: 14, min: 5,  max: 21, step: 1, type: opt}
+      k_smooth:   {default: 3,  min: 1,  max: 5,  step: 1, type: opt}
+      d_smooth:   {default: 3,  min: 1,  max: 5,  step: 1, type: opt}
+      overbought: {default: 80, min: 70, max: 90, step: 5, type: opt}
+      oversold:   {default: 20, min: 10, max: 30, step: 5, type: opt}
+
+  ichimoku:
+    desc: "Cloud (Tenkan/Kijun/Senkou/Chikou). Hosoda 9/26/52 — DO NOT OPTIMIZE."
+    layer: L1   # cloud
+    role: regime
+    info_category: trend
+    secondary: [L2]
+    price_action: false
+    provenance: sourced
+    engine: todo
+    optimize: none             # power is self-fulfilling; everyone watches the defaults
+    params:
+      tenkan:       {default: 9,  type: fixed}
+      kijun:        {default: 26, type: fixed}
+      senkou_b:     {default: 52, type: fixed}
+      displacement: {default: 26, type: fixed}
+
+  supertrend:
+    desc: "ATR-band trailing trend that flips long/short."
+    layer: L1   # ATR trend flip
+    role: regime
+    info_category: trend
+    secondary: [L2]
+    price_action: false
+    provenance: sourced
+    engine: implemented   # wired Fase 6 (layer-2 codegen proof): entry on the flip bar
+    optimize: multiplier
+    params:
+      atr_length: {default: 10,  min: 7,   max: 20,  step: 1,   type: opt}
+      multiplier: {default: 3.0, min: 1.5, max: 4.0, step: 0.5, type: opt}
+
+  bbwp:
+    desc: "Bollinger band-width percentile — a volatility band-pass gate (symmetric, both sides)."
+    layer: L7   # volatility regime gate
+    role: volatility
+    info_category: volatility
+    price_action: false
+    provenance: sourced
+    engine: implemented   # wired Fase 6: symmetric veto; the ta.vwma basis option lives here
+    optimize: thresholds
+    params:
+      length:   {default: 20,  min: 10, max: 50,  step: 5, type: opt}
+      lookback: {default: 255, min: 50, max: 500, step: 5, type: fixed}
+      basis:    {default: SMA, options: [SMA, EMA, VWMA],   type: opt}
+      min:      {default: 0,   min: 0,  max: 100, step: 5, type: opt}
+      max:      {default: 100, min: 0,  max: 100, step: 5, type: opt}
+
+  mfi:
+    desc: "Candle money-flow side (HMA-smoothed): longs while positive, shorts while negative."
+    layer: L6
+    role: momentum
+    info_category: momentum
+    price_action: false
+    provenance: sourced
+    engine: implemented   # wired Fase 6: directional veto; the ta.hma smoother lives here
+    optimize: none
+    params:
+      period: {default: 60, min: 10, max: 120, step: 5, type: opt}
+
+  donchian:
+    desc: "Highest-high/lowest-low breakout channel. Turtle 20/55. Presence enables the channel-break entry."
+    layer: L3   # breakout is the trigger
+    role: structure
+    info_category: structure
+    secondary: [L9]
+    price_action: false
+    provenance: sourced
+    engine: implemented        # prior-N channel break entry wired (Level B)
+    optimize: coarse_menu
+    classic_menu: [20, 55]
+    params:
+      length: {default: 20, min: 10, max: 55, step: 5, type: opt}
+
+  keltner:
+    desc: "EMA +/- ATR*mult envelope (smoother than Bollinger)."
+    layer: L7   # ATR envelope
+    role: volatility
+    info_category: volatility
+    secondary: [L4]
+    price_action: false
+    provenance: sourced
+    engine: todo
+    optimize: multiplier
+    params:
+      ema_length: {default: 20,  min: 10, max: 50, step: 5,   type: opt}
+      atr_length: {default: 14,  min: 7,  max: 20, step: 1,   type: opt}
+      multiplier: {default: 2.0, min: 1.0, max: 3.0, step: 0.5, type: opt}
+
+# ============================================================================
+# HARD CONSTRAINTS — engine enforces these, they are not just ranges
+# ============================================================================
+constraints:
+  - "macd.slow > macd.fast"
+  - "ema_cross.slow > ema_cross.fast"
+  - "moving_average.length_slow > moving_average.length_fast"
+  - "rsi.overbought > rsi.oversold"
+  - "stochastic.overbought > stochastic.oversold"
+  - "fvg.gap_max_ticks > fvg.gap_min_ticks"
+  - "premium_discount_ote.ote_high > premium_discount_ote.ote_low"
+  - "bollinger_bands.stddev_mult > 0"
+  - "market_structure.pivot_k == swing_stops.pivot_k   # one fractal lookback drives both"

@@ -1,0 +1,21 @@
+{
+  "name": "mex-web",
+  "private": true,
+  "type": "module",
+  "description": "Corporate + editorial web framework for mex-traders.com and pipsandpalmtrees.com",
+  "workspaces": [
+    "packages/*",
+    "sites/*"
+  ],
+  "scripts": {
+    "dev:mex": "npm run dev -w @mex/site-mex",
+    "dev:ppt": "npm run dev -w @mex/site-ppt",
+    "build": "npm run build -w @mex/site-mex && npm run build -w @mex/site-ppt",
+    "build:mex": "npm run build -w @mex/site-mex",
+    "build:ppt": "npm run build -w @mex/site-ppt",
+    "check": "npm run check -w @mex/site-mex && npm run check -w @mex/site-ppt"
+  },
+  "engines": {
+    "node": ">=20.11"
+  }
+}

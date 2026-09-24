@@ -1,0 +1,26 @@
+# MEX public-stats writer — genereert public-stats.json (D-17).
+#
+# Draait de trade-log door de mex_units.roles-laag en schrijft de units-only
+# `for_public()`-payload naar disk. De viewer serveert die op /public-stats.json;
+# de statische sites kunnen daar direct tegen praten (Access-Control-Allow-Origin: *).
+#
+# Install op mex-mw-01:
+#   sudo cp deploy/mex-public-stats.{service,timer} /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mex-public-stats.timer
+# Check: journalctl -u mex-public-stats -n20
+[Unit]
+Description=MEX public-stats writer (units-only public payload)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+Environment=EXPORTS_DIR=/root/exports
+Environment=ROUTED_DIR=/root/intent-store
+# 209 heeft een incomplete Fills export — buiten de publieke rollup houden.
+Environment=DASH_SKIP=209
+Environment=PUBLIC_STATS_PATH=/root/public-stats.json
+Environment=PUBLIC_STATS_DELAY=T+1
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.public_stats

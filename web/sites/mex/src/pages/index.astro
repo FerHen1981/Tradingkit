@@ -1,0 +1,131 @@
+---
+import { getCollection, getEntry, render } from "astro:content";
+
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import Card from "@mex/brand/components/Card.astro";
+import Button from "@mex/brand/components/Button.astro";
+import StatStrip from "@mex/brand/components/StatStrip.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+
+import { site } from "../site.config";
+import stats from "../data/public-stats.json";
+import { headlineTiles, statsSource } from "../lib/stats";
+
+const pillars = (await getCollection("pillars", ({ data }) => !data.draft)).sort(
+  (a, b) => a.data.order - b.data.order
+);
+
+const home = await getEntry("homepage", "index");
+if (!home) throw new Error("src/content/homepage/index.mdx ontbreekt");
+const { Content } = await render(home);
+const hero = home.data;
+
+const tiles = headlineTiles(stats);
+---
+
+<Base title={site.name} description={site.description}>
+  <Hero eyebrow={hero.eyebrow} headline={hero.headline} lead={hero.lead}>
+    {hero.primaryCta && (
+      <Button slot="actions" href={hero.primaryCta.href} size="lg">
+        {hero.primaryCta.label}
+      </Button>
+    )}
+    {hero.secondaryCta && (
+      <Button slot="actions" href={hero.secondaryCta.href} variant="secondary" size="lg">
+        {hero.secondaryCta.label}
+      </Button>
+    )}
+  </Hero>
+
+  <Section
+    eyebrow="Resultaat"
+    title="Gemeten in units, niet in verhalen"
+    lead={hero.statsIntro}
+  >
+    {stats.sample && (
+      <Callout variant="warning" title="Voorbeelddata">
+        Deze cijfers zijn nog niet gekoppeld aan de live snapshot. Zodra de
+        publicatietaak op de server draait, worden ze automatisch vervangen door
+        de gereconcilieerde waarden.
+      </Callout>
+    )}
+
+    <StatStrip items={tiles} source={statsSource(stats)} />
+
+    <p class="more">
+      <Button href="/resultaten" variant="secondary">
+        Volledige uitsplitsing per markt
+      </Button>
+    </p>
+  </Section>
+
+  <Section
+    eyebrow="Wat we doen"
+    title="Eén discipline, drie horizonnen"
+    lead="Handelen is waar het begon. Het bedrijf eromheen is breder: het kapitaal dat de handel opbrengt moet ook werken, en de structuur eromheen moet houdbaar zijn."
+    raised
+  >
+    <div class="grid grid--3">
+      {pillars.map((p) => (
+        <Card title={p.data.title} eyebrow={p.data.mark}>
+          {p.data.summary}
+        </Card>
+      ))}
+    </div>
+  </Section>
+
+  <Section eyebrow="Curaçao" title="Waarom het eiland geen detail is">
+    <div class="split">
+      <div class="prose">
+        <p>
+          Een handelsbedrijf verhuist niet voor het uitzicht. De stap naar
+          Willemstad was een structuurbeslissing: een entiteit met echte
+          aanwezigheid, een tijdzone die de Amerikaanse sessie comfortabel
+          maakt, en een regelgevend kader dat past bij handelen voor eigen
+          rekening.
+        </p>
+        <p>
+          De weg ernaartoe was minder romantisch dan de foto's suggereren. Die
+          route documenteren we, met de administratieve werkelijkheid erbij.
+        </p>
+      </div>
+      <div>
+        <Button href="/curacao">De transitie, stap voor stap</Button>
+      </div>
+    </div>
+  </Section>
+
+  <Section eyebrow="De opzet" title="Drie lagen die elkaar controleren" narrow>
+    <div class="prose">
+      <Content />
+    </div>
+
+    <Callout variant="legal">
+      MEX Traders handelt uitsluitend met eigen kapitaal. Wij beheren geen
+      gelden van derden, verlenen geen beleggingsadvies en bieden geen
+      beleggingsdiensten aan. Niets op deze site is een aanbod of uitnodiging
+      tot het aangaan van een transactie.
+    </Callout>
+  </Section>
+</Base>
+
+<style>
+  .more {
+    margin-top: var(--sp-5);
+  }
+
+  .split {
+    display: grid;
+    gap: var(--sp-6);
+    align-items: start;
+  }
+
+  @media (min-width: 860px) {
+    .split {
+      grid-template-columns: 1.7fr 1fr;
+      gap: var(--sp-8);
+    }
+  }
+</style>

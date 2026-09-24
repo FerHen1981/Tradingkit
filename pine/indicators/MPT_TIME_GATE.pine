@@ -1,0 +1,193 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT Time Gate v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  Every time-based gate the strategy applies, in one place:
+//
+//    weekday  ->  hour  ->  market regime  ->  risk-gate window  ->  force-flat  ->  verdict
+//
+//  Each of those can close on its own, and the table names WHICH one is closed. That is the
+//  point: "no trades today" is usually one gate, not the signal.
+//
+//  Also shown: the trading-day boundary (ETH / RTH / calendar), because that is where session
+//  P&L, the day counter and the halt reset — and getting it wrong shifts every daily number
+//  without changing a single entry rule.
+//
+//  Defaults follow EL REY MNQ PROD EOD: all hours and weekdays on except Sat/Sun, market
+//  regime "All sessions", force flat 16:55–18:00, risk-gate window off.
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its gates for inspection.
+// ============================================================================================
+indicator("MPT Time Gate v1.0", "MPT Time", overlay=true)
+
+// === INPUTS =================================================================
+var string GROUP_TZ   = "1 · TIMEZONE & BOUNDARY"
+var string GROUP_DAYS = "2 · WEEKDAYS"
+var string GROUP_HRS  = "3 · HOURS"
+var string GROUP_MREG = "4 · MARKET REGIME"
+var string GROUP_WIN  = "5 · WINDOWS"
+var string GROUP_VIS  = "6 · VISUALS"
+var string GROUP_TBL  = "7 · TABLE"
+var string GROUP_THEME = "8 · THEME"
+
+activeTz = input.string("America/New_York", "Reference timezone", group=GROUP_TZ,
+     tooltip="All hours below are read in this timezone. Keep it identical to the strategy or every window shifts.")
+dayBoundaryMode = input.string("Exchange session (ETH)", "Trading day boundary", options=["Exchange session (ETH)","Regular hours (RTH)","Calendar day (timezone)"], group=GROUP_TZ,
+     tooltip="Where the trading day rolls: session P&L, the day counter and the halt reset there. ETH = the futures session, RTH = 09:30, calendar = midnight in the timezone above. This does not filter entries.")
+
+tradeSunday    = input.bool(false, "Sun", inline="wd", group=GROUP_DAYS)
+tradeMonday    = input.bool(true,  "Mon", inline="wd", group=GROUP_DAYS)
+tradeTuesday   = input.bool(true,  "Tue", inline="wd", group=GROUP_DAYS)
+tradeWednesday = input.bool(true,  "Wed", inline="wd", group=GROUP_DAYS)
+tradeThursday  = input.bool(true,  "Thu", inline="wd", group=GROUP_DAYS)
+tradeFriday    = input.bool(true,  "Fri", inline="wd", group=GROUP_DAYS)
+tradeSaturday  = input.bool(false, "Sat", inline="wd", group=GROUP_DAYS)
+
+timeHour00 = input.bool(true, "00", inline="h0", group=GROUP_HRS), timeHour01 = input.bool(true, "01", inline="h0", group=GROUP_HRS), timeHour02 = input.bool(true, "02", inline="h0", group=GROUP_HRS), timeHour03 = input.bool(true, "03", inline="h0", group=GROUP_HRS), timeHour04 = input.bool(true, "04", inline="h0", group=GROUP_HRS), timeHour05 = input.bool(true, "05", inline="h0", group=GROUP_HRS)
+timeHour06 = input.bool(true, "06", inline="h1", group=GROUP_HRS), timeHour07 = input.bool(true, "07", inline="h1", group=GROUP_HRS), timeHour08 = input.bool(true, "08", inline="h1", group=GROUP_HRS), timeHour09 = input.bool(true, "09", inline="h1", group=GROUP_HRS), timeHour10 = input.bool(true, "10", inline="h1", group=GROUP_HRS), timeHour11 = input.bool(true, "11", inline="h1", group=GROUP_HRS)
+timeHour12 = input.bool(true, "12", inline="h2", group=GROUP_HRS), timeHour13 = input.bool(true, "13", inline="h2", group=GROUP_HRS), timeHour14 = input.bool(true, "14", inline="h2", group=GROUP_HRS), timeHour15 = input.bool(true, "15", inline="h2", group=GROUP_HRS), timeHour16 = input.bool(true, "16", inline="h2", group=GROUP_HRS), timeHour17 = input.bool(true, "17", inline="h2", group=GROUP_HRS)
+timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_HRS), timeHour19 = input.bool(true, "19", inline="h3", group=GROUP_HRS), timeHour20 = input.bool(true, "20", inline="h3", group=GROUP_HRS), timeHour21 = input.bool(true, "21", inline="h3", group=GROUP_HRS), timeHour22 = input.bool(true, "22", inline="h3", group=GROUP_HRS), timeHour23 = input.bool(true, "23", inline="h3", group=GROUP_HRS, tooltip="Hour blackout grid. This is a manual tool, not a search space: fine-grained (day, hour) selection is recorded in this project as disproven out-of-sample noise.")
+
+marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
+     tooltip="Liquidity Core = Globex reopen + London + US. Custom = whatever you tick below. The windows are OR-ed, so overlap is harmless.")
+customGlobexOpen = input.bool(true,  "Globex reopen 18:00-19:00", inline="mr1", group=GROUP_MREG)
+customAsia       = input.bool(false, "Asia 19:00-02:00",          inline="mr1", group=GROUP_MREG)
+customLondon     = input.bool(true,  "London 02:00-05:00",        inline="mr2", group=GROUP_MREG)
+customUsMorning  = input.bool(true,  "US 07:00-12:00",            inline="mr2", group=GROUP_MREG)
+customInitBal    = input.bool(false, "Initial balance 09:30-10:30", inline="mr3", group=GROUP_MREG)
+customNyAm       = input.bool(false, "NY AM 09:30-11:30",         inline="mr3", group=GROUP_MREG)
+customLunch      = input.bool(false, "Lunch 11:30-13:00",         inline="mr4", group=GROUP_MREG)
+customNyPm       = input.bool(false, "NY PM 13:00-15:00",         inline="mr4", group=GROUP_MREG)
+customPowerHour  = input.bool(false, "Power hour 15:00-16:00",    inline="mr5", group=GROUP_MREG)
+
+useAutoFlat = input.bool(true, "Force flat", inline="flat", group=GROUP_WIN)
+flatHour    = input.int(16, "from", minval=0, maxval=23, inline="flat", group=GROUP_WIN)
+flatMinute  = input.int(55, ":", minval=0, maxval=59, inline="flat", group=GROUP_WIN)
+resumeHour  = input.int(18, "until", minval=0, maxval=23, inline="flat", group=GROUP_WIN)
+resumeMinute= input.int(0, ":", minval=0, maxval=59, inline="flat", group=GROUP_WIN,
+     tooltip="No new entries inside this window, and open positions are flattened.")
+rgUseWindow = input.bool(false, "Risk-gate window", inline="rg", group=GROUP_WIN)
+rgWinStart  = input.int(18, "from", minval=0, maxval=23, inline="rg", group=GROUP_WIN)
+rgWinEnd    = input.int(23, "to", minval=0, maxval=23, inline="rg", group=GROUP_WIN,
+     tooltip="Inclusive: 23 = through 23:59. Outside it exits still fire, entries do not.")
+
+showBg      = input.bool(true, "Tint the chart when the gate is open", group=GROUP_VIS)
+showBlocked = input.bool(true, "Tint red when it is closed", group=GROUP_VIS)
+showRoll    = input.bool(true, "Mark the day boundary", group=GROUP_VIS)
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+color pGold      = isDark ? #F7C948 : #8F6400
+
+// === GATES (mirror the strategy) ============================================
+f_getHour()     => hour(time, activeTz)
+f_getMinute()   => minute(time, activeTz)
+f_minuteOfDay() => f_getHour() * 60 + f_getMinute()
+f_toMOD(_h, _m) => _h * 60 + _m
+f_inRangeMOD(_sh, _sm, _eh, _em) =>
+    _cur = f_minuteOfDay()
+    _s = f_toMOD(_sh, _sm)
+    _e = f_toMOD(_eh, _em)
+    _e > _s ? (_cur >= _s and _cur < _e) : (_cur >= _s or _cur < _e)
+
+tradeDOW = dayofweek(time, activeTz)
+bool dayOK = (tradeDOW == dayofweek.sunday and tradeSunday) or (tradeDOW == dayofweek.monday and tradeMonday) or
+     (tradeDOW == dayofweek.tuesday and tradeTuesday) or (tradeDOW == dayofweek.wednesday and tradeWednesday) or
+     (tradeDOW == dayofweek.thursday and tradeThursday) or (tradeDOW == dayofweek.friday and tradeFriday) or
+     (tradeDOW == dayofweek.saturday and tradeSaturday)
+
+hourEnabled = array.from(timeHour00,timeHour01,timeHour02,timeHour03,timeHour04,timeHour05,timeHour06,timeHour07,timeHour08,timeHour09,timeHour10,timeHour11,timeHour12,timeHour13,timeHour14,timeHour15,timeHour16,timeHour17,timeHour18,timeHour19,timeHour20,timeHour21,timeHour22,timeHour23)
+bool hourOK = array.get(hourEnabled, f_getHour())
+
+bool _mregGlobex  = f_inRangeMOD(18, 0, 19, 0)
+bool _mregAsia    = f_inRangeMOD(19, 0, 2, 0)
+bool _mregLondon  = f_inRangeMOD(2, 0, 5, 0)
+bool _mregUs      = f_inRangeMOD(7, 0, 12, 0)
+bool _mregInitBal = f_inRangeMOD(9, 30, 10, 30)
+bool _mregNyAm    = f_inRangeMOD(9, 30, 11, 30)
+bool _mregLunch   = f_inRangeMOD(11, 30, 13, 0)
+bool _mregNyPm    = f_inRangeMOD(13, 0, 15, 0)
+bool _mregPower   = f_inRangeMOD(15, 0, 16, 0)
+bool regimeOK = marketRegimeMode == "All sessions" ? true :
+     marketRegimeMode == "Liquidity Core" ? (_mregLondon or _mregUs or _mregGlobex) :
+     ((customLondon and _mregLondon) or (customUsMorning and _mregUs) or (customGlobexOpen and _mregGlobex) or
+      (customAsia and _mregAsia) or (customLunch and _mregLunch) or (customPowerHour and _mregPower) or
+      (customInitBal and _mregInitBal) or (customNyAm and _mregNyAm) or (customNyPm and _mregNyPm))
+
+bool inFlatWindow = useAutoFlat and f_inRangeMOD(flatHour, flatMinute, resumeHour, resumeMinute)
+bool rgWindowOK   = not rgUseWindow or (f_getHour() >= rgWinStart and f_getHour() <= rgWinEnd)
+bool gateOpen     = dayOK and hourOK and regimeOK and rgWindowOK and not inFlatWindow
+
+// dag-grens
+bool newCalDay = ta.change(time(dayBoundaryMode == "Calendar day (timezone)" ? "1D" : "1D", "0000-0000", activeTz)) != 0
+int  _dayMod   = f_minuteOfDay()
+bool _rthRoll  = _dayMod >= 570 and nz(_dayMod[1], _dayMod) < 570
+bool dayRoll   = dayBoundaryMode == "Regular hours (RTH)" ? _rthRoll : dayBoundaryMode == "Calendar day (timezone)" ? newCalDay : timeframe.change("1D")
+
+// welk venster zijn we in (voor de tabel)
+string regimeNow = _mregGlobex ? "Globex reopen" : _mregAsia ? "Asia" : _mregLondon ? "London" :
+     _mregInitBal ? "Initial balance" : _mregNyAm ? "NY AM" : _mregLunch ? "Lunch" :
+     _mregNyPm ? "NY PM" : _mregPower ? "Power hour" : _mregUs ? "US" : "—"
+
+// eerste gesloten poort, in dezelfde volgorde als de strategie ze toepast
+string blockedBy = not dayOK ? "weekday" : not hourOK ? "hour " + str.tostring(f_getHour()) :
+     not regimeOK ? "market regime" : inFlatWindow ? "force flat" : not rgWindowOK ? "risk-gate window" : "—"
+
+// === PLOT ===================================================================
+bgcolor(gateOpen and showBg ? color.new(POS, 93) : (not gateOpen and showBlocked ? color.new(NEG, 93) : na), title="Gate")
+plotshape(showRoll and dayRoll, "Day boundary", shape.triangleup, location.bottom, pGold, size=size.tiny)
+
+alertcondition(gateOpen and not gateOpen[1], "Time gate opens", "MPT time gate opened")
+alertcondition(not gateOpen and gateOpen[1], "Time gate closes", "MPT time gate closed")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 6, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "Local time", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, str.format_time(time, "EEE HH:mm", activeTz), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "Regime window", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 1, regimeNow, text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Day rolls on", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 2, dayBoundaryMode == "Regular hours (RTH)" ? "09:30 (RTH)" : dayBoundaryMode == "Calendar day (timezone)" ? "00:00 (calendar)" : "session (ETH)", text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 3, "Force flat", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 3, not useAutoFlat ? "off" : str.tostring(flatHour, "00") + ":" + str.tostring(flatMinute, "00") + " – " + str.tostring(resumeHour, "00") + ":" + str.tostring(resumeMinute, "00"), text_color=inFlatWindow ? color.white : pText, bgcolor=inFlatWindow ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 4, "Blocked by", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 4, blockedBy, text_color=blockedBy == "—" ? pMuted : pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 5, "Time gate", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 5, gateOpen ? "OPEN" : "CLOSED", text_color=color.white, bgcolor=gateOpen ? color.new(POS, 15) : color.new(NEG, 15), text_size=textSize, text_halign=text.align_center)

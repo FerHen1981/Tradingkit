@@ -1,0 +1,70 @@
+{
+  "sample": true,
+  "_comment": "PLACEHOLDER. Overwritten by the publish job that Middleware App owns (SPRINT D-17; see web/README.md). While `sample` is true every page that renders these figures shows a visible placeholder banner, so illustrative numbers can never be mistaken for a track record. The equity series below is illustrative only. The market rows carry the real unit figures from the reconciled journal; fields that require a value this snapshot cannot yet derive are null rather than invented. `status` noemt het type rekening waarop de markt draait (funded of evaluatie) — een operationele stand, uitdrukkelijk geen oordeel over de edge.",
+  "generated_at": "2026-08-15T04:00:00Z",
+  "period": { "from": "2023-08", "to": "2026-08" },
+  "delay": "T+1",
+  "headline": {
+    "trades": 717,
+    "win_rate": 44.1,
+    "profit_factor": null,
+    "r_total": null,
+    "expectancy_r": null,
+    "months_live": 36,
+    "avg_slippage_ticks": null
+  },
+  "markets": [
+    {
+      "symbol": "GC",
+      "label": "Goud",
+      "unit": "ticks",
+      "net_units": 6011,
+      "trades": 653,
+      "win_rate": 43.9,
+      "r_total": null,
+      "profit_factor": null,
+      "slippage_ticks": null,
+      "status": "Funded"
+    },
+    {
+      "symbol": "ES",
+      "label": "S&P 500",
+      "unit": "ticks",
+      "net_units": 133,
+      "trades": 45,
+      "win_rate": 42.2,
+      "r_total": null,
+      "profit_factor": null,
+      "slippage_ticks": null,
+      "status": "Funded"
+    },
+    {
+      "symbol": "NQ",
+      "label": "Nasdaq 100",
+      "unit": "ticks",
+      "net_units": 655,
+      "trades": 19,
+      "win_rate": 52.6,
+      "r_total": null,
+      "profit_factor": null,
+      "slippage_ticks": null,
+      "status": "Evaluatie"
+    }
+  ],
+  "equity_unit": "R",
+  "equity": [
+    { "t": "2023-08", "v": 0.0 },
+    { "t": "2023-11", "v": 4.2 },
+    { "t": "2024-02", "v": 9.6 },
+    { "t": "2024-05", "v": 7.1 },
+    { "t": "2024-08", "v": 14.8 },
+    { "t": "2024-11", "v": 21.3 },
+    { "t": "2025-02", "v": 18.9 },
+    { "t": "2025-05", "v": 27.4 },
+    { "t": "2025-08", "v": 33.1 },
+    { "t": "2025-11", "v": 30.2 },
+    { "t": "2026-02", "v": 39.7 },
+    { "t": "2026-05", "v": 46.5 },
+    { "t": "2026-08", "v": 51.8 }
+  ]
+}

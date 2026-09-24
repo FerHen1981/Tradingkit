@@ -1,0 +1,22 @@
+---
+title: Handel
+summary: >-
+  Systematische futures-handel op eigen rekening. Eén engine, per markt
+  gekalibreerd, met een risicomodel dat per rekening is ingesteld en niet
+  onderhandelbaar is.
+mark: "01"
+order: 10
+draft: false
+---
+
+De handelskant is volledig regelgebaseerd. Een strategie komt pas in productie
+nadat zij een vaste reeks tests heeft doorstaan: in-sample kalibratie, validatie
+op onafhankelijke perioden, en een walk-forward-analyse die laat zien of de edge
+overleeft wanneer de parameters niet op de toekomst zijn gekozen. Strategieën die
+alleen in de eerste helft van de data werken, krijgen geen funded kapitaal — hoe
+aantrekkelijk de totaalcurve er ook uitziet.
+
+Out-of-sample in de strikte zin — nieuwe periodes ná het bevriezen van een
+configuratie — telt bij ons pas mee zodra de bijbehorende dagen ook echt live
+zijn doorlopen. De historische reeks van 2023–2026 heet daarom validatie, niet
+out-of-sample.

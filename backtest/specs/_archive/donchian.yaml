@@ -1,0 +1,19 @@
+# Donchian channel break — breakout/breakdown entry (Level B, classic).
+# Long when the close breaks above the prior-N-bar high, short below the prior-N
+# low (Turtle-style). Breakout = continuation, so trend filters apply.
+name: Donchian_Break
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: false
+  max_active_groups: 4
+groups:
+  donchian:
+    length: 20
+  cvd_delta:
+    cvd_trend_count: 3
+  vwap:
+    vwap_veto: true
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

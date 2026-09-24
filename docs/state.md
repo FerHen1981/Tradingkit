@@ -47,14 +47,17 @@ netprofit + openprofit, Intraday-model). Dat is de echte Apex-regel: één trade
 **Incident 24/9 (Fills_41, APEX…243):** short 5 NQ @ 30750.25 (21:13 ET) is in
 Tradovate om 21:34 ET gesloten @ 30759.25 = exact −36t × 5 × $5 = **−$900**, zonder
 PMT-close in de alerts-log; de Pine zag om 21:48 de TP (+$3.034, EVAL PASSED) en
-blokkeert sindsdien. Oorzaak **niet vastgesteld**: Ferry bevestigt geen Tradovate
-DLL (legacy eval). Wat de data uitsluit: SL (13,5 pt verder), TP, elke TradingView-
-alert (geen enkele alert om 01:34 UTC). Wat overblijft: PMT-dashboard risk-regel of
-handmatige/app-close via PMT, een Apex/Tradovate-liquidatie die niet als DLL zichtbaar
-is, of een handmatige close. Onderscheid: order 672798000035 in de Tradovate order-
-historie (Auto-Liq-vlag vs API vs handmatig) en de PMT order-log. **Regel blijft: geen
-guard onder 1 SL + slippage op welk account dan ook.** Pine-engine en echte stand lopen
-na zo'n ingreep uit elkaar → alert opnieuw starten met Live sync (PnL vs start).
+blokkeert sindsdien. Tradovate-orderhistorie: order 672798000035 = "Buy 5 NQZ6 MKT –
+Filled 5/5 – **ADMIN**", events Risk Passed / At Execution / 5@30759.25. De order is
+dus door de broker-/Apex-kant geplaatst, niet door PMT (API), TradingView (geen alert
+om 01:34 UTC), de middleware (geen flatten-logica) of Ferry. Geen Tradovate DLL op de
+account. Exit precies −36t = −$900 open verlies op de high van de bar (MAE 43t), 14 min
+vóór de TP. Dezelfde avond liepen 238 en 242 wél naar hun volle SL (−$2.290/−$2.465)
+zonder ADMIN-ingreep → geen generieke open-verlies-regel; oorzaak alleen via Apex-
+support op te vragen (order-ID meegeven). Hypothese: Apex 30%-regel (30% × $2.500 =
+$750 of 30% × $3.000 = $900) of handmatige risk-desk-actie. **Regel blijft: geen guard
+onder 1 SL + slippage.** Pine-engine en echte stand lopen na zo'n ingreep uit elkaar →
+alert opnieuw starten met Live sync (PnL vs start).
 
 ### Tradovate Auto Liq — per account (hard, realized + open)
 

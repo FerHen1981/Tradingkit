@@ -145,6 +145,25 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
+## D-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, voorstel)
+
+**Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.
+Verklaring: Apex-trailing op evals volgt de HWM inclusief open winst. Op 5 NQ is de
+trail-afstand $2.500 = 100t; de TP staat op 122t. Een trade met MFE 100–121t die
+terugvalt naar de entry wordt op ≈ break-even geliquideerd. Zelfde mechanisme bij 241
+(23/9): MFE 89t → floor −$275 → SL −$2.365 = breach. Dit zit in de structuur (target
+$3.000 > trail $2.500), niet in een instelling: elke weg naar +$3.000 loopt door de
+zone waar een volledige terugval een breach is.
+
+**Voorstel (nog niet live).** Pine Enable Trailing **On**, Trail Activation MFE ≈ 95t,
+Trail Buffer 10t op de eval-charts. Een near-miss sluit dan op ≈ +85t (+$2.125) in
+plaats van op −1t: account leeft met ~$2.100 ruimte en nog $875 tot target. Vervolg
+handmatig: qty 2 NQ, TP 122t (+$1.220 → pass), SL 90t (−$900, twee pogingen). Kosten:
+trades die tussen 95t en 122t heen-en-weer gaan en daarna alsnog de TP halen, worden
+nu op de trail gesloten; niet te kwantificeren zonder NQ-export met MFE/MAE. Verificatie
+244: NQ-low ≤ 30457.00 tussen 07:06 en 07:14 ET. Als dat niet zo is, is 244 een tweede
+ADMIN-geval zoals 243 en geldt dit voorstel niet.
+
 ## D-76 — Day-trail en DLL herijkt op export d8ac1 (23 sep 2026)
 
 **Bewijs.** TES-MGC-C export `d8ac1` (24 jun–23 sep, qty 4, TP R-multiple 1 = 100t,

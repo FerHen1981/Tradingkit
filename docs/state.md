@@ -58,6 +58,13 @@ support op te vragen (order-ID meegeven). Hypothese: Apex 30%-regel (30% × $2.5
 $750 of 30% × $3.000 = $900) of handmatige risk-desk-actie. **Regel blijft: geen guard
 onder 1 SL + slippage.** Pine-engine en echte stand lopen na zo'n ingreep uit elkaar →
 alert opnieuw starten met Live sync (PnL vs start).
+**Incident 24/9 (Fills_42, APEX…244):** short 5 NQ @ 30481.75 (07:06 ET), gesloten
+07:14 ET @ 30482.00 = −1 tick (−$40,50 incl. commissie), Tradovate meldt *breached*.
+Enige mechanisme dat dit oplevert: intraday trailing incl. open winst. Bij MFE ≥ 99t
+(+$2.475) staat de floor op ≈ break-even; terugval naar −1t = liquidatie. Verificatie:
+NQ-low ≤ 30457.00 tussen 07:06 en 07:14 ET. Structureel: TP 122t ligt vóórbij de
+trail-afstand (100t op 5 NQ); elke MFE in 100–121t die omkeert is een breach. Zie
+D-77 voor de near-miss-bescherming.
 
 ### Tradovate Auto Liq — per account (hard, realized + open)
 

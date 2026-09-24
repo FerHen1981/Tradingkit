@@ -44,25 +44,19 @@ one-TP-lottery (5 NQ × 122t × $5 = $3.050 ≥ eval-target $3.000); de eerdere 
 na EVAL PASSED, en TRAILING BREACH (model) op HWM incl. open P&L (`acctPnL` =
 netprofit + openprofit, Intraday-model). Dat is de echte Apex-regel: één trade die
 +$75 open heeft gestaan en dan naar SL loopt, breacht een verse 50K op 5 NQ.
-**Incident 24/9 (Fills_41, APEX…243):** short 5 NQ @ 30750.25 (21:13 ET) is in
-Tradovate om 21:34 ET gesloten @ 30759.25 = exact −36t × 5 × $5 = **−$900**, zonder
-PMT-close in de alerts-log; de Pine zag om 21:48 de TP (+$3.034, EVAL PASSED) en
-blokkeert sindsdien. Tradovate-orderhistorie: order 672798000035 = "Buy 5 NQZ6 MKT –
-Filled 5/5 – **ADMIN**", events Risk Passed / At Execution / 5@30759.25. De order is
-dus door de broker-/Apex-kant geplaatst, niet door PMT (API), TradingView (geen alert
-om 01:34 UTC), de middleware (geen flatten-logica) of Ferry. Geen Tradovate DLL op de
-account. Exit precies −36t = −$900 open verlies op de high van de bar (MAE 43t), 14 min
-vóór de TP. Dezelfde avond liepen 238 en 242 wél naar hun volle SL (−$2.290/−$2.465)
-zonder ADMIN-ingreep → geen generieke open-verlies-regel; oorzaak alleen via Apex-
-support op te vragen (order-ID meegeven). Hypothese: Apex 30%-regel (30% × $2.500 =
-$750 of 30% × $3.000 = $900) of handmatige risk-desk-actie. **Regel blijft: geen guard
-onder 1 SL + slippage.** Pine-engine en echte stand lopen na zo'n ingreep uit elkaar →
-alert opnieuw starten met Live sync (PnL vs start).
+**Incident 24/9 (Fills_41, APEX…243) — opgelost via Apex-ticket #1777923:** short 5 NQ
+@ 30750.25 (21:13 ET) liep om 21:29 ET ≈ +67t (+$1.675 open) → Apex "unrealized peak
+balance" $51.667,25 → trailing floor $49.167,25 (= −$832,75 = −33t vanaf entry). De
+spike om 21:34 ET naar 30761 (−43t) zat onder die floor → systeem-liquidatie (order
+"ADMIN" = Apex/Tradovate-systeem), fill −36t = −$900. Het ronde bedrag was toeval, geen
+regel. De TP werd 14 min later geraakt. Bracket door PMT correct geplaatst; Pine-engine
+had dezelfde floor gemodelleerd (Intraday-model), dus engine en Apex kloppen. Account
+243 is gefaald; opties: reset of nieuwe account.
 **Incident 24/9 (Fills_42, APEX…244):** short 5 NQ @ 30481.75 (07:06 ET), gesloten
 07:14 ET @ 30482.00 = −1 tick (−$40,50 incl. commissie), Tradovate meldt *breached*.
 Enige mechanisme dat dit oplevert: intraday trailing incl. open winst. Bij MFE ≥ 99t
-(+$2.475) staat de floor op ≈ break-even; terugval naar −1t = liquidatie. Verificatie:
-NQ-low ≤ 30457.00 tussen 07:06 en 07:14 ET. Structureel: TP 122t ligt vóórbij de
+(+$2.475) staat de floor op ≈ break-even; terugval naar −1t = liquidatie. Zelfde mechanisme als
+243 (door Apex bevestigd). Structureel: TP 122t ligt vóórbij de
 trail-afstand (100t op 5 NQ); elke MFE in 100–121t die omkeert is een breach. Zie
 D-77 voor de near-miss-bescherming.
 
@@ -145,7 +139,7 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
-## D-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, voorstel)
+## D-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
 
 **Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.
 Verklaring: Apex-trailing op evals volgt de HWM inclusief open winst. Op 5 NQ is de
@@ -160,9 +154,12 @@ Trail Buffer 10t op de eval-charts. Een near-miss sluit dan op ≈ +85t (+$2.125
 plaats van op −1t: account leeft met ~$2.100 ruimte en nog $875 tot target. Vervolg
 handmatig: qty 2 NQ, TP 122t (+$1.220 → pass), SL 90t (−$900, twee pogingen). Kosten:
 trades die tussen 95t en 122t heen-en-weer gaan en daarna alsnog de TP halen, worden
-nu op de trail gesloten; niet te kwantificeren zonder NQ-export met MFE/MAE. Verificatie
-244: NQ-low ≤ 30457.00 tussen 07:06 en 07:14 ET. Als dat niet zo is, is 244 een tweede
-ADMIN-geval zoals 243 en geldt dit voorstel niet.
+nu op de trail gesloten; niet te kwantificeren zonder NQ-export met MFE/MAE. Mechanisme
+door Apex bevestigd (ticket #1777923, 243): floor = unrealized peak − $2.500, ook
+intra-trade. Op 5 NQ is het hele budget 100t swing vanaf de beste open stand; MFE ≥ 10t
+gevolgd door een volle SL (90t) is al een breach. Test vóór live: El Toro HF export
+met Enable Trailing On (activation 40t / buffer 40t) naast Off, tel TP-exits en
+trail-exits ≥ +40t.
 
 ## D-76 — Day-trail en DLL herijkt op export d8ac1 (23 sep 2026)
 

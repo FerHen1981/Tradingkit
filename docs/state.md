@@ -35,9 +35,15 @@ uitzetten van de Pine day-trail op 15/9 zakte dit naar het rauwe profiel
 | | PA DLL · consistency · min payout · qualifying day | 300 (inactief) · 30% · 500 · 250 |
 | | MAE guard · derisk · next payout | off · off · 1 |
 
-NQ (TOR-NQ-HF v1.0.2-NQ-HF-INTRA, eval-only): TP **Fixed 90t** / SL 90t (1:1), expiry 9,
-FVG 4–12, confirmation 2, CVD **On**, streak 3, monFilter On. Op 15/9 stond TP op 122t —
-teruggezet.
+NQ (TOR-NQ-HF v1.0.2-NQ-HF-INTRA, eval-only): TP **Fixed 122t** / SL 90t, expiry 9,
+FVG 4–12, confirmation 2, CVD **On**, streak 3, monFilter On. Correctie 24/9 uit
+alerts-log `d9675`: 122t staat sinds 2 sep op alle eval-charts en is de bedoelde
+one-TP-lottery (5 NQ × 122t × $5 = $3.050 ≥ eval-target $3.000); de eerdere notitie
+"teruggezet naar 90t" was fout. **Account phase sinds 22/9: Apex Eval** (was Research
+(none)): de Pine account-engine is nu actief — ACCOUNT STARTED/HALT-kaarten, blokkade
+na EVAL PASSED, en TRAILING BREACH (model) op HWM incl. open P&L (`acctPnL` =
+netprofit + openprofit, Intraday-model). Dat is de echte Apex-regel: één trade die
++$75 open heeft gestaan en dan naar SL loopt, breacht een verse 50K op 5 NQ.
 
 ### Tradovate Auto Liq — per account (hard, realized + open)
 

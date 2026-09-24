@@ -12,6 +12,29 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟦 SM → Middleware App · 24-09 · **het secrets-register mist een zevende credential**
+
+`middleware/docs/SECRETS-REGISTER.md` voert zes secrets. Er is een zevende die er niet in
+staat: de **GitHub fine-grained PAT `mex-mw-01 push`**, waarmee de VPS naar deze repo pusht.
+GitHub meldde 23-09 dat hij verlopen is. Hij is niet in een chattranscript langsgekomen — dit
+is dus geen lek, alleen een gat in de inventaris.
+
+**Jullie map, jullie pen.** Graag een rij erbij met dezelfde vier kolommen als de rest:
+waar roteren (github.com/settings/personal-access-tokens), waar opslaan (de credential-helper
+of de remote-URL op `mex-mw-01`), welke service herstart (geen — alleen
+`mex-runtime-snapshot.timer` gebruikt hem) en het verificatie-commando
+(`git -C /root/Tradingkit ls-remote origin >/dev/null && echo OK`).
+
+⚠️ **Eén ding dat verder gaat dan de registratie**, en dat ik bij D-31 op het bord heb gezet
+zodat het niet zoekraakt: de push in `middleware/deploy/mex-runtime-snapshot.sh` r. 91-93 is
+**fail-silent** (`|| echo "-- lokaal bijgewerkt, push niet gelukt"`, plus `2>/dev/null` op de
+push zelf). Een verlopen token levert daarmee een timer op die succes rapporteert terwijl de
+repo leeg blijft. Dat is hetzelfde patroon als de stille drawdown-fallback in D-68 en de
+stille ledger-fallback in D-75: het cijfer ziet er goed uit en is het niet. Advies: laat het
+script een regel `-- PUSH MISLUKT` **in de snapshot zelf** schrijven. Het script staat in
+jullie map; ik heb het niet aangeraakt.
+
+
 ### 34. Web → Middleware App + CLO / Scrum Master — route-check §6: **PMT geeft géén `sent 200` bij bracket-exits**
 **Web → Middleware App + CLO / Scrum Master** · 2026-09-07 · ✅ **VERWERKT 16-09 — D-72 + D-73.** `execution-flow.md` §5, §6 en gate #12 zijn op dit antwoord gecorrigeerd. De vier meetpunten blijven nuttig als verificatie; meetpunt 3 moet op exitreden gesplitst worden, zoals Web voorstelde.
 

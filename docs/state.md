@@ -44,6 +44,14 @@ one-TP-lottery (5 NQ × 122t × $5 = $3.050 ≥ eval-target $3.000); de eerdere 
 na EVAL PASSED, en TRAILING BREACH (model) op HWM incl. open P&L (`acctPnL` =
 netprofit + openprofit, Intraday-model). Dat is de echte Apex-regel: één trade die
 +$75 open heeft gestaan en dan naar SL loopt, breacht een verse 50K op 5 NQ.
+**Incident 24/9 (Fills_41, APEX…243):** short 5 NQ @ 30750.25 (21:13 ET) is in
+Tradovate om 21:34 ET gesloten @ 30759.25 = exact −36t × 5 × $5 = **−$900**, zonder
+PMT-close in de alerts-log; de Pine zag om 21:48 de TP (+$3.034, EVAL PASSED) en
+blokkeert sindsdien. Oorzaak: een Tradovate auto-liq daily loss van $900 op een
+eval-account, kleiner dan één SL ($2.265 incl. commissie). **Regel: eval-accounts
+op de one-TP-lottery krijgen géén Tradovate DLL; een DLL onder 1 SL + slippage is
+op elk account een verkapte, slechtere stop.** Pine-engine en echte stand lopen na
+zo'n ingreep uit elkaar → alert opnieuw starten met Live sync (PnL vs start).
 
 ### Tradovate Auto Liq — per account (hard, realized + open)
 

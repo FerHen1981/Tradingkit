@@ -185,6 +185,17 @@ per contract: $400/ct** (qty 2 → $800) — beste totaal/DD-verhouding; DLL ≤
 ruimte tot liq gaat vóór. (4) Qty 2 pas na de lock (balans ≥ $52.600) en ruimte ≥ $2.400;
 verse 50K op qty 2 + DLL 300–400/ct overleeft de slechtste start van de reeks (25–26 jun).
 
+**Schaal-ladder (26/9).** Twee regels, de strengste wint. (1) Ruimte: qty ≤ ⌊(balans −
+liq-niveau) / 1.200⌋ (3 DLL-dagen à $400/ct); DLL = 400 × qty maar ≤ ⅓ ruimte. (2) Consistency
+op aanvraagmoment: qty ≤ ⌊0,3 × winst_bij_aanvraag / 500⌋; vóór payout #1 is die winst vast
+(safety net + trede 1): 50K → qty ≤ 2, 250K → ≤ 5, 300K → ≤ 6. Legacy 50K na de lock
+(balans ≥ 52.600, liq 50.100), aanvragen op max zonder buffer: qty 2 vanaf 52.600, qty 3
+vanaf 55.000, qty 4 vanaf 56.700, qty 5 vanaf 58.400. Met de $2.000-buffer (aanvraag pas
+op safety net + buffer + trede) is qty 3 al vanaf cyclus 1 mogelijk en qty 4 vanaf cyclus 3.
+Afschalen: direct als balans onder de drempel van de huidige qty zakt (na een payout of
+een DLL-dag), nooit wachten tot de aanvraag. Vers: 50K qty 1 tot lock; 250K qty 3 tot
+lock (256.600); 300K qty 4 tot lock (307.600); één DLL-dag laat dan nog twee over.
+
 **Activatie-check 26/9 (drie samples, geschaald naar qty 2, giveback 200, cap 1.000):**
 30d `2dc43`: act 500 → 6.173, 400 → 6.090, 300 → 5.525, 200 → 3.205. 65d `d8ac1`:
 400–500 → 13.108 (69% winstdagen), 200–300 → 9.605, uit → 14.259. Jaar `89aa5`: 400 →

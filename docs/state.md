@@ -102,27 +102,29 @@ is de beste dag sinds de laatste payout. Per account geldt dus:
 `daily target ≤ min(30% × (balance − 50.000), huidige best-day)` — een dag boven de
 huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakker.
 
-### Per-account set nu (23 sep, D-76 — vervangt de tabel van 18 sep)
+### Per-account set (26 sep, stand Tradovate na sluiting — vervangt 23 sep)
 
-Ruimte = balans − Tradovate "Drawdown auto" (liq-niveau). Regels: qty 1 tot de
-trailing DD gelockt is (balans ≥ $52.600) én ruimte ≥ $2.400, daarna qty 2; DLL =
-4 × SL per contract ($400/ct), maar nooit meer dan ⅓ van de ruimte; target = cap × qty.
+Weg per 28/9: PA021 (breached) en de evals 238, 240–245, 247, 248, 251, 252. Erbij: PA
+uit eval 249 (gehaald) en 2 nieuwe 50K. Volledig schema met schaal-ladder en payout-
+projectie: `fleet_startschema_2026-09-28.pdf` (scratchpad/Ferry, niet in repo).
 
-| Account | Product | Balans 23/9 | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Actie |
+| Account | Product | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|
-| PA013 | Legacy 50K | 55.438 | 5.338 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | payout #1 $1.500 nu; qty 3 bij balans ≥ 55.000, qty 4 bij ≥ 56.700 |
-| PA018 | Legacy 50K | 56.607 | 6.507 | 2 → 3 | 750 / 300 / 1.500 na payout | $1.500 | $1.200 | payout #1 $1.500 nu, daarna qty 3 (winst 5.107 → best-day ≤ 1.532); qty 4 bij ≥ 56.700 |
-| PA021 | Legacy 50K | 51.007 | 907 | 1 | 250 / 100 / 500 | $500 | $300 | onder safety net; qty 2 pas bij lock |
-| PA022 | Legacy 50K | 52.631 | 2.531 | 2 | 500 / 200 / 1.000 | $1.000 | $600 | +$1.469 tot max → 2 cap-dagen, dan $1.500 |
-| PA023 | Intraday 4.0 | 51.651 | 1.551 | 1 | 250 / 100 / 500 | $500 | $400 | TV DLL was $1.000 → $400 |
-| PA024 | Intraday 4.0 | 49.257 | 768 | 1 | 250 / 100 / 500 | $500 | $250 | TV DLL was $1.000 → $250; 3 SL-dagen tot liq |
-| PA025 | Legacy 50K | 49.751 | 2.172 | 1 | 250 / 100 / 500 | $500 | $400 | qty 2 bij balans ≥ 52.600 |
-| PA026 | Legacy 50K | 50.830 | 1.684 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
-| PA027 | Legacy 50K | 49.940 | 2.122 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
-| PA028 | Legacy 50K | 49.933 | 2.221 | 1 | 250 / 100 / 500 | $500 | $400 | idem |
-| PA (ex-239) | Legacy 50K | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | $400 | vers; qty 2 bij lock |
-| 240 / 241 | 50K eval | 50.000 | 2.500 | 5 NQ | geen day-guards (El Toro HF, lottery) | — | — | handoff-profiel |
-| 242 | 50K eval (trail $2.000) | 50.000 | 2.000 | 4 NQ | geen day-guards | — | — | 1 SL minder ruimte dan 240/241 |
+| PA013 | Legacy 50K | 55.242 | 5.142 | 3 | 750 / 300 / 1.500 | $1.500 | $1.200 | #1 ontvangen 10/9; **#2 $2.000** zodra 5 kwal.dagen vol; na #2 ruimte 3.142 → qty 2 tot 53.700 |
+| PA018 | Legacy 50K | 56.007 | 5.907 | 4 | 1.000 / 400 / 2.000 | $2.000 | $1.600 | #1 geblokkeerd door best-day $2.504 → balans ≥ 58.348; cap 2.000 verhoogt de lat niet |
+| PA022 | Legacy 50K | 52.671 | 2.571 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | +1.429 tot max #1 (54.100) |
+| PA023 | Intraday 4.0 | 50.585 | 485 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL was 1.000; 2 verliesdagen tot liq; best $621 → consistency 50% vraagt winst ≥ 1.242 |
+| PA024 | Intraday 4.0 | 49.000 | 511 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL was 1.000; 2 verliesdagen tot liq |
+| PA025 | Legacy 50K | 48.723 | 1.006 | 1 | 250 / 100 / 500 | $500 | $300 | ⅓-regel |
+| PA026 | Legacy 50K | 50.788 | 1.642 | 1 | 250 / 100 / 500 | $500 | $400 | best $1.010 → winst ≥ 3.367 vóór #1 |
+| PA027 | Legacy 50K | 49.913 | 1.767 | 1 | 250 / 100 / 500 | $500 | $400 | |
+| PA028 | Legacy 50K | 49.023 | 1.250 | 1 | 250 / 100 / 500 | $500 | $400 | |
+| PA029 | Legacy 50K | 48.945 | 1.411 | 1 | 250 / 100 / 500 | $500 | $400 | nieuw (ex-239) |
+| PA ex-249, Nieuw A/B | Legacy 50K | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | $400 | qty 2 bij lock |
+| 253–257 | 50K eval | 50.000 | 2.500 | 5 NQ | geen day-guards | — | — | lottery; 250 ($219 ruimte) niet handelbaar |
+
+Week 21–25 sep live: alle PA's negatief tot vlak (013 −196, 018 −600, 023 −1.065, 025 −1.028,
+028 −910, 029 −1.055); backtest qty 2 zelfde week +315 (ma/wo/vr verlies in de US-sessie).
 
 Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
 is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.

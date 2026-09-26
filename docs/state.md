@@ -185,6 +185,13 @@ per contract: $400/ct** (qty 2 → $800) — beste totaal/DD-verhouding; DLL ≤
 ruimte tot liq gaat vóór. (4) Qty 2 pas na de lock (balans ≥ $52.600) en ruimte ≥ $2.400;
 verse 50K op qty 2 + DLL 300–400/ct overleeft de slechtste start van de reeks (25–26 jun).
 
+**Activatie-check 26/9 (drie samples, geschaald naar qty 2, giveback 200, cap 1.000):**
+30d `2dc43`: act 500 → 6.173, 400 → 6.090, 300 → 5.525, 200 → 3.205. 65d `d8ac1`:
+400–500 → 13.108 (69% winstdagen), 200–300 → 9.605, uit → 14.259. Jaar `89aa5`: 400 →
+14.047 (optimum), 500 → 13.388, 300 → 12.711, uit → 10.166. Robuuste zone **$400–500 op
+qty 2 = $200–250 per contract**; lager kost in elk sample 10–45%. Giveback 100 en 200
+zijn op trade-closes identiek (één verlies = $204); 300 kost winstdagen. Geen wijziging.
+
 **Beperking.** Op qty 4 is één trade ±$400: giveback 100–300 en activation 400–600 zijn
 op trade-closes identiek. Pine's intraday trail (open P&L) is niet reproduceerbaar; de
 sim is een bovengrens. Deze run is TP 100t; live blijft 85t (jaardata `89aa5`).

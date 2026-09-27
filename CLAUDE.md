@@ -158,6 +158,14 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   project *MEX PROP TRADER*. Werkwijze in `docs/CHAT_INSTRUCTIE.md`.
 
 ## Dev conventions
+- 🔴 **Sinds 27-09 werkt het project volgens `docs/PLAN-2026-09-27-herijking.md`.** Dat
+  document zegt *waarom* een item bestaat; `docs/SPRINT.md` zegt wie het doet en hoe ver
+  het is. Wijkt een item af van het plan, dan wint het plan. Zeven fasen plus twee
+  parallelsporen; **fasen zijn dwingend** — claim geen item uit fase 3 zolang 1 en 2 niet
+  af zijn. De sporen B en C lopen ernaast en mogen altijd.
+- **Wat van het bord af ging staat in `docs/ARCHIVE.md`**, met volledige tekst. Geparkeerd
+  is niet weerlegd — het wacht tot het platform staat. Kijk daar vóór je iets opnieuw
+  uitzoekt.
 - **Eén branch: `claude/middleware-setup-guide-afhvtk`.** Develop/commit/push daar en nergens
   anders zonder toestemming. **Begin elke sessie met `git pull origin claude/middleware-setup-guide-afhvtk`** —
   het bord, de inbox en dit bestand staan daar en lopen anders achter. De chat-branches zijn

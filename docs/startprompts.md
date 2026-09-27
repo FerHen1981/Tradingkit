@@ -1,152 +1,155 @@
-# Startprompts per chat — ronde 18-09-b · **na de D-53-oplevering**
+# Startprompts per chat — ronde 27-09 · **na de herijking**
 
-_Eigenaar: Scrum Master. Watermerk: `1144057`, 18-09._
+_Eigenaar: Scrum Master. Watermerk: `1144057`, 27-09._
 
-**Wat er sinds ronde 18-09-a is veranderd:**
-- 🔴 **D-53 is gebouwd** (`72274d7`, Middleware App) en staat op `review`. Hij is **nog niet
-  live** — dat is één handeling van Ferry. Zolang die niet gebeurd is draait de receiver nog
-  op de oude code en gaan MATADOR-alerts nog steeds met 6 contracten de deur uit.
-- ✅ **D-76 is dicht** (widget-Today per stack, gereviewd door Middleware App).
-- ✅ **D-74 web-helft is dicht en gereviewd.** De middleware-helft loopt.
-- De gate-volgorde in `docs/execution-flow.md` staat weer op **#7** voor de qty-override —
-  Middleware App verplaatste de *code* naar precies die plek. CLO's oorspronkelijke tabel
-  klopte; mijn correctie erop is teruggedraaid.
+🔴 **Het bord is volledig herzien.** Lees `docs/PLAN-2026-09-27-herijking.md` vóór je iets
+claimt. Van de 33 openstaande items zijn er 12 geparkeerd, 7 opgegaan in een fase en 4
+afgesloten; er staan 27 nieuwe items op. **Wat je gisteren op je lijstje had, staat er
+mogelijk niet meer** — kijk in `docs/ARCHIVE.md` voor de reden voordat je het opnieuw
+oppakt.
 
-**D-66 blijft de sleutel** voor Pine Dev en Backtest Setup. Die houdt D-63 → D-54 → D-57
-tegen en daarmee de hele vlootrangorde. Ronde 18-09-a beschrijft dat blok volledig; het is
-ongewijzigd en staat hieronder alleen samengevat.
+**Fasen zijn dwingend.** Claim geen item uit fase 3 zolang fase 1 en 2 niet af zijn. De
+parallelsporen B en C lopen ernaast en mogen altijd.
+
+**Waar we nu staan:** fase 0 is van de Scrum Master en loopt (D-77 en D-78, de twee
+schema's). Zolang die niet vastliggen kan fase 1 niet beginnen — dat is bewust: als het
+event-schema tijdens fase 2 alsnog gaat schuiven, moet fase 1 opnieuw.
 
 ---
 
-## 🟦 Middleware App (chat: **App Setup**) — vier items, alle vier vrij
+## 🟦 Middleware App (chat: **App Setup**) — twee dingen die nu al kunnen
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-Lees docs/SPRINT.md en de rondes van 18-09 in docs/inbox.md. D-53 is akkoord bevonden —
-mooi werk, met name dat jullie de override uit eigen beweging ná de risicopoorten hebben
-gezet. Dat was mijn D-70-bevinding en die is daarmee opgelost: reject-rijen in
-routed_*.jsonl dragen nu de onaangeraakte Pine-body.
-
-DOE NU, in deze volgorde:
-
-1. 🔴 D-74 — JULLIE HELFT AFMAKEN. Dit is het enige item waar publicatie van eval-bedragen
-   nog dagelijks doorloopt. Vier dingen:
-   (a) `account_type` (eval/funded) per account in het datamodel;
-   (b) PASSED/BREACHED-tellers, genormaliseerd naar 50k-equivalent (factor = grootte/50000);
-   (c) `public_stats.write` roept `for_public_evals()` aan — Web heeft die functie én
-       `assert_no_eval_metrics()` al opgeleverd en ik heb ze functioneel nagemeten
-       (1×50k + 1×100k passed = 3,0; 300k breached = 6,0; geneste lekken worden gevangen);
-   (d) 📱 DE WIDGET. `middleware/scriptable/mex-fleet-widget.js` rendert in de `eval`-stand
-       vandaag `realized` en `buffer` IN DOLLARS. Dat is exact wat Ferry op 05-09 aanwees.
-       Voor eval horen daar alleen genormaliseerde tellers te staan. En zet de labels erbij
-       die execution-flow.md §3.1 voorschrijft: `50k-eq · N=<aantal>` voor eval,
-       `✓ verified <datum>` / `⚠ unverified since <datum>` voor funded.
-   Het label uit (d) is het belangrijkste deel van deze hele ronde — zie punt 2.
-
-2. D-73 — sla PMT's antwoordbody op in de routed-regel. `sent 200` is de status van ONZE
-   POST, niet PMT's oordeel over de order. routed_journal.py r. 23-27 noemt die rijen zelf
-   "accepted orders", niet "fills". Rejected() leest die body al en gooit hem daarna weg.
-
-3. D-69 — de Render-blueprint deployt `middleware/app/main.py`. Dat bestand bestaat niet
-   meer (verwijderd in D-05). De blueprint is daarmee dood; of je repareert hem of je
-   haalt hem weg, maar hij mag niet blijven staan alsof hij werkt.
-
-4. D-07 en D-17 — niet langer geblokkeerd. D-07 hing aan D-08 (done). D-17 is de viewer-rol
-   (units-only) uit web/handover/mex_units/ + public-stats.json periodiek publiceren; dat
-   raakt D-74 direct, dus doe hem in dezelfde ronde als je kunt.
-
-NIET AAN BEGINNEN:
-- D-75 (actuals uit /root/exports). Ik wacht op één meting van Ferry: `ls /root/exports`.
-  Liggen daar geen Cash_History-CSV's, dan is er niets om op te pakken en bouw je aan een
-  bron die niet bestaat. Het LABEL uit D-74(d) is wél nu al zinvol en staat daarom daar.
-- D-23 — staat op "to be refined" bij Ferry.
-```
-
----
-
-## 🟨 Pine Dev — D-64 kan nu, de rest hangt aan D-66
-
-```
-git pull origin claude/middleware-setup-guide-afhvtk
+Lees eerst docs/PLAN-2026-09-27-herijking.md, daarna het nieuwe docs/SPRINT.md.
+Fase 1 (D-79/D-80/D-81) is voor jullie, maar die start pas als D-77 en D-78 vastliggen.
+Twee dingen kunnen wél nu, en het eerste is belangrijker dan het lijkt.
 
 DOE NU:
 
-1. D-64 — MEX_EL_DORADO.pine compileert niet, en de GENERATOR is de bron. Handmatig
-   herstellen in de .pine is dus fout werk: het wordt bij de volgende generatie overschreven.
-   Fix tools/gen_pine_firms.py (dat bestand blijft bij jullie, ook al staat tools/** op
-   Backtest Setup) en genereer opnieuw.
+1. 🔴 D-73 — DE METING WAAR HEEL T2 OP RUST. Dit item is bij de herijking gepromoveerd
+   van opruimwerk tot fundament. Leg 20 echte PMT-antwoordbodies vast en beoordeel wat
+   erin staat: bevat de body een fill-prijs, of alleen een bevestiging dat de order is
+   aangenomen? Niemand heeft dat ooit gemeten. Het antwoord bepaalt of de bevestigingslaag
+   (T2) een prijs kan dragen of alleen een status — en dus hoe dicht de webapp bij "live"
+   kan komen zonder Tradovate-API. Ontwerp niets op T2 tot deze meting er ligt.
 
-2. D-66 — samen met Backtest Setup. DE PARITEITSVRAAG: draait de vloot op een andere
-   CVD-motor dan de backtester meet? 9 van de 9 scripts gebruiken ta.requestVolumeDelta(),
-   terwijl "canonical CVD" in de pijplijn een deterministische OHLCV-polariteitsproxy is.
-   Dit is een MEETVRAAG, geen fix. Stel eerst vast óf ze verschillen en hoeveel.
+2. D-74 — jullie helft, maar NU SMALLER. Het volledige labelsysteem verhuist naar D-93 in
+   fase 4. Wat overblijft is het stuk dat vandaag fout gaat: de eval-stand van
+   mex-fleet-widget.js rendert realized en buffer IN DOLLARS, en dat is precies wat Ferry
+   op 05-09 aanwees. Haal de bedragen daar weg en zet er de genormaliseerde tellers neer.
+   Meer niet — de verified/unverified-labels komen later en met een API-veld dat er nog
+   niet is.
 
-NIET AAN BEGINNEN:
-- D-63 (bron-wint-conflict) — wacht op D-66. Als de motoren verschillen verandert de vraag.
-- D-57 (derisk in de bevroren configs) — wacht op D-54, die op D-66 wacht.
-- D-44 staat op review bij mij; de fix zelf ligt bij Ferry in het PMT-dashboard.
+REVIEW (kort, als je toekomt): D-69 — de Render-blueprint deployt middleware/app/main.py,
+dat bestaat niet meer. Repareren of weghalen, maar niet laten staan alsof het werkt.
+
+NIET AAN BEGINNEN: alles met een fasenummer 1 t/m 7 behalve D-73. De volgorde is er om te
+voorkomen dat we twee keer bouwen.
 ```
 
 ---
 
-## 🟩 Backtest Setup — D-68 kan nu, de rest hangt aan D-66
+## 🟩 Backtest Setup — spoor B, en dit is de grootste meting van het plan
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
+Lees docs/PLAN-2026-09-27-herijking.md, spoor B. Ferry heeft besloten (antwoord 14) dat de
+backtester het .pine-bestand ZELF moet lezen en dat resultaat door de hele molen moet.
+Dit spoor loopt parallel aan alles en blokkeert niets.
+
+⛔ HARDE REGEL: dit spoor komt niet in middleware/** of web/**.
+
 DOE NU:
 
-1. D-68 — de vloot-pijplijn leest de accountregels NIET uit de registry maar codeert ze
-   hard. backtest/pipeline/fleet.py:84 zet acct_trail_dd=2000.0 en acct_dll=1000.0 in de
-   code, en higher.py:237 valt stil terug op 2500 als dat veld leeg is. Die stille fallback
-   is het echte gevaar: een verkeerde drawdown levert een plausibel ogend maar onjuist
-   cijfer. Lees ze uit data/propfirms.json en laat het HARD falen als een regel ontbreekt.
+1. D-100 — INVENTARISEER welk deel van Pine onze scripts werkelijk gebruiken. De 13
+   scripts van de v1_0_0-lijn komen uit één familie, dus de kans is groot dat de gebruikte
+   taalconstructies een beperkte, opsombare verzameling zijn. Lever een lijst: welke
+   functies, welke ingebouwde variabelen, welke taalconstructies, en hoe vaak elk voorkomt.
+   Dat bepaalt of D-101 een project van weken of van maanden is — dus meet het vóórdat er
+   iets ontworpen wordt.
 
-2. D-66 — samen met Pine Dev, zie hun blok. Jullie kant is de meetkant: wat meet de
-   backtester precies als "CVD", en is dat hetzelfde als wat TradingView teruggeeft?
+   ➡️ D-66 (de CVD-pariteitsvraag) IS HIERIN OPGEGAAN EN VERVALT. Is er straks één
+   implementatie, dan valt er geen pariteit meer te bewaken. Daarmee vervalt ook de keten
+   D-63 → D-54 → D-57 die erachter stond. Begin er niet meer aan.
 
-NIET AAN BEGINNEN:
-- D-54 (rangorde afmaken) — hangt aan D-66. Alleen MATADOR heeft nu een geldig cijfer;
-  LEON en REY staan achter een open harde poort en zijn daarmee ONGELDIG, niet "indicatief".
-- D-15 / D-16 / D-25 / D-38 / D-39 — onderzoeksitems, niet deze ronde.
-- D-50 en D-27 staan geblokkeerd.
+2. D-68 — blijft staan en is nu extra relevant: fleet.py:84 codeert acct_trail_dd=2000 en
+   acct_dll=1000 hard, en higher.py:237 valt STIL terug op 2500. Lees uit
+   data/propfirms.json en laat het HARD falen als een regel ontbreekt. Fase 5 bouwt
+   dezelfde regel aan de webapp-kant; als jullie het hier goed zetten is dat daar een
+   kopieerslag in plaats van een ontwerpronde.
+
+NIET AAN BEGINNEN: D-54, D-15, D-16, D-25, D-38, D-39, D-50, D-27 — geparkeerd tot het
+platform staat. Zie docs/ARCHIVE.md.
 ```
 
 ---
 
-## 🟪 Web (chat: **Website Build Mex-traders.com**) — deze ronde niets nieuws
+## 🟨 Pine Dev — spoor C nu, fase 3 later
 
-Jullie helft van D-74 is opgeleverd, nagemeten en akkoord (`36f0425`), en D-34 is dicht.
-De render in `resultaten.astro` kan pas zodra Middleware App het payload-format levert
-(punt 1c hierboven). **Begin daar niet op vooruit** — dan bouw je tegen een format dat nog
-kan schuiven. Ik meld het in `docs/inbox.md` zodra het er is.
+```
+git pull origin claude/middleware-setup-guide-afhvtk
+
+Lees docs/PLAN-2026-09-27-herijking.md. Fase 3 is jullie grote werk — de kanaalrouting uit
+alle 13 scripts halen — maar die start pas als fase 1 en 2 staan. Twee dingen nu.
+
+DOE NU:
+
+1. D-103 — spoor C, "alleen versies" (Ferry, antwoord 12). Leg vast welke versie van elk
+   script op TradingView draait, met datum en een korte reden. Handmatig plakken blijft
+   zoals het is (antwoord 13). Dit is een conventie plus een bestand, geen bouwwerk —
+   houd het klein.
+
+2. D-77 — lever input op het canonieke event-schema. Ik schrijf het, jullie toetsen één
+   ding: is elk veld uit een Pine-script te produceren? Velden: strategie-id, account-
+   sleutel, richting, type (entry/exit/halt/derisk/info), prijs, stop, target, tijdstempel,
+   gebeurtenis-id. Kan er iets niet, dan wil ik dat nu weten en niet in fase 3.
+
+VOORUITBLIK OP FASE 3, zodat je weet wat eraan komt: D-86 haalt 9 instellingen uit elk van
+13 scripts (routePMT, routeRithmic, routePineConnector, routeDiscord, routeJournal,
+pmtToken, pcLicense, pcSymbol, accountID). 🔴 Daarbij geldt: GEEN enkele wijziging aan
+entry-, exit- of risicologica. Ferry heeft besloten dat de OOS-klok hiervoor niet op nul
+gaat, maar die beslissing staat of valt met een diff die aantoont dat alleen de plumbing
+wijzigde. Kunnen we dat niet aantonen, dan gaat de klok alsnog op nul voor de hele vloot.
+
+NIET AAN BEGINNEN: D-64 en D-63 zijn geparkeerd. D-44 staat op review en de fix zelf ligt
+bij Ferry in het PMT-dashboard.
+```
 
 ---
 
-## 🧑‍✈️ Ferry — vier handelingen, in deze volgorde
+## 🟪 Web — deze ronde bewust niets
 
-**1. 🔴 D-53 uitrollen.** Dit is de enige die vandaag iets aan de executie verandert.
+Jullie werk zit in **fase 2** (D-83 en D-84, de settings-tab in twee niveaus) en dat kan
+pas als de config-store van fase 1 er is. Vooruitbouwen zou betekenen: bouwen tegen een
+schema dat nog vaststaat te worden.
+
+Wat je wél kunt doen als je wilt vooruitkijken: lees `docs/PLAN-2026-09-27-herijking.md`
+§2.1 en §4-fase-2. Eén punt is belangrijk om nu al te laten bezinken — **met de settings-tab
+wordt de webapp onderdeel van het live executiepad**. Vandaag toont een fout daar een
+verkeerd getal; straks stuurt hij een order naar het verkeerde account. Dat verandert wat
+"af" betekent voor dat scherm.
+
+---
+
+## 🧑‍✈️ Ferry
+
+**1. D-53 nog steeds uitrollen.** Bij de herijking is besloten dat contracten in Pine
+blijven (antwoord 9), waardoor de qty-override een **vangnet** is en geen besturingsknop.
+Dat maakt hem niet minder nuttig — een vangnet dat niet geïnstalleerd is, vangt niets.
 
 ```bash
 cd /root/mex-middleware-b
 dotnet build src/Mex.Journal.Receiver -c Release
-# zet in de EnvironmentFile: MEX_ACCOUNT_QTY=<account>=1,<account>=1,...
+# zet in de EnvironmentFile: MEX_ACCOUNT_QTY=<account>=1,...
 systemctl restart mex-receiver
 ```
-Controleer daarna bij de eerste alert dat de doorgestuurde body `"quantity":"1"` draagt.
 
-**2. 📱 `ls -la /root/exports/*Cash_History*.csv`** — bepaalt of D-75 een taak is of een
-lege huls. Plak de uitvoer, ook als het niets oplevert; "niets" is hier ook een antwoord.
+**2. Het eerste dat ik van je nodig heb voor fase 4:** één wekelijkse Tradovate fills-CSV,
+zodat we het formaat kunnen lezen vóórdat we de import ontwerpen. Eén bestand is genoeg.
 
-**3. 📱 Widget op de telefoon bekijken** — past de vierde rij op een small widget, of kapt
-hij af? Kapt hij af, dan haal ik de `Accounts`-rij eruit; die staat ook op het dashboard.
-
-**4. D-72 — de routekeuze.** Web heeft statisch bewezen dat PMT nooit een bracket-exit
-echoot: `f_sendExec` wordt aan de sluitkant alleen aangeroepen voor vijf administratieve
-closes. Poort #12 zou daarmee bijna elke echte trade als `unconfirmed` markeren — dat is
-fail-blind, niet fail-closed. Er liggen drie routes (a/b/c) in D-72 op het bord.
-
-Daarna, wanneer het uitkomt: D-44 (PMT-dashboard: Auto BreakEven = YES, risicotype ≠ `Price`),
-D-47 (twee resterende alerts), D-11 (drie secrets roteren), D-31 (snapshot-timer),
-D-58 (default branch), D-03 (reconciliatie-timer).
+**3. Blijft staan, wanneer het uitkomt:** D-44 (PMT-dashboard: Auto BreakEven = YES,
+risicotype ≠ `Price`) · D-11 (secrets roteren — verandert in fase 2 van karakter) ·
+D-31 (snapshot-timer + het verlopen GitHub-token) · D-58 (default branch).

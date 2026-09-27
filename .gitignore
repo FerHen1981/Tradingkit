@@ -47,3 +47,8 @@ middleware/dotnet-receiver/**/appsettings*.json
 *.save
 *.save.[0-9]
 middleware/.env.save
+
+# fills/cash exports — nooit committen (accountnummers + standen)
+*Fills*.csv
+*Cash_History*.csv
+exports/

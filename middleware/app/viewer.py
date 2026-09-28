@@ -320,7 +320,11 @@ class Handler(BaseHTTPRequestHandler):
                     "yesterday": {"net": round(yall.get("window_net") or 0, 2),
                                   "trades": yall.get("trades") or 0,
                                   "winrate": yall.get("win_rate") or 0,
-                                  "pf": yall.get("pf") or 0},
+                                  "pf": yall.get("pf") or 0,
+                                  # D-105 · sessiedag die _aggregate("yesterday") koos —
+                                  # "laatste handelsdag met activiteit", niet calendar-
+                                  # gisteren. Op maandag = vrijdag.
+                                  "session_date": yall.get("window_date")},
                     "eval_stats": eval_stats,
                     "funded_verified": funded_verified,
                 }

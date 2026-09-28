@@ -367,3 +367,39 @@ def test_build_eval_stats_win_rate_is_none_when_nothing_decided():
     stats = ds._build_eval_stats(accts)
     assert stats["raw_counts"] == {"passed": 0, "breached": 0, "running": 1}
     assert stats["win_rate"] is None
+
+
+# --- D-105: window_date exposeert de gekozen sessiedag --------------------
+
+
+def test_aggregate_yesterday_returns_the_last_session_with_trades():
+    import datetime as dt
+    today = ds._session_date(dt.datetime.now(dt.timezone.utc))
+    fri = today - dt.timedelta(days=3)     # meest recente vrijdag als 'today' maandag is
+    wed = today - dt.timedelta(days=5)
+    trades = [
+        {"acct": "PAAPEX111", "sym": "MGC", "strat": "El Tesoro", "net": 20.0,
+         "ticks": 0, "close": fri, "hour": 12, "dow": fri.weekday(), "comm": 0.0,
+         "mfe": None, "mae": None},
+        {"acct": "PAAPEX111", "sym": "MGC", "strat": "El Tesoro", "net": -10.0,
+         "ticks": 0, "close": wed, "hour": 12, "dow": wed.weekday(), "comm": 0.0,
+         "mfe": None, "mae": None},
+    ]
+    ag = ds._aggregate(trades, "yesterday")
+    # yesterday kiest de meest recente sessiedag mét trades die vóór vandaag ligt,
+    # niet strikt de calender-gisteren.
+    assert ag["window_date"] == fri.isoformat()
+    assert ag["stats"]["n"] == 1     # alleen de vrijdag-trade telt
+
+
+def test_aggregate_day_returns_todays_session_date():
+    import datetime as dt
+    today = ds._session_date(dt.datetime.now(dt.timezone.utc))
+    trades = []
+    ag = ds._aggregate(trades, "day")
+    assert ag["window_date"] == today.isoformat()
+
+
+def test_aggregate_week_leaves_window_date_none():
+    ag = ds._aggregate([], "week")
+    assert ag["window_date"] is None

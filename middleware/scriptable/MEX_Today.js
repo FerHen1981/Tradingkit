@@ -120,7 +120,22 @@ async function getData() {
 
     today: -653.44,
 
-    yesterday: null,
+    // D-105 · Demo laat "last session" zien met een echte sessiedag (vrijdag
+    // 25-09) en met een niet-nul net, zodat de yesterday-tak in demo-mode ook
+    // de nieuwe splitrij + label rendert.
+    yesterday: {
+
+      net: 421.87,
+
+      trades: 6,
+
+      winrate: 66.7,
+
+      pf: 1.94,
+
+      session_date: "2026-09-25"
+
+    },
 
     week: {
 
@@ -131,6 +146,39 @@ async function getData() {
       winrate: 50.0,
 
       pf: 0.20
+
+    },
+
+    // D-105 · genormaliseerde eval-tellers voor de splitrij (accountontwikkeling,
+    // geen bedragen — D-74). Waarden matchen wat _build_eval_stats zou uitrekenen
+    // voor bv. 6 passed (50k-eq) en 1 breached (50k-eq).
+    eval_stats: {
+
+      unit: "50k-equivalent",
+
+      counts_50k_eq: {
+
+        passed: 6.0,
+
+        breached: 1.0,
+
+        running: 12.0
+
+      },
+
+      raw_counts: {
+
+        passed: 4,
+
+        breached: 1,
+
+        running: 12
+
+      },
+
+      n_accounts: 17,
+
+      win_rate: 80.0
 
     },
 
@@ -517,6 +565,120 @@ function yesterdaySnapshot(d) {
 
 
 // ==========================================================
+// EVAL / FUNDED SPLIT
+// ==========================================================
+//
+// D-105 · Één bron voor de splitrij, in alle vier de standen (today · yesterday
+// · week · total). Twee doorsneden:
+//
+//   funded  → SALDO-ontwikkeling in dollars — de period-net van de funded-stack.
+//   eval    → ACCOUNTONTWIKKELING in aantallen — de 50k-genormaliseerde tellers
+//             uit `d.eval_stats.counts_50k_eq`. Geen bedragen. D-74 verbiedt
+//             eval-saldo's op publieke oppervlakken; dit widget staat op een
+//             auth-gated endpoint maar is Ferry's dagelijkse oppervlak.
+//
+// De eval-half is een STAND (snapshot van de vloot nu), geen periode-delta —
+// we hebben vandaag geen historische snapshots om "passed op einde van dag X"
+// tegen te zetten. Ferry's ask van 27-09 (antwoord 11) noemt het bewust
+// "accountontwikkeling" en niet "eval-P&L", en een stand hoort daar bij tot
+// een historische bron beschikbaar is.
+//
+// Format eval-half: `<passed>p·<breached>b` in 50k-eq (bv. "6p·1b"). Beide 0
+// → "—". Format funded-half: `moneyK(bedrag)` of "—" als er geen bedrag is.
+function evalFundedSplit(d, fundedAmount) {
+
+  const counts =
+    (d.eval_stats || {}).counts_50k_eq || {}
+
+  const passed =
+    num(counts.passed, 0)
+
+  const breached =
+    num(counts.breached, 0)
+
+  const evText =
+    (passed === 0 && breached === 0)
+      ? "—"
+      : (
+          fmtCount(passed) + "p·" + fmtCount(breached) + "b"
+        )
+
+  const fuText =
+    (fundedAmount === null || fundedAmount === undefined)
+      ? "—"
+      : moneyK(fundedAmount)
+
+  return {
+
+    label:
+      "Eval / Funded",
+
+    a:
+      evText,
+
+    b:
+      fuText
+
+  }
+
+}
+
+
+// Ronding waarmee 50k-eq getallen leesbaar blijven zonder onwaar precies te
+// worden: onder 10 → één decimaal (2.5), 10 en hoger → geheel (12). Nul valt
+// hier niet doorheen — die filtert `evalFundedSplit` er eerder al uit.
+function fmtCount(n) {
+
+  const v =
+    Number(n || 0)
+
+  return Math.abs(v) < 10
+    ? v.toFixed(1)
+    : String(Math.round(v))
+
+}
+
+
+// D-105 · ISO-datum ("2026-09-25") → korte weergave ("Fri 25 Sep"). Ongeldige
+// input → null zodat de aanroeper kan terugvallen. Wij vermijden bewust een
+// locale-afhankelijke format — de widget-strings zijn EN.
+const WEEKDAYS =
+  ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+const MONTHS =
+  ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+function fmtSessionDate(iso) {
+
+  if (
+    typeof iso !== "string" ||
+    iso.length < 10
+  ) {
+    return null
+  }
+
+  const d =
+    new Date(iso + "T12:00:00Z")
+
+  if (
+    isNaN(d.getTime())
+  ) {
+    return null
+  }
+
+  return (
+    WEEKDAYS[d.getUTCDay()] +
+    " " +
+    d.getUTCDate() +
+    " " +
+    MONTHS[d.getUTCMonth()]
+  )
+
+}
+
+
+// ==========================================================
 // SPARKLINE
 // ==========================================================
 
@@ -826,22 +988,8 @@ if (
   ]
 
 
-  split = {
-
-    label:
-      "Eval / Funded",
-
-    a:
-      moneyK(
-        t.ev
-      ),
-
-    b:
-      moneyK(
-        t.fu
-      )
-
-  }
+  split =
+    evalFundedSplit(d, t.fu)
 
 }
 
@@ -865,10 +1013,17 @@ else if (
 
 
   title =
-    "YESTERDAY"
+    "LAST SESSION"
 
+  // D-105 · lbl toont de daadwerkelijke sessiedag ("Fri 26 Sep") als de API
+  // hem meestuurt onder `yesterday.session_date`. Dat is de laatste dag mét
+  // activiteit, niet de vorige kalenderdag — op maandag is dat vrijdag, na
+  // een stille dag schuift hij door. Zonder datum val je terug op de generieke
+  // tekst, dan is de label geen leugen maar wel minder scherp.
   lbl =
-    "Yesterday"
+    fmtSessionDate(
+      (d.yesterday || {}).session_date
+    ) || "Last session"
 
 
   // Geen data beschikbaar?
@@ -888,7 +1043,7 @@ else if (
 
       [
         "Endpoint",
-        "Yesterday missing"
+        "Last session missing"
       ]
 
     ]
@@ -932,29 +1087,11 @@ else if (
     ]
 
 
-    if (
-      y.ev !== null ||
-      y.fu !== null
-    ) {
-
-      split = {
-
-        label:
-          "Eval / Funded",
-
-        a:
-          y.ev === null
-            ? "—"
-            : moneyK(y.ev),
-
-        b:
-          y.fu === null
-            ? "—"
-            : moneyK(y.fu)
-
-      }
-
-    }
+    split =
+      evalFundedSplit(
+        d,
+        y.fu === null ? null : y.fu
+      )
 
   }
 
@@ -1044,6 +1181,19 @@ else if (
 
   ]
 
+
+  // D-105 · Eval/Funded-splitrij hoort ook in de week-stand (antwoord 11).
+  // Funded-half = week-net van de funded-stack; eval-half = accountontwikkeling
+  // (huidige 50k-eq snapshot — dat is een stand, geen periode-delta).
+  const funded =
+    d.stacks && d.stacks.funded || {}
+
+  split =
+    evalFundedSplit(
+      d,
+      typeof funded.week === "number" ? funded.week : null
+    )
+
 }
 
 
@@ -1126,6 +1276,18 @@ else {
     ]
 
   ]
+
+
+  // D-105 · Eval/Funded-splitrij hoort ook in de total-stand (antwoord 11).
+  // Funded-half = all-time realized van de funded-stack; eval-half = accountontwikkeling.
+  const funded =
+    d.stacks && d.stacks.funded || {}
+
+  split =
+    evalFundedSplit(
+      d,
+      typeof funded.realized === "number" ? funded.realized : null
+    )
 
 }
 

@@ -563,16 +563,23 @@ def _load_routed_trades(routed_dir: str, skip: list[str], after: "dt.date | None
 def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
     today = _session_date(dt.datetime.now(dt.timezone.utc))   # CME session date (18:00 ET roll)
     start = _window_start(window, today)
+    # D-105 · window_date = de daadwerkelijk gekozen sessiedag voor day/yesterday,
+    # zodat de widget onder "Yesterday" kan tonen wélke datum dat is (op maandag
+    # is dat vrijdag, na een stille dag schuift hij door). Voor bredere vensters
+    # blijft dit None.
+    window_date: dt.date | None = None
     if window == "day":
         # Current session day only. After the 18:00 ET roll, "today" is the next calendar day
         # and this correctly returns an empty set until the new session's first trade.
         rows = [t for t in trades if t["close"] == today]
+        window_date = today
     elif window == "yesterday":
         # The most recent COMPLETED session that has trades (so on Monday morning it shows
         # Friday, not an empty Saturday/Sunday).
         prev_days = sorted(set(t["close"] for t in trades if t["close"] < today), reverse=True)
         target = prev_days[0] if prev_days else today - dt.timedelta(days=1)
         rows = [t for t in trades if t["close"] == target]
+        window_date = target
     elif start is not None:
         rows = [t for t in trades if t["close"] >= start]
     else:
@@ -700,7 +707,8 @@ def _aggregate(trades: list[dict], window: str, stage: str = "all") -> dict:
 
     return {"assets": assets, "totals": totals, "acct_net": dict(acct_net),
             "heatmap": heatmap, "correlation": correlation, "calendar": calendar,
-            "equity": equity, "acct_stats": acct_stats, "strat_stats": strat_stats, "stats": stats}
+            "equity": equity, "acct_stats": acct_stats, "strat_stats": strat_stats,
+            "stats": stats, "window_date": window_date.isoformat() if window_date else None}
 
 
 # ---- caches --------------------------------------------------------------------------
@@ -913,6 +921,10 @@ def command_state(window: str = "all", stage: str = "all") -> dict:
             "withdrawable": total_withdrawable,
             "payout_eligible": payout_eligible,
             "attention": attn_counts,
+            # D-105 · voor `day` en `yesterday` de gekozen sessiedag (ISO); voor
+            # bredere vensters None. Widget leest dit om "Yesterday" te labelen
+            # met de daadwerkelijke laatste handelsdag i.p.v. calendar-yesterday.
+            "window_date": ag.get("window_date"),
         },
         "accounts": accounts,
         "assets": assets,

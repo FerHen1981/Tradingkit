@@ -4718,3 +4718,55 @@ nodig.
 
 Op review. D-53 blijft `wip` tot Ferry deployed heeft en de eerste live-order de nieuwe
 qty draagt.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-105 op review
+
+**Vier stappen gedaan zoals uitgezet, drie kleine keuzes bij het nemen ervan gemeld.**
+
+### 1. Bron opgenomen, oude gearchiveerd
+
+- `middleware/scriptable/MEX_Today.js` staat er als **de** bron (uit `docs/widget-MEX_Today-2026-09-28.js.txt`, `git mv` zodat de historie meegaat).
+- `middleware/scriptable/mex-fleet-widget.js` → `middleware/scriptable/archive/mex-fleet-widget.js`, met een README ernaast (`middleware/scriptable/archive/README.md`) die vertelt waarom hij daar staat en welke commits erop staan die op de nieuwe bron van toepassing zijn.
+- `docs/widget-MEX_Today-2026-09-28.js.txt` bestaat niet meer als losse levering — hij is de bron nu, en losstaand rondslingeren was dubbel.
+
+### 2. Eval-splitrij: bedragen eruit, accountontwikkeling erin
+
+- Één helper `evalFundedSplit(d, fundedAmount)` in de widget vervangt de drie ad-hoc `split = {…}`-blokken. **Eval-half** leest `d.eval_stats.counts_50k_eq.{passed,breached}` en rendert als `<Xp·Yb>` in 50k-equivalenten (compact met `fmtCount`: onder 10 één decimaal, anders geheel). **Beide 0 → `—`.** **Funded-half** blijft dollars via `moneyK(...)`.
+- De API leverde `eval_stats` al aan de top-level widget-payload (viewer.py, D-74). De widget consumeert dat nu ook — geen nieuwe API-shape nodig voor deze fix.
+- ⚠️ **Bewuste beperking, expliciet:** eval-half is een **stand** (huidige 50k-eq snapshot), geen periode-delta. Op `today`, `yesterday`, `week` en `total` toont hij dezelfde `Xp·Yb`. Reden: we hebben geen historische snapshots ("passed op einde van dag X") en Ferry's antwoord 11 noemt het bewust *accountontwikkeling*, niet *eval-P&L*. Zodra we snapshot-taps krijgen (D-93-adjacent) wordt dit eenvoudig period-aware.
+
+### 3. "Yesterday" = laatste handelsdag met activiteit
+
+- **De backend deed dit al** — `_aggregate("yesterday")` op `dashboard_state.py:571-575` filtert op *"the most recent completed session that has trades"*. Op maandag levert dat vrijdag; na een stille dag schuift hij door. Geen nieuwe window nodig.
+- Wat er ontbrak was **zichtbaarheid**. Toegevoegd: `window_date` in het `_aggregate`-return (ISO-datum voor `day` en `yesterday`, `null` voor bredere vensters), doorgereikt in `command_state().fleet.window_date`, en in het widget-endpoint als `yesterday.session_date` (`viewer.py`).
+- Widget-kant: `title` van `YESTERDAY` → `LAST SESSION`; `lbl` toont de datum als `Fri 25 Sep` via `fmtSessionDate(iso)`. Ontbreekt de datum, dan valt hij terug op `"Last session"`. De "No data" fallback-tekst is meegegroeid: `"Yesterday missing"` → `"Last session missing"`.
+- Drie unit-tests toegevoegd op `_aggregate`: `test_aggregate_yesterday_returns_the_last_session_with_trades` (op een fixture met woensdag + vrijdag levert yesterday vrijdag op, wed niet), `test_aggregate_day_returns_todays_session_date`, `test_aggregate_week_leaves_window_date_none`.
+
+### 4. Split in `week` en `total`
+
+- Beide branches krijgen dezelfde `evalFundedSplit`-oproep. In `week` = `stacks.funded.week`, in `total` = `stacks.funded.realized`. Als het funded-veld ontbreekt → `null` → rendert `—` in de funded-half. De eval-half is dezelfde snapshot als in today/yesterday (zie beperking bij §2).
+
+### DEMO-payload aangepast zodat de tak-render nu klopt
+
+- `yesterday: null` → een echt object met `net`, `trades`, `winrate`, `pf`, `session_date: "2026-09-25"`. Zonder dit wordt de yesterday-tak in DEMO-modus altijd door de "No data"-tak gehaald en zie je de nieuwe split + label niet.
+- `eval_stats` toegevoegd (waarden matchen wat `_build_eval_stats` zou berekenen voor 4 passed accounts / 1 breached / 12 running met 50k-normalisatie 6/1/12).
+- Live gedrag verandert hierdoor niet — DEMO staat op `false`.
+
+### NIET meegenomen (bewust, per opdracht)
+
+- Herkomstlabels T1/T2/T3, `verified` / `unverified since <datum>`. Die vragen een API-veld dat pas na D-73 bestaat; niet vooruitbouwen.
+- Een nieuwe `command_state`-window naast `yesterday`. De bestaande yesterday-semantiek matcht "laatste handelsdag met activiteit" al; SM's diagnose ("er is een venster nodig dat de laatste dag mét activiteit pakt") kwam uit widget-symptoom, niet uit een gemis in de backend. Deze conclusie staat in de melding zodat het bord dit klopt kan krijgen.
+
+### Test-status
+
+184 middleware-tests groen (van 181 → 184 met de drie window_date-tests). Widget: `node --check` schoon; alle split-permutaties nagespeeld (funded ±$, geen funded, geen eval-stats) plus de sessiedatum-formatter. Live rooktest kan pas ná deploy van de nieuwe payload-shape in viewer.py (deze commit).
+
+### Wat Ferry moet doen
+
+Voor de widget-code alleen: replace `MEX_Today.js` in Scriptable met het nieuwe bestand — de repo-versie is nu `middleware/scriptable/MEX_Today.js`. De receiver-kant (`middleware/app/viewer.py` + `dashboard_state.py`) draait pas na de gebruikelijke restart van de cockpit-viewer (`mex-viewer`-service, niet `mex-receiver`).
+
+**Live-executiepad?** Niet direct. `viewer.py` en `dashboard_state.py` zijn de cockpit/dashboard, niet het executie-pad; het executie-pad is `mex-receiver` (`Program.cs`). Deze commit raakt dat niet. Wel goed om te noemen: als de cockpit-viewer niet automatisch herstart, ziet de widget de oude payload-shape tot Ferry hem verspringt (`systemctl restart mex-viewer` of hoe je hem hier ook noemt).
+
+Op review.

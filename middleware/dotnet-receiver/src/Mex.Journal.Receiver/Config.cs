@@ -137,6 +137,31 @@ public static class ConfigProvider
     /// <summary>Alleen voor tests / handmatige triggers. Doet één reload-poging.</summary>
     public static void ForceReload() => TryReload();
 
+    /// <summary>D-82 · Publieke variant van de parser + validator. Wordt door
+    /// de Config-API gebruikt om een inkomende PUT te toetsen vóór hij wordt
+    /// weggeschreven — anders schrijven we een file die 5 seconden later door
+    /// TryReload wordt afgewezen en krijgt de gebruiker geen directe feedback.</summary>
+    public static (bool Ok, string Error) TryParseAndValidate(string text)
+    {
+        var parsed = Parse(text, out var parseError);
+        if (parsed is null) return (false, parseError ?? "unknown parse error");
+        return ConfigValidator.Validate(parsed);
+    }
+
+    /// <summary>D-82 · Rauwe file-inhoud voor de GET-endpoint. Leest van disk
+    /// zodat de client precies ziet wat er is opgeslagen — inclusief velden die
+    /// de fase-1 reader vandaag nog niet consumeert (channels, defaults.widget,
+    /// notion.*). Zonder file: null zodat de endpoint 204 kan sturen.</summary>
+    public static string? ReadRawOrNull()
+    {
+        try
+        {
+            if (!File.Exists(_path)) return null;
+            return File.ReadAllText(_path);
+        }
+        catch { return null; }
+    }
+
     static void TryReload()
     {
         FileInfo info;

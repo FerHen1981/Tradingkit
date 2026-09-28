@@ -150,6 +150,29 @@ app.MapPost("/killswitch", (string token, bool armed) =>
     return Results.Ok(new { armed = Runtime.Armed });
 });
 
+// D-82 · Config-API. Auth: Bearer-token via `MEX_CONFIG_API_TOKENS` (map
+// naam:token) of `MEX_CONFIG_API_TOKEN` (single-token + optionele
+// `MEX_CONFIG_API_USER`). Zonder env-vars: locked-by-default → 401.
+app.MapGet("/api/config", (HttpContext ctx) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    return Results.Json(ConfigApi.BuildGetResponse());
+});
+
+app.MapPut("/api/config", async (HttpContext ctx) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    string body;
+    using (var r = new StreamReader(ctx.Request.Body)) body = await r.ReadToEndAsync();
+    if (string.IsNullOrWhiteSpace(body)) return Results.BadRequest(new { error = "empty body" });
+    var result = await ConfigApi.WriteAsync(body, user);
+    return result.Ok
+        ? Results.Ok(new { version = result.Version, updated_by = user })
+        : Results.BadRequest(new { error = result.Error });
+});
+
 app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
 {
     if (string.IsNullOrEmpty(secret) || token != secret)

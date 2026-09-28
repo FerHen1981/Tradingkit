@@ -5705,3 +5705,123 @@ we niet.
 De qty-helft (vijf van zes closes sturen `t_qty` in plaats van `math.abs(strategy.position_size)`)
 is **klein, los van de fase-3-herstructurering en in één regel per site te doen**. Wil je die
 vooruit hebben zonder op fase 3 te wachten, zeg het — dan lever ik hem als losse commit.
+
+---
+
+## 28-09 · Ferry → SM · zes fase-0-beslissingen (via Middleware App)
+
+Ferry heeft de zes kleine keuzes rond D-77 en D-78 in één ronde beslist. Ik leg ze
+hier neer voor je verwerking in de schemas; ik begin ondertussen aan D-82 tegen deze
+aannames.
+
+**D-77 (schema-event.md):**
+1. **JA** — 12 PMT-defaults als middleware-constanten in de builder; geen event-veld, geen `pmt_defaults`-blok in config.
+2. **JA** — Discord-kleur uit vaste `kind+action`-tabel in de middleware; geen event-veld.
+3. **AKKOORD** — Notion-db-id in `schema-config.md` §4 defaults onder `notion.databases.trade_journal_id`.
+
+**D-78 (schema-config.md):**
+4. **JA** — `verified_amount` + `verified_at` als optionele velden op `accounts[]`. Vervangt de fleet-brede `FUNDED_VERIFIED_AT`-env uit D-74.
+5. **AKKOORD** — `WIDGET_GOAL` naar `defaults.widget.monthly_goal`.
+6. **AKKOORD** — `MEX_RENDER_*` + `MEX_SIGNAL_*` in §6-tabel (renderpaden, blijven env).
+
+Fase 0 kan dicht zodra jij de twee schemas hierop bijwerkt. Ik heb D-82 op `wip` gezet
+en bouw tegen deze aannames — als een van de drie akkoorden anders uitpakt in de
+schema-update, is een correctie op de Config-API klein.
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-82 opgeleverd, LIVE PATH
+
+**Fase 2 opener — Config-API met bearer-auth op de .NET-receiver. Hergebruikt D-79's
+provider, D-80's validator en D-81's auditspoor: één write-pad, één plek waar het kan
+misgaan.**
+
+### Twee endpoints, allebei achter Bearer-auth
+
+- **`GET  /api/config`** — geeft `{ path, active_version, active_updated_at, file_present, file }`. `file` is de rauwe file-inhoud, geparsed als JSON zodat de client alles ziet inclusief velden die de fase-1-reader nog niet consumeert (channels, defaults.widget, notion.*). Zonder file: `file_present: false, file: {}`.
+- **`PUT  /api/config`** — vervangt de configuratie volledig. Validatie eerst (dezelfde `ConfigValidator` als de file-poll), dan atomaire write (tmp + rename), dan een `ForceReload()` zodat het antwoord de nieuwe versie draagt. Server overschrijft `version` (monotonisch +1), `updated` en `updated_by` — een client kan die niet vervalsen.
+
+### Authenticatie
+
+Twee vormen, beide via `Authorization: Bearer <token>`:
+
+- **Aanbevolen:** `MEX_CONFIG_API_TOKENS=ferry:t0k3nA,operator:t0k3nB` — mapt naam → token, en de naam belandt in `updated_by` in het auditspoor.
+- **Kort:** `MEX_CONFIG_API_TOKEN=<single-token>` + optioneel `MEX_CONFIG_API_USER=ferry` (default "admin").
+
+**Locked by default.** Zonder een van deze env-vars gaan alle requests 401. Dat is precies wat Ferry vroeg (*"authenticatie als ontwerpeis"*): stille onbereikbaarheid is veiliger dan een open scherm dat orders stuurt.
+
+Token-vergelijk is **constant-tijd** (`CryptographicOperations.FixedTimeEquals`) om timing-lek te vermijden. Onbelangrijk vandaag, gratis om nu goed te doen.
+
+### Concurrentie
+
+Één `SemaphoreSlim` serialiseert PUT-schrijfacties. Zonder deze zouden twee simultane PUTs allebei versie N+1 kunnen nemen — één zou stil verdwijnen. Vandaag is er één gebruiker; zodra Ferry er een tweede naast wil, is dit al goed.
+
+### Wat er hergebruikt wordt (dus geen dubbele logica)
+
+- `ConfigProvider.TryParseAndValidate(text)` — dezelfde parse + validate als de file-poll.
+- `ConfigProvider.ForceReload()` — dezelfde reload-code, dus dezelfde `[config] loaded`-lijn en dezelfde audit-regel als een handmatige file-edit.
+- `ConfigValidator.Validate` — dezelfde regels (status enum, cap ≥ 0, contracts > 0).
+- Alles wat na een succesvolle PUT gebeurt (audit-lijn, provider-swap) is bit-voor-bit identiek aan een handmatige `sed`-edit. **Er is nooit twee paden.**
+
+### Wat er NIET in zit (bewust)
+
+- **PATCH.** Alleen full-replace. Fase 2's UI kan dat prima aansturen (lezen + hele file terugsturen), en PATCH zou een tweede validatie-pad zijn dat sync moet blijven.
+- **Audit-lees-endpoint.** `audit.log` staat op disk en het settings-tab (D-83/D-84) kan hem rechtstreeks lezen — de receiver hoeft geen tweede eindpunt daarvoor.
+- **Token-rotate via HTTP.** Tokens blijven env; roteren via `systemctl edit mex-receiver` (D-11 blijft dat pad).
+- **CORS-headers.** De settings-tab hoort achter dezelfde Caddy-hostnaam te draaien als de API. Cross-origin scenarios komen niet voor.
+
+### Acceptance-flow (na deploy + één van de tokens gezet)
+
+```bash
+# Zet één token (voor de test):
+mkdir -p /etc/systemd/system/mex-receiver.service.d
+cat > /etc/systemd/system/mex-receiver.service.d/config-api.conf <<'CONF'
+[Service]
+Environment=MEX_CONFIG_API_TOKENS=ferry:test-token-abc123
+CONF
+systemctl daemon-reload && systemctl restart mex-receiver
+
+# GET zonder token → 401
+curl -s -w "\n%{http_code}\n" http://localhost:5000/api/config
+# → {} en 401
+
+# GET met token → 200, JSON met path/version/file
+curl -s http://localhost:5000/api/config -H "Authorization: Bearer test-token-abc123" | python3 -m json.tool
+
+# PUT met geldige config
+curl -s -X PUT http://localhost:5000/api/config \
+  -H "Authorization: Bearer test-token-abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"accounts":{"PAAPEX2700250000013":{"status":"active","contracts":2}}}'
+# → {"version": N+1, "updated_by": "ferry"}
+# → journalctl: [config] loaded vN+1 · updatedBy=ferry
+# → audit.log: nieuwe phase:"loaded"-regel met diff
+
+# PUT met ongeldige status → 400 met reden
+curl -s -X PUT http://localhost:5000/api/config \
+  -H "Authorization: Bearer test-token-abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"accounts":{"PAAPEX2700250000013":{"status":"typo"}}}'
+# → {"error":"account PAAPEX2700250000013: unknown status 'typo' …"}
+# → file NIET overschreven, actieve config blijft de laatst-goede
+```
+
+### Wat dit voor D-83/D-84 (Web) betekent
+
+- **De contract is klaar.** Web hoeft alleen te fetchen en te putten; alles daarachter is al gedekt door de bestaande D-79/D-80/D-81-machinerie.
+- **`GET`-shape blijft stabiel.** `active_version` + `file` zijn de twee velden die de settings-tab nodig heeft. Als Web extra metadata wil (bv. "last error"), meld dat en ik voeg het toe.
+- **Auth-token wordt via HTTP-header verwacht.** Web-app slaat het in localStorage (of `<script>window.API_TOKEN = "…"</script>` uit een backend); het scherm zelf verstuurt hem als `Authorization: Bearer <token>`.
+
+### Deploy
+
+Zelfde recept, plus `ConfigApi.cs` erbij:
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/{Program.cs,Config.cs,ConfigApi.cs} /root/mex-middleware-b/src/Mex.Journal.Receiver/ \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+Zonder `MEX_CONFIG_API_TOKEN(S)` blijft de API dicht — je kunt veilig deployen en later een token zetten wanneer de settings-tab er is.
+
+D-82 op review. Live-executiepad — herbouw + herstart via bovenstaand blok.

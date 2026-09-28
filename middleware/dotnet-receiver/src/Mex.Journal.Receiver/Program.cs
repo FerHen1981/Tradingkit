@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Mex.Journal.Receiver;
 using Mex.Journal.Recon;
 
 // MEX Signaal-endpoint (Fase D) — één alert-URL per chart.
@@ -37,6 +38,11 @@ var pcUrl = Environment.GetEnvironmentVariable("MEX_PC_URL") ?? cfg["PineConnect
 var dryRun = !string.Equals(Environment.GetEnvironmentVariable("MEX_DRY_RUN") ?? "true",
                             "false", StringComparison.OrdinalIgnoreCase);
 Directory.CreateDirectory(storePath);
+
+// D-79 · Herlaadbare configuratie. Start de poll-loop bij boot. Ontbreekt de
+// file, dan gedraagt de receiver zich als vandaag — de env-vangnetten winnen
+// voor elk account dat niet in de file staat.
+ConfigProvider.Start();
 
 // Kaart-rendering: Discord-berichten van Tier A/B gaan als PNG i.p.v. tekst.
 // Zelf-configurerend: staat het render-script er niet, dan blijft alles tekst.
@@ -510,7 +516,18 @@ public static class AccountQty
     }
 
     public static int? QuantityFor(string account)
-        => !string.IsNullOrEmpty(account) && _map.TryGetValue(account, out var n) ? n : null;
+    {
+        if (string.IsNullOrEmpty(account)) return null;
+        // D-79 · File wint van env. Staat het account in de configuratiefile
+        // met een expliciete `contracts` > 0, dan is dat de bron. Ontbreekt
+        // het account of het veld, dan blijft de env-map het vangnet. Dit
+        // maakt hot-reload mogelijk zonder dat je alle 39 accounts in één
+        // klap moet migreren.
+        if (ConfigProvider.Current.Accounts.TryGetValue(account, out var cfg)
+            && cfg.Contracts is int c && c > 0)
+            return c;
+        return _map.TryGetValue(account, out var n) ? n : null;
+    }
 }
 
 // D-40 · Reactieve blocked-gate per account. Onthoudt een PMT-weigering met een
@@ -645,12 +662,31 @@ public static class AccountRiskGate
 
     public static void SetDefaultCap(int cap) => _defaultCap = cap > 0 ? cap : 0;
 
-    public static bool IsHalted(string account) =>
-        !string.IsNullOrEmpty(account) && _halted.Contains(account);
+    public static bool IsHalted(string account)
+    {
+        if (string.IsNullOrEmpty(account)) return false;
+        // D-79 · File wint. Staat het account op `halted` in de config, dan
+        // is dat de bron; anders valt hij terug op de env-set die de static
+        // ctor heeft geladen. Zo werkt hot-reload zonder dat de env-lijst
+        // hoeft te verdwijnen.
+        if (ConfigProvider.Current.Accounts.TryGetValue(account, out var cfg)
+            && string.Equals(cfg.Status, "halted", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return _halted.Contains(account);
+    }
 
-    // Effectieve cap voor dit account: expliciet > default > geen cap (0).
+    // Effectieve cap voor dit account: file > env-expliciet > file-default > env-default > geen cap (0).
+    // File wint per D-79; env blijft vangnet zolang D-81 nog niet gemigreerd is.
     public static int CapFor(string account)
-        => _caps.TryGetValue(account, out var n) ? n : _defaultCap;
+    {
+        if (!string.IsNullOrEmpty(account)
+            && ConfigProvider.Current.Accounts.TryGetValue(account, out var cfg)
+            && cfg.DailyEntryCap is int fromFile && fromFile > 0)
+            return fromFile;
+        if (_caps.TryGetValue(account, out var n)) return n;
+        if (ConfigProvider.Current.DefaultEntryCap is int fd && fd > 0) return fd;
+        return _defaultCap;
+    }
 
     public static int EntryCount(string account, DateTime nowUtc)
     {

@@ -5004,3 +5004,104 @@ Ik start met D-79 (config-provider met herlaad) tegen deze shape; als de toevoeg
 worden overgenomen zijn ze nog steeds toe te voegen zonder de provider te herschrijven.
 
 D-73 op review, D-79 op wip.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-79 opgeleverd, LIVE PATH
+
+**Fase 1 opener staat. Nieuwe file `Config.cs` + drie kleine ingrepen in `Program.cs`. Zelfde gedrag als vandaag zolang de configuratiefile ontbreekt of leeg is.**
+
+### Wat er verandert
+
+- **`middleware/dotnet-receiver/src/Mex.Journal.Receiver/Config.cs`** (nieuw):
+  `ConfigDocument`, `AccountConfig`, `ConfigProvider`. Poll elke 5s (configureerbaar
+  via `MEX_CONFIG_POLL_MS`, min 500ms) op mtime + length; herlaad atomair; op parse-
+  of leesfout blijft de laatst-goede staan met een `[config] reload failed …`-regel
+  op stderr. Fase 1 doet géén validatie of luide melding — dat is D-80.
+- **`Program.cs`**: `ConfigProvider.Start()` bij boot; `AccountQty.QuantityFor()`,
+  `AccountRiskGate.IsHalted()` en `AccountRiskGate.CapFor()` consulteren nu eerst de
+  file, dan de env. File-waarde wint per D-79; env blijft vangnet tot D-81 migreert.
+
+### Wat er BEWUST hetzelfde blijft
+
+- **Env-vars werken door zoals vandaag.** Zonder `/root/mex-config/mex.json` verandert
+  er niets aan het gedrag — `MEX_ACCOUNT_QTY`, `MEX_HALTED_ACCOUNTS`,
+  `MEX_ACCOUNT_ENTRY_CAPS` en `MEX_DEFAULT_ENTRY_CAP` blijven de bron. Dit is de
+  belangrijkste veiligheidsgarantie voor deze rollout.
+- **`AccountBlockGate` bleef ongemoeid.** De SM-tekst noemt hem in het rijtje, maar
+  hij leest géén env-config in zijn static ctor — hij is een runtime-accumulator
+  (PMT-weigeringen → sessieroll). Er valt niets aan hem hot-reloadbaar te maken tot
+  we een file-gestuurde limit-marker-lijst willen (mogelijk in fase 4).
+- **`AccountBlockGate.LimitMarkers`** blijft ook hardcoded. Per-firm markers zijn een
+  D-90-onderwerp.
+
+### Acceptance zoals D-79 hem vraagt
+
+*"in `DRY_RUN` een waarde wijzigen en aantonen dat het gedrag meebeweegt zonder
+`systemctl restart`."*
+
+Op de VPS, in DRY_RUN:
+
+```bash
+mkdir -p /root/mex-config
+cat > /root/mex-config/mex.json <<'JSON'
+{
+  "version": 1,
+  "updated": "2026-09-28T00:00:00Z",
+  "updated_by": "d79-test",
+  "accounts": {
+    "PAAPEX2700250000013": { "status": "active", "contracts": 3 }
+  }
+}
+JSON
+
+# journalctl -u mex-receiver -f in een andere shell — verwacht:
+#   [config] provider started · path=/root/mex-config/mex.json · poll=5000ms
+#   [config] loaded v1 · accounts=1 · defaultCap=— · updatedBy=d79-test
+
+# stuur nu een test-signaal voor PAAPEX...013 → quantity moet 3 worden
+# (in DRY_RUN wordt hij niet doorgestuurd, wel in routed_*.jsonl gezet)
+
+# wijzig contracts naar 5:
+sed -i 's/"contracts": 3/"contracts": 5/' /root/mex-config/mex.json
+# binnen 5s in de log:
+#   [config] loaded v1 · accounts=1 · …
+# volgend signaal voor …013 draagt quantity=5. Geen restart.
+```
+
+Een voorbeeldconfig staat in de repo: `middleware/dotnet-receiver/mex-config.example.json`.
+
+### Compileren en deployen (dezelfde flow als D-53)
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs /root/mex-middleware-b/src/Mex.Journal.Receiver/Program.cs \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/Config.cs   /root/mex-middleware-b/src/Mex.Journal.Receiver/Config.cs \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+**Zonder een `mex.json`-file verandert er niets aan het gedrag.** Ferry kan dus veilig
+uitrollen en de file later aanmaken zodra hij wil gaan experimenteren met hot-reload.
+
+### Wat er NIET in deze commit zit
+
+- **Validatie + laatst-goede-terugval + luide melding** → D-80. Vandaag: parse-error
+  = last-good blijft, stderr-regel. Dat is niet "luid" (geen Discord/telegram).
+- **Auditspoor** → D-81. Vandaag geen wie-wat-wanneer-log op configwijzigingen.
+- **Migratie env → file** → D-81. Env blijft nu bewust naast de file leven.
+- **Schrijfpad via HTTP** → D-82. Vandaag alleen file-schrijven op de VPS zelf.
+
+### D-78-review-hangover
+
+Ik heb de configuratieshape van `schema-config.md` gevolgd voor de velden die fase 1
+raakt (`accounts[].status`, `accounts[].caps.entries_per_day`, `defaults.caps.entries_per_day`)
+plus één afwijking: **`accounts[].contracts`** als optioneel hot-reloadable veld. Schema §3
+verbiedt dit veld in de settings-tab, en dat blijft zo — de tab (D-82) toont hem niet.
+Maar de reader in fase 1 leest hem wél, zodat de acceptance-flow "wijzig waarde, geen
+restart" ook voor D-53's vangnet werkt. Als je dat te ver vindt, is de fix één regel
+weg in `Config.cs` — Ferry kan hem dan alleen via env veranderen (dus wél restart voor
+qty-wijziging, hot-reload voor status/caps).
+
+D-79 op review. **Live executiepad** — Ferry, zie het build/deploy-blok hierboven.

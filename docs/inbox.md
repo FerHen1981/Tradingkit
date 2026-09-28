@@ -4770,3 +4770,45 @@ Voor de widget-code alleen: replace `MEX_Today.js` in Scriptable met het nieuwe 
 **Live-executiepad?** Niet direct. `viewer.py` en `dashboard_state.py` zijn de cockpit/dashboard, niet het executie-pad; het executie-pad is `mex-receiver` (`Program.cs`). Deze commit raakt dat niet. Wel goed om te noemen: als de cockpit-viewer niet automatisch herstart, ziet de widget de oude payload-shape tot Ferry hem verspringt (`systemctl restart mex-viewer` of hoe je hem hier ook noemt).
 
 Op review.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-73 gemeten, één anomalie gevonden
+
+**41 bestanden, 4539 PMT-rijen, gedraaid op de VPS.** Volledige bevinding staat in
+`docs/D-73-pmt-bodies-2026-09-28.md`. Twee dingen om nu te noemen:
+
+**Kern:** PMT's antwoord-body draagt géén fill-prijs en géén order-id, in geen enkele
+van de 4539 rijen. **`GEWEIGERD 200` komt in de praktijk niet voor** — echte weigeringen
+komen als HTTP 403, niet als 200 met een error-body. De `Rejected()`-body-check in
+`Program.cs` heeft dus feitelijk niets afgevangen. Web's route-check van 07-09 klopt op
+de meting. **T3 moet uit Fills-CSV of Rithmic komen; T2 kan alleen "verstuurd →
+geaccepteerd" markeren op basis van ontvangstbevestiging.**
+
+**Anomalie die opviel en om één actie vraagt:** account **APEX27002500000205** draagt
+**100% van de 414 lege bodies** (9,1% van al het verkeer) én **100% van de 22 `error
+403`-rijen**. Dat is geen ruis maar gerichte drift op één account. Waarschijnlijk is de
+PMT-endpoint voor dit account anders geconfigureerd (Rithmic vs Tradovate) of is er een
+auth-mismatch. Een `Console.Error`-regel in `Program.cs` die per POST logt welk endpoint
+gekozen werd, zou dit direct oplossen. **Niet nu gedaan** — dat is een aparte kleine
+wijziging op het live pad, geen deel van D-73's meet-scope. Aan de Scrum Master of dit
+een eigen D-nummer verdient of onder D-91's onderzoek meegaat.
+
+**Aanbevolen T2-poort (input voor D-91):**
+
+```
+sent 2xx + {"error": false, ...}     → CONFIRMED
+sent 2xx + <empty>                   → UNKNOWN  (flag account)
+sent 2xx + {"error": true, ...}      → REJECTED  (praktisch onbestaand)
+error 4xx | GEWEIGERD ...            → REJECTED
+```
+
+De `UNKNOWN`-tak is niet dood-materiaal — hij vangt de 9,1% lege bodies en zichtbaar-
+zijn is precies het punt van T2 (fase 2.2 van het herijkingsplan: onbevestigd is een
+expliciete toestand, geen poort die dichtvalt).
+
+**Reproduceren:**
+
+    python3 middleware/tools/analyze_pmt_bodies.py --dir /root/intent-store --samples 20
+
+D-73 op review.

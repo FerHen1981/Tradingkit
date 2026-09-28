@@ -79,6 +79,12 @@ if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MEX_ACCOUNT_Q
     Console.Error.WriteLine(
         "[config] deprecated env MEX_ACCOUNT_QTY_MULTIPLIERS is set — use MEX_ACCOUNT_QTY (contracten) instead.");
 
+// D-85 · Secrets-store: een APARTE bron voor tokens/urls/webhooks. Wordt via
+// `PUT /api/secrets/{name}` beheerd door de settings-tab en door de receiver-
+// code opgehaald via `SecretsStore.Get(name)` (fase 3 pad D-87). De rauwe file
+// verlaat nooit via een endpoint en verschijnt nooit in `audit.log`.
+SecretsStore.Start();
+
 // Kaart-rendering: Discord-berichten van Tier A/B gaan als PNG i.p.v. tekst.
 // Zelf-configurerend: staat het render-script er niet, dan blijft alles tekst.
 var renderScript = Environment.GetEnvironmentVariable("MEX_RENDER_SCRIPT")
@@ -170,6 +176,29 @@ app.MapPut("/api/config", async (HttpContext ctx) =>
     var result = await ConfigApi.WriteAsync(body, user);
     return result.Ok
         ? Results.Ok(new { version = result.Version, updated_by = user })
+        : Results.BadRequest(new { error = result.Error });
+});
+
+// D-85 · Secrets-endpoints. Zelfde Bearer-auth als config, maar de kluis
+// heeft eigen semantiek: namen mogen naar buiten, waarden nooit.
+app.MapGet("/api/secrets", (HttpContext ctx) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    return Results.Json(ConfigApi.BuildSecretsListResponse());
+});
+
+app.MapPut("/api/secrets/{name}", async (string name, HttpContext ctx) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    string body;
+    using (var r = new StreamReader(ctx.Request.Body)) body = await r.ReadToEndAsync();
+    // Body mag leeg zijn — dat is DELETE-semantiek. `WriteSecretAsync`
+    // verwerkt dat.
+    var result = await ConfigApi.WriteSecretAsync(name, body, user);
+    return result.Ok
+        ? Results.Ok(new { name, updated_by = user })
         : Results.BadRequest(new { error = result.Error });
 });
 

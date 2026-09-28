@@ -73,7 +73,7 @@
 | **D-82** | 2 | wip | Middleware App | **Config-API in de viewer: lezen, valideren, schrijven.** Endpoints voor beide niveaus uit D-78, met **authenticatie als ontwerpeis, niet als bijzaak** — dit scherm stuurt orders. Besluit Ferry 27-09: **alleen Ferry bedient het**, dus één sterke sessie volstaat; bouw het wel zo dat er later een tweede gebruiker bij kan zonder herbouw. Elke schrijfactie gaat door dezelfde validatie als D-80 en landt in het auditspoor van D-81. |
 | **D-83** | 2 | todo | Web | **Settings-tab niveau 1 — kanaal en herkomst.** Per prop-firm-programma uit `data/propfirms.json` (**alle 18 selecteerbaar**): kanaal, token, URL, Discord-webhook. Toon vóór het opslaan **wat er verandert**, niet alleen dat er iets verandert. |
 | **D-84** | 2 | todo | Web | **Settings-tab niveau 2 — per account.** Harde caps · publiceren ja/nee · accountstatus · Discord-webhook per kanaal. ⛔ Geen contractveld (zie D-78). De publiceer-toggle is de knop waar **D-74** om vroeg. |
-| **D-85** | 2 | todo | Pine Dev + Middleware App | **Geheimen uit de Pine-scripts halen.** `pmtToken`, `pcLicense` en `accountID` staan vandaag als **chart-input in TradingView**, per script. Zodra de store ze draagt, verdwijnen ze daar. 🔗 Dit verandert **D-11** van karakter: roteren wordt een handeling in het scherm in plaats van een SSH-sessie. |
+| **D-85** | 2 | wip | Pine Dev + Middleware App | **Geheimen uit de Pine-scripts halen.** `pmtToken`, `pcLicense` en `accountID` staan vandaag als **chart-input in TradingView**, per script. Zodra de store ze draagt, verdwijnen ze daar. 🔗 Dit verandert **D-11** van karakter: roteren wordt een handeling in het scherm in plaats van een SSH-sessie. |
 
 ---
 

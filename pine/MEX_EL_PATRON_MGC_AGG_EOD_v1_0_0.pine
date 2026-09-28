@@ -210,6 +210,12 @@
 //   andere kant) of te weinig (restpositie blijft staan). De vier halt-paden sturen nu
 //   math.abs(posSize). De zesde plek is geen sluiting maar het intrekken van een
 //   niet-opgepikte limietorder; daar is t_qty juist en die blijft staan.
+//   DERDE STUK (zelfde ronde, na D-104): de firmablokken zijn opnieuw uit de registry
+//   gegenereerd nadat Backtest Setup de laatste vier firma's toevoegde. Zes nieuwe
+//   programma's erbij; van de achttien bestaande veranderden er twee, en allebei omdat de
+//   .pine achterliep op de registry: mffu_50k_eval en takeprofittrader_50k_eval krijgen
+//   consistency 50% (stond op 0 = geen regel) en min. handelsdagen 2 resp. 3 (stond op 1).
+//   GEEN ENKEL APEX-PROGRAMMA VERANDERT -- alle negen staan er bit-voor-bit gelijk in.
 var string SCRIPT_NAME = "MΞX EL PATRON · MGC AGG EOD"
 var string currentVersion = "v3.5.0"
 strategy("MΞX EL PATRON · MGC AGG EOD · " + currentVersion, shorttitle="PAT-MGC-A", overlay=true,
@@ -516,7 +522,7 @@ rgDllBasis  = input.string("Realized + open (cuts the trade)", "DLL basis", opti
 int rgRollHour = 18   // CME-roll; valt samen met het einde van de force-flat
 
 useFirmPreset = input.bool(true, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "fundednext_50k_rapid_eval", "fundednext_50k_rapid_pa", "mffu_50k_eval", "mffu_50k_pa", "takeprofittrader_50k_eval", "takeprofittrader_50k_pa", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_50k_growth_eval", "tradeify_50k_growth_pa", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
@@ -595,18 +601,42 @@ f_firmRules(string _p) =>
         _g := 3000.0
         _dll := 0.0
         _cons := 0.0
+    else if _p == "fundednext_50k_rapid_eval"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 0.0
+    else if _p == "fundednext_50k_rapid_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 0.0
     else if _p == "mffu_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 0.0
-        _cons := 0.0
+        _cons := 50.0
+    else if _p == "mffu_50k_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 50.0
     else if _p == "takeprofittrader_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 0.0
-        _cons := 0.0
+        _cons := 50.0
+    else if _p == "takeprofittrader_50k_pa"
+        _dd := "Intraday"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 50.0
     else if _p == "topone_50k_elite_eval"
         _dd := "EOD"
         _ml := 2000.0
@@ -637,6 +667,18 @@ f_firmRules(string _p) =>
         _g := 3000.0
         _dll := 0.0
         _cons := 0.0
+    else if _p == "tradeify_50k_growth_eval"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 1250.0
+        _cons := 0.0
+    else if _p == "tradeify_50k_growth_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 1250.0
+        _cons := 35.0
     else if _p == "tradeify_advanced_25k_instant"
         _dd := "EOD"
         _ml := 1500.0
@@ -670,9 +712,17 @@ f_firmMinPayout(string _p) =>
         _mp := 500.0
     else if _p == "daytraders_s2f_25k_instant"
         _mp := 500.0
+    else if _p == "fundednext_50k_rapid_eval"
+        _mp := 500.0
+    else if _p == "fundednext_50k_rapid_pa"
+        _mp := 500.0
     else if _p == "mffu_50k_eval"
         _mp := 500.0
+    else if _p == "mffu_50k_pa"
+        _mp := 500.0
     else if _p == "takeprofittrader_50k_eval"
+        _mp := 500.0
+    else if _p == "takeprofittrader_50k_pa"
         _mp := 500.0
     else if _p == "topone_50k_elite_eval"
         _mp := 500.0
@@ -684,6 +734,10 @@ f_firmMinPayout(string _p) =>
         _mp := 500.0
     else if _p == "tradeday_50k_pa"
         _mp := 250.0
+    else if _p == "tradeify_50k_growth_eval"
+        _mp := 500.0
+    else if _p == "tradeify_50k_growth_pa"
+        _mp := 500.0
     else if _p == "tradeify_advanced_25k_instant"
         _mp := 500.0
     _mp
@@ -752,12 +806,28 @@ f_firmDays(string _p) =>
         _md := 1
         _pd := 0
         _qd := 50.0
-    else if _p == "mffu_50k_eval"
+    else if _p == "fundednext_50k_rapid_eval"
         _md := 1
         _pd := 0
         _qd := 50.0
+    else if _p == "fundednext_50k_rapid_pa"
+        _md := 0
+        _pd := 0
+        _qd := 50.0
+    else if _p == "mffu_50k_eval"
+        _md := 2
+        _pd := 0
+        _qd := 50.0
+    else if _p == "mffu_50k_pa"
+        _md := 0
+        _pd := 0
+        _qd := 50.0
     else if _p == "takeprofittrader_50k_eval"
-        _md := 1
+        _md := 3
+        _pd := 0
+        _qd := 50.0
+    else if _p == "takeprofittrader_50k_pa"
+        _md := 3
         _pd := 0
         _qd := 50.0
     else if _p == "topone_50k_elite_eval"
@@ -778,6 +848,14 @@ f_firmDays(string _p) =>
         _qd := 50.0
     else if _p == "tradeday_50k_pa"
         _md := 5
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeify_50k_growth_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeify_50k_growth_pa"
+        _md := 0
         _pd := 0
         _qd := 50.0
     else if _p == "tradeify_advanced_25k_instant"

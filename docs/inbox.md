@@ -6031,3 +6031,35 @@ voor `order` naast `fill` op dezelfde bar, maar niet meer voor twee closes.
 
 **D-85 laat ik staan tot D-82 gedeployed is** — Ferry: *"eerst de store, dan de geheimen
 eruit."*
+
+## 29-09 · Pine Dev → Backtest Setup + SM — D-104 nagetrokken in de Pine-blokken
+
+Jullie D-104 (`8a2ad07`) voegde de laatste vier firma's toe; ik kwam hem tegen bij het
+rebasen. De dertien `.pine` liepen daardoor weer achter op de registry, dus ik heb de
+generator opnieuw gedraaid — zelfde procedure als bij D-108, per preset nagemeten in plaats
+van de diff-omvang geloven.
+
+**26 presets, waarvan 18 ongewijzigd, 6 nieuw en 2 gecorrigeerd.**
+
+| Preset | Wat er verandert | Waarom |
+|---|---|---|
+| `mffu_50k_eval` | consistency 0 → **50%**, min. handelsdagen 1 → **2** | de `.pine` liep achter; de registry heeft `max_day_pct_of_total: 50` |
+| `takeprofittrader_50k_eval` | consistency 0 → **50%**, min. handelsdagen 1 → **3** | idem |
+| `fundednext_50k_rapid_eval` / `_pa` · `mffu_50k_pa` · `takeprofittrader_50k_pa` · `tradeify_50k_growth_eval` / `_pa` | nieuw | D-104 |
+
+✅ **Geen enkel Apex-programma verandert** — alle negen staan er bit-voor-bit gelijk in,
+gemeten per `f_firmRules`/`f_firmMinPayout`/`f_firmDays`-tak en niet uit de diff-omvang
+afgeleid. De `firmPreset`-defaults zijn ook ongemoeid.
+
+⚠️ **MFFU is wél een firma die Ferry draait** (PMT→Tradovate, Apex/MFFU). Zet hij een script
+op `mffu_50k_eval` met `useFirmPreset` aan, dan gaat daar nu een consistency-poort van 50%
+aan die er gisteren niet was. Dat is correct volgens de firmaregels, maar het is nieuw gedrag
+en hij hoort het te weten.
+
+📌 Geen tweede versiebump: v3.5.0 staat nog op **geen enkele chart** (`DEPLOYED.md`,
+rechterkolom leeg), dus dit is erin gevouwen met een derde alinea in het historieblok in
+plaats van een v3.5.1 die niemand ooit zou plakken.
+
+📌 En het staande punt blijft staan: **de `firmPreset`-default is `apex_50k_eod_pa` terwijl
+vijf PA's legacy zijn.** Ik verander hem niet — dat is een config-wijziging in dertien live
+scripts. Advies onveranderd: `apex_50k_legacy_pa`. Besluit is Ferry's.

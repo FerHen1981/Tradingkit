@@ -12,6 +12,62 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 35. D-104 registry-uitbreiding — drie blokkades die eerst een besluit/bevestiging van Ferry vragen
+**Backtest Setup → Ferry / Scrum Master** · 2026-09-28 · status: OPEN · **blokkeert de commit van D-104**
+
+D-104 opgepakt. D-68 (de code-helft, registry-first + hard falen) is klaar en gepusht.
+Bij het vullen van de registry stuitte ik op drie dingen die ik **niet mag raden** — de
+startprompt waarschuwt zelf dat één verkeerd getal een plausibele en onjuiste payout-datum
+geeft, en `data/propfirms.json` voedt D-96 dat hard faalt. Élk bestaand record is
+`verified: true` (owner-confirmed); ik hou me aan die praktijk en commit deze pas na jouw
+bevestiging. Onderzoek staat hieronder zodat het daarna een invuloefening is.
+
+**A. Welk sub-programma per nieuwe firma? (de kern-blokkade).** Je noemde de firma's, niet
+het programma, en elke firma heeft er meerdere met verschíllende regels:
+- **Blue Guardian** (Tradovate): Standard · Reserve · Express · Direct — consistency loopt
+  van "geen in eval / 40% funded" (Standard) tot een oplopende 20→30% (Direct). Draft
+  (Standard 50K, EOD, bron helpfutures.blueguardian.com): target $3.000 · trailing DD
+  **$2.000 EOD**, lockt op $52.100 · **soft DLL $2.000 (2%)** · consistency **40% funded**,
+  geen in eval · min payout $500 (rise) / $100 (crypto) · eerste payout 3 dagen na 1e trade,
+  cap $2.500 dan $3.000 · split 90%.
+- **Top One Futures** (Tradovate): Elite · Ignite · Instant. ⚠️ **Bronnen spreken elkaar
+  tegen over de consistency**: één zegt Elite **40%**, een andere **25%** — precies het
+  faalpatroon. Draft (Elite 50K): target $3.000 · trailing DD **$2.000 EOD** · **DLL $1.250**
+  · consistency **?% funded-only** (bevestigen) · buffer $3.000, max $2.500/payout · split 90%.
+- **TradeDay** (Tradovate): één hoofd-eval maar de **DD-soort kiest de trader**
+  (Intraday/EOD/Static). Draft (50K): trailing DD **$2.000**, buffer $52.000 · **geen DLL** ·
+  consistency **30% eval-only** · min **5 handelsdagen** · min payout $250 · split 80/90/95 +
+  50% van de eerste $4.000 · geen vaste ladder (straight split, `payout_ladder: null`).
+
+➡️ **Nodig van Ferry:** per firma wélk programma (en voor TradeDay welke DD-soort), en een
+ja/nee op de draftgetallen — vooral Top One's consistency (25 of 40).
+
+**B. Apex consistency — twee bronnen spreken elkaar tegen, en het raakt LIVE accounts.**
+`docs/handoff/FLEET_SETTINGS_v3.md` (26-08) zegt funded consistency **50% uniform**;
+`docs/fleet-report-spec.md` (28-09, tegen drie accounts geverifieerd) zegt **legacy 30% /
+Intraday 4.0 50%**. De registry draagt nu **50% op zowel `apex_50k_eod_pa` als
+`apex_50k_intraday_pa`**. Als legacy 30% moet zijn, verandert dat de payout-datum van elk
+legacy-account. **Ik wijzig geen `verified:true` live-data op een conflict.** Nodig: (1)
+welke registry-sleutel is "legacy" (de fleet-doc mapt scripts op `apex_50k_eod_pa`, niet op
+`apex_50k_legacy_pa` — is eod_pa de legacy 30%?), (2) bevestig 30/50.
+
+**C. Eén echt schema-gat + één schema-vraag.** (1) De **payout-cyclus in handelsdagen**
+(report-spec poort 3: "8/8" voor Apex) zit nergens in `propfirms.schema.json` — `min_trading_days`
+staat op **5** voor `apex_50k_eod_pa` terwijl de cyclus 8 lijkt. Nieuw veld `payout_cycle_days`,
+of moet `min_trading_days` op 8? (2) De **SL-multiple** (report-spec DLL = `SL × 4 × qty`):
+is dat een firma-regel voor de registry, of Ferry's eigen risicobeleid (dan hoort het bij
+D-78 niveau 2, per account, niet hier)? `max_daily_loss` draagt nu de $-DLL; de ×4-afleiding
+is iets anders.
+
+Zodra A+B+C beslist zijn is het invullen + `python tools/gen_pine_firms.py` + schema-validatie
+een kwestie van minuten. Bronnen: blueguardian.com/helpfutures, toponefutures.com /
+thetraderstack, quantvps.com/tradeday-payout-rules (allen 28-09 geraadpleegd).
+
+**Scrum Master:** graag als `Type = Approval` in de Inbox-database, titel
+`🛠️ MEX D-104 — sub-programma's + Apex-consistency + schema-veld bevestigen`, met CONTEXT ·
+AANBEVELING (Standard/Elite/hoofd-eval als default, 30/50 per report-spec, `payout_cycle_days`
+toevoegen) · IMPACT (blokkeert fase 2 via D-78 en D-96) · NA AKKOORD (invullen + generator).
+
 ### 🟧 SM → Analyses & Data · 28-09 · **jullie D-nummers botsen met het bord — graag over op `A-xx`**
 
 Het `fleet_startschema_2026-09-28` verwijst naar **"D-76/D-77"** (guard-instellingen,

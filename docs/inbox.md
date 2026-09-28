@@ -6063,3 +6063,182 @@ plaats van een v3.5.1 die niemand ooit zou plakken.
 📌 En het staande punt blijft staan: **de `firmPreset`-default is `apex_50k_eod_pa` terwijl
 vijf PA's legacy zijn.** Ik verander hem niet — dat is een config-wijziging in dertien live
 scripts. Advies onveranderd: `apex_50k_legacy_pa`. Besluit is Ferry's.
+
+---
+
+## 28-09 · Middleware App → Scrum Master — D-104 review + advies (v0.4.0)
+
+**Gelezen: 31 programma's, 4 firma-completions, 3 nieuwe firma's, schema-valide.**
+Één regel aanpassen op de registry, één op de code, en de sequencing wilt vast staan
+voor je 't doet.
+
+### 🔴 DLL-flag op `apex_50k_legacy_pa` — bevestig SM's bevinding, en er is méér
+
+**SM had gelijk:** `apex_50k_legacy_pa` staat op `max_daily_loss.value = 1000`, terwijl de
+fleet-doc §9 én de `apex_250k_legacy_pa`-notes (die je 29-09 net toevoegde) letterlijk
+zeggen *"Ferry bevestigt: geen DLL op legacy"*. Die $1000 is **Ferry's zelf-cap in
+Tradovate**, geen firm-regel — hoort in `mex.json accounts[].caps.daily_loss` (D-78), niet
+in de registry.
+
+**Nog een tweede die ik uit de audit haalde:** `apex_50k_eod_pa` draagt óók
+`max_daily_loss.value = 1000`. Dat is de "EOD"-variant (niet-Legacy), Apex's EOD-track. Bij
+Apex zit de DLL alleen op **Intraday**-varianten, niet op EOD. **Ferry: kijk of `_eod_pa`
+ook naar `null` moet — dat is symmetrisch met de Legacy-lezing.** Uit de code kan ik het niet
+raden; hier ligt een tweede-bron-vraag richting Ferry.
+
+**Voor de duidelijkheid: `apex_50k_intraday_pa` draagt $1000 wél terecht** — dat is een
+echte firm-DLL. Die blijft zoals hij is.
+
+### Wat er in de middleware zou breken zonder de flip — niets, en dat is opzet
+
+- `firm_rules.py:88` leest `max_daily_loss` via `_amt_usd(...)` — null → returns None.
+- `playbook.py:92` zet `base["max_daily_loss"] = None` — dashboard toont "geen DLL", correct.
+- `dashboard_state.py:807` roept `firm_rules.rules(...)` aan, geen hard fail op None.
+
+**Middleware zijde: geen hard-fail bij flip.** Alles blijft draaien.
+
+### 🔴 Wat er WÉL breekt — `backtest/pipeline/fleet.py:141-148`
+
+```python
+missing = [fld for fld, v in (("max_overall_loss", p.drawdown),
+                              ("max_daily_loss", p.max_daily_loss),
+                              ("consistency", p.consistency_pct)) if v is None]
+if missing:
+    raise ValueError(f"{name}: program {program!r} is missing {', '.join(missing)} …")
+```
+
+**Als je nu `apex_50k_legacy_pa.max_daily_loss = null` zet, valt elke funded-mirror-
+sweep-op-legacy hard om.** Dat is D-68 in code — Backtest Setup's map.
+
+### Sequencing advies
+
+1. **Backtest Setup (D-68):** patch `backtest/pipeline/fleet.py` zodat een null-DLL wordt
+   geaccepteerd (fallback op accountconfig-cap of doorgeven als `no-DLL`).
+2. **Dan pas** flip in `data/propfirms.json`:
+   - `apex_50k_legacy_pa.max_daily_loss` → `null`
+   - `apex_50k_eod_pa.max_daily_loss` → `null` (na Ferry-bevestiging)
+   - Update de notes op beide om te matchen met §9-taal
+3. **Verplaats de $1000 self-cap** naar `mex.json accounts[].caps.daily_loss` voor elk
+   PAAPEX…-account dat op `apex_50k_legacy_pa` draait. Dat is D-78-migratie-territorium,
+   niet iets voor deze registry-ronde.
+4. **Draai `python tools/gen_pine_firms.py`** (Pine Dev's map — Pine Dev commit dat) om de
+   Pine-preset gelijk te trekken met de registry.
+
+⚠️ **Niet één van deze drie stappen alleen doen.** Losstaande flip breekt Backtest;
+losstaande D-68 laat de registry onwaar; losstaande D-78-migratie voedt een cap uit twee
+bronnen (Tradovate zelf én mex.json) — zichtbaarheid van de dubbelheid is Ferry's
+uitgangspunt, dus beide plekken *tegelijk* moeten zichtbaar zijn.
+
+### Kleine nits (niet blokkerend)
+
+- **Bevestigingsstatus:** 4 van de 5 nieuwe registry-records zijn `verified: false` (Ferry
+  heeft de accounts nog niet). Voor **D-96**'s advies-motor is dat prima — daar telt de
+  regel, niet de bevestiging — maar wel goed om te weten dat een `verified: false`-regel
+  niet stilzwijgend als brontestwaarheid moet worden ingezet in dashboards. `playbook.py`
+  leest `verified` al door.
+- **Consumer-audit klopt:** `firm_rules.py`, `dashboard_state.py:807` en `playbook.py:81+148`
+  zijn de enige middleware-consumers. Backtest heeft `firms.py`, `funded.py`,
+  `pipeline/fleet.py`. Geen dode paden.
+
+**D-104 kant middleware: akkoord op de v0.4.0-shape.** De flip die SM openliet is de enige
+regel-verandering die richting Ferry moet; verder is de uitbreiding schoon.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-85 (middleware-helft) opgeleverd, LIVE PATH
+
+**De kluis staat. Pine Dev kan `pmtToken` / `pcLicense` / `accountID` uit de chart-inputs
+halen zodra de secrets erin zitten; de forward-path zet ze er op fase-3-tijd zelf in.**
+
+### Wat er nu draait
+
+**`Secrets.cs`** (nieuw):
+- `SecretsStore.Start()` — polls `/root/mex-config/secrets.json` (env `MEX_SECRETS_PATH`) elke 5s. Zelfde patroon als `ConfigProvider`, maar apart: **de rauwe file verlaat nooit een endpoint** en verschijnt **nooit in `audit.log` of stderr**. Wat gedeeld wordt is alléén namen en tijdstempels van de laatste schrijfactie.
+- `SecretsStore.Get(name) → string?` — de enige lees-API. Ontworpen voor D-87's `PmtPayloadBuilder`: die roept `SecretsStore.Get(channel.token_ref)` aan als hij een token in de outgoing payload wil zetten.
+- **Geen env-fallback.** Als de kluis leeg is, `Get()` returnt `null`. Dat is schema §5 letterlijk: de kluis is de enige bron, geen tweede waarheid.
+- Kapotte kluis-file → laatst-goede blijft, stderr-log. Ontbrekende file → geen secrets, geen alarm (bewust — een lege kluis is een geldige beginstaat).
+
+**`ConfigApi.cs` uitgebreid:**
+- `BuildSecretsListResponse()` → `{ path, count, secrets: [{name, last_written_utc}] }`. Nooit waarden.
+- `WriteSecretAsync(name, body, user)` → schrijft `{"value": "…"}`, atomair tmp+rename. Body leeg → DELETE.
+- Naam-validatie tegen `/` en `..` (URL-safety); paden gaan op disk maar de HTTP-oppervlak accepteert alleen platte namen.
+
+**`Program.cs` mount:**
+- `GET  /api/secrets` → BuildSecretsListResponse
+- `PUT  /api/secrets/{name}` → WriteSecretAsync
+
+Bearer-auth uit D-82 hergebruikt — één set tokens beheert config-API én secrets-API. Nog steeds locked-by-default (`MEX_CONFIG_API_TOKEN(S)` niet gezet → 401).
+
+### Wat er NIET in zit
+
+- **Geen forward-path integratie.** `Program.cs`'s PMT-forwarding leest vandaag `multiple_accounts[0].token` uit de Pine-body. Als Pine dat straks weglaat (D-85 Pine Dev), moet er ergens `SecretsStore.Get("apex_pmt")` gebeuren op basis van welk `token_ref` het account draagt. Dat vraagt D-87's payload-builder — dan gaat het in één keer voor alle drie de secret-types tegelijk. **Fase 3, niet fase 2.**
+- **Geen import-tool.** Ferry kan de kluis vullen via de settings-tab (D-83/D-84) zodra Web dat scherm heeft. Voor de overgangsperiode kan hij ook direct `curl -X PUT` doen; voorbeeld staat hieronder.
+
+### Coördinatie met Pine Dev
+
+Pine Dev's D-85-helft: `pmtToken`, `pcLicense`, `accountID` uit de scripts halen. **Volgorde:**
+
+1. **Nu (klaar):** kluis-backend + `PUT /api/secrets/{name}` + `SecretsStore.Get()`.
+2. **Web (D-83/D-84):** settings-tab schrijft naar `PUT /api/secrets/{name}`. Ferry vult per firma één token in.
+3. **Fase 3 (D-87):** middleware bouwt de PMT-payload zelf, roept `SecretsStore.Get(token_ref)` aan, injecteert waarde. Pas hier verdwijnt Pine's `pmtToken`-input.
+
+Pine Dev kan hun kant nu al voorbereiden (input verwijderen uit hun eigen v-nummering), maar mag hem **pas activeren** wanneer de kluis is gevuld én D-87 landt. Anders vertrekt er een PMT-request zonder token.
+
+### Acceptance
+
+```bash
+# Token voor de smoketest:
+mkdir -p /etc/systemd/system/mex-receiver.service.d
+cat > /etc/systemd/system/mex-receiver.service.d/config-api.conf <<'CONF'
+[Service]
+Environment=MEX_CONFIG_API_TOKENS=ferry:test-token-abc123
+CONF
+systemctl daemon-reload && systemctl restart mex-receiver
+
+# GET secrets lijst (leeg direct na start)
+curl -s http://localhost:5000/api/secrets -H "Authorization: Bearer test-token-abc123" | python3 -m json.tool
+# → {"path":"/root/mex-config/secrets.json","count":0,"secrets":[]}
+
+# PUT een geheim
+curl -s -X PUT http://localhost:5000/api/secrets/apex_pmt \
+  -H "Authorization: Bearer test-token-abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"value":"the-real-apex-token"}'
+# → {"name":"apex_pmt","updated_by":"ferry"}
+
+# GET terug — WAARDE MAG NIET terugkomen
+curl -s http://localhost:5000/api/secrets -H "Authorization: Bearer test-token-abc123" | python3 -m json.tool
+# → {"path":"…","count":1,"secrets":[{"name":"apex_pmt","last_written_utc":"…"}]}
+
+# Verify: geen waarde in journalctl noch in audit.log
+journalctl -u mex-receiver --since "1 minute ago" --no-pager | grep -i "the-real-apex-token"    # verwacht: LEEG
+grep -i "the-real-apex-token" /root/mex-config/audit.log                                        # verwacht: geen match
+
+# Verify: file op disk bevat het geheim (rechten zijn 644 wat rooiger mag —
+# zet ze op 600 als je meer sluitheid wilt):
+cat /root/mex-config/secrets.json
+# → {"apex_pmt":"the-real-apex-token"}
+
+# DELETE (lege body):
+curl -s -X PUT http://localhost:5000/api/secrets/apex_pmt \
+  -H "Authorization: Bearer test-token-abc123" \
+  -d ''
+# → {"name":"apex_pmt","updated_by":"ferry"}   → file heeft de sleutel niet meer
+```
+
+⚠️ **Rechten op de file:** Ik schrijf hem als `644` (standaard `File.WriteAllTextAsync`).
+Overweeg `chmod 600 /root/mex-config/secrets.json` in je systemd-hardening of via een
+`chmod` in Ferry's `ExecStartPre`. De receiver draait als root vandaag, dus practical
+security laag; op een niet-root process zou dit belangrijker zijn.
+
+### Deploy
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/{Program.cs,Config.cs,ConfigApi.cs,Secrets.cs} /root/mex-middleware-b/src/Mex.Journal.Receiver/ \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+D-85 (middleware-helft) op review.

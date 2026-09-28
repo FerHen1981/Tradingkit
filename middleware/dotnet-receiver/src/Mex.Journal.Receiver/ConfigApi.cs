@@ -166,6 +166,70 @@ public static class ConfigApi
         }
     }
 
+    // --------------------------------------------------------------
+    // D-85 · Secrets-endpoints. Namen worden geretourneerd, waarden nooit.
+    // De GET is bewust minimalistisch (naam + last_written_utc) zodat de
+    // settings-tab kan tonen *"apex_pmt · ✓ gezet · laatst gewijzigd 12-09"*
+    // zonder ooit een waarde te ontvangen.
+    // --------------------------------------------------------------
+
+    public static JsonObject BuildSecretsListResponse()
+    {
+        var meta = SecretsStore.ListMetadata();
+        var arr = new JsonArray();
+        foreach (var m in meta)
+        {
+            arr.Add(new JsonObject
+            {
+                ["name"] = m.Name,
+                ["last_written_utc"] =
+                    m.LastWrittenUtc == default ? null : m.LastWrittenUtc.ToString("o"),
+            });
+        }
+        return new JsonObject
+        {
+            ["path"] = SecretsStore.Path,
+            ["count"] = meta.Count,
+            ["secrets"] = arr,
+        };
+    }
+
+    /// <summary>PUT /api/secrets/{name} — schrijft één geheim. Body-vorm:
+    /// `{"value": "<string>"}`. Lege of ontbrekende `value` wist het geheim
+    /// (DELETE-semantiek). Naam mag geen slashes bevatten — dat is een
+    /// URL-veiligheidscheck; de kluis staat het toe, maar het is een teken
+    /// van een bug bij de aanroeper.</summary>
+    public static async Task<WriteResult> WriteSecretAsync(string name, string body, string user)
+    {
+        if (string.IsNullOrEmpty(name) || name.Contains('/') || name.Contains(".."))
+            return WriteResult.Fail("invalid secret name");
+
+        string? value = null;
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            JsonNode? root;
+            try { root = JsonNode.Parse(body); }
+            catch (JsonException ex) { return WriteResult.Fail($"JSON parse: {ex.Message}"); }
+            if (root is not JsonObject obj)
+                return WriteResult.Fail("top-level must be a JSON object");
+            value = obj["value"]?.ToString();
+        }
+
+        try
+        {
+            await SecretsStore.WriteAsync(name, value);
+        }
+        catch (Exception ex)
+        {
+            return WriteResult.Fail($"write failed: {ex.Message}");
+        }
+        // De version-teller is een config-concept, niet een secrets-concept —
+        // geheimen hebben geen monotonisch stijgend versienummer nodig omdat
+        // ze niet worden doorgereden naar de gates. Return 0 zodat het contract
+        // van WriteResult past.
+        return WriteResult.Success(0);
+    }
+
     static async Task<WriteResult> WriteInternalAsync(string body, string user)
     {
         JsonNode? root;

@@ -98,6 +98,10 @@ public static class ConfigProvider
     // gereset zodra een gezonde file laadt (dan is de reeks fouten voorbij).
     static DateTime _lastAlarmMtimeUtc = DateTime.MinValue;
     static long _lastAlarmLength = -1;
+    // D-81 SM-review · aparte boolean voor het "file is weg"-alarm zodat het
+    // niet interfereert met de mtime+length rate-limit voor parse/validate-
+    // rejects. Reset op elke gezonde load.
+    static bool _missingAlarmFired = false;
     static Action<string, string>? _alarm;
 
     static Timer? _timer;
@@ -174,18 +178,54 @@ public static class ConfigProvider
 
         if (!info.Exists)
         {
-            if (_current != ConfigDocument.Empty)
+            // D-81 SM-review, twee punten:
+            // (a) een verdwenen file was tot deze fix stil (alleen stderr).
+            //     Weg-zijn is minstens zo ernstig als een kapotte file, dus
+            //     we schieten hier hetzelfde alarm af.
+            // (b) 🔴 VOLGORDE-RISICO. Terugvallen op ConfigDocument.Empty
+            //     was veilig zolang de env-vangnet nog gevuld is. Na de
+            //     D-81-migratie is de env leeg — dan betekent "empty" GEEN
+            //     regels op ELK account: kill-switch-gedrag zonder bedoeling.
+            //     **We houden nu de laatst-goede snapshot vast** en laten
+            //     `_lastMtimeUtc`/`_lastLength` staan. Zo blijven de gates
+            //     bediend tot de file terugkomt of tot Ferry expliciet
+            //     herstart (waarna Empty de eerste snapshot is en de env-
+            //     vangnet doet wat hij moet doen).
+            if (_current == ConfigDocument.Empty)
+                return;   // niets te verliezen, geen alarm nodig
+            if (_missingAlarmFired)
+                return;   // al gealarmeerd voor deze verdwijning — wacht op verandering
+
+            var stderrLine =
+                $"[config] file missing, keeping last-good v{_current.Version} · path={_path}";
+            Console.Error.WriteLine(stderrLine);
+
+            lock (_lock)
             {
-                // File verdween — val terug op leeg, zodat env-vangnet weer
-                // wint. Ongewoon maar mogelijk (moved, atomic replace half).
-                Console.Error.WriteLine($"[config] file missing, reverting to empty · path={_path}");
-                lock (_lock)
-                {
-                    _current = ConfigDocument.Empty;
-                    _lastMtimeUtc = DateTime.MinValue;
-                    _lastLength = -1;
-                }
+                _missingAlarmFired = true;
             }
+
+            var alarm = _alarm;
+            if (alarm is not null)
+            {
+                var current = _current;
+                var title = "⚠️ Config-file verdwenen — draai door op laatst-goede";
+                var desc =
+                    $"**Reden:** file disappeared\n" +
+                    $"**Pad:** `{_path}`\n" +
+                    $"**Nog actief:** v{current.Version} ({current.Accounts.Count} accounts)\n\n" +
+                    "De receiver draait door op de laatst-goede configuratie. Als je de env-migratie al hebt gedaan, is dit géén veilige stille terugval — er staan geen envs meer als vangnet.";
+                try { alarm(title, desc); }
+                catch (Exception ex) { Console.Error.WriteLine($"[config] alarm delivery failed: {ex.Message}"); }
+            }
+
+            // D-81 · auditspoor krijgt ook de "disappeared"-lijn.
+            try
+            {
+                ConfigAudit.AppendMissing(_current, _path);
+            }
+            catch (Exception ex) { Console.Error.WriteLine($"[config] audit write failed: {ex.Message}"); }
+
             return;
         }
         if (info.LastWriteTimeUtc == _lastMtimeUtc && info.Length == _lastLength)
@@ -228,11 +268,12 @@ public static class ConfigProvider
             _current = parsed;
             _lastMtimeUtc = info.LastWriteTimeUtc;
             _lastLength = info.Length;
-            // Gezonde load → reset de alarm-cursor, zodat een toekomstige fout
-            // meteen een melding krijgt in plaats van door de rate-limit gedempt
-            // te worden.
+            // Gezonde load → reset de alarm-cursor én de missing-vlag, zodat
+            // een toekomstige fout of nieuwe verdwijning meteen een melding
+            // krijgt in plaats van door de rate-limit gedempt te worden.
             _lastAlarmMtimeUtc = DateTime.MinValue;
             _lastAlarmLength = -1;
+            _missingAlarmFired = false;
         }
         Console.Error.WriteLine(
             $"[config] loaded v{parsed.Version} · accounts={parsed.Accounts.Count} · " +
@@ -462,6 +503,21 @@ public static class ConfigAudit
             ["detail"] = detail,
             ["file_mtime"] = info.LastWriteTimeUtc.ToString("o"),
             ["file_size"] = info.Length,
+        };
+        Write(record);
+    }
+
+    // D-81 SM-review · een file die verdwijnt is óók een gebeurtenis. Zonder
+    // deze regel staat er straks een gat: "de config ging van v3 naar v3 en
+    // dan verscheen ineens v4" — met de disappeared-regel weet je waarom.
+    public static void AppendMissing(ConfigDocument kept, string path)
+    {
+        var record = new JsonObject
+        {
+            ["ts"] = DateTime.UtcNow.ToString("o"),
+            ["phase"] = "disappeared",
+            ["kept"] = kept.Version,
+            ["path"] = path,
         };
         Write(record);
     }

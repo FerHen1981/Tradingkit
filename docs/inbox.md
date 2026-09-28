@@ -5825,3 +5825,110 @@ cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afh
 Zonder `MEX_CONFIG_API_TOKEN(S)` blijft de API dicht — je kunt veilig deployen en later een token zetten wanneer de settings-tab er is.
 
 D-82 op review. Live-executiepad — herbouw + herstart via bovenstaand blok.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-81 hersteld op twee review-punten
+
+**Twee terechte SM-bevindingen op D-81 verwerkt. LIVE PATH, dezelfde deploy-flow.**
+
+### (a) Verdwenen file was stil — nu een luid alarm
+
+De missing-file-tak schreef alleen `Console.Error.WriteLine`. Weg-zijn is minstens zo
+ernstig als kapot: een migratie die de env leeghaalt terwijl niemand het merkt is
+dezelfde faalmodus als een validatie-fout die niet klopt. Nu schiet dezelfde Discord-
+melding af — rood, met titel `⚠️ Config-file verdwenen — draai door op laatst-goede` en
+een expliciete waarschuwing in de beschrijving:
+
+> *"De receiver draait door op de laatst-goede configuratie. Als je de env-migratie al
+> hebt gedaan, is dit géén veilige stille terugval — er staan geen envs meer als
+> vangnet."*
+
+Rate-limit: één alarm per verdwijning. Zodra de file terugkomt en gezond laadt, resette
+de `_missingAlarmFired`-vlag — een volgende deletion gaat direct opnieuw luiden.
+
+### (b) 🔴 Volgorde-risico — laatst-goede behouden i.p.v. terugvallen op Empty
+
+Dit was de belangrijkste, en SM had gelijk om er nadruk op te zetten. De oude tak reverte
+`_current` naar `ConfigDocument.Empty` zodra de file weg was. Dat was veilig **zolang** de
+env-vars nog gevuld waren — dan namen `AccountQty.QuantityFor` en `AccountRiskGate.CapFor`
+de env-fallback en ging het gedrag terug naar wat het altijd was.
+
+**Post-migratie ligt dat andersom.** Als Ferry de env-vars uit de systemd-unit haalt en de
+config-file valt weg, betekende `Empty` **geen regels op elk account**: geen halts, geen
+caps, geen contracts-override — de kill-switch draait door, maar de rest van de gates
+staat open. Onbedoeld.
+
+Nieuwe tak: **`_current` blijft ongewijzigd**. `_lastMtimeUtc`/`_lastLength` blijven staan
+zodat de eerstvolgende gezonde file (dezelfde mtime) niet als "geen wijziging" wordt
+overgeslagen. De gates blijven bediend door de laatst-goede snapshot totdat de file
+terugkomt.
+
+### `audit.log` krijgt een `disappeared`-lijn
+
+`ConfigAudit.AppendMissing(kept, path)` schrijft:
+
+```json
+{"ts":"…","phase":"disappeared","kept":3,"path":"/root/mex-config/mex.json"}
+```
+
+Zonder deze regel staat er straks een gat in het verhaal ("v3 → v3, waar zat de aanraking
+tussen?"). Met de regel is elke laad-poging én elke verdwijning traceable.
+
+### Deploy — hetzelfde recept
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/{Program.cs,Config.cs,ConfigApi.cs} /root/mex-middleware-b/src/Mex.Journal.Receiver/ \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+### Acceptance na deploy
+
+```bash
+# Baseline: geldige file laadt
+cat > /root/mex-config/mex.json <<'JSON'
+{ "version": 1, "updated": "2026-09-28T00:00:00Z", "updated_by": "d81b-good",
+  "accounts": { "PAAPEX2700250000013": { "status": "active", "contracts": 1 } } }
+JSON
+sleep 6
+
+# (a+b) verwijder de file
+rm /root/mex-config/mex.json
+sleep 6
+journalctl -u mex-receiver -n 5 --no-pager | grep "\[config\]"
+# → [config] file missing, keeping last-good v1 · path=…
+# → Discord rood-embed "⚠️ Config-file verdwenen"
+
+tail -n 1 /root/mex-config/audit.log
+# → {"phase":"disappeared","kept":1,…}
+
+# Blijf 20s wachten — geen tweede alarm.
+sleep 20
+journalctl -u mex-receiver --since "25 seconds ago" --no-pager | grep -c "file missing"
+# → 1
+
+# Herstel — cursor reset, volgende verdwijning zou opnieuw alarmeren
+cat > /root/mex-config/mex.json <<'JSON'
+{ "version": 2, "updated": "2026-09-28T00:00:00Z", "updated_by": "d81b-restored",
+  "accounts": { "PAAPEX2700250000013": { "status": "active", "contracts": 1 } } }
+JSON
+sleep 6
+journalctl -u mex-receiver -n 3 --no-pager | grep "\[config\]"
+# → [config] loaded v2 · … · updatedBy=d81b-restored
+```
+
+### Vooruitblik-notities
+
+**§3c gelezen:** het event krijgt een `risk`-object voor de zes trail/breakeven-velden en
+`text.color` als eigen veld. Beide raken pas D-87 (fase 3). Mijn D-82-code op de config-API
+raakt niets van dit event-schema, dus fase 2 hoeft niet opnieuw. `CardTier.For(kind, action)`
+neem ik mee als note voor de D-87-refactor.
+
+**D-82 staat al op branch** (`a8ae39a`, 28-09) — Config-API met bearer-auth, GET+PUT. Zag
+je die commit al? Vind ik het net zo lief als jij eerst hierboven `mex.json`-verdwijning
+smoketest zodat we D-81-B op review-akkoord kunnen zetten.
+
+D-81 opnieuw op review; D-82 al op review sinds `a8ae39a`.

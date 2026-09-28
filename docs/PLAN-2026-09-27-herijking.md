@@ -113,7 +113,7 @@ Elk getal in de webapp draagt zijn laag als label.
 | Laag | Bron | Latency | Wat het is |
 |---|---|---|---|
 | **T1 · gemodelleerd** | het canonieke event uit Pine (entry/exit, prijs, richting, qty) | direct | Wat de strategie *bedoelde*. Bevat geen slippage en geen echte commissie. |
-| **T2 · bevestigd** | het **antwoordbericht van PMT** op de order | seconden | Of de order geaccepteerd is, en — als PMT dat teruggeeft — tegen welke prijs. |
+| **T2 · bevestigd** | het **antwoordbericht van PMT** op de order | seconden | Of PMT de order heeft **aangenomen**. ✅ **Gemeten 28-09 (D-73), en de aanname eronder is weerlegd: er komt géén prijs.** |
 | **T3 · afgestemd** | de wekelijkse fills/Cash_History-export | wekelijks | Brokerwaarheid: echte fills, echte commissies, funding en payouts. |
 
 **Hoe ze samenwerken.** T1 vult het scherm onmiddellijk. T2 promoveert een regel van
@@ -121,11 +121,25 @@ Elk getal in de webapp draagt zijn laag als label.
 antwoord 6 beschrijft: de afwijking T1→T3 per account en per venue is meteen de
 slippage-meting waar de reconciliatielaag voor bedoeld was.
 
-⚠️ **T2 rust op een onbewezen aanname en krijgt daarom eerst een meting.** We weten dat PMT
-een antwoordbody stuurt — `Rejected()` leest hem al — maar **niemand heeft ooit vastgelegd
-wát erin staat**. Bevat hij een fill-prijs, of alleen een bevestiging? Fase 4 begint met het
-opslaan en bekijken van 20 echte antwoorden vóór er iets op gebouwd wordt. Dat is ook wat
-**D-73** al vroeg; dat item wordt hiermee gepromoveerd van opruimwerk tot fundament.
+✅ **GEMETEN 28-09 (D-73) — en de meting weerlegt de aanname waarop T2 was ontworpen.**
+Middleware App analyseerde **4539 PMT-rijen over 41 bestanden**, niet de twintig die ik vroeg.
+Uitkomst: **de antwoordbody draagt nooit een fill-prijs en nooit een order-id.** Verdeling:
+90,4% `{"res":"Successfully send","error":false}` · 9,1% leeg · 0,5% `error 403`.
+
+Drie gevolgen, en ze veranderen het ontwerp:
+
+1. **T2 is een statuslaag, geen prijslaag.** Vier toestanden: `CONFIRMED` · `UNKNOWN` (lege
+   body) · `REJECTED` · en verder niets. Er is dus **geen tussenliggende prijswaarheid**:
+   de afwijking **T1→T3 blijft de enige slippage-meting** die we kunnen doen, en die is
+   wekelijks. Dat is een echte beperking en geen implementatiedetail.
+2. **`GEWEIGERD 200` kwam 0 keer voor in 4539 rijen.** De body-gebaseerde `Rejected()`-check
+   in de live receiver heeft nooit iets afgevangen — niet omdat hij overbodig is, maar omdat
+   **PMT `error:true` in de praktijk niet stuurt**. Een echte weigering komt als **HTTP 403**.
+   De poort moet dus op de statuscode staan, niet op de body.
+3. **`UNKNOWN` is geen restcategorie maar de kern.** 9,1% lege bodies zichtbaar maken is
+   precies waar §2.2 om vroeg: onbevestigd is een **toestand**, geen poort die dichtvalt.
+
+Volledige meting: `docs/D-73-pmt-bodies-2026-09-28.md`.
 
 **Notion** (antwoord 1) wordt een **afnemer van dezelfde journaalregels**, niet een aparte
 schrijfweg. Eén bron, twee vensters — dat is de enige manier om "dezelfde waarheid als de

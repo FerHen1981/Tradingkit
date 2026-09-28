@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "updated": "2026-09-29",
   "value_unit_note": "Rule values carry a unit ('usd' or 'pct'). % is of account size unless noted. VERIFY all — rules change; verified=false means Claude-drafted, not human-confirmed.",
   "programs": [
@@ -842,9 +842,12 @@
         }
       },
       "trading_rules": {
-        "min_trading_days": 1,
+        "min_trading_days": 2,
         "max_trading_days": null,
-        "consistency": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 50
+        },
         "overnight_allowed": null,
         "weekend_allowed": null,
         "news_allowed": true,
@@ -878,7 +881,7 @@
         "verified": false,
         "notes": "No daily loss limit in eval; only EOD balance vs trailing threshold. Fast payouts. VERIFY exact target/DD per plan."
       },
-      "converts_to": null
+      "converts_to": "mffu_50k_pa"
     },
     {
       "key": "ftmo_100k_challenge",
@@ -1205,9 +1208,12 @@
         }
       },
       "trading_rules": {
-        "min_trading_days": 1,
+        "min_trading_days": 3,
         "max_trading_days": null,
-        "consistency": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 50
+        },
         "overnight_allowed": false,
         "weekend_allowed": false,
         "news_allowed": true,
@@ -1243,7 +1249,7 @@
         "verified": false,
         "notes": "EOD trailing, no DLL. VERIFY exact target/DD per size."
       },
-      "converts_to": null
+      "converts_to": "takeprofittrader_50k_pa"
     },
     {
       "key": "tradeify_advanced_25k_instant",
@@ -1883,6 +1889,435 @@
         "as_of": "2026-09",
         "verified": false,
         "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. EOD trailing (Ferry's rule). No firm DLL. NO funded consistency rule (a TradeDay selling point). Split 80/90/95 tiered + 50% of the first $4k buffer. Min payout $250, next business day. WEB-SOURCED — confirm."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "fundednext_50k_rapid_eval",
+      "firm": "FundedNext",
+      "display_name": "FundedNext Futures 50K — Rapid Eval (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "eval",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": {
+          "value": 3000,
+          "unit": "usd"
+        },
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 1,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": null,
+        "split_scaling": null,
+        "payout_cadence": null,
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "helpfutures.fundednext.com / thetraderstack / damnpropfirms (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). Rapid = FundedNext Futures' EOD-trailing 50K (replaced the retired Bolt/Rapid July 2026). DD $2000 EOD, locks at $50,100. No eval consistency, no firm DLL (Bolt's $1000 soft was retired). WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": "fundednext_50k_rapid_pa"
+    },
+    {
+      "key": "fundednext_50k_rapid_pa",
+      "firm": "FundedNext",
+      "display_name": "FundedNext Futures 50K — Rapid Funded (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "helpfutures.fundednext.com / thetraderstack / damnpropfirms (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). EOD trailing $2000, no firm DLL, 90/10 split, payouts daily/every 3 days. Funded consistency not confirmed (left null). WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "mffu_50k_pa",
+      "firm": "MyFundedFutures",
+      "display_name": "MyFundedFutures 50K — Rapid Funded (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 50
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "help.myfundedfutures.com Rapid EOD 50k / pipback (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). Rapid EOD (closest to Apex). DD $2000 EOD, locks $50,100, no firm DLL, 50% SOFT consistency, 90/10 daily payouts. WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "takeprofittrader_50k_pa",
+      "firm": "Take Profit Trader",
+      "display_name": "Take Profit Trader 50K — PRO Funded (Intraday)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "intraday_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 3,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 50
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": 0.8,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "takeprofittraderhelp.zendesk.com PRO rules / quantvps (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). Route Test(EOD)->PRO. KNOWN DIFFERENCE vs Apex: the standard funded PRO uses INTRADAY trailing (PRO+ is EOD 90/10 but invitation-only). No firm DLL (removed Jan 2025). 50% consistency, 80/20 split, buffer $52,000. WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "tradeify_50k_growth_eval",
+      "firm": "Tradeify",
+      "display_name": "Tradeify 50K — Growth Eval (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "eval",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": {
+          "value": 3000,
+          "unit": "usd"
+        },
+        "max_daily_loss": {
+          "value": 1250,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 1,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": null,
+        "split_scaling": null,
+        "payout_cadence": null,
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "help.tradeify.co Growth accounts / fundedstreak / proptradingvibes (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). Growth = Tradeify's EOD-trailing plan (closest to Apex). DD $2000 EOD. $1250 SOFT daily loss (session lock, does NOT fail the account) — KNOWN DIFFERENCE vs Apex (none). WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": "tradeify_50k_growth_pa"
+    },
+    {
+      "key": "tradeify_50k_growth_pa",
+      "firm": "Tradeify",
+      "display_name": "Tradeify 50K — Growth Funded (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": {
+          "value": 1250,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 35
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": 3000,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "help.tradeify.co Growth accounts / fundedstreak / proptradingvibes (web, 2026-09-29); plan per Ferry-rule 29-09",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Plan closest to the Apex rules (Ferry 29-09). Growth EOD funded. DD $2000 EOD, $1250 soft DLL (session lock, no fail), 35% funded consistency, 90/10, payout cap $3000 from the 4th payout. WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
       },
       "converts_to": null
     }

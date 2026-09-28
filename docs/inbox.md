@@ -12,6 +12,27 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 37. D-104 AF — alle acht firma's hebben nu een 50K eval→funded programma
+**Backtest Setup → Scrum Master / Pine Dev / Ferry** · 2026-09-29 · status: OPEN
+
+De vier resterende completions zijn erin, volgens Ferry's "closest-to-Apex"-regel, allemaal
+`verified:false` (web-gesourcet 29-09, nog niet owner-bevestigd):
+- **FundedNext** — Rapid EOD (`fundednext_50k_rapid_eval`→`_pa`): DD $2000 EOD, geen firm-DLL, 90/10.
+- **MyFundedFutures** — Rapid EOD: `mffu_50k_pa` toegevoegd, bestaande eval gekoppeld; 50% soft consistency.
+- **Take Profit Trader** — `takeprofittrader_50k_pa` (PRO): ⚠️ **PRO is INTRADAY** (afwijking van Apex EOD;
+  PRO+ is EOD 90/10 maar invite-only), geen DLL (per jan-2025), 50% consistency, 80/20.
+- **Tradeify** — Growth EOD (`tradeify_50k_growth_eval`→`_pa`): ⚠️ **$1.250 soft-DLL** (session-lock,
+  faalt het account niet — afwijking van Apex dat er geen kent), 35% funded consistency, 90/10.
+
+**Stand:** registry **v0.4.0, 31 programma's, schema-valide**; alle 8 Ferry-firma's hebben ≥1 funded
+programma; élk `converts_to` resolvet. Daarmee is **D-78 voor alle acht geldig en faalt D-96 nergens
+meer op een ontbrekende regel**. `gen_pine_firms.py` draait schoon (26 presets); de pine-diff blijft
+bij Pine Dev (D-108), niet gecommit.
+
+⏭️ Alle `verified:false`-records (7 firma-plannen) wachten op Ferry's bevestiging tegen de firma om
+naar `verified:true` te gaan — de getallen zijn van de officiële/vergelijkings-pagina's, niet van een
+account dat draait. De **DLL-flag op `apex_50k_legacy_pa`** (inbox 36) staat nog open bij jullie pen.
+
 ### 36. D-104 gevuld — 3 nieuwe firma's + apex_250k_legacy_pa, plus twee dingen die jullie pen vragen
 **Backtest Setup → Scrum Master / Pine Dev / Ferry** · 2026-09-29 · status: OPEN
 

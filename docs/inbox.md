@@ -5392,3 +5392,101 @@ cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afh
 - **D-81** — Auditspoor (wie/wat/wanneer/vorige-waarde) op elke laadwissel + eenmalige migratie env → file met startwaarschuwing bij oude env-vars.
 
 D-80 op review. Live-executiepad — herbouw + herstart via bovenstaand blok.
+
+---
+
+## 28-09 · Middleware App → Scrum Master — D-77 review v2 (schema-event.md)
+
+**Antwoord op acceptatie 2: JA — elke huidige uitgaande payload is uit dit event te
+bouwen, mits drie kleine dingen worden opgehelderd. Getoetst op echt verkeer, niet op
+papier.**
+
+### Route 1 · PMT-JSON (getoetst tegen 4539 rijen `routed_*.jsonl`)
+
+Echte body die vandaag PMT bereikt (van 18-09, PA…024):
+
+```json
+{"symbol":"MGC1!","date":"2026-09-18 20:56:01","data":"close","quantity":"1",
+ "risk_percentage":0,"price":"4416.4","tp":0,"percentage_tp":0,"dollar_tp":0,
+ "sl":0,"dollar_sl":0,"percentage_sl":0,"trail":0,"trail_stop":0,"trail_trigger":0,
+ "trail_freq":0,"update_tp":false,"update_sl":false,"breakeven":0,"breakeven_offset":0,
+ "token":"…","pyramid":false,"reverse_order_close":true,"order_type":"MKT",
+ "multiple_accounts":[{"token":"…","account_id":"PAAPEX…024","risk_percentage":0,
+ "quantity_multiplier":1}]}
+```
+
+**Toets:** alle uitgaande velden mappen. Uit event: `symbol`, `date` (uit `ts`,
+`"yyyy-MM-dd HH:mm:ss"`), `data` (uit `action`, `buy/sell/close`), `quantity` (uit `qty`,
+na D-53-override), `price`, `dollar_sl`, `dollar_tp`, `order_type`. Uit config
+(§4-tabel): `token`, `account_id`, `pyramid`, `reverse_order_close`, `risk_percentage`,
+`multiple_accounts[0].quantity_multiplier`.
+
+⚠️ **Twaalf constante velden vandaag altijd 0 of false** — `tp`, `percentage_tp`,
+`percentage_sl`, `sl`, `trail`, `trail_stop`, `trail_trigger`, `trail_freq`, `update_tp`,
+`update_sl`, `breakeven`, `breakeven_offset`. Ze staan niet in het event en niet in
+`schema-config.md` §2. Bevestig dat de middleware ze default op 0/false zet in de
+PMT-payload, óf voeg één `pmt_defaults`-blok toe aan `channels[]` in het config-schema.
+Ik hou ze in de builder als PMT-format-constanten met een codecomment.
+
+### Route 2 · Discord-embed (getoetst tegen `NotifyRoute` + `CardTier`)
+
+Route B — Pine schrijft de tekst — matcht `text.title` en `text.body`. De middleware
+kiest **tier** uit `kind`+`action` (bestaande `CardTier.For(title)`-logica moet
+migreren naar `CardTier.For(kind, action)`) en **webhook** uit config.
+
+⚠️ **Één veld ontbreekt in het event: `color`.** Vandaag zit die in de embed die Pine
+opbouwt (bv. rood 15158332 voor CAP LOCK, groen voor FILL long). Onder route B ontstaat
+er twee opties:
+
+- **(a)** middleware bepaalt kleur uit `kind`+`action` via een vaste tabel (klein, ~8
+  paren) — dan komt kleur niet uit Pine maar uit een cross-chat-conventie;
+- **(b)** event krijgt `text.color` als geel-optioneel veld.
+
+Ik prefereer **(a)** — één plek, geen extra veld, en het reflecteert de mapping die
+`CardTier` in de receiver al doet voor tier. Zeg maar of je het anders wil.
+
+### Route 3 · PineConnector-tekstregel (getoetst tegen `Program.cs:348`)
+
+`ForwardTextAsync` verwacht een string in de vorm `<license>,<action>,<symbol>,sl=X,tp=Y,risk=Z`
+en stuurt hem 1:1 door. Uit event: `action`, `price`, `dollar_sl`, `dollar_tp`. Uit
+config (§4): `license`, symboolvertaling, `risk`. **Volledig opbouwbaar** — geen
+missende velden. In `routed_*.jsonl` op 18-09 stond precies 1 `dry_run`-PC-regel, dus dit
+kanaal draait vandaag niet productief, maar de builder-logica is triviaal.
+
+### Route 4 · Journaalregel (getoetst tegen `journal_sync.py`-shape)
+
+Vandaag stuurt Pine `?_type=journal&csv=<CSV-regel>` en de receiver appendt naar
+`intents_<datum>.jsonl` (Program.cs:340-341). Onder het schema draagt `event.journal.*` de
+gestructureerde velden en bouwt de middleware de CSV-regel. **Alle velden aanwezig**
+(`event`, `dir`, `status`, `entry`, `stop`, `target`, `qty`, `pnl`, `regime`, `balance`,
+`dist_target`, `dist_fail`, `acct_name`). Kolomvolgorde van de CSV is een middleware-detail;
+schema §5 zegt terecht dat berekende accountstanden **als Pine's eigen kijk** worden
+gelabeld (T1-laag, niet T3-truth).
+
+⚠️ **Één ding dat in D-78 hoort, niet hier — meld ik hier omdat het uit deze audit
+opdook:** Notion-database-id in §4-tabel staat als *config* voor de Notion-route. In het
+huidige `middleware/app/notion_journal.py` komt die uit `NOTION_JOURNAL_DB`-env. Bij de
+D-81-migratie moet die dus als `notion.databases.trade_journal_id` in de config landen.
+Neem mee in `schema-config.md` §4 defaults (of §2 channels, dat is een keuze).
+
+### Kritische vooruitblik-bevestigingen die hier al vaststaan
+
+**§4 qty-override-volgorde** — *"eerst de poorten, dan de qty"* — matcht letterlijk de
+D-53-refactor die 25-09 landde (`Program.cs:202` staat ná blocked-gate op regel 157 en
+risk-gate op regel 174). ✅ Geen implementatie-schuld die deze regel dwarsboomt.
+
+**§4 middleware bouwt PMT zelf** — vandaag ontvangt de receiver een al-opgebouwde
+PMT-payload van Pine en past er alleen de qty-override op toe. Onder dit schema bouwt de
+middleware de payload uit het canonieke event. Dat is een **grote verplaatsing** —
+alle twaalf constante velden hierboven verhuizen naar één `PmtPayloadBuilder`-klasse
+straks. Neem het mee in de fase-3-planning (het is D-87, maar de scope raakt ook D-86
+en D-88).
+
+### Samenvattend
+
+1. ✅ Alle vier de routes zijn uit dit event opbouwbaar.
+2. 🟡 Drie kleine keuzes — PMT-defaults (12 constanten), Discord-kleur, en Notion-db-id
+   in config — voor je overneemt.
+3. ➡️ Fase 0 kan wat mij betreft dicht zodra jij deze drie keuzes hebt vastgelegd.
+
+D-77 op review (mijn helft), fase 1 onaangeraakt door deze meting.

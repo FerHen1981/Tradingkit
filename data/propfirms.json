@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1",
+  "version": "0.3.0",
   "updated": "2026-09-29",
   "value_unit_note": "Rule values carry a unit ('usd' or 'pct'). % is of account size unless noted. VERIFY all — rules change; verified=false means Claude-drafted, not human-confirmed.",
   "programs": [
@@ -645,7 +645,7 @@
         "verified": true,
         "notes": "Legacy 250k eval: $15k target, intraday trailing $6.5k, 27 contracts, 1 min day. Converts into a Legacy PA of this size, which is not modelled yet — add it when one exists."
       },
-      "converts_to": null
+      "converts_to": "apex_250k_legacy_pa"
     },
     {
       "key": "apex_250k_legacy_pa",
@@ -1454,6 +1454,435 @@
         "as_of": "2026-07",
         "verified": false,
         "notes": "Static DD. Split up to 95% based on consistency. VERIFY current step structure."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "blueguardian_50k_standard_eval",
+      "firm": "Blue Guardian",
+      "display_name": "Blue Guardian 50K — Standard Eval (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "eval",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": {
+          "value": 3000,
+          "unit": "usd"
+        },
+        "max_daily_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 1,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": null,
+        "payout_cadence": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "blueguardian.com / helpfutures.blueguardian.com (web, 2026-09-28); plan owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. Standard: EOD trailing, DD $2000 locks at $52,100 (+$100 floor). Soft $2000 (2%) daily limit flattens+locks the session. No eval consistency. WEB-SOURCED, not yet owner-verified against the firm — confirm before D-96 relies on it."
+      },
+      "converts_to": "blueguardian_50k_standard_pa"
+    },
+    {
+      "key": "blueguardian_50k_standard_pa",
+      "firm": "Blue Guardian",
+      "display_name": "Blue Guardian 50K — Standard Funded (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 40
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null,
+        "min_profitable_days": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": 3,
+        "min_payout": 500,
+        "payout_cap": null,
+        "payout_ladder": [
+          2500,
+          3000
+        ],
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "blueguardian.com / helpfutures.blueguardian.com (web, 2026-09-28); plan owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. Funded: 40% consistency, 90% split, first payout 3 days after first trade, min payout $500 (rise)/$100 (crypto), payout caps $2500 then $3000, DD locks after first payout. WEB-SOURCED — confirm before D-96 relies on it."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "topone_50k_elite_eval",
+      "firm": "Top One",
+      "display_name": "Top One Futures 50K — Elite Eval (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "eval",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": {
+          "value": 3000,
+          "unit": "usd"
+        },
+        "max_daily_loss": {
+          "value": 1250,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 1,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": null,
+        "payout_cadence": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "toponefutures.com / thetraderstack (web, 2026-09-28); plan owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. Elite: the ordinary eval->funded route. DD $2000 EOD, locks at $52,000 (floor = start). KNOWN DIFFERENCE vs Apex legacy: Elite carries a firm DLL of $1250 (Apex legacy has none) — recorded, not an error. WEB-SOURCED — confirm."
+      },
+      "converts_to": "topone_50k_elite_pa"
+    },
+    {
+      "key": "topone_50k_elite_pa",
+      "firm": "Top One",
+      "display_name": "Top One Futures 50K — Elite Funded (EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": {
+          "value": 1250,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 40
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null,
+        "min_profitable_days": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": null,
+        "payout_cap": 2500,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "toponefutures.com / thetraderstack (web); consistency 40% + plan owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. Funded: consistency 40% (OWNER-CONFIRMED 2026-09-29 — web sources disagreed 25 vs 40, so this value is Ferry's, not the website). 90% split, buffer $3000 to first payout, max $2500/payout. Firm DLL $1250 (known diff vs Apex legacy). Other numbers WEB-SOURCED — confirm."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "tradeday_50k_eval",
+      "firm": "TradeDay",
+      "display_name": "TradeDay 50K — Eval (EOD trailing)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "eval",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": {
+          "value": 3000,
+          "unit": "usd"
+        },
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 5,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 30
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null
+      },
+      "funded": {
+        "profit_split": null,
+        "payout_cadence": null,
+        "min_payout": null,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "quantvps.com/tradeday-payout-rules / traderstack (web, 2026-09-28); DD type owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. TradeDay lets the trader pick the DD type (Intraday/EOD/Static); Ferry's rule -> EOD trailing (Apex legacy is EOD). No firm DLL. 30% consistency in EVAL only. Min 5 trading days. Profit target assumed $3000 (unconfirmed). WEB-SOURCED."
+      },
+      "converts_to": "tradeday_50k_pa"
+    },
+    {
+      "key": "tradeday_50k_pa",
+      "firm": "TradeDay",
+      "display_name": "TradeDay 50K — Funded (EOD trailing)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 5,
+        "max_trading_days": null,
+        "consistency": null,
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": null,
+        "scaling_plan": null,
+        "min_profitable_days": null
+      },
+      "funded": {
+        "profit_split": 0.8,
+        "split_scaling": "80% first $50k, 90% $50k-100k, 95% above; 50% of the first $4k buffer",
+        "payout_cadence": "on_demand",
+        "first_payout_wait_days": null,
+        "min_payout": 250,
+        "payout_cap": null,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "quantvps.com/tradeday-payout-rules / traderstack (web, 2026-09-28); DD type owner-confirmed (Ferry 2026-09-29)",
+        "as_of": "2026-09",
+        "verified": false,
+        "notes": "Program choice follows Ferry's rule (29-09): pick the program closest to the Apex rules. EOD trailing (Ferry's rule). No firm DLL. NO funded consistency rule (a TradeDay selling point). Split 80/90/95 tiered + 50% of the first $4k buffer. Min payout $250, next business day. WEB-SOURCED — confirm."
       },
       "converts_to": null
     }

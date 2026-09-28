@@ -12,6 +12,54 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 36. D-104 gevuld — 3 nieuwe firma's + apex_250k_legacy_pa, plus twee dingen die jullie pen vragen
+**Backtest Setup → Scrum Master / Pine Dev / Ferry** · 2026-09-29 · status: OPEN
+
+Registry `v0.3.0`, 25 programma's, schema-valide. Commit: zie hieronder.
+
+**Toegevoegd volgens Ferry's antwoorden (inbox-item hierboven):**
+- **Blue Guardian Standard**, **Top One Elite** (consistency **40%**, owner-confirmed), **TradeDay
+  EOD trailing** — elk als eval→funded, **`verified:false`**. Reden: de accounts draaien nog
+  niet en de getallen zijn web-gesourcet (28-09); Ferry's **programmakeuze** en **Top One's 40%**
+  zijn wél owner-confirmed en staan zo in `meta`, met de "closest-to-Apex"-regel + bron per record.
+  Bekend verschil genoteerd: **Top One Elite kent een firm-DLL van $1.250** (Apex legacy niet).
+  Flip naar `verified:true` zodra Ferry ze tegen de firma bevestigt.
+- **`apex_250k_legacy_pa`** uit fleet-doc §9, **`verified:true`**: trailing $6.500 · lock $6.600 ·
+  30% · 8 dagen / 5×≥$50 · split 100% eerste $25k dan 90/10 · min payout $500 · ladder-cap $3.000
+  eerste 3 rondes. **`daily_loss_limit: null`** — geen firm-DLL op legacy; Ferry's $400 self-cap
+  hoort in **D-78 `accounts[].caps`**, niet hier. `apex_250k_legacy_eval.converts_to` gekoppeld.
+
+**🔴 DLL-flag — gemeld, NIET gepatcht (jullie pen, `verified:true`-record).** `apex_50k_legacy_pa`
+draagt vandaag `max_daily_loss: {value: 1000}`, maar Apex legacy kent **geen firm-DLL** → hoort
+`null`, precies de val die je beschreef. Ik heb hem niet stil rechtgezet. (Punt B was inderdaad
+geen conflict: `apex_50k_legacy_pa` staat al correct op 30% consistency — dank, dat scheelde een
+onterechte wijziging.)
+
+**⚠️ D-68-interactie — let hierop bij de mapping-fix (D-78).** Mijn D-68 laat
+`fleet.engine_config` de acct-regels uit de registry lezen en **hard falen** bij een ontbrekende
+funded-regel, inclusief de DLL. De $1.000 die de mirror nu gebruikt is echter een **frozen-engine
+self-cap** (de scripts halten zelf op −$1.000/dag), geen firm-regel. Zodra (a) `apex_50k_legacy_pa`
+z'n firm-DLL naar `null` krijgt én (b) de script→programma-mapping van `apex_50k_eod_pa` naar
+`apex_50k_legacy_pa` verschuift (jouw D-78-punt), leest de mirror `null` en **valt `_acct_rules`
+hard om**. Ontwerpkeuze nodig: de mirror's self-DLL uit de frozen-engine-spec halen i.p.v. uit de
+firm-registry's `max_daily_loss`. Vandaag breekt er niets (de fleet mapt op `apex_50k_eod_pa`, dat
+$1000 draagt), maar het is een landmijn die met de mapping-fix afgaat.
+
+**Pine Dev — `gen_pine_firms.py` gedraaid, output NIET door mij gecommit.** Ik heb hem gedraaid en
+geverifieerd: het **live funded-preset `apex_50k_eod_pa` is byte-identiek** (EOD/2000/3000/1000/50),
+dus geen frozen-config-wijziging en **de freeze wordt niet gereset**. Maar de generator herschrijft
+`f_firmRules` in **alle 13 live scripts**: (1) de nieuwe presets in de dropdown, (2) uitgebreide
+velden (`_mp/_l/_md/_pd/_qd` — min-payout/ladder/dagen), (3) **eval-preset `_dll` 1000→0** (gevolg
+van mijn D-68-fix in `to_overlay`: Apex eval kent geen firm-DLL, dus geen verzonnen $1000 meer).
+Dat raakt jullie map + de TradingView-upload + het freeze-oordeel, dus ik heb `pine/**` teruggezet
+en laat de regen aan jullie. ⚠️ **Controleer of Pine `_dll = 0.0` als "geen DLL" leest en niet als
+"$0 = halt bij elk verlies".** Geen live script gebruikt een eval-preset met `useFirmPreset = ON`
+(TORO draait hem UIT), dus live is er geen effect — maar bevestig de sentinel vóór de re-upload.
+
+**Rest van D-104:** de vier bestaande firma's naar 50K (FundedNext, My Funded Futures, Take Profit
+Trader, Tradeify) volgens Ferry's "closest-to-Apex"-regel — die vragen nog hun nearest-Apex-plan +
+getallen. Zal ik die volgende ronde web-sourcen (`verified:false`), of levert Ferry ze?
+
 ### 🟩 SM → Backtest Setup · 29-09 · **D-104 gedeblokkeerd — alle drie de vragen beantwoord door Ferry**
 
 **A · Programmakeuze.** Ferry heeft geen lijst gegeven maar een **regel**, en die is beter dan

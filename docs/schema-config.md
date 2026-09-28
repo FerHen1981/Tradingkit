@@ -103,6 +103,8 @@ publiceren toggle, status van een account instelbaar, een Discord webhook per ka
     "status": "active",
     "caps": { "daily_loss": 1200, "entries_per_day": 8 },
     "publish": true,
+    "verified_amount": null,
+    "verified_at": null,
     "discord_webhook_ref": null,
     "payouts": [ { "date": "2026-09-10", "amount": 1500, "nr": 1 } ]
   }
@@ -116,12 +118,35 @@ publiceren toggle, status van een account instelbaar, een Discord webhook per ka
 | `status` | `active` · `halted` · `blocked` · `archived`. Vervangt `MEX_HALTED_ACCOUNTS`. |
 | `caps` | Vervangt `MEX_ACCOUNT_ENTRY_CAPS` en `MEX_DEFAULT_ENTRY_CAP`. ⚠️ Ferry zet deze nu **in Tradovate**; dit is dus een tweede plek. Zie §6. |
 | `publish` | De poort van D-74: mag dit account op de site en in de widget. |
+| `verified_amount` / `verified_at` | Per account, optioneel, default `null`. Vervangt de vloot-brede `FUNDED_VERIFIED_*`-vlag (§3b). Zonder deze twee mag een funded saldo niet als geverifieerd gepubliceerd worden — zie D-93. |
 | `payouts` | 🔴 **Nieuw en niet weg te laten.** Een payout verlaagt de balans maar staat **niet in de fills**, dus zonder deze lijst krijgt T3 (D-92) de balans nooit sluitend. Gemeten op PA013: fills gaven $1.903 minder dan de brokerbalans, waarvan $1.500 exact de op 10-09 ontvangen payout was. Stand 28-09: dit is de **enige** payout in de hele vloot (bevestigd door Ferry). |
 
 ⛔ **Geen `contracts`-veld.** Ferry (antwoord 9): *"aantal contracten zit in het advies en
 beheer ik in pine."* De qty-override (D-53) blijft bestaan als **vangnet** onder een andere
 sleutel, maar krijgt geen veld in de settings-tab — anders ontstaan er twee plekken die het
 aantal contracten bepalen en weet niemand meer welke wint.
+
+---
+
+## 3b. ✅ Review Middleware App verwerkt — drie toevoegingen
+
+Zij auditeerden **alle 19 `MEX_*`-vars uit `Program.cs` plus 25 Python-app-envs** tegen §3 en
+§7 en bevestigden dat de acht uit de migratietabel letterlijk kloppen. Drie categorieën vielen
+er nog buiten; alle drie overgenomen:
+
+1. ✅ **`FUNDED_VERIFIED_AT` + `FUNDED_VERIFIED_WINDOW`** staan vandaag als **één vlag voor de
+   hele funded-stack** (de noodgreep uit D-74), terwijl tabel 2 van `execution-flow.md`
+   per-account `verified_amount` + `verified_at` voorschrijft. **Overgenomen als twee
+   optionele velden op `accounts[]`, default `null`.** Daarmee valt D-93 hier vanzelf op zijn
+   plek en verdwijnt de vloot-brede vlag bij de migratie. Goede vangst — dit was een stille
+   generalisatie die niemand had opgemerkt.
+2. ✅ **`WIDGET_GOAL`** → `defaults` (§4).
+3. ✅ **`MEX_SIGNAL_JSON` en `MEX_SIGNAL_OUT`** vallen inderdaad onder *renderpaden* in §6 —
+   bevestigd, machine-eigenschappen en geen vloot-instelling.
+
+⏸️ **`PMT_MATCH_WINDOW_S`** (900 s in `routed_journal.py`) laten we bewust staan. Hun
+redenering klopt: dat is reconciliatie-tuning die bij het bevestigingsvenster van fase 4 hoort,
+en nu in `defaults` zetten is te vroeg. Komt terug bij **D-91**.
 
 ---
 
@@ -195,8 +220,9 @@ gebruikte.
 
 ## 8. Acceptatiecriteria
 
-1. Middleware App bevestigt dat elke huidige env-instelling hierin een plek heeft, en meldt
-   wat ontbreekt.
+1. ✅ **Middleware App heeft geauditeerd** (28-09): 19 `MEX_*`-vars plus 25 Python-envs
+   getoetst, de acht uit §7 kloppen letterlijk, drie gaten gemeld en alle drie overgenomen
+   (§3b). **Akkoord zonder blokkers.**
 2. Elk `program` resolvet naar een bestaande sleutel in `data/propfirms.json` — dus **D-104
    moet af zijn** voordat de configuratie voor alle acht firma's geldig kan zijn.
 3. Er ligt één voorbeeldconfiguratie die de huidige vloot exact beschrijft, en het gedrag

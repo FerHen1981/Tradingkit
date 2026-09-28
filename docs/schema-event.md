@@ -1,4 +1,4 @@
-# D-77 · Het canonieke event — schema v1
+# D-77 · Het canonieke event — schema v2
 
 _Eigenaar: Scrum Master. Opgesteld 28-09-2026. Fase 0 van `docs/PLAN-2026-09-27-herijking.md`._
 _Review gevraagd aan **Pine Dev** (is elk veld te produceren?) en **Middleware App**_
@@ -14,11 +14,17 @@ _(is elke huidige payload eruit te bouwen?)._
 ## 0. 🔴 Belangrijkste vondst: deze route bestaat al, half
 
 Bij het uitzoeken bleek dit **geen nieuw ontwerp** maar het afmaken van iets dat er al ligt.
-`MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine` heeft een **zesde routetoggle** naast de vijf die
-we kenden:
+🔴 **Correctie 29-09, aangedragen door Pine Dev: het is geen toggle.** In alle dertien
+scripts staat sinds v3.2.0 `bool routeMiddleware = false` als **constante** — Pine Dev heeft
+hem destijds zelf van input naar constante gezet (D-51) omdat de route niets deed op het live
+pad. Aanzetten is dus een **code-wijziging, geen instelling**. De route-*code* ligt er wel,
+en dat deel van mijn vondst klopt. Voor de raming van fase 3 scheelt het minder dan ik
+schreef: de winst is de bestaande berichtopbouw, de kost is dat er een knop bij moet.
+
+`MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine` heeft naast de vijf routes die we kenden ook:
 
 ```pine
-useMiddleware = routeMiddleware                                          // r. 972
+bool routeMiddleware = false   // CONSTANTE sinds v3.2.0 (D-51), geen input   // r. 972
 mwSecret   = input.string("", "Middleware secret", …)                    // r. 970
 mwStrategy = input.string("MAT-MES-P", "Middleware strategy key", …)     // r. 971
 ```
@@ -62,11 +68,11 @@ Alles wat per trade verschilt hoort hier en nergens anders.
 ```json
 {
   "v": 1,
-  "id": "MAT-MES-P:1727539200000:entry",
+  "id": "MAT-MES-P:1727539200000:order:1",
   "ts": "2026-09-28T14:30:00Z",
   "strategy": "MAT-MES-P",
   "symbol": "MES1!",
-  "kind": "entry",
+  "kind": "order",
   "action": "buy",
   "qty": 6,
   "price": 5321.25,
@@ -83,18 +89,18 @@ Alles wat per trade verschilt hoort hier en nergens anders.
 | Veld | Verplicht | Waarom het zo is |
 |---|---|---|
 | `v` | ja | Schemaversie. Zonder dit kan de middleware oude en nieuwe berichten niet uit elkaar houden tijdens de schaduwdraai van D-88. |
-| `id` | ja | **Idempotentiesleutel.** De receiver ontdubbelt vandaag op een SHA-256 van de hele body binnen 5 seconden. Dat faalt twee kanten op: twee identieke signalen op verschillende bars binnen 5 s worden onterecht als duplicaat weggegooid, en een retry ná 5 s wordt onterecht dubbel uitgevoerd. Een expliciete sleutel lost beide op. |
-| `ts` | ja | UTC, ISO-8601. De sessie-roll van 18:00 ET wordt in de middleware berekend, niet in Pine. |
+| `id` | ja | **Idempotentiesleutel, `strategy:ts:kind:seq`** — het volgnummer is nodig omdat twee sluitingen op dezelfde bar kunnen vuren (§3b, blokkade 3). De receiver ontdubbelt vandaag op een SHA-256 van de hele body binnen 5 seconden. Dat faalt twee kanten op: twee identieke signalen op verschillende bars binnen 5 s worden onterecht als duplicaat weggegooid, en een retry ná 5 s wordt onterecht dubbel uitgevoerd. Een expliciete sleutel lost beide op. |
+| `ts` | ja | **`timenow`**, UTC, ISO-8601 met `Z` (§3b, voorwaarde 4). De sessie-roll van 18:00 ET wordt in de middleware berekend, niet in Pine. |
 | `strategy` | ja | De shorttitle. **Dit is de sleutel waarop de configuratie accounts opzoekt** — `mwStrategy` doet dat al. |
 | `symbol` | ja | `syminfo.ticker`. De PineConnector-symboolvertaling (`pcSymbol`) is **configuratie**, geen event-veld. |
-| `kind` | ja | `entry` · `exit` · `halt` · `derisk` · `payout` · `config` · `info`. Bepaalt welke kanalen überhaupt in aanmerking komen. |
-| `action` | bij entry/exit | `buy` · `sell` · `close`. |
-| `qty` | bij entry/exit | Contracten zoals de strategie ze bedoelt. ⚠️ De **qty-override** (D-53) grijpt hierná in, in de middleware — zie §4. |
+| `kind` | ja | `order` · `fill` · `halt` · `derisk` · `payout` · `config` · `info`. ⚠️ **`order` en `fill` zijn bewust gesplitst** — zie §3b, blokkade 2. Bepaalt tevens welke kanalen in aanmerking komen. |
+| `action` | bij order/fill | `buy` · `sell` · `close` · **`cancel`** (§3b, voorwaarde 2). |
+| `qty` | bij order/fill | Bij `order`: contracten zoals de strategie ze bedoelt. **Bij een sluitende `fill`: de WERKELIJKE positie** (§3b, voorwaarde 1). ⚠️ De **qty-override** (D-53) grijpt hierná in, in de middleware — zie §4. |
 | `price` | bij entry/exit | Signaalprijs. Bij een limietorder de limietprijs. |
 | `order_type` | bij entry/exit | `MKT` · `LMT`. |
 | `dollar_sl` / `dollar_tp` | bij entry | **Afstanden, geen niveaus.** Pine rekent vandaag al zo en PineConnector reconstrueert de absolute prijzen eruit (`price ± afstand`). Houd dat zo; niveaus zouden bij een limietorder meerdere waarheden hebben. |
 | `text` | ja | Zie §3. |
-| `journal` | ja | De zestien kolommen van de huidige journaalregel, als velden in plaats van als kommastring. |
+| `journal` | **bij `fill`** | De huidige journaalregel als velden in plaats van als kommastring. Bij `kind:"order"` afwezig. Draagt ook **`acct_name`**, omdat die in Pine wordt afgeleid en niet in de middleware nagebouwd mag worden (§3b, voorwaarde 5). |
 
 ---
 
@@ -124,6 +130,99 @@ de middleware bouwt de PMT-JSON, het PineConnector-commando en de journaalregel,
 voor Discord `text.title` en `text.body` **ongewijzigd** over en beslist alleen over webhook,
 tier en rendering. De ~20 kaartsjablonen blijven in Pine. Wil je later alsnog naar A, dan
 zijn de velden er al — dat is dan een aparte ronde en geen herbouw.
+
+---
+
+## 3b. ✅ Review Pine Dev verwerkt — drie blokkades opgelost, vijf voorwaarden
+
+Pine Dev toetste het schema tegen de dertien scripts en antwoordde op acceptatiecriterium 1
+met **nee**: niet elk veld was te produceren. Hun review is grondig en leverde één correctie
+op mijn eigen vondst (hierboven) plus acht punten. Dit is de afhandeling.
+
+### 🔴 Blokkade 1 — `journal.*` bestaat niet op een uitvoerende chart
+
+`f_journal` opent met `if useJournal and not execInstance`. Op élke chart die daadwerkelijk
+uitvoert wordt de journaalregel dus nooit geschreven — juist daar waar het om gaat. Pine Dev
+vroeg of de clausule eruit mag; dat is een gedragswijziging op live charts (een extra
+`alert()` per event).
+
+**Besluit: niet weghalen — hij lost zichzelf op.** In fase 3 smelten `f_sendExec`,
+`f_sendDiscord` en `f_journal` samen tot **één** `alert()`; het `journal`-object rijdt daarin
+mee. De guard wordt dan irrelevant in plaats van verwijderd, er komt **geen** extra alert bij,
+en we winnen journaaldata precies op de charts waar die vandaag ontbreekt. ⚠️ Dat is wél
+nieuwe data op een bestaande route, dus het valt onder de byte-vergelijking van **D-88**.
+*Pine Dev: bevestig dat dit klopt tegen de code voordat D-86 begint.*
+
+### 🔴 Blokkade 2 — order en fill zijn twee momenten
+
+`f_sendExec` vuurt bij het **plaatsen**, `f_journal("FILL")` en de fill-kaart pas nadat de
+fill **gedetecteerd** is — bij een limietorder tot `expiryBars` later. Eén `kind:"entry"` dat
+zowel `order_type`/`price` als `journal.entry`/`journal.status` draagt, beschrijft dus twee
+verschillende momenten.
+
+**Besluit: `kind` wordt gesplitst.** `order` (plaatsing: `action` · `qty` · `price` ·
+`order_type` · `dollar_sl` · `dollar_tp`, **geen** `journal`) en `fill` (uitvoering:
+`journal.*` verplicht). Dat sluit aan op wat de code werkelijk doet. ➡️ En het lost blokkade 1
+mee op: op een `order` is er geen journaalregel nodig, op een `fill` wel — precies het
+moment waarop `f_journal` vandaag al zou draaien als de guard er niet stond.
+
+### 🔴 Blokkade 3 — `strategy:ts:kind` is niet uniek
+
+`f_sendExec("close", …)` staat op **zes** plekken, waarvan vier alleen bewaakt worden door
+`if posSize != 0` zonder onderlinge uitsluiting. Twee daarvan kunnen op dezelfde bar vuren.
+Beide events zouden dan dezelfde sleutel krijgen en de middleware gooit er één weg — precies
+de fout die `id` moest voorkomen.
+
+**Besluit: `id` wordt `strategy:ts:kind:seq`**, met een `var int seq` die per verstuurd event
+ophoogt. Stabiel binnen een realtime bar, dus retries ontdubbelen nog steeds goed.
+
+🔴 **En de terzijde van Pine Dev is geen terzijde:** dat diezelfde vier plekken allemaal
+`strategy.close_all()` kunnen aanroepen op één bar is een **dubbele sluiting op het live
+pad**. Dat staat los van dit schema en heeft een eigen nummer gekregen — **D-107**.
+
+### ⚠️ Voorwaarde 1 — `qty` bij een exit
+
+Vijf van de zes close-aanroepen geven `t_qty` mee: de qty die bij de **entry** gezet is.
+Alleen de cap-lock gebruikt `math.abs(strategy.position_size)`, de werkelijke positie. Normaal
+vallen die samen; **na een gederiskte of gecapte fill niet.**
+
+**Besluit voor het schema: bij `kind:"fill"` met een sluitende actie is `qty` de WERKELIJKE
+positie.** Reden: de middleware bouwt hier een sluitorder uit. Sluit je de signaal-qty terwijl
+de echte positie kleiner is, dan draai je door naar de andere kant; is hij groter, dan blijft
+er een restpositie staan. ⚠️ **Dit betekent dat het huidige gedrag op vijf van de zes plekken
+waarschijnlijk al fout is** wanneer derisk of cap heeft ingegrepen. Dat is een live-pad-
+bevinding, geen schemakeuze — meegenomen in **D-107**.
+
+### ⚠️ Voorwaarde 2 — "resting order annuleren" gaat als `close` de deur uit
+
+r. 2065 vuurt terwijl `isFlat` waar is: een niet-opgepikte limietorder wordt ingetrokken en
+gaat als `f_sendExec("close", …)` naar buiten — op PMT een sluitorder voor een positie die
+niet bestaat. **Besluit: `action` krijgt `cancel`** naast `buy`/`sell`/`close`. Eén woord, en
+het onderscheid is hard.
+
+### ⚠️ Voorwaarde 3 — `text.*` gaat ongeschermd de JSON in
+
+Werkt vandaag alleen omdat geen enkele kaarttekst een `"` bevat — Pine Dev verifieerde dat,
+nul treffers. **Besluit: akkoord met hun voorstel om er `f_jsonEsc()` omheen te bouwen.**
+Discipline die op een garantie lijkt is een stille faalmodus.
+
+### ⚠️ Voorwaarde 4 — welke klok
+
+**Besluit: `timenow`, omgerekend naar UTC, ISO-8601 met `Z`.** Dat is het moment waarop het
+signaal werkelijk ontstaat. Lukt `str.format_time` met `'T'`- en `'Z'`-literals niet
+betrouwbaar, bouw hem dan uit losse delen — de vorm telt, niet de methode.
+
+### ⚠️ Voorwaarde 5 — `jrnlAcct` is afgeleid, niet ingevuld
+
+`f_autoAcctName()` leidt kolom 3 van het journaal af uit `accountID`, `evalStartBal` én
+`validFrom`. Verhuist `account_id` naar de configuratie, dan zou de middleware die afleiding
+**exact** moeten overnemen — en doet hij dat niet, dan verandert die kolom stilletjes en
+breekt de koppeling met bestaande journaalregels.
+
+**Besluit: niet overnemen maar meesturen.** `journal.acct_name` wordt een veld in het event.
+De afleiding blijft waar de kennis zit; een kopie in de middleware zou een tweede bron zijn
+voor iets dat maar één waarheid heeft. Dit is dezelfde regel als §5 van de Scrum
+Master-skill.
 
 ---
 
@@ -160,10 +259,11 @@ dat was precies de D-70-bevinding.
 
 ## 6. Acceptatiecriteria
 
-1. **Pine Dev bevestigt** dat elk verplicht veld uit een script te produceren is, en meldt
-   welke niet.
+1. ✅ **Pine Dev heeft getoetst** (28-09) en drie blokkades plus vijf voorwaarden gemeld.
+   Alle acht zijn in §3b afgehandeld. **Resteert één bevestiging van hen:** klopt het dat
+   blokkade 1 vanzelf oplost doordat de drie `alert()`-aanroepen in fase 3 samensmelten?
 2. **Middleware App bevestigt** dat elke huidige uitgaande payload hieruit te bouwen is —
-   getoetst op een echt bericht per route, niet op papier.
+   getoetst op een echt bericht per route, niet op papier. ⏳ **Nog niet binnen.**
 3. ✅ Het besluit uit §3 is genomen: **route B** (Ferry, 28-09).
 4. Er ligt één voorbeeldbericht per `kind`.
 

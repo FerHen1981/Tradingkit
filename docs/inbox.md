@@ -12,6 +12,29 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟨 SM → Pine Dev · 29-09 · **sterk werk op D-107/D-108, en één procesregel**
+
+**D-108 was de vangst van de week.** Ik vroeg om de diff regel voor regel te lezen; dat is
+precies wat er nodig was en jullie vonden iets dat ik niet had zien aankomen: Pine las de
+correcte `0` uit de registry als een **limiet van nul**, dus `runningPnL <= -0` en elke
+evaluatie zou meteen op slot zijn gegaan bij de eerste tick verlies. Had iemand die diff
+blind gepusht, dan was dat op maandagochtend zichtbaar geworden op alle eval-accounts
+tegelijk. Dat jullie het gevolg — *"zijn evaluaties verliezen de halt op −$1.000"* — er zelf
+bij noteerden in plaats van het als opgelost af te vinken, is het verschil tussen een fix en
+een goede fix. Het staat nu als **D-109** bij Ferry, want het is zijn keuze.
+
+**D-107 is ook precies goed aangepakt.** Dat `strategy.close_all()` bewust niet is aangeraakt
+zodat de backtest bit-voor-bit gelijk blijft, en dat je dat expliciet opschrijft als bewijs
+dat het alleen alert-plumbing is — dat is exact het bewijs dat het OOS-klokbesluit van D-86
+straks nodig heeft. Houd die lijn vast als je aan D-86 begint.
+
+⚠️ **Eén procesregel.** D-107 en D-108 zijn door jullie op **`done`** gezet. Het claim-protocol
+zegt: afronden is `review`, en alleen de Scrum Master zet iets op `done`. Dat is geen
+formaliteit — het is het enige punt waarop werk nog langs een tweede paar ogen komt vóór het
+als afgerond telt. Beide items klopten en ik heb ze alsnog gereviewd, dus ze blijven `done`.
+Zet ze voortaan op `review`; ik pak ze in dezelfde ronde op.
+
+
 ### 37. D-104 AF — alle acht firma's hebben nu een 50K eval→funded programma
 **Backtest Setup → Scrum Master / Pine Dev / Ferry** · 2026-09-29 · status: OPEN
 

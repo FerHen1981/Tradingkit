@@ -1,6 +1,6 @@
 {
   "version": "0.2.1",
-  "updated": "2026-08-18",
+  "updated": "2026-09-29",
   "value_unit_note": "Rule values carry a unit ('usd' or 'pct'). % is of account size unless noted. VERIFY all — rules change; verified=false means Claude-drafted, not human-confirmed.",
   "programs": [
     {
@@ -644,6 +644,92 @@
         "as_of": "2026-08",
         "verified": true,
         "notes": "Legacy 250k eval: $15k target, intraday trailing $6.5k, 27 contracts, 1 min day. Converts into a Legacy PA of this size, which is not modelled yet — add it when one exists."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "apex_250k_legacy_pa",
+      "firm": "Apex",
+      "display_name": "Apex 250K — Funded PA (Legacy EOD)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": null,
+      "account": {
+        "size": 250000,
+        "currency": "USD",
+        "fee": null,
+        "fee_refundable": null,
+        "reset_fee": null
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 6500,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 6600,
+          "unit": "usd"
+        }
+      },
+      "trading_rules": {
+        "min_trading_days": 8,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 30
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": {
+          "value": 27,
+          "unit": "contracts"
+        },
+        "scaling_plan": null,
+        "min_profitable_days": {
+          "days": 5,
+          "min_each": {
+            "value": 50,
+            "unit": "usd"
+          }
+        }
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": "100% first $25k then 90/10",
+        "payout_cadence": "ladder",
+        "first_payout_wait_days": null,
+        "min_payout": 500,
+        "payout_cap": null,
+        "payout_ladder": [
+          3000,
+          3000,
+          3000
+        ],
+        "safety_net_payouts": 3,
+        "in_eval_profit_share": null
+      },
+      "execution": {
+        "platforms": [
+          "Rithmic",
+          "Tradovate",
+          "Quantower"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": "NQ",
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "Ferry fleet-doc 2026-09-28 §9 (QuantVPS-tabel jul-2025 + registry, door Ferry bevestigd); programmakeuze per Ferry-regel 29-09 \"dichtst bij de Apex-regels\"",
+        "as_of": "2026-09",
+        "verified": true,
+        "notes": "Legacy PA 250K. GEEN daily loss limit: fleet-doc §9 zegt letterlijk \"Ferry bevestigt: geen DLL op legacy\". De $1.200 DLL die in het startschema bij qty 3 staat is Ferry's EIGEN cap in Tradovate, geen firm-regel — die hoort in de accountconfiguratie (D-78 accounts[].caps), niet hier. Halve-contracten-drempel op 13 van 27 ct. Payout eerste 3 rondes max $3.000, daarna onbegrensd. TWEE dagtellers zoals bij 50K: 8 dagen met fills EN 5 dagen met minstens $50 winst. OPEN: apex_50k_legacy_pa draagt max_daily_loss $1.000 terwijl hetzelfde doc voor legacy \"geen DLL\" zegt — een van beide klopt niet, voorgelegd aan Ferry 29-09."
       },
       "converts_to": null
     },

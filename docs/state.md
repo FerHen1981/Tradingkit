@@ -5,7 +5,7 @@ can be trusted.
 
 _Last updated: 2026-09-23 (Analyses & Data chat)_
 
-## Live settings — de werkende config (D-75, vervangt D-43)
+## Live settings — de werkende config (A-75, vervangt A-43)
 
 Bewezen op live fills 1–14 sep 2026 (PA013/018/021/022/023, 325 trades):
 **60% trade-winrate, 75% winstdagen, mediaan account-dag +$503.** Na het
@@ -58,7 +58,7 @@ Enige mechanisme dat dit oplevert: intraday trailing incl. open winst. Bij MFE �
 (+$2.475) staat de floor op ≈ break-even; terugval naar −1t = liquidatie. Zelfde mechanisme als
 243 (door Apex bevestigd). Structureel: TP 122t ligt vóórbij de
 trail-afstand (100t op 5 NQ); elke MFE in 100–121t die omkeert is een breach. Zie
-D-77 voor de near-miss-bescherming.
+A-77 voor de near-miss-bescherming.
 
 ### Tradovate Auto Liq — per account (hard, realized + open)
 
@@ -125,6 +125,12 @@ projectie: `fleet_startschema_2026-09-28.pdf` (scratchpad/Ferry, niet in repo).
 
 Week 21–25 sep live: alle PA's negatief tot vlak (013 −196, 018 −600, 023 −1.065, 025 −1.028,
 028 −910, 029 −1.055); backtest qty 2 zelfde week +315 (ma/wo/vr verlies in de US-sessie).
+**Projectiebasis (meting Scrum Master 28-09, `docs/DECISIONS.md`):** de fleet-projectie rekent
+met $187 netto per contract per handelsdag (live 1–14 sep). Op de volledige fills 01→25 sep:
+1–14 sep +$12.110 (31 account-dagen), 15–25 sep −$4.414 (69 account-dagen), heel venster
+$76,97 per account-dag = **$27,59 per contract-dag**, een zevende van de basis. Vanaf de
+volgende versie toont het fleet-doc beide vensters naast elkaar; het "realistisch midden
+50–60%" is op deze meting nog optimistisch.
 
 Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
 is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.
@@ -141,7 +147,7 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
-## D-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
+## A-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
 
 **Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.
 Verklaring: Apex-trailing op evals volgt de HWM inclusief open winst. Op 5 NQ is de
@@ -163,7 +169,7 @@ gevolgd door een volle SL (90t) is al een breach. Test vóór live: El Toro HF e
 met Enable Trailing On (activation 40t / buffer 40t) naast Off, tel TP-exits en
 trail-exits ≥ +40t.
 
-## D-76 — Day-trail en DLL herijkt op export d8ac1 (23 sep 2026)
+## A-76 — Day-trail en DLL herijkt op export d8ac1 (23 sep 2026)
 
 **Bewijs.** TES-MGC-C export `d8ac1` (24 jun–23 sep, qty 4, TP R-multiple 1 = 100t,
 exit mode Off, gate Off = rauwe stroom): 1.063 trades, 65 dagen, $26.258, 63%
@@ -174,7 +180,7 @@ gesimuleerd op trade-closes (per contract, ×4 op deze run):
 |---|---:|---:|---:|---:|---:|
 | rauw | 6.564 | 63% | 1.073 | −943 | 1.277 |
 | 125 / 50 / 250 (= de ingevulde 500/200/1.000 op qty 4) | 4.668 | 78% | 337 | −943 | 1.277 |
-| **250 / 100 / 500** (D-75) | 6.554 | 69% | 594 | −943 | 1.277 |
+| **250 / 100 / 500** (A-75) | 6.554 | 69% | 594 | −943 | 1.277 |
 | alleen cap 500 | 7.128 | 65% | 594 | −943 | 1.277 |
 | 250 / 100 / 500 + DLL 300 (3 SL) | 4.846 | 62% | 594 | −324 | 1.095 |
 | 250 / 100 / 500 + **DLL 400 (4 SL)** | 5.462 | 68% | 594 | −424 | 822 |
@@ -211,10 +217,14 @@ sim is een bovengrens. Deze run is TP 100t; live blijft 85t (jaardata `89aa5`).
 
 Bronbestand (upload, niet in repo): TES-MGC-C export `66a9acf3…d8ac1` (23 sep).
 
-## D-75 — Werkende live-config vastgelegd + schaalregel guards (18 sep 2026)
+## A-75 — Werkende live-config vastgelegd + schaalregel guards (18 sep 2026)
 
-Genummerd D-75 om botsing met de board-nummering te vermijden (board zit op D-74);
-de D-43 hieronder is de oudere Analyses-chat-nummering.
+**Nummering (besluit Ferry 28-09):** het register van deze chat draagt het voorvoegsel
+`A-` (A-43, A-75, A-76, A-77 …); nummers blijven staan, alleen het voorvoegsel is nieuw.
+`D-`-nummers geeft alleen de Scrum Master uit (`docs/SPRINT.md`). Reikt een A-besluit
+buiten deze chat, dan wordt het gemeld in `docs/inbox.md` en krijgt het daar een D-nummer;
+de twee verwijzen naar elkaar. Eerdere afgeleverde documenten (fleet-doc 28-09) noemen
+nog "A-76/A-77"; lees dat als A-76/A-77.
 
 **Bewijs.** Fills 35–40 (1–16 sep, 6 accounts, 389 trades): vóór 15/9 60% op trades,
 75% op account-dagen, mediaan +$503, avg verliezer −$126; ná 15/9 (day-trail uit)
@@ -236,7 +246,7 @@ tegen deze tabel.
 Bronbestanden (uploads, niet in repo): Fills_35–40.csv, TradingView_Alerts_Log
 2026-09-17 ae004, TES-MGC-C exports 1b4a6 / df588 / ff116 / 89aa5 / 6ae1c.
 
-## D-43 — Buffer-gedreven per-account sizing + hard Tradovate-limits (28 aug 2026)
+## A-43 — Buffer-gedreven per-account sizing + hard Tradovate-limits (28 aug 2026)
 
 **Waarom.** Fleet-optimalisatie-analyse op de MGC1! 1-jaars backtest (config
 `91469a71`, TP 85t Fixed) laat zien: mediaan-dag ligt op qty 5-6 tussen $400-500

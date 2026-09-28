@@ -1,4 +1,4 @@
-// D-79 + D-80 · ConfigProvider — de herlaadbare bron voor `AccountQty`,
+// D-79 + D-80 + D-81 · ConfigProvider — de herlaadbare bron voor `AccountQty`,
 // `AccountBlockGate` en `AccountRiskGate`. Fase 1 van het herijkingsplan.
 //
 // Waarom nodig. Vandaag lezen die drie klassen hun waarden in een static
@@ -6,19 +6,22 @@
 // restart mex-receiver`. Ferry's antwoord 8 vraagt om optie b: een
 // configuratiebron die zónder herstart mee-beweegt.
 //
-// Wat dit is (fase 1 · D-79 + D-80) en wat het NIET is (fase 2+):
+// Wat dit is (fase 1 · D-79 + D-80 + D-81) en wat het NIET is (fase 2+):
 //   ✔ leest `docs/schema-config.md`-shape uit een JSON-file
 //   ✔ polls de file elke `MEX_CONFIG_POLL_MS` ms (default 5000) en herlaadt
 //     op een gewijzigde mtime
 //   ✔ biedt een thread-safe `Current`-snapshot
 //   ✔ per-account waarden (status, caps, contracts) worden geconsulteerd door
-//     de gates in `Program.cs`; het env-pad blijft als vangnet zolang D-81
-//     de migratie niet gedaan heeft
+//     de gates in `Program.cs`; het env-pad blijft als vangnet zolang de
+//     migratie niet volledig heeft plaatsgevonden
 //   ✔ D-80 · valideert een nieuwe file vóór hij `Current` wordt; op fout
 //     blijft de laatst-goede staan, een luide melding gaat naar Discord
 //     (rate-limited per unieke bad-file-mtime zodat een blijvend kapotte
 //     file niet spammt)
-//   ✘ geen auditspoor — dat is D-81
+//   ✔ D-81 · append-only auditspoor: elke laad-poging (geslaagd én afgewezen)
+//     krijgt een JSONL-regel met wie/wat/wanneer/vorige-versie en bij een
+//     wijziging een diff van gewijzigde velden. Bron voor "waarom is deze
+//     order zo gerouteerd" achteraf reconstrueerbaar.
 //   ✘ geen HTTP-schrijfpad — dat is D-82
 //
 // Zelfde gedrag, andere bron. Als de configuratiefile ontbreekt of leeg is,
@@ -193,8 +196,10 @@ public static class ConfigProvider
         // zodat een half-gelezen of ongeldige file **nooit** door een gate wordt
         // geconsulteerd — de gates zien of de oude waarde of de nieuwe, nooit
         // iets ertussenin.
+        ConfigDocument previous;
         lock (_lock)
         {
+            previous = _current;
             _current = parsed;
             _lastMtimeUtc = info.LastWriteTimeUtc;
             _lastLength = info.Length;
@@ -207,6 +212,12 @@ public static class ConfigProvider
         Console.Error.WriteLine(
             $"[config] loaded v{parsed.Version} · accounts={parsed.Accounts.Count} · " +
             $"defaultCap={parsed.DefaultEntryCap?.ToString() ?? "—"} · updatedBy={parsed.UpdatedBy}");
+
+        // D-81 · Auditspoor. Elke wissel krijgt een regel met from→to +
+        // een diff van gewijzigde velden. Faalt de write, dan gebeurt er
+        // niets met de swap — het auditspoor mag de provider niet stukmaken.
+        try { ConfigAudit.AppendLoaded(previous, parsed); }
+        catch (Exception ex) { Console.Error.WriteLine($"[config] audit write failed: {ex.Message}"); }
     }
 
     // Log + eenmalige luide melding voor deze exacte bad-file (mtime + length).
@@ -217,6 +228,11 @@ public static class ConfigProvider
         var stderrLine =
             $"[config] {phase} for {_path}, keeping last-good v{_current.Version}: {detail}";
         Console.Error.WriteLine(stderrLine);
+
+        // D-81 · Auditspoor krijgt ook de reject-lijn — anders staat er straks een
+        // gat in het verhaal ("de config ging van v2 naar v4, waar is v3 gebleven?").
+        try { ConfigAudit.AppendRejected(_current, info, phase, detail); }
+        catch (Exception ex) { Console.Error.WriteLine($"[config] audit write failed: {ex.Message}"); }
 
         // Rate-limit: alleen alarmeren als deze exacte (mtime+length) nog niet
         // aan de melding is geweest. Anders blijft een blijvend kapotte file
@@ -364,5 +380,125 @@ public static class ConfigValidator
         }
 
         return (true, "");
+    }
+}
+
+
+// -----------------------------------------------------------------------
+// D-81 · Auditspoor. Append-only JSONL, één regel per laad-poging (geslaagd
+// of afgewezen). "Straks de enige manier om te reconstrueren waarom een
+// order ergens heen ging" — dus geen truncatie, geen roterende bestanden,
+// geen filtering. Je hoort dit later te kunnen lezen en zien welke config
+// er op moment X actief was.
+//
+// Format:
+//   {"ts":"…","phase":"loaded","from":1,"to":2,"updated_by":"…","diff":{…}}
+//   {"ts":"…","phase":"rejected","kept":1,"reason":"validation failed",
+//    "detail":"…","file_mtime":"…","file_size":123}
+//
+// Pad: `MEX_CONFIG_AUDIT_PATH` (default `/root/mex-config/audit.log`).
+// Ontbreekt de map, dan maakt de audit hem aan. Faalt de write, dan wordt
+// er stderr-gelogd — de config-swap zelf gaat door.
+// -----------------------------------------------------------------------
+
+public static class ConfigAudit
+{
+    static readonly object _writeLock = new();
+
+    static string Path =>
+        Environment.GetEnvironmentVariable("MEX_CONFIG_AUDIT_PATH")
+        ?? "/root/mex-config/audit.log";
+
+    public static void AppendLoaded(ConfigDocument previous, ConfigDocument current)
+    {
+        var diff = BuildDiff(previous, current);
+        var record = new JsonObject
+        {
+            ["ts"] = DateTime.UtcNow.ToString("o"),
+            ["phase"] = "loaded",
+            ["from"] = previous.Version,
+            ["to"] = current.Version,
+            ["updated_by"] = current.UpdatedBy,
+            ["updated_at"] = current.UpdatedAt,
+            ["accounts_now"] = current.Accounts.Count,
+            ["diff"] = diff,
+        };
+        Write(record);
+    }
+
+    public static void AppendRejected(ConfigDocument kept, FileInfo info, string phase, string detail)
+    {
+        var record = new JsonObject
+        {
+            ["ts"] = DateTime.UtcNow.ToString("o"),
+            ["phase"] = "rejected",
+            ["kept"] = kept.Version,
+            ["reason"] = phase,
+            ["detail"] = detail,
+            ["file_mtime"] = info.LastWriteTimeUtc.ToString("o"),
+            ["file_size"] = info.Length,
+        };
+        Write(record);
+    }
+
+    // Diff is bewust plat: gepunte pad → {from, to}. Dat leest achteraf beter
+    // dan een boom en past in Discord/kliphistorie zonder verrassingen. Alleen
+    // gewijzigd/toegevoegd/verwijderd; ongewijzigd wordt weggelaten.
+    static JsonObject BuildDiff(ConfigDocument prev, ConfigDocument now)
+    {
+        var diff = new JsonObject();
+
+        if (prev.DefaultEntryCap != now.DefaultEntryCap)
+            diff["defaults.caps.entries_per_day"] = FromTo(prev.DefaultEntryCap, now.DefaultEntryCap);
+
+        var prevKeys = new HashSet<string>(prev.Accounts.Keys, StringComparer.OrdinalIgnoreCase);
+        var nowKeys = new HashSet<string>(now.Accounts.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var added in nowKeys.Except(prevKeys, StringComparer.OrdinalIgnoreCase))
+            diff[$"accounts.{added}"] = FromToStr(null, "added");
+        foreach (var removed in prevKeys.Except(nowKeys, StringComparer.OrdinalIgnoreCase))
+            diff[$"accounts.{removed}"] = FromToStr("removed", null);
+
+        foreach (var acct in prevKeys.Intersect(nowKeys, StringComparer.OrdinalIgnoreCase))
+        {
+            var p = prev.Accounts[acct];
+            var n = now.Accounts[acct];
+            if (!string.Equals(p.Status, n.Status, StringComparison.OrdinalIgnoreCase))
+                diff[$"accounts.{acct}.status"] = FromToStr(p.Status, n.Status);
+            if (p.DailyEntryCap != n.DailyEntryCap)
+                diff[$"accounts.{acct}.caps.entries_per_day"] = FromTo(p.DailyEntryCap, n.DailyEntryCap);
+            if (p.Contracts != n.Contracts)
+                diff[$"accounts.{acct}.contracts"] = FromTo(p.Contracts, n.Contracts);
+        }
+
+        return diff;
+    }
+
+    static JsonObject FromTo(int? from, int? to)
+    {
+        var o = new JsonObject();
+        o["from"] = from is int f ? JsonValue.Create(f) : null;
+        o["to"] = to is int t ? JsonValue.Create(t) : null;
+        return o;
+    }
+
+    static JsonObject FromToStr(string? from, string? to)
+    {
+        var o = new JsonObject();
+        o["from"] = from is null ? null : JsonValue.Create(from);
+        o["to"] = to is null ? null : JsonValue.Create(to);
+        return o;
+    }
+
+    static void Write(JsonObject record)
+    {
+        var path = Path;
+        var dir = System.IO.Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        var line = record.ToJsonString() + "\n";
+        lock (_writeLock)
+        {
+            File.AppendAllText(path, line);
+        }
     }
 }

@@ -5490,3 +5490,106 @@ en D-88).
 3. ➡️ Fase 0 kan wat mij betreft dicht zodra jij deze drie keuzes hebt vastgelegd.
 
 D-77 op review (mijn helft), fase 1 onaangeraakt door deze meting.
+
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-81 opgeleverd (+ D-106 partial), LIVE PATH
+
+**Fase 1 dicht: auditspoor, startwaarschuwing, migratie-tool. En terwijl ik in `Program.cs` bezig was: D-106's endpoint-veld erin gezet.**
+
+### D-81 · Auditspoor (Config.cs)
+
+- Nieuwe `ConfigAudit`-klasse. Elke laad-poging (geslaagd én afgewezen) schrijft één JSONL-regel naar `MEX_CONFIG_AUDIT_PATH` (default `/root/mex-config/audit.log`).
+- **Geslaagde load:** `{ts, phase:"loaded", from, to, updated_by, updated_at, accounts_now, diff}` — diff is een platte map van gepunte paden → `{from, to}` voor alleen gewijzigd/toegevoegd/verwijderd. Ongewijzigde velden worden weggelaten zodat de regel niet opzwelt.
+- **Afgewezen load:** `{ts, phase:"rejected", kept, reason, detail, file_mtime, file_size}` — zo staat er straks geen gat in het verhaal ("de config ging van v2 naar v4, waar is v3 gebleven?").
+- Append-only, geen rotatie, geen truncatie. SM: *"straks de enige manier om te reconstrueren waarom een order ergens heen ging."*
+- Als de audit-write faalt (disk vol, permissie), gaat een stderr-lijn eruit en gaat de config-swap gewoon door. Het spoor mag de provider niet stuk maken.
+
+### D-81 · Startwaarschuwing (Program.cs)
+
+- Bij boot, één stderr-regel per gedeprecieerde env-var die nog gezet is: `MEX_HALTED_ACCOUNTS`, `MEX_ACCOUNT_ENTRY_CAPS`, `MEX_DEFAULT_ENTRY_CAP`. Plus de bestaande `MEX_ACCOUNT_QTY_MULTIPLIERS` → `MEX_ACCOUNT_QTY`-warning die we sinds D-53 hadden.
+- Env blijft werken als vangnet zolang niet elk account in de file staat (dat is opzet — file wint per account); de waarschuwing is de reminder dat Ferry ze uit de systemd-unit kan halen zodra de migratie compleet is.
+
+### D-81 · Migratie-tool (nieuw)
+
+`middleware/tools/migrate_env_to_config.py` — leest env-values (uit `systemctl show -p Environment mex-receiver` óf uit CLI-args) en produceert een `accounts[]` + `defaults` blok tegen de fase-1-shape. Voorbeelden:
+
+```bash
+# preview:
+python3 middleware/tools/migrate_env_to_config.py --from-systemd mex-receiver
+
+# schrijf/merge (atomair tmp+rename):
+python3 middleware/tools/migrate_env_to_config.py \
+    --from-systemd mex-receiver \
+    --out /root/mex-config/mex.json \
+    --updated-by "d81-migration"
+```
+
+- **Merge is idempotent** — bestaande handmatige velden (bv. `contracts: 3` gezet door de settings-tab straks) blijven staan; de migratie voegt alleen `status` en `caps.entries_per_day` toe wanneer die nog niet aanwezig zijn.
+- **`MEX_ACCOUNT_QTY` wordt bewust NIET gemigreerd** — schema §7 zegt: blijft env als vangnet. De tool laat de kluis (URLs/tokens/webhooks) en channels-blok ook liggen — die zijn D-82/D-104 territorium.
+- Test-run in de scratchpad met een bestaande file bevestigt de merge-semantiek: bestaande `status: active` blijft, `contracts` blijft, versie bumpt van 3 → 4.
+
+### D-106 partial · endpoint per POST in het routed-log
+
+Ferry noemde in de startprompt: *"log per POST welk endpoint gekozen werd."*
+Aangepakt terwijl ik in `Program.cs` was:
+
+- `Audit.AppendAsync` krijgt een optioneel `transport`-veld.
+- Voor PMT-POSTs zet de code hem op `"pmt_rithmic"` of `"pmt_tradovate"` (bestaande routing-logica, alleen zichtbaar gemaakt).
+- Overige kinds (`discord`, `journal`, `pineconnector`, `unknown`) hebben geen transport en krijgen `null`.
+- Regelvorm nu: `{"ts":…,"kind":"pmt","account":"PA…024","transport":"pmt_tradovate","result":"sent 200 …","body":…}`. Direct grep-baar: `grep -c '"transport":"pmt_rithmic"' routed_*.jsonl`.
+
+Sluit de open eind van D-73 op APEX…205 (die als enige lege bodies gaf): straks is één query van de log genoeg om te zien of dat account op Rithmic vs Tradovate zit.
+
+### Deploy (zelfde flow als D-79/D-80)
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/{Program.cs,Config.cs} /root/mex-middleware-b/src/Mex.Journal.Receiver/ \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+Na herstart: eerste laad schrijft `audit.log` met `phase:"loaded", from:0, to:1, diff:{accounts.PAAPEX…013: {from:null, to:"added"}, …}` — bewijs dat het spoor loopt. `routed_*.jsonl`-nieuwe rijen dragen `"transport":"pmt_tradovate"`.
+
+### Acceptance-checks
+
+**D-81 (a) auditspoor:**
+```bash
+# na een laad-cyclus:
+tail -n 3 /root/mex-config/audit.log | python3 -m json.tool
+# verwacht: "phase":"loaded" en een niet-lege diff bij elke wijziging;
+# bij een validatiefout een "phase":"rejected"-regel ertussen.
+```
+
+**D-81 (b) migratie:**
+```bash
+python3 middleware/tools/migrate_env_to_config.py --from-systemd mex-receiver \
+  --out /root/mex-config/mex.json --updated-by "d81-migration"
+# in de log: [config] loaded v… · updatedBy=d81-migration
+# audit.log krijgt een phase:"loaded" regel met de diff.
+```
+
+**D-81 startwaarschuwing:** na herstart eenmalig in `journalctl`:
+```
+[config] deprecated env MEX_HALTED_ACCOUNTS is set — file-based equivalent in mex.json wins per account; this env stays as fallback until D-81 migration completes and it is removed.
+```
+
+**D-106:**
+```bash
+grep -h '"kind":"pmt"' /root/intent-store/routed_*.jsonl | tail -n 1 | python3 -c '
+import sys, json; r = json.loads(sys.stdin.read()); print("transport:", r.get("transport"))'
+# verwacht: pmt_tradovate (of pmt_rithmic voor accounts in MEX_PMT_RITHMIC_ACCOUNTS).
+```
+
+### Wat er nog rest in fase 1
+
+**Niets.** Fase 1 is met deze commit inhoudelijk dicht:
+- D-79 ✅ (deploy 28-09 groen, hot-reload live bewezen)
+- D-80 ✅ (deploy 28-09 groen, validatie + Discord-alarm bewezen op smoketest)
+- D-81 ✅ (audit + startwaarschuwing + migratie-tool)
+
+D-106 is *deels* af (endpoint-veld in routed-log); de bredere D-106-scope (audit-viewer, dashboard-integratie) wacht op fase 4.
+
+Op review. Live-executiepad — herbouw + herstart via bovenstaand blok.

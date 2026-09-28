@@ -60,6 +60,25 @@ ConfigProvider.Start((title, description) =>
     });
 });
 
+// D-81 · Startwaarschuwing voor gedeprecieerde env-vars. De acht die schema §7
+// zegt naar de configuratiefile te migreren en die deze fase 1 kan overnemen.
+// De env-vars blijven werken als vangnet zolang niet elk account in de file
+// staat — dat is opzet — maar wie er nog eentje zet moet weten dat de file wint.
+foreach (var name in new[] {
+    "MEX_HALTED_ACCOUNTS",
+    "MEX_ACCOUNT_ENTRY_CAPS",
+    "MEX_DEFAULT_ENTRY_CAP",
+})
+{
+    var v = Environment.GetEnvironmentVariable(name);
+    if (!string.IsNullOrWhiteSpace(v))
+        Console.Error.WriteLine(
+            $"[config] deprecated env {name} is set — file-based equivalent in mex.json wins per account; this env stays as fallback until D-81 migration completes and it is removed.");
+}
+if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("MEX_ACCOUNT_QTY_MULTIPLIERS")))
+    Console.Error.WriteLine(
+        "[config] deprecated env MEX_ACCOUNT_QTY_MULTIPLIERS is set — use MEX_ACCOUNT_QTY (contracten) instead.");
+
 // Kaart-rendering: Discord-berichten van Tier A/B gaan als PNG i.p.v. tekst.
 // Zelf-configurerend: staat het render-script er niet, dan blijft alles tekst.
 var renderScript = Environment.GetEnvironmentVariable("MEX_RENDER_SCRIPT")
@@ -221,6 +240,12 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         var useRithmic = !string.IsNullOrWhiteSpace(rithmicList) && !string.IsNullOrEmpty(acct)
             && rithmicList.Split(',').Select(x => x.Trim()).Contains(acct);
         var target = useRithmic && !string.IsNullOrEmpty(pmtRithmicUrl) ? pmtRithmicUrl : pmtUrl;
+        // D-106 · Leg vast welke keuze deze POST maakte. `transport` gaat mee in
+        // de routed-regel zodat een latere analyzer (zoals `analyze_pmt_bodies.py`)
+        // kan zien of een specifiek account op Rithmic of Tradovate zit. Dit sluit
+        // de D-73-anomalie af — APEX…205 leek als enige lege bodies te krijgen; met
+        // deze veld is dat achteraf één grep.
+        var transport = useRithmic && !string.IsNullOrEmpty(pmtRithmicUrl) ? "pmt_rithmic" : "pmt_tradovate";
 
         // D-53 · qty per account. Pine zet `quantity` op zijn eigen bevroren aantal
         // (MATADOR: "6"); hier overschrijven we dat met wat de map voor dit account
@@ -242,7 +267,7 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         }
 
         var res = await ForwardJsonAsync(http, target, body, dryRun);
-        await AppendAsync(storePath, "pmt", body, res, acct);
+        await AppendAsync(storePath, "pmt", body, res, acct, transport);
 
         // D-40 · registreer de weigering. Als PMT afwees met een day-cap/DLL marker in de
         // reply, dan gaat dit account op slot tot 18:00 ET. Reactief, met opzet: de eerste
@@ -389,8 +414,8 @@ app.Run();
 // --- helpers ---------------------------------------------------------------
 
 // Append-only audit: één regel per binnengekomen bericht, per dag één bestand.
-static Task AppendAsync(string storePath, string kind, string body, string result, string account = "")
-    => Audit.AppendAsync(storePath, kind, body, result, account);
+static Task AppendAsync(string storePath, string kind, string body, string result, string account = "", string transport = "")
+    => Audit.AppendAsync(storePath, kind, body, result, account, transport);
 
 // POST met retry op netwerkfouten en 5xx; 4xx niet opnieuw proberen (lost niet op).
 // Het antwoord kort houden: het gaat mee in elke journaalregel.
@@ -746,13 +771,16 @@ public static class AccountRiskGate
 
 public static class Audit
 {
-    public static async Task AppendAsync(string storePath, string kind, string body, string result, string account = "")
+    public static async Task AppendAsync(string storePath, string kind, string body, string result, string account = "", string transport = "")
     {
+        // D-106 · `transport` (optional) noteert welk PMT-endpoint werd gekozen
+        // (`pmt_tradovate` / `pmt_rithmic`). Leeg voor niet-PMT kinds.
         var rec = JsonSerializer.Serialize(new
         {
             ts = DateTime.UtcNow,
             kind,
             account,
+            transport = string.IsNullOrEmpty(transport) ? null : transport,
             result,
             body = body.Length > 4000 ? body[..4000] : body
         });

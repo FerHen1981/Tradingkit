@@ -173,8 +173,31 @@
 //   NIET meegenomen: "Last payout (consistency anchor)" blijft een eigen input. Dat is geen
 //   handelsvenster maar het startpunt van de consistency- en kwalificerende-dagentellers;
 //   samenvoegen zou die tellers stukmaken.
+// v3.5.0 (29-09, D-108 + D-107): twee correcties op het live pad, geen handelslogica.
+//   D-108 -- NUL BETEKENT GEEN LIMIET. De firmablokken zijn opnieuw uit de registry
+//   gegenereerd. Die schrijft nu correct 0 waar een programma geen daglimiet of geen
+//   consistency-regel kent (de evaluaties), in plaats van de verzonnen fallbacks 1000/50
+//   die er sinds D-68 in stonden. Pine las die 0 echter als een limiet VAN nul:
+//   runningPnL <= -0 is waar zodra de dag een cent onder nul staat, dus de dag ging
+//   meteen op slot. GEREPAREERD: dllHit eist nu acctDLL > 0 en consistencyOK behandelt
+//   consistencyPct <= 0 als "geen regel". Ferry's funded programma's veranderen niet;
+//   zijn evaluaties verliezen de halt op -$1.000 -- correct volgens de firmaregels, maar
+//   het is een bescherming die weggaat.
+//   D-107 -- EEN SLUITING PER BAR NAAR BUITEN. Cap-/pass-lock, auto-flat, venster-grace,
+//   dag-halt en account-halt konden alle vijf op dezelfde bar f_sendExec("close") sturen;
+//   elk had alleen zijn eigen once-guard en geen onderlinge uitsluiting. Een dag-halt op
+//   de bar waarop ook het flat-window ingaat stuurde dus TWEE sluitorders naar het live
+//   pad, de tweede voor een positie die al dicht was. De bar-lokale vlag flatSentBar laat
+//   er per bar precies een door. strategy.close_all() is bewust NIET aangeraakt, zodat de
+//   backtest bit-voor-bit gelijk blijft en dit aantoonbaar alleen alert-plumbing is.
+//   OOK D-107: vijf van de zes sluitingen stuurden t_qty mee -- de qty die bij de ENTRY
+//   is gezet en daarna blijft staan -- in plaats van de werkelijke positie. Na een
+//   gederiskte of gecapte fill lopen die uiteen en sluit je te veel (doordraaien naar de
+//   andere kant) of te weinig (restpositie blijft staan). De vier halt-paden sturen nu
+//   math.abs(posSize). De zesde plek is geen sluiting maar het intrekken van een
+//   niet-opgepikte limietorder; daar is t_qty juist en die blijft staan.
 var string SCRIPT_NAME = "MΞX ΞL TORO · NQ HF INTRA"
-var string currentVersion = "v3.4.0"
+var string currentVersion = "v3.5.0"
 strategy("MΞX ΞL TORO · NQ HF INTRA · " + currentVersion, shorttitle="TOR-NQ-HF", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -2055,6 +2078,9 @@ if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow
     strategy.cancel("Long")
     strategy.cancel("Short")
     f_markUnfilled(pendBar, pendLimit, false)
+    // D-107: dit is GEEN sluiting maar het intrekken van een niet-opgepikte limietorder;
+    // de positie is hier per definitie 0, dus t_qty (de qty van de pending order) is juist.
+    // In D-86 wordt dit action="cancel" (schema-event.md §3b, voorwaarde 2).
     f_sendExec("close", t_qty, close, 0, 0, "MKT")
     f_sendDiscord("⏳ " + syminfo.ticker + " LIMIT EXPIRED", jrnlAcct + " | " + "Pending " + (pendDir == 1 ? "long" : "short") + " cancelled @ " + str.tostring(pendLimit, format.mintick))
     f_journal("EXPIRED", pendDir, "NOT_FILLED", pendLimit, pendStop, float(na), t_qty, float(na), evalStarted, evalBal, distTarget, distFail, useRegime, regimeFav)
@@ -2065,6 +2091,16 @@ if isFlat and pendDir != 0 and (bar_index - pendBar > expiryBars or inFlatWindow
 // ============================================================================
 // === POSITION MANAGEMENT ====================================================
 // ============================================================================
+// === D-107 — één sluiting per bar naar buiten ===============================
+// Vijf paden kunnen op dezelfde bar plat willen: cap-/pass-lock, auto-flat, venster-grace,
+// dag-halt en account-halt. Elk had alleen zijn eigen once-guard, geen onderlinge
+// uitsluiting — dus een dag-halt op de bar waarop ook het flat-window ingaat stuurde TWEE
+// f_sendExec("close") naar het live pad, de tweede voor een positie die al dicht is.
+// Deze vlag is bar-lokaal (bewust GEEN var) en laat er per bar precies één door.
+// ⛔ strategy.close_all() blijft ongemoeid: dat pad is en blijft identiek, zodat deze
+// wijziging aantoonbaar alleen alert-plumbing raakt en de backtest bit-voor-bit gelijk is.
+bool flatSentBar = false
+
 posSize = strategy.position_size
 inLong  = posSize > 0
 inShort = posSize < 0
@@ -2252,7 +2288,9 @@ if barstate.isconfirmed and inFlatWindow and not flattenedToday
     flattenedToday := true
     if posSize != 0
         strategy.close_all(comment="Auto Flat")
-        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(posSize), close, 0, 0, "MKT")
         exitReasonNext := "AUTO-FLAT"
     f_sendDiscord("🕔 " + syminfo.ticker + " AUTO FLAT", jrnlAcct + " | " + "Forced flat @ ~" + str.tostring(close, format.mintick))
 
@@ -2272,7 +2310,9 @@ if windowExpired and not exitGraceOpen and not graceFlatDone and barstate.isconf
     graceFlatDone := true
     if posSize != 0
         strategy.close_all(comment="WINDOW-EXPIRED")
-        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(posSize), close, 0, 0, "MKT")
         exitReasonNext := "WINDOW-EXPIRED"
         f_sendDiscord("⛔ " + syminfo.ticker + " WINDOW CLOSED",
              jrnlAcct + " | 24h grace expired — flattened @ ~" + str.tostring(close, format.mintick))
@@ -2287,7 +2327,9 @@ if dayHalted and not haltCloseSent
     pendDir := 0
     if posSize != 0
         strategy.close_all(comment=haltReason)
-        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(posSize), close, 0, 0, "MKT")
     exitReasonNext := haltReason
     f_sendDiscord("🔒 " + syminfo.ticker + " DAY HALT", jrnlAcct + " | " + haltReason + " | Today: $" + str.tostring(runningPnL, "#.##"))
     if plainAlertsOK
@@ -2314,7 +2356,9 @@ if acctHalted and not acctCloseSent
     pendDir := 0
     if posSize != 0
         strategy.close_all(comment=acctHaltReason)
-        f_sendExec("close", t_qty, close, 0, 0, "MKT")
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(posSize), close, 0, 0, "MKT")
     exitReasonNext := "ACCOUNT-HALT"
     f_sendDiscord("🏁 " + syminfo.ticker + " ACCOUNT HALT", jrnlAcct + " | " + acctHaltReason + " | acct PnL $" + str.tostring(acctRealized, "#"))
     if plainAlertsOK
@@ -2386,7 +2430,9 @@ if lockOnPass and evalTrack and evalStarted and not passLocked and strategy.posi
         passLocked := true
         exitReasonNext := "PASS-LOCK"
         strategy.close_all(comment="PASS-LOCK")
-        f_sendExec("close", math.abs(strategy.position_size), close, 0, 0, "MKT")
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(strategy.position_size), close, 0, 0, "MKT")
         f_sendDiscord("🔐 " + syminfo.ticker + " PASS LOCK", jrnlAcct + " | " + "Open PnL banks the eval target (+" + str.tostring(lockBufTicks, "#") + "t cost buffer). Closing all — pass secured.")
 
 

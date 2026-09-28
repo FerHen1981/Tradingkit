@@ -5953,3 +5953,81 @@ je die commit al? Vind ik het net zo lief als jij eerst hierboven `mex.json`-ver
 smoketest zodat we D-81-B op review-akkoord kunnen zetten.
 
 D-81 opnieuw op review; D-82 al op review sinds `a8ae39a`.
+## 29-09 · Pine Dev → Scrum Master + Ferry — D-107 gedaan, LIVE PAD, alle dertien op v3.5.0
+
+Ferry: *"D-107 is nu het belangrijkste open live-item … Het schema schrijft inmiddels de
+werkelijke positie voor, dus dat tweede moet hoe dan ook. Mag samen met D-86."* Ik heb hem
+**nu** gedaan in plaats van in fase 3, om één reden: beide helften bleken **puur
+alert-plumbing** te kunnen, zonder één regel aan de handelslogica. Daarmee hoeft hij niet op
+D-86 te wachten en is hij ook niet verweven met de herstructurering.
+
+### (a) Dubbele sluiting — opgelost met één bar-lokale vlag
+
+Vijf paden konden op dezelfde bar `f_sendExec("close")` sturen: cap-/pass-lock, auto-flat,
+venster-grace, dag-halt en account-halt. Elk had alleen zijn **eigen** once-guard
+(`capLocked`, `flattenedToday`, `graceFlatDone`, `haltCloseSent`, `acctCloseSent`) en er was
+geen onderlinge uitsluiting.
+
+```pine
+bool flatSentBar = false        // bewust GEEN var: reset elke bar
+…
+    if posSize != 0
+        strategy.close_all(comment=haltReason)   // ← ONAANGERAAKT
+        if not flatSentBar
+            flatSentBar := true
+            f_sendExec("close", math.abs(posSize), close, 0, 0, "MKT")
+```
+
+⛔ **`strategy.close_all()` is bewust niet aangeraakt.** Dat is het verschil tussen "plumbing"
+en "gedragswijziging": de tweede `close_all` is voor de strategie een no-op, dus de backtest
+is bit-voor-bit gelijk aan v3.4.0. Had ik hém ook gepoort, dan was de claim dat de OOS-klok
+niet op nul hoeft niet meer aantoonbaar. Wat wél weggaat is de **tweede sluitorder naar PMT**
+— dat was het live-risico.
+
+⚠️ Dat de vlag in de TORO-scripts na de vier halt-paden wordt gezet en in de PA-scripts
+ervóór (cap-lock staat daar hoger) maakt niet uit: hij is bar-lokaal en de volgorde binnen de
+bar is deterministisch. In beide gevallen gaat er precies één sluiting de deur uit.
+
+### (b) Verkeerde qty — vier plekken om, één bewust niet
+
+De vier halt-paden sturen nu `math.abs(posSize)` in plaats van `t_qty`. `posSize` is de
+snapshot van `strategy.position_size` bovenaan het positieblok; binnen dezelfde bar verandert
+`strategy.position_size` niet meer na een `close_all`, dus dit ís de werkelijke positie.
+
+**De zesde plek blijft `t_qty`, en dat is geen omissie.** Dat is de limiet-annulering
+(r. ±2170): hij vuurt terwijl `isFlat` waar is, dus `posSize` is daar per definitie 0 en
+`math.abs(posSize)` zou een sluitorder van nul contracten sturen. `t_qty` is daar de qty van
+de **pending order**, en dat is de juiste waarde. Ik heb er drie regels commentaar boven
+gezet die naar `schema-event.md` §3b voorwaarde 2 verwijzen — in D-86 wordt dit
+`action:"cancel"` en dan is het onderscheid hard in plaats van beschreven.
+
+### Versie: v3.5.0, en D-108 hoort daar ook in
+
+D-108 ging gisteren de deur uit **zonder versiebump**, en dat was een misser van mij: de
+`dllHit`-guard is een gedragswijziging op evaluatieaccounts, geen commentaar. v3.5.0 dekt nu
+beide, met het historieblok bovenin elk script erbij. `DEPLOYED.md` staat op v3.5.0 / 29-09,
+de TradingView-kolom blijft leeg tot Ferry plakt.
+
+📌 **Over de OOS-klok heb ik bewust niet zelf beslist.** In de versietabel staat *deels*:
+D-107 is plumbing (bewijsbaar — `close_all` onaangeraakt, backtest gelijk), maar **D-108 is
+dat niet voor de tien evaluaties**: die verliezen de halt op −$1.000. Of dat de klok voor de
+hele vloot op nul zet of alleen voor de TORO-scripts is een besluit van jou/Ferry, niet van
+mij.
+
+### Verificatie
+
+- `pine/tools/pine_lint.py` vóór en ná: **byte-identieke uitvoer** (alle 13 `ok`, de twee
+  bekende FOUT's staan in `pine/history/` en `pine/lib/`).
+- Per bestand geteld vóór het patchen: 4 halt-sites (8 spaties inspringing), 1 annulering
+  (4 spaties), 1 lock-site — in alle dertien exact 4/1/1, geen uitzonderingen.
+- Declaratie staat in alle dertien vóór het eerste gebruik; `posSize` vóór alle vier de
+  halt-paden. Nagemeten per bestand op regelnummer, niet aangenomen.
+
+### Wat dit voor D-86 betekent
+
+Kleiner. De `qty`-regel uit het schema (§3b voorwaarde 1) staat er al, en de `seq` uit
+blokkade 3 wordt eenvoudiger nu er per bar nog maar één sluiting uitgaat — hij blijft nodig
+voor `order` naast `fill` op dezelfde bar, maar niet meer voor twee closes.
+
+**D-85 laat ik staan tot D-82 gedeployed is** — Ferry: *"eerst de store, dan de geheimen
+eruit."*

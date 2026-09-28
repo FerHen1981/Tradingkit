@@ -152,6 +152,9 @@ en nu in `defaults` zetten is te vroeg. Komt terug bij **D-91**.
 
 ## 4. `defaults`
 
+**Toegevoegd 29-09 uit de D-77-audit:** de **Notion-database-id's** — vandaag `NOTION_JOURNAL_DB`
+als env. Die landen hier als `notion.databases.trade_journal_id`; D-94 leest ze daar.
+
 Wat vandaag globale env-variabelen zijn en per installatie geldt: de Discord-kaart-tier,
 het rendermaximum per minuut, de standaard entry-cap. **Niet** `MEX_DRY_RUN` en **niet**
 de kill-switch — zie §6.

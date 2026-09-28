@@ -1,4 +1,4 @@
-# D-77 · Het canonieke event — schema v2
+# D-77 · Het canonieke event — schema v3
 
 _Eigenaar: Scrum Master. Opgesteld 28-09-2026. Fase 0 van `docs/PLAN-2026-09-27-herijking.md`._
 _Review gevraagd aan **Pine Dev** (is elk veld te produceren?) en **Middleware App**_
@@ -79,7 +79,9 @@ Alles wat per trade verschilt hoort hier en nergens anders.
   "order_type": "MKT",
   "dollar_sl": 150,
   "dollar_tp": 300,
-  "text": { "title": "📈 MES1! LONG MARKET", "body": "…" },
+  "risk": { "trail": false, "trail_stop": 0, "trail_trigger": 0, "trail_freq": 0,
+            "breakeven": 0, "breakeven_offset": 0 },
+  "text": { "title": "📈 MES1! LONG MARKET", "body": "…", "color": 3447003 },
   "journal": { "event": "ENTRY", "dir": "long", "status": "…", "entry": 5321.25,
                "stop": 5296.25, "target": 5371.25, "qty": 6, "pnl": null,
                "regime": "FAVORABLE", "balance": null, "dist_target": null, "dist_fail": null }
@@ -99,7 +101,8 @@ Alles wat per trade verschilt hoort hier en nergens anders.
 | `price` | bij entry/exit | Signaalprijs. Bij een limietorder de limietprijs. |
 | `order_type` | bij entry/exit | `MKT` · `LMT`. |
 | `dollar_sl` / `dollar_tp` | bij entry | **Afstanden, geen niveaus.** Pine rekent vandaag al zo en PineConnector reconstrueert de absolute prijzen eruit (`price ± afstand`). Houd dat zo; niveaus zouden bij een limietorder meerdere waarheden hebben. |
-| `text` | ja | Zie §3. |
+| `risk` | bij order | Trailing en break-even zoals Pine ze **berekent** uit `useTrail`/`useBreakEven`. 🔴 **Geen constanten** — zie §3c punt 1. |
+| `text` | ja | Zie §3. `color` is optioneel; ontbreekt hij, dan kiest de middleware een neutrale kleur. |
 | `journal` | **bij `fill`** | De huidige journaalregel als velden in plaats van als kommastring. Bij `kind:"order"` afwezig. Draagt ook **`acct_name`**, omdat die in Pine wordt afgeleid en niet in de middleware nagebouwd mag worden (§3b, voorwaarde 5). |
 
 ---
@@ -226,13 +229,76 @@ Master-skill.
 
 ---
 
+## 3c. ✅ Review Middleware App verwerkt — schema naar v3
+
+Zij toetsten alle vier de uitgaande routes tegen **echt verkeer** (4539 rijen
+`routed_*.jsonl`, `NotifyRoute`, `Program.cs:348`, `journal_sync.py`) en antwoordden op
+acceptatiecriterium 2 met **ja**: elke payload is hieruit te bouwen. Drie punten om op te
+helderen. Op één daarvan wijk ik van hun voorstel af, en dat is het belangrijkste punt van
+deze ronde.
+
+### 🔴 Punt 1 — zes van de "twaalf constanten" zijn geen constanten
+
+Zij zagen twaalf PMT-velden die in hun steekproef altijd `0` of `false` waren en stelden
+voor ze als **PMT-format-constanten** in de builder te zetten. **Zes daarvan zijn dat niet.**
+Nagemeten in de Pine-bron:
+
+```pine
+"trail":            (f_trailOn(_slD) ? "1" : "0")
+"trail_stop":       (f_trailOn(_slD) ? f_distPrice(trBufEff) : 0)
+"trail_trigger":    (f_trailOn(_slD) ? f_distPrice(trStartEff) : 0)
+"trail_freq":       (f_trailOn(_slD) ? f_distPrice(trailUpdateStep) : 0)
+"breakeven":        ((useBEeff and _slD > 0) ? f_distPrice(beTrigEff) : "0")
+"breakeven_offset": ((useBEeff and _slD > 0) ? f_distPrice(beOffEff) : "0")
+```
+
+Die zes worden **berekend** uit `useTrail` en `useBreakEven` — twee inputs die per script
+aan of uit kunnen. In hun steekproef stonden ze uit, en de getoonde regel was bovendien een
+`close`, waar breakeven per definitie 0 is.
+
+⚠️ **Waarom dit niet als constante mag: dat is exact de faalmodus van D-44.** Dat item heette
+*"de BE-offset bereikt de broker nooit"* en is net dichtgezet. Zet de middleware deze zes
+hard op 0, dan stopt de dag dat Ferry trailing of break-even aanzet die instelling
+stilzwijgend bij de middleware — en niemand ziet het, want de order gaat gewoon door.
+
+**Besluit: het event krijgt een `risk`-object** dat deze zes draagt. Ze horen bij de
+strategie, net als `dollar_sl`, en niet bij de configuratie.
+
+**De andere zes zijn wél literalen** in de Pine-bron — `tp` · `percentage_tp` · `sl` ·
+`percentage_sl` · `update_tp` · `update_sl` (plus `risk_percentage`). Die zet de middleware
+als PMT-formaatconstanten, met het codecommentaar dat zij voorstelden. Geen `pmt_defaults`
+in de configuratie: dat suggereert dat het instellingen zijn.
+
+### Punt 2 — de Discord-kleur: `text.color`, niet een tabel in de middleware
+
+Zij vroegen of de middleware de kleur uit `kind`+`action` mag afleiden via een tabel van
+~8 paren, met als argument dat `CardTier` dat al doet voor de tier. Redelijk, maar
+**ik kies (b): `text.color` als optioneel veld in het event.**
+
+Reden: route B trekt de grens bij *Pine bepaalt hoe de kaart eruitziet, de middleware
+bepaalt waar hij heen gaat*. Een kleurtabel zet de helft van het uiterlijk aan de andere
+kant van die grens. En het faalgedrag verschilt: komt er een nieuw kaarttype in Pine, dan
+valt een tabel stil terug op een standaardkleur — terwijl een meegestuurd veld vanzelf
+meekomt. Bij 29 `f_sendDiscord`-aanroepen per script is die stille drift een kwestie van
+tijd.
+
+Hun observatie dat `CardTier.For(title)` naar **`CardTier.For(kind, action)`** moet
+migreren is wél overgenomen: de tier hoort bij de routing, de kleur bij de kaart.
+
+### Punt 3 — de Notion-database-id hoort in D-78
+
+Klopt, en goed dat ze het meldden uit deze audit in plaats van het te laten liggen. Die
+komt vandaag uit `NOTION_JOURNAL_DB`. Toegevoegd aan `schema-config.md` §4.
+
+---
+
 ## 4. Wat de middleware eruit bouwt
 
 | Uitgaand | Uit het event | Uit de configuratie (D-78) |
 |---|---|---|
-| **PMT-JSON** | `symbol` · `ts` · `action` · `qty` · `price` · `dollar_sl` · `dollar_tp` · `order_type` | `token` · `account_id` · trail-instellingen · breakeven · `pyramid` · `reverse_order_close` · Tradovate of Rithmic |
+| **PMT-JSON** | `symbol` · `ts` · `action` · `qty` · `price` · `dollar_sl` · `dollar_tp` · `order_type` · **`risk.*`** | `token` · `account_id` · `pyramid` · `reverse_order_close` · Tradovate of Rithmic. Plus zeven **formaatconstanten** die de middleware zelf zet: `tp` · `percentage_tp` · `sl` · `percentage_sl` · `update_tp` · `update_sl` · `risk_percentage` |
 | **PineConnector** | `action` · `price` ± `dollar_sl`/`dollar_tp` | `license` · symboolvertaling · `risk` |
-| **Discord** | `text.title` · `text.body` · `kind` | webhook per account/kanaal · tier · wel of geen kaart |
+| **Discord** | `text.title` · `text.body` · `text.color` · `kind` · `action` | webhook per account/kanaal · wel of geen kaart. De **tier** komt uit `CardTier.For(kind, action)` — gemigreerd van `For(title)` |
 | **Journaal** | `journal.*` | opslagpad |
 | **Notion** (D-94) | `journal.*` | database-id |
 
@@ -262,10 +328,12 @@ dat was precies de D-70-bevinding.
 1. ✅ **Pine Dev heeft getoetst** (28-09) en drie blokkades plus vijf voorwaarden gemeld.
    Alle acht zijn in §3b afgehandeld. **Resteert één bevestiging van hen:** klopt het dat
    blokkade 1 vanzelf oplost doordat de drie `alert()`-aanroepen in fase 3 samensmelten?
-2. **Middleware App bevestigt** dat elke huidige uitgaande payload hieruit te bouwen is —
-   getoetst op een echt bericht per route, niet op papier. ⏳ **Nog niet binnen.**
+2. ✅ **Middleware App heeft getoetst** (28-09) tegen echt verkeer op alle vier de routes en
+   antwoordde **ja**, met drie punten. Alle drie afgehandeld in §3c — op punt 1 wijk ik van
+   hun voorstel af, met een meting erbij.
 3. ✅ Het besluit uit §3 is genomen: **route B** (Ferry, 28-09).
 4. Er ligt één voorbeeldbericht per `kind`.
 
-Pas daarna begint fase 1. Schuift dit schema later alsnog, dan moet fase 1 opnieuw — dat is
+✅ **Alle vier afgerond op 29-09; D-77 staat op `done`.** Fase 1 was al begonnen omdat D-78
+als eerste dichtging — dat kon, want de config-store leunt op dat schema en niet op dit. Schuift dit schema later alsnog, dan moet fase 1 opnieuw — dat is
 de reden dat het hier staat en niet halverwege.

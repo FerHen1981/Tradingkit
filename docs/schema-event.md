@@ -98,7 +98,7 @@ Alles wat per trade verschilt hoort hier en nergens anders.
 
 ---
 
-## 3. 🔴 Ontwerpbesluit dat op Ferry wacht: wie schrijft de Discord-tekst?
+## 3. ✅ BESLIST 28-09 (Ferry): route B — Pine schrijft de tekst
 
 Pine stelt vandaag **ongeveer twintig verschillende kaartteksten** samen: `FILL`, `EXIT`,
 `DERISK L1/L2`, `PA DERISK`, `PAYOUT READY`, `CAP LOCK`, `SIGNAL BLOCKED`, `ACCOUNT STARTED`,
@@ -112,15 +112,18 @@ een verkeerde kaart.
 
 **Route B — Pine schrijft de tekst, de middleware bepaalt de bestemming.** Het event draagt
 `text.title` en `text.body` zoals Pine ze nu al samenstelt; de middleware kiest de webhook, de
-tier en of hij een kaart rendert. ✅ **Aanbeveling.**
+tier en of hij een kaart rendert. ✅ **GEKOZEN door Ferry op 28-09.**
 
 Waarom B: Ferry's doel (antwoord 4) is *"de instellingen voor kanalen, tokens en weburls
 volledig inzichtelijk en beheersbaar in een settings tab"*. Dat gaat over **routing en
 credentials**, niet over wie de kaarttekst schrijft. Route A verdrievoudigt fase 3 zonder dat
 het dat doel dichterbij brengt. B kan later alsnog naar A groeien — de velden staan er dan al.
 
-**Het schema hierboven veronderstelt B.** Valt het besluit op A, dan vervangt een
-`payload`-object per `kind` het `text`-object en wordt D-87 aanzienlijk groter.
+Het schema hierboven veronderstelde al B en blijft dus ongewijzigd. ➡️ **Gevolg voor D-87:**
+de middleware bouwt de PMT-JSON, het PineConnector-commando en de journaalregel, maar neemt
+voor Discord `text.title` en `text.body` **ongewijzigd** over en beslist alleen over webhook,
+tier en rendering. De ~20 kaartsjablonen blijven in Pine. Wil je later alsnog naar A, dan
+zijn de velden er al — dat is dan een aparte ronde en geen herbouw.
 
 ---
 
@@ -161,7 +164,7 @@ dat was precies de D-70-bevinding.
    welke niet.
 2. **Middleware App bevestigt** dat elke huidige uitgaande payload hieruit te bouwen is —
    getoetst op een echt bericht per route, niet op papier.
-3. Het besluit uit §3 is genomen.
+3. ✅ Het besluit uit §3 is genomen: **route B** (Ferry, 28-09).
 4. Er ligt één voorbeeldbericht per `kind`.
 
 Pas daarna begint fase 1. Schuift dit schema later alsnog, dan moet fase 1 opnieuw — dat is

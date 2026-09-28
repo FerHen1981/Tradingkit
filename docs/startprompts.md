@@ -1,201 +1,164 @@
-# Startprompts per chat — ronde 28-09b · **fase 0 is af**
+# Startprompts per chat — ronde 29-09
 
-_Eigenaar: Scrum Master. Watermerk: `abe75a6`+, 28-09._
+_Eigenaar: Scrum Master. Watermerk: `50cd6c6`, 29-09._
 
-🔴 **Lees eerst `docs/PLAN-2026-09-27-herijking.md`.** Het bord is op 27-09 volledig herzien:
-12 items geparkeerd, 7 opgegaan in een fase, 4 afgesloten, 29 nieuwe. Staat jouw item er niet
-meer, kijk dan in `docs/ARCHIVE.md` vóór je het opnieuw oppakt.
+**Stand:** fase 0 is op één review na af, fase 1 loopt al (D-79 op review, D-80 in de bouw),
+en de registry is gedeblokkeerd. Ferry heeft LifeOS laten opschonen: van de oude taken staan
+er nog vijf op hem, de rest is dicht of geparkeerd.
 
 ## Wat er sinds gisteren is veranderd
 
-- ✅ **Fase 0 is opgeleverd.** `docs/schema-event.md` (D-77) en `docs/schema-config.md` (D-78)
-  staan op review. **Fase 1 start zodra die review rond is** — daarna is de volgorde dwingend.
-- ✅ **Ferry heeft route B gekozen** (D-77 §3): **Pine blijft de Discord-tekst schrijven**, de
-  middleware bepaalt alleen de bestemming. De ~20 kaartsjablonen blijven dus waar ze zijn.
-- ✅ **T3 is bewezen.** Eigen FIFO-koppeling op Ferry's echte fills reproduceert de
-  Apex-balans tot op de cent, voor alle tien de accounts. Geen Tradovate-API nodig.
-- ✅ **D-44 dicht** (Ferry: *"die werkt al"*). **D-104** heeft een scope gekregen die veel
-  kleiner is dan gedacht.
-
-## Drie vondsten die iedereen moet kennen
-
-**1. De canonieke route bestaat al, half.** Pine heeft een **zesde** routetoggle naast de vijf
-die we kenden — `routeMiddleware` (r. 972) met `mwSecret` en `mwStrategy` — en `f_sendExec`
-stuurt daar al een bericht heen met `secret · strategy · event · action · symbol · price ·
-order_type · dollar_sl · dollar_tp · qty`. Hij doet niets omdat hij gericht was op
-`accounts.yaml` (de Python-route, verwijderd in D-05) en omdat de .NET-receiver hem niet
-herkent: hij valt door naar de Fase C-tak, die `node["account"]` leest terwijl dat veld er
-niet in zit. **Fase 3 wordt hiermee kleiner.**
-
-**2. De middleware raadt firma en fase uit de accountnáám.** `NotifyRoute` doet
-`StartsWith("PA") → FUNDED` en `Contains("APEX") → APEX`. Dat werkt vandaag bij toeval omdat
-élk account `PAAPEX…` heet, en het breekt zodra Blue Guardian, Top One of TradeDay erbij
-komen. Het kan nu al Legacy 50K, Legacy 250K en Intraday 50K niet uit elkaar houden —
-terwijl die **andere regels** hebben (consistency 30% tegen 50%, geverifieerd).
-
-**3. Er draaiden twee widget-scripts.** De D-76-fix van 18-09 landde in het bestand dat Ferry
-niet draait. De bevinding eronder klopte; alleen het bestand was fout.
-
-⚠️ **En twee correcties op mijn eigen werk, omdat er een les in zit die jullie kunnen gebruiken:**
-- Ik rekende eerst met **één puntwaarde voor alle producten**. De volledige fills-exports
-  bevatten naast MGC ook NQ, MNQ en MYM, en met $10 voor alles kwam PA022 op −$4.436 uit waar
-  het +$2.671 moest zijn. **Koppel per product, en haal de puntwaarde uit de registry.**
-- Ik zei *"alle accounts handelen uitsluitend MGC"*. Dat gold alleen voor het
-  september-venster.
+- ✅ **D-78 is `done`** — Middleware App auditeerde 19 `MEX_*`-vars plus 25 Python-envs,
+  akkoord zonder blokkers, drie toevoegingen overgenomen.
+- 🔴 **D-77 heeft de review van Pine Dev gehad en dat leverde drie blokkades op.** Alle acht
+  punten zijn afgehandeld en het schema staat op **v2**. **Er ontbreekt nog één review: die
+  van Middleware App.** Dat is het laatste wat fase 0 dichtzet.
+- ✅ **Route B gekozen** (Ferry): Pine blijft de Discord-tekst schrijven, de middleware
+  bepaalt alleen de bestemming. De ~20 kaartsjablonen blijven waar ze zijn.
+- ✅ **D-73 afgerond en het weerlegde de aanname onder T2.** 4539 PMT-rijen gemeten: de body
+  draagt **nooit** een fill-prijs of order-id. T2 wordt een **statuslaag**, geen prijslaag —
+  en daarmee blijft **T1→T3 de enige slippage-meting**, wekelijks.
+- ✅ **D-104 is gedeblokkeerd**, Ferry beantwoordde alle drie de vragen.
+- ✅ **`apex_250k_legacy_pa` bestaat** (door de Scrum Master aangemaakt op Ferry's verzoek).
+- 🔴 **Twee nieuwe live-items:** **D-107** (dubbele sluiting + verkeerde exit-qty in Pine) en
+  **D-108** (de dertien `.pine` lopen achter op de registry sinds D-68).
 
 ---
 
-## 🟦 Middleware App (chat: **App Setup**) — de widget is vrijgegeven
+## 🟦 Middleware App (chat: **App Setup**) — eerst die ene review
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-DOE NU — D-105, DE WIDGET. Ferry heeft dit 28-09 vrijgegeven.
+Mooi doorgepakt op D-79 en D-80. Eén ding gaat daar nu vóór.
 
-BRON VASTGESTELD: MEX_Today.js wordt het script. Een kopie staat in
-docs/widget-MEX_Today-2026-09-28.js.txt; die hoort thuis in jullie map.
-middleware/scriptable/mex-fleet-widget.js gaat naar het archief met een notitie.
+1. 🔴 D-77 REVIEW — dit is het laatste wat fase 0 dichtzet.
+   Lees docs/schema-event.md (staat inmiddels op v2, met §3b waarin Pine Devs drie
+   blokkades zijn afgehandeld). Toets één ding: is elke huidige uitgaande payload hieruit
+   te bouwen? Toets op een ECHT bericht per route — PMT-JSON, Discord-embed,
+   PineConnector-commando, journaalregel — niet op papier.
+   Let specifiek op wat er sinds v1 veranderd is en wat dat voor D-87 betekent:
+   - `kind` is gesplitst in `order` en `fill`. Een order draagt GEEN journal-object, een
+     fill wel. Reden: f_sendExec vuurt bij het plaatsen, f_journal("FILL") pas nadat de
+     fill gedetecteerd is — bij een limietorder tot expiryBars later.
+   - `id` wordt strategy:ts:kind:seq. Het volgnummer is nodig omdat twee sluitingen op
+     dezelfde bar kunnen vuren.
+   - `action` krijgt "cancel" erbij.
+   - Bij een sluitende fill is `qty` de WERKELIJKE positie, niet de signaal-qty.
+   - `journal.acct_name` wordt MEEGESTUURD, niet in de middleware nagebouwd. f_autoAcctName()
+     leidt hem af uit accountID + evalStartBal + validFrom; een kopie zou een tweede bron zijn.
+   - Route B: voor Discord neem je text.title en text.body ONGEWIJZIGD over en beslis je
+     alleen over webhook, tier en rendering.
 
-⚠️ Waarom: er draaiden twee widget-scripts met verschillende standen
-(today/yesterday/week/total tegenover week/funded/eval/all) op hetzelfde endpoint.
-De D-76-fix van 18-09 landde in het bestand dat Ferry NIET draait. De bevinding eronder
-klopte wel en is in MEX_Today.js al correct toegepast: net leest top-level `today`
-(vloot-breed), de splitrij leest stacks.funded.today en stacks.eval.today.
+2. Ga daarna door met fase 1: D-81 (auditspoor + migratie) sluit de fase af.
 
-VIER STAPPEN, in deze volgorde:
+3. D-105 en D-53 staan op review bij mij; D-74 en D-69 lopen nog bij jullie.
 
-1. MEX_Today.js opnemen in middleware/scriptable/ als de bron. De ander archiveren met
-   een notitie waarom — niet weggooien.
+VOORUITBLIK D-91, nu D-73 binnen is. T2 kan vier toestanden onderscheiden en geen prijs:
+CONFIRMED (90,4%) · UNKNOWN (9,1%, lege body) · REJECTED · en verder niets. 🔴 En let op de
+tweede bevinding, die de live code raakt: "GEWEIGERD 200" kwam 0 keer voor in 4539 rijen.
+De body-gebaseerde Rejected()-check heeft nooit iets afgevangen omdat PMT error:true in de
+praktijk niet stuurt — een echte weigering is HTTP 403. De poort hoort op de statuscode.
 
-2. 🔴 DE EVAL-SPLITRIJ TOONT EEN BEDRAG. split.a = moneyK(t.ev), dus dollars voor de
-   eval-stack. Dat is precies wat Ferry op 05-09 aanwees en het loopt vandaag nog door.
-   Eval krijgt ACCOUNTONTWIKKELING: passed/breached genormaliseerd naar 50k-equivalent.
-   Web leverde for_public_evals() al en ik heb die functioneel nagemeten (1x50k + 1x100k
-   passed = 3,0; 300k breached = 6,0; geneste lekken worden gevangen). Die telling
-   ontbreekt alleen nog in /api/widget: stack() in viewer.py:281 geeft wel `accounts`
-   en `breached`, niet de genormaliseerde tellers. Dat API-veld hoort bij deze ronde —
-   jullie bezitten beide kanten, doe het in één keer.
-
-3. 🔴 "yesterday" IS NIET "laatste handelsdag". Op maandag is gisteren zondag en toont de
-   widget "No data / Yesterday missing". Ferry vroeg om vandaag · laatste handelsdag ·
-   week · overall. Er is een venster nodig dat de laatste dag MET activiteit pakt.
-
-4. De Eval/Funded-splitrij bestaat alleen in today en yesterday; hij hoort ook in week
-   en total.
-
-NIET MEENEMEN: de herkomstlabels (T1/T2/T3, verified/unverified). Die komen in D-93 en
-vragen een API-veld dat pas na de meting van D-73 bestaat.
-
-DAARNA: D-73 — leg 20 echte PMT-antwoordbodies vast en beoordeel wat erin staat. Nu T3
-bewezen is, is T2 de enige laag waarvan we niets weten. Ontwerp niets op T2 tot die
-meting er ligt.
-
-OOK VAN JULLIE GEVRAAGD (review, kost een half uur):
-- docs/schema-event.md (D-77): is elke huidige uitgaande payload hieruit te bouwen?
-  Toets op een echt bericht per route, niet op papier.
-- docs/schema-config.md (D-78): heeft elke huidige env-instelling hierin een plek?
-  Meld wat ontbreekt. Let op §5 (geheimen worden verwijzingen, geen waarden) en op §6
-  (caps zijn bewust een tweede plek naast Tradovate en moeten als zodanig gelabeld).
-
-VOORUITBLIK D-92, zodat je niet twee keer bouwt — drie dingen die de koppelstap MOET doen:
-- Koppel PER PRODUCT met de puntwaarde uit de registry. Eén bestand bevat meerdere
-  contracten en een gedeelde FIFO-wachtrij koppelt MGC tegen NQ.
-- Een PAYOUT verlaagt de balans maar staat NIET in de fills. Dat is een aparte invoer.
-  Stand 28-09: één payout in de hele vloot (PA013 #1, $1.500, 10-09).
-- In de volledige exports is buy != sell: er staan posities open aan de rand van het
-  venster. RAPPORTEER dat, poets het niet weg.
+D-106 ligt deels bij jullie: log per POST welk endpoint gekozen werd (Rithmic of Tradovate).
+Dat haalt de eerste onbekende weg bij het account dat 100% van het afwijkende verkeer draagt.
 ```
 
 ---
 
-## 🟩 Backtest Setup — D-104 is klein en concreet geworden
+## 🟩 Backtest Setup — D-104 is vrij, en het is kleiner dan gedacht
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
+
+D-104 staat weer op todo — je drie vragen zijn beantwoord, zie docs/inbox.md.
+
+Goed dat je gestopt bent in plaats van te gokken op een verified:true-record dat live
+accounts voedt. Dat is precies de juiste reflex.
+
+A · Ferry gaf een REGEL in plaats van een lijst: "ik kies altijd de programma's die het
+    dichtst bij de Apex-regels liggen." Leg die regel vast in de meta van elk nieuw record,
+    met de motivering — dan is over drie maanden nog na te gaan waarom er Standard staat
+    en geen Direct. Toegepast: Blue Guardian Standard · Top One Elite (met het bekende
+    verschil dat Elite wél een DLL kent) · TradeDay EOD trailing. 🎯 Die regel beslist
+    meteen jouw open vraag over TradeDay's DD-soort.
+B · Top One consistency = 40%. Zet verified:true met "owner-confirmed" als bron, niet de
+    website — die twee bronnen spraken elkaar tegen en daarom lag het bij Ferry.
+C · apex_250k_legacy_pa heb ik zelf aangemaakt op Ferry's verzoek. Eenmalig; normaal is
+    dat jullie pen. Kijk hem na.
+
+🔴 EN CONTROLEER DIT, het raakt de vooruitblik van elk legacy-account:
+apex_50k_legacy_pa draagt max_daily_loss $1.000, terwijl Ferry's fleet-doc §9 voor legacy
+letterlijk "geen DLL" zegt. Dat is geen tegenspraak in het doc maar twee verschillende
+dingen: de FIRMA legt geen DLL op (registry = null) en FERRY legt zichzelf er één op in
+Tradovate (hoort in D-78 accounts[].caps). Staat Ferry's cap als firm-regel in de registry,
+dan bewaakt D-96 straks een limiet die Apex niet kent. Meld wat je vindt, zet het niet
+stil recht — het is een verified:true-record.
+
+Draai na het vullen python tools/gen_pine_firms.py. ⚠️ Die diff is nu veel groter dan
+één preset door D-68; dat is D-108 bij Pine Dev. Push de pine-kant NIET zelf.
+
+Daarna: D-100 staat op review, dus door naar D-101 — de interpreter voor de
+Pine-deelverzameling, die HARD weigert op alles wat hij niet kent.
+```
+
+---
+
+## 🟨 Pine Dev — twee live-items, en het eerste is het zwaarst
+
+```
+git pull origin claude/middleware-setup-guide-afhvtk
+
+Sterke review op D-77. De drie blokkades zijn alle drie afgehandeld en het schema staat op
+v2 — lees §3b van docs/schema-event.md, daar staat per punt wat het geworden is en waarom.
+Dank ook voor de correctie op mijn vondst: routeMiddleware is een constante, geen toggle.
+Die staat rechtgezet.
+
+Eén ding heb ik nog van je nodig op D-77: bevestig dat blokkade 1 vanzelf oplost.
+Mijn redenering: in fase 3 smelten f_sendExec, f_sendDiscord en f_journal samen tot één
+alert(), dus de `not execInstance`-guard wordt irrelevant in plaats van verwijderd en er
+komt geen extra alert bij. Klopt dat tegen de code?
 
 DOE NU:
 
-1. 🔴 D-104 — data/propfirms.json uitbreiden. Ferry heeft de scope 28-09 vastgelegd:
-   "waar mogelijk altijd 50k accounts; voor Apex Legacy 50k en 250k, plus 2 x 50k Intraday."
-   Dus per firma ALLEEN het 50K-programma (eval -> funded), en voor Apex drie: Legacy 50K,
-   Legacy 250K, Intraday 50K. Apex staat al grotendeels in de registry. Het echte werk is
-   zeven 50K-programma's, waarvan drie bij firma's die er nog helemaal niet in staan:
-   Blue Guardian, Top One, TradeDay. Die drie eerst.
-   Per programma nodig voor D-96: trailing drawdown · lock-drempel en -offset · DLL en de
-   SL-multiple · consistency-PERCENTAGE · cyclus in handelsdagen · kwalificatiedagen en de
-   minimumdag · payout-ladder · platform(en).
-   🔴 Het consistency-percentage VERSCHILT per programma — Apex legacy 30%, Intraday 4.0 50%.
-   Beide zijn 28-09 geverifieerd tegen Ferry's fleet-doc en klopten exact op drie accounts.
-   Eén verkeerd percentage geeft een plausibele en onjuiste payout-datum.
-   ⚠️ Dit blokkeert nu twee dingen: D-78 kan pas volledig geldig zijn als elk `program`
-   naar een bestaande registry-sleutel resolvet, en D-96 faalt per ontwerp hard op een
-   ontbrekende regel. Gedeelde bron: volg data/propfirms.schema.json, draai daarna
-   python tools/gen_pine_firms.py, en meld het in docs/inbox.md.
+1. 🔴 D-107 — JOUW TERZIJDE WAS GEEN TERZIJDE, het raakt echte orders.
+   (a) Vier sluitingspaden — auto-flat (r. 2262), venster-grace (2282), dag-halt (2297),
+       account-halt (2324) — roepen elk strategy.close_all() aan, alleen bewaakt door
+       if posSize != 0 en zonder onderlinge uitsluiting. Twee kunnen op dezelfde bar vuren.
+   (b) Vijf van de zes close-aanroepen sturen t_qty mee, de qty van de ENTRY, in plaats van
+       math.abs(strategy.position_size). Alleen de cap-lock doet het laatste. Normaal valt
+       dat samen; na een gederiskte of gecapte fill niet — dan sluit je te veel (doordraaien
+       naar de andere kant) of te weinig (restpositie blijft staan).
+   Dit is bestaand gedrag, niet door de herijking veroorzaakt. Het mag samen met D-86 in
+   één ronde, dan test je het één keer.
 
-2. D-100 — spoor B, de inventarisatie: welk deel van Pine gebruiken de 13 scripts echt?
-   Lever een lijst met functies, ingebouwde variabelen en constructies, met frequentie.
-   Dat bepaalt of D-101 weken of maanden is. D-66 is hierin opgegaan en vervalt; daarmee
-   vervalt ook de keten D-63 -> D-54 -> D-57.
-
-3. D-68 — fleet.py:84 codeert acct_trail_dd=2000 en acct_dll=1000 hard; higher.py:237 valt
-   STIL terug op 2500. Lees uit de registry en faal HARD bij een ontbrekende regel. Doe dit
-   in dezelfde ronde als D-104 — zelfde bron, en fase 5 bouwt straks dezelfde regel aan de
-   webapp-kant.
+2. D-108 — de dertien .pine lopen achter op de registry sinds D-68. Draai
+   python tools/gen_pine_firms.py en LEES DE DIFF REGEL VOOR REGEL.
+   Ik draaide hem gisteren en kreeg 14 bestanden / 370 regels. Dat leek eerst een fout maar
+   is het niet: D-68 haalde twee verzonnen fallbacks uit firms.py — acct_dll viel terug op
+   1_000.0 en consistency_pct op 50.0 voor elk programma zonder registry-waarde. De
+   gecommitte .pine draagt die verzonnen waarden nog.
+   ✅ Gemeten via to_overlay(): Ferry's eigen programma's veranderen NIET. apex_50k_legacy_pa
+   houdt DLL 1000 / consistency 30, apex_50k_intraday_pa houdt 1000 / 50.
+   ⚠️ Toch een gedragswijziging in dertien live scripts. Bevestig dat er niets verandert aan
+   een programma dat Ferry werkelijk draait vóór je pusht. Ik heb de regeneratie bewust
+   teruggedraaid en niet meegecommit — jullie map, live pad.
+   📌 Neem meteen mee: de firmPreset-default staat op apex_50k_eod_pa terwijl Ferry LEGACY
+   handelt. Dat zet de consistency in Pine op 50 waar hij 30 hoort te zijn.
 ```
 
 ---
 
-## 🟨 Pine Dev — review gevraagd, en één vondst die jullie aangaat
+## 🟪 Web — nog even niets, maar het komt dichtbij
 
-```
-git pull origin claude/middleware-setup-guide-afhvtk
+Fase 1 is bijna rond (D-79 op review, D-80 in de bouw, D-81 resteert). Zodra **D-82** — de
+config-API — er is, zijn D-83 en D-84 aan de beurt.
 
-🔴 VONDST DIE IN JULLIE MAP LIGT: de canonieke route bestaat al, half.
-MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine heeft een ZESDE routetoggle naast de vijf die we
-kenden: routeMiddleware (r. 972), met mwSecret (r. 970) en mwStrategy (r. 971). f_sendExec
-stuurt daar al een bericht heen (r. 1864) met secret/strategy/event/action/symbol/price/
-order_type/dollar_sl/dollar_tp/qty. Dat is bijna het canonieke event uit D-77.
-Hij doet vandaag niets omdat (a) de tooltip van mwStrategy verwijst naar accounts.yaml — de
-dode Python-route, verwijderd in D-05 — en (b) de .NET-receiver het bericht niet herkent en
-het laat doorvallen naar de Fase C-tak, die node["account"] leest terwijl dat veld er niet
-in zit. Het belandt met een LEEG accountveld in intents_<datum>.jsonl.
-Gevolg: fase 3 wordt kleiner. Pine krijgt geen nieuwe route, alleen een vollediger bericht
-op een route die er al ligt.
+**Lees alvast `docs/schema-config.md` §2 en §3**: dat is letterlijk het scherm dat jullie
+gaan bouwen, in twee niveaus. En §5, want dat bepaalt de vorm: **tokens worden verwijzingen,
+geen waarden.** Het scherm toont `apex_pmt · ✓ gezet · gewijzigd 12-09` en een veld om te
+vervangen — nooit de waarde zelf.
 
-DOE NU:
-
-1. D-77 REVIEW — lees docs/schema-event.md en toets één ding: is elk verplicht veld uit een
-   script te produceren? Velden: v · id (idempotentiesleutel) · ts · strategy · symbol ·
-   kind · action · qty · price · order_type · dollar_sl · dollar_tp · text.title ·
-   text.body · journal.* (de zestien kolommen van de huidige journaalregel).
-   Kan er iets niet, dan wil ik dat NU weten en niet in fase 3.
-   ✅ Ferry koos route B: jullie blijven de Discord-tekst schrijven. De ~20 kaartsjablonen
-   blijven dus in Pine; het event draagt ze als text.title/text.body.
-
-2. D-103 — spoor C, "alleen versies". Leg vast welke versie van elk script op TradingView
-   draait, met datum en een korte reden. Handmatig plakken blijft zoals het is. Conventie
-   plus een bestand, geen bouwwerk.
-
-AFGEROND: D-44 is dicht — Ferry 28-09: "die werkt al."
-
-VOORUITBLIK FASE 3: D-86 haalt 9 instellingen uit elk van 13 scripts (routePMT,
-routeRithmic, routePineConnector, routeDiscord, routeJournal, pmtToken, pcLicense,
-pcSymbol, accountID). GEEN wijziging aan entry-, exit- of risicologica. Ferry besloot dat
-de OOS-klok daarvoor niet op nul gaat — maar dat besluit staat of valt met een diff die
-aantoont dat uitsluitend de plumbing wijzigde. Lukt dat niet, dan gaat de klok alsnog op
-nul voor de hele vloot.
-```
-
----
-
-## 🟪 Web — nog steeds bewust niets, en nu met een datum
-
-Fase 2 (D-83, D-84) kan pas als de config-store van fase 1 er is. Fase 1 start zodra de
-review van D-77 en D-78 rond is. **Wel alvast lezen:** `docs/schema-config.md` §2 en §3 —
-dat is letterlijk wat jullie straks als scherm bouwen, in twee niveaus. En §5: **tokens
-worden verwijzingen, geen waarden.** Het scherm toont `apex_pmt · ✓ gezet · gewijzigd 12-09`
-en een veld om te vervangen, nooit de waarde zelf.
-
-Eén ding om nu al te laten bezinken: **met dit scherm wordt de webapp onderdeel van het live
+⚠️ Eén ding dat nu al telt: **met dit scherm wordt de webapp onderdeel van het live
 executiepad.** Vandaag toont een fout daar een verkeerd getal; straks stuurt hij een order
-naar het verkeerde account. Dat verandert wat "af" betekent.
+naar het verkeerde account. Dat verandert wat "af" betekent voor dit scherm.

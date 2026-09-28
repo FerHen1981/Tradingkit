@@ -186,5 +186,5 @@
 
 | Branch | Beoordeeld t/m | Datum |
 |---|---|---|
-| `claude/middleware-setup-guide-afhvtk` | `1144057` | 2026-09-27 (herijking — bord geschoond) |
+| `claude/middleware-setup-guide-afhvtk` | `HEAD` | 2026-09-29 (registry + LifeOS-sync) |
 | overige chat-branches | bevroren | zie `CLAUDE.md` |

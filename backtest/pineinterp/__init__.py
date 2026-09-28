@@ -26,5 +26,9 @@ Nothing in this package may import from middleware/** or web/** (plan §spoor B)
 from __future__ import annotations
 
 from .lexer import Tok, TokType, PineLexError, tokenize
+from .capabilities import (UnsupportedPineError, check_supported, namespaced_calls,
+                           SUPPORTED_TA, SUPPORTED_NAMESPACES)
 
-__all__ = ["Tok", "TokType", "PineLexError", "tokenize"]
+__all__ = ["Tok", "TokType", "PineLexError", "tokenize",
+           "UnsupportedPineError", "check_supported", "namespaced_calls",
+           "SUPPORTED_TA", "SUPPORTED_NAMESPACES"]

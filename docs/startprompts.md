@@ -1,155 +1,131 @@
-# Startprompts per chat — ronde 27-09 · **na de herijking**
+# Startprompts per chat — ronde 28-09
 
-_Eigenaar: Scrum Master. Watermerk: `1144057`, 27-09._
+_Eigenaar: Scrum Master. Watermerk: `abe75a6`, 28-09._
 
-🔴 **Het bord is volledig herzien.** Lees `docs/PLAN-2026-09-27-herijking.md` vóór je iets
-claimt. Van de 33 openstaande items zijn er 12 geparkeerd, 7 opgegaan in een fase en 4
-afgesloten; er staan 27 nieuwe items op. **Wat je gisteren op je lijstje had, staat er
-mogelijk niet meer** — kijk in `docs/ARCHIVE.md` voor de reden voordat je het opnieuw
-oppakt.
+🔴 **Lees eerst `docs/PLAN-2026-09-27-herijking.md`.** Het bord is op 27-09 volledig herzien:
+12 items geparkeerd, 7 opgegaan in een fase, 4 afgesloten, 27 nieuwe. Staat jouw item er niet
+meer, kijk dan in `docs/ARCHIVE.md` voor de reden vóór je het opnieuw oppakt.
 
-**Fasen zijn dwingend.** Claim geen item uit fase 3 zolang fase 1 en 2 niet af zijn. De
-parallelsporen B en C lopen ernaast en mogen altijd.
+**Nieuw sinds gisteren, en het raakt bijna iedereen:** Ferry leverde echte Tradovate-fills
+(13 exports, ~3.200 fills, PA013 t/m PA029) en zijn handmatige fleet-startschema. Daarmee is
+**T3 bewezen haalbaar** — eigen FIFO-koppeling op de ruwe fills reproduceert de Apex-balans
+tot op de cent, voor alle tien de accounts. Er is geen Tradovate-API nodig. Details in
+`docs/DECISIONS.md` 28-09 en `docs/fleet-report-spec.md`.
 
-**Waar we nu staan:** fase 0 is van de Scrum Master en loopt (D-77 en D-78, de twee
-schema's). Zolang die niet vastliggen kan fase 1 niet beginnen — dat is bewust: als het
-event-schema tijdens fase 2 alsnog gaat schuiven, moet fase 1 opnieuw.
+⚠️ **Twee correcties op mijn eigen werk, omdat ze een les bevatten die jullie kunnen gebruiken:**
+- Ik rekende eerst met **één puntwaarde voor alle producten**. De volledige exports bevatten
+  naast MGC ook NQ, MNQ en MYM, en met $10 voor alles kwam PA022 op −$4.436 uit waar het
+  +$2.671 moest zijn. **Koppel per product, en haal de puntwaarde uit de registry.**
+- Ik zei *"alle accounts handelen uitsluitend MGC"*. Dat gold alleen voor het
+  september-venster; over de volle historie is het overwegend maar niet uitsluitend MGC.
 
 ---
 
-## 🟦 Middleware App (chat: **App Setup**) — twee dingen die nu al kunnen
+## 🟦 Middleware App (chat: **App Setup**) — nu drie dingen, en de eerste is nieuw
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-Lees eerst docs/PLAN-2026-09-27-herijking.md, daarna het nieuwe docs/SPRINT.md.
-Fase 1 (D-79/D-80/D-81) is voor jullie, maar die start pas als D-77 en D-78 vastliggen.
-Twee dingen kunnen wél nu, en het eerste is belangrijker dan het lijkt.
+Lees docs/PLAN-2026-09-27-herijking.md en het nieuwe docs/SPRINT.md. Fase 1 (D-79/D-80/D-81)
+is voor jullie maar wacht op D-77 en D-78; die schrijf ik nu.
 
-DOE NU:
+DOE NU, in deze volgorde:
 
-1. 🔴 D-73 — DE METING WAAR HEEL T2 OP RUST. Dit item is bij de herijking gepromoveerd
-   van opruimwerk tot fundament. Leg 20 echte PMT-antwoordbodies vast en beoordeel wat
-   erin staat: bevat de body een fill-prijs, of alleen een bevestiging dat de order is
-   aangenomen? Niemand heeft dat ooit gemeten. Het antwoord bepaalt of de bevestigingslaag
-   (T2) een prijs kan dragen of alleen een status — en dus hoe dicht de webapp bij "live"
-   kan komen zonder Tradovate-API. Ontwerp niets op T2 tot deze meting er ligt.
+1. 🔴 D-105 — ER ZIJN TWEE WIDGET-SCRIPTS EN WE WETEN NIET WELKE DRAAIT.
+   Ferry leverde MEX_Today.js als "volgens mij de laatste versie" — vier standen
+   today/yesterday/week/total, met een eigen Eval/Funded-splitrij. Het repo-bestand
+   middleware/scriptable/mex-fleet-widget.js kent week/funded/eval/all: andere standen,
+   andere rijen, zelfde endpoint. Een kopie van Ferry's versie staat in
+   docs/widget-MEX_Today-2026-09-28.js.txt — pak die op, hij ligt in jullie map thuis.
+   ⚠️ Gevolg dat je meteen moet meenemen: de D-76-fix van 18-09 ging naar het repo-bestand
+   en heeft Ferry's telefoon waarschijnlijk nooit bereikt. Dit is het dubbele-implementatie-
+   patroon: wie als eerste merget maakt het werk van de ander tot dode code.
+   Stappen: (1) stel vast welk script hij werkelijk draait en maak dát de bron in
+   middleware/scriptable/; (2) archiveer de ander met een notitie, gooi niets weg;
+   (3) pas dan de wijziging die Ferry vraagt: funded -> saldo-ontwikkeling in dollars,
+   eval -> accountontwikkeling ZONDER bedragen (D-74), en de splitsing ook in week en total
+   waar hij nu ontbreekt. De eval-splitrij toont vandaag moneyK(t.ev) — een bedrag — en dat
+   is precies wat Ferry op 05-09 aanwees.
 
-2. D-74 — jullie helft, maar NU SMALLER. Het volledige labelsysteem verhuist naar D-93 in
-   fase 4. Wat overblijft is het stuk dat vandaag fout gaat: de eval-stand van
-   mex-fleet-widget.js rendert realized en buffer IN DOLLARS, en dat is precies wat Ferry
-   op 05-09 aanwees. Haal de bedragen daar weg en zet er de genormaliseerde tellers neer.
-   Meer niet — de verified/unverified-labels komen later en met een API-veld dat er nog
-   niet is.
+2. 🔴 D-73 — DE METING WAAR HEEL T2 OP RUST, en die is nu urgenter geworden.
+   Nu T3 bewezen is, is T2 de enige laag waarvan we niets weten. Leg 20 echte
+   PMT-antwoordbodies vast en beoordeel wat erin staat: een fill-prijs, of alleen een
+   bevestiging? Ontwerp niets op T2 tot die meting er ligt.
 
-REVIEW (kort, als je toekomt): D-69 — de Render-blueprint deployt middleware/app/main.py,
-dat bestaat niet meer. Repareren of weghalen, maar niet laten staan alsof het werkt.
+3. D-69 — de Render-blueprint deployt middleware/app/main.py, dat bestaat niet meer.
 
-NIET AAN BEGINNEN: alles met een fasenummer 1 t/m 7 behalve D-73. De volgorde is er om te
-voorkomen dat we twee keer bouwen.
+VOORUITBLIK OP D-92 (fase 4), zodat je niet twee keer bouwt. Het formaat staat vast en is
+uitgeschreven op het bord. Drie dingen die de koppelstap MOET doen en die je anders mist:
+- Koppel PER PRODUCT met de puntwaarde uit de registry. Eén bestand bevat meerdere
+  contracten en een gedeelde FIFO-wachtrij koppelt MGC tegen NQ.
+- Een PAYOUT verlaagt de balans maar staat NIET in de fills. Payout-registratie is een
+  aparte invoer; zonder die krijg je de balans nooit sluitend.
+- In de volledige exports is buy != sell (1251/1254, 970/974, 472/474): er staan posities
+  open aan de rand van het venster. RAPPORTEER dat, poets het niet weg.
 ```
 
 ---
 
-## 🟩 Backtest Setup — spoor B, en dit is de grootste meting van het plan
+## 🟩 Backtest Setup — D-104 is nu klein en concreet
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-Lees docs/PLAN-2026-09-27-herijking.md, spoor B. Ferry heeft besloten (antwoord 14) dat de
-backtester het .pine-bestand ZELF moet lezen en dat resultaat door de hele molen moet.
-Dit spoor loopt parallel aan alles en blokkeert niets.
-
-⛔ HARDE REGEL: dit spoor komt niet in middleware/** of web/**.
-
 DOE NU:
 
-1. D-100 — INVENTARISEER welk deel van Pine onze scripts werkelijk gebruiken. De 13
-   scripts van de v1_0_0-lijn komen uit één familie, dus de kans is groot dat de gebruikte
-   taalconstructies een beperkte, opsombare verzameling zijn. Lever een lijst: welke
-   functies, welke ingebouwde variabelen, welke taalconstructies, en hoe vaak elk voorkomt.
-   Dat bepaalt of D-101 een project van weken of van maanden is — dus meet het vóórdat er
-   iets ontworpen wordt.
+1. 🔴 D-104 — data/propfirms.json uitbreiden. Ferry heeft de scope 28-09 vastgelegd en die
+   is veel kleiner dan "acht firma's compleet": "waar mogelijk altijd 50k accounts; voor
+   Apex Legacy 50k en 250k, plus 2 x 50k Intraday."
+   Dus: per firma ALLEEN het 50K-programma (eval -> funded), en voor Apex drie —
+   Legacy 50K, Legacy 250K, Intraday 50K. Apex staat al grotendeels in de registry.
+   Het echte werk is zeven 50K-programma's, waarvan drie bij firma's die er nog helemaal
+   niet in staan: Blue Guardian, Top One, TradeDay. Die drie eerst.
+   Per programma minimaal nodig voor D-96: trailing drawdown · lock-drempel en -offset ·
+   DLL en de SL-multiple · consistency-PERCENTAGE · cyclus in handelsdagen ·
+   kwalificatiedagen en de minimumdag · payout-ladder · platform(en).
+   🔴 Het consistency-percentage VERSCHILT per programma — Apex legacy rekent 30%, Intraday
+   4.0 rekent 50%. Beide zijn op 28-09 geverifieerd tegen Ferry's fleet-doc en klopten
+   exact. Eén verkeerd percentage geeft een plausibele en onjuiste payout-datum.
+   Gedeelde bron: volg data/propfirms.schema.json, draai daarna
+   python tools/gen_pine_firms.py, en meld het in docs/inbox.md.
 
-   ➡️ D-66 (de CVD-pariteitsvraag) IS HIERIN OPGEGAAN EN VERVALT. Is er straks één
-   implementatie, dan valt er geen pariteit meer te bewaken. Daarmee vervalt ook de keten
-   D-63 → D-54 → D-57 die erachter stond. Begin er niet meer aan.
+2. D-100 — spoor B, de inventarisatie: welk deel van Pine gebruiken de 13 scripts echt?
+   Lever een lijst met functies, ingebouwde variabelen en constructies, met frequentie.
+   Dat bepaalt of D-101 weken of maanden is. D-66 is hierin opgegaan en vervalt.
 
-2. D-68 — blijft staan en is nu extra relevant: fleet.py:84 codeert acct_trail_dd=2000 en
-   acct_dll=1000 hard, en higher.py:237 valt STIL terug op 2500. Lees uit
-   data/propfirms.json en laat het HARD falen als een regel ontbreekt. Fase 5 bouwt
-   dezelfde regel aan de webapp-kant; als jullie het hier goed zetten is dat daar een
-   kopieerslag in plaats van een ontwerpronde.
-
-NIET AAN BEGINNEN: D-54, D-15, D-16, D-25, D-38, D-39, D-50, D-27 — geparkeerd tot het
-platform staat. Zie docs/ARCHIVE.md.
+3. D-68 — fleet.py:84 codeert acct_trail_dd=2000 en acct_dll=1000 hard; higher.py:237 valt
+   STIL terug op 2500. Lees uit de registry en faal HARD bij een ontbrekende regel.
+   Doe dit in dezelfde ronde als D-104 — het is dezelfde bron.
 ```
 
 ---
 
-## 🟨 Pine Dev — spoor C nu, fase 3 later
+## 🟨 Pine Dev — klein deze ronde
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-Lees docs/PLAN-2026-09-27-herijking.md. Fase 3 is jullie grote werk — de kanaalrouting uit
-alle 13 scripts halen — maar die start pas als fase 1 en 2 staan. Twee dingen nu.
-
 DOE NU:
 
-1. D-103 — spoor C, "alleen versies" (Ferry, antwoord 12). Leg vast welke versie van elk
-   script op TradingView draait, met datum en een korte reden. Handmatig plakken blijft
-   zoals het is (antwoord 13). Dit is een conventie plus een bestand, geen bouwwerk —
-   houd het klein.
+1. D-103 — spoor C, "alleen versies". Leg vast welke versie van elk script op TradingView
+   draait, met datum en een korte reden. Handmatig plakken blijft zoals het is. Conventie
+   plus een bestand, geen bouwwerk.
 
-2. D-77 — lever input op het canonieke event-schema. Ik schrijf het, jullie toetsen één
-   ding: is elk veld uit een Pine-script te produceren? Velden: strategie-id, account-
-   sleutel, richting, type (entry/exit/halt/derisk/info), prijs, stop, target, tijdstempel,
+2. D-77 — input op het canonieke event-schema. Ik schrijf het; jullie toetsen één ding:
+   is elk veld uit een Pine-script te produceren? Velden: strategie-id, account-sleutel,
+   richting, type (entry/exit/halt/derisk/info), prijs, stop, target, tijdstempel,
    gebeurtenis-id. Kan er iets niet, dan wil ik dat nu weten en niet in fase 3.
 
-VOORUITBLIK OP FASE 3, zodat je weet wat eraan komt: D-86 haalt 9 instellingen uit elk van
-13 scripts (routePMT, routeRithmic, routePineConnector, routeDiscord, routeJournal,
-pmtToken, pcLicense, pcSymbol, accountID). 🔴 Daarbij geldt: GEEN enkele wijziging aan
-entry-, exit- of risicologica. Ferry heeft besloten dat de OOS-klok hiervoor niet op nul
-gaat, maar die beslissing staat of valt met een diff die aantoont dat alleen de plumbing
-wijzigde. Kunnen we dat niet aantonen, dan gaat de klok alsnog op nul voor de hele vloot.
+AFGEROND: D-44 is dicht — Ferry 28-09: "die werkt al." De BE-offset bereikt de broker.
 
-NIET AAN BEGINNEN: D-64 en D-63 zijn geparkeerd. D-44 staat op review en de fix zelf ligt
-bij Ferry in het PMT-dashboard.
+VOORUITBLIK FASE 3: D-86 haalt 9 instellingen uit elk van 13 scripts. GEEN wijziging aan
+entry-, exit- of risicologica; de OOS-klok blijft alleen op nul staan als we met een diff
+kunnen aantonen dat uitsluitend de plumbing wijzigde.
 ```
 
 ---
 
-## 🟪 Web — deze ronde bewust niets
+## 🟪 Web — nog steeds bewust niets
 
-Jullie werk zit in **fase 2** (D-83 en D-84, de settings-tab in twee niveaus) en dat kan
-pas als de config-store van fase 1 er is. Vooruitbouwen zou betekenen: bouwen tegen een
-schema dat nog vaststaat te worden.
-
-Wat je wél kunt doen als je wilt vooruitkijken: lees `docs/PLAN-2026-09-27-herijking.md`
-§2.1 en §4-fase-2. Eén punt is belangrijk om nu al te laten bezinken — **met de settings-tab
-wordt de webapp onderdeel van het live executiepad**. Vandaag toont een fout daar een
-verkeerd getal; straks stuurt hij een order naar het verkeerde account. Dat verandert wat
-"af" betekent voor dat scherm.
-
----
-
-## 🧑‍✈️ Ferry
-
-**1. D-53 nog steeds uitrollen.** Bij de herijking is besloten dat contracten in Pine
-blijven (antwoord 9), waardoor de qty-override een **vangnet** is en geen besturingsknop.
-Dat maakt hem niet minder nuttig — een vangnet dat niet geïnstalleerd is, vangt niets.
-
-```bash
-cd /root/mex-middleware-b
-dotnet build src/Mex.Journal.Receiver -c Release
-# zet in de EnvironmentFile: MEX_ACCOUNT_QTY=<account>=1,...
-systemctl restart mex-receiver
-```
-
-**2. Het eerste dat ik van je nodig heb voor fase 4:** één wekelijkse Tradovate fills-CSV,
-zodat we het formaat kunnen lezen vóórdat we de import ontwerpen. Eén bestand is genoeg.
-
-**3. Blijft staan, wanneer het uitkomt:** D-44 (PMT-dashboard: Auto BreakEven = YES,
-risicotype ≠ `Price`) · D-11 (secrets roteren — verandert in fase 2 van karakter) ·
-D-31 (snapshot-timer + het verlopen GitHub-token) · D-58 (default branch).
+Fase 2 (D-83, D-84) kan pas als de config-store van fase 1 er is, en die wacht op mijn twee
+schema's. Vooruitbouwen is bouwen tegen een schema dat nog vastgesteld wordt.

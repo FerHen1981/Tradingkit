@@ -5593,3 +5593,115 @@ import sys, json; r = json.loads(sys.stdin.read()); print("transport:", r.get("t
 D-106 is *deels* af (endpoint-veld in routed-log); de bredere D-106-scope (audit-viewer, dashboard-integratie) wacht op fase 4.
 
 Op review. Live-executiepad — herbouw + herstart via bovenstaand blok.
+## 29-09 · Pine Dev → Scrum Master · blokkade 1 bevestigd · D-108 gedaan, met een vondst
+
+### ✅ Blokkade 1 — je redenering klopt tegen de code, met één randvoorwaarde
+
+**Bevestigd: de guard lost zichzelf op en er komt geen alert bij.** Nagelopen per emit-site:
+
+| Site | Vandaag | Na de samensmelting |
+|---|---|---|
+| LIMIT EXPIRED (r. 2065–2067) | `f_sendExec` + `f_sendDiscord` + `f_journal`, **zelfde bar, drie regels onder elkaar** | 1 event |
+| FILL (r. 2107 + 2113) | `f_journal` + `f_sendDiscord`, zelfde bar | 1 event |
+| EXIT (r. 2181 + 2196) | idem, 15 regels uit elkaar maar zelfde blok | 1 event |
+| ORDER (r. 2043) | alleen `f_sendExec` (1–3 alerts: PMT · PineConnector · middleware) | 1 event |
+
+Op een uitvoerende chart met Discord aan gaan er vandaag **twee** alerts per fill de deur uit
+(exec + kaart, journaal onderdrukt). Straks één. Dus niet "geen extra" maar **minder**. En je
+koppeling met blokkade 2 klopt: op een `order` bestaat er vandaag al geen journaalregel, op een
+`fill` wel — de guard is precies wat die laatste tegenhoudt.
+
+⚠️ **De randvoorwaarde: de guard was niet de enige reden dat `journal.*` ontbreekt.**
+`f_journal` wordt vanuit **zes plekken** aangeroepen en dekt **vijf soorten** — CONFIG, EXPIRED,
+FILL, EXIT, RISKOFF(×2). Daartegenover staan **29** `f_sendDiscord`-aanroepen. Voor ongeveer
+twee dozijn kaarttypes (halts, derisk, payout, cap-lock, account started, breach, ARMED…) is er
+**op geen enkele chart** een journaalregel om mee samen te smelten, exec of niet.
+
+Onder v2 is `journal` verplicht bij `kind:"fill"` — dat dekt het. Maar zeg expliciet wat er
+moet gebeuren bij `halt` · `derisk` · `payout` · `info`: **geen `journal`**, of moet Pine daar
+velden gaan produceren die vandaag niet bestaan? `config` is gedekt (r. 1897 schrijft wél een
+journaalregel).
+
+🟠 **En één mapping-detail voor D-86:** in het RISKOFF-blok (r. 2219–2226 en 2242–2249) staan
+**twee** Discord-kaarten — `RISK OFF` en `TRAIL ACTIVE` — bij **één** journaalregel, in hetzelfde
+blok op dezelfde bar. Met `seq` in de `id` is uniciteit geregeld, maar besluit wie van die twee
+`journal.*` draagt. Eén-op-één is het daar niet.
+
+---
+
+### 🔴 D-108 — gedaan, maar je meting miste de evals
+
+Generator gedraaid: **14 bestanden, 1491 toevoegingen / 207 verwijderingen**, 21 presets in de
+dropdown. Regel voor regel gelezen. Buiten de gegenereerde blokken veranderde **niets** —
+commissie nul regels, `firmPreset`-defaults ongewijzigd, inputaantallen gelijk (148/149/151/140).
+
+**Je conclusie klopt voor de funded programma's:**
+
+| Preset | `dll` | `cons` | |
+|---|---|---|---|
+| `apex_50k_legacy_pa` | 1000 → 1000 | 30 → 30 | ✅ ongewijzigd |
+| `apex_50k_eod_pa` | 1000 → 1000 | 50 → 50 | ✅ ongewijzigd |
+| `apex_50k_intraday_pa` | 1000 → 1000 | 50 → 50 | ✅ ongewijzigd |
+
+**Maar Ferry draait ook tien evaluaties, en die veranderen alle drie de sleutels wél:**
+
+| Preset | `dll` | Wie |
+|---|---|---|
+| `apex_50k_intraday_eval` | **1000 → 0** | vijf Intraday-Trail evals |
+| `apex_50k_legacy_eval` | **1000 → 0** | vier Legacy 50k evals |
+| `apex_25k_legacy_eval` | **1000 → 0** | de 25k Rithmic |
+
+De registry heeft gelijk — die programma's kennen geen dagverlieslimiet (`max_daily_loss: null`),
+en die 1000 was de verzonnen fallback die D-68 terecht weghaalde. **Maar Pine las die 0 als
+"limiet van nul" in plaats van "geen limiet":**
+
+```pine
+dllHit = (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+```
+
+Met `acctDLL = 0` is `runningPnL <= -0` waar zodra de dag **een cent** onder nul staat. De dag
+werd dan onmiddellijk stilgelegd. Zonder ingreep had het regenereren van deze dertien bestanden
+dat op het live pad gezet.
+
+**Gerepareerd in dezelfde ronde**, twee regels, in alle dertien:
+
+- `dllHit = acctDLL > 0 and (…)` — nul betekent geen limiet.
+- `consistencyOK = consistencyPct <= 0 or (…)` — zelfde patroon: bij `cons = 0` was
+  `bestDaySince/profitSince < 0` nooit waar en kwam `payoutEligible` nooit uit. Raakt
+  `daytraders_s2f_25k_instant` en `tradeify_advanced_25k_instant`, die Ferry niet draait, maar
+  het is dezelfde fout en hij hoort nu weg te zijn.
+
+Zeven presets hadden de gevaarlijke combinatie DLL 0 + ddModel EOD: `apex_50k_eod_eval`,
+`mffu_50k_eval`, `takeprofittrader_50k_eval`, `tradeday_50k_eval`, `daytraders_s2f_25k_instant`,
+`tradeify_advanced_25k_instant`. Van die lijst raakt er één Ferry: **`apex_50k_eod_eval`**, de
+default van `TOR-GC-SN`.
+
+⚠️ **Of het hem vandaag raakt hangt aan één vinkje.** De vier TORO-scripts staan default op
+`useFirmPreset = false`; dan blijft `acctDLL` de hardcoded 1000 en verandert er niets. **Maar ik
+heb hem op 26-08 en 27-08 in twee instellingenbladen aangeraden dat vinkje juist áán te zetten.**
+Staat het aan, dan verliezen zijn evals nu de halt op −$1.000 — correct volgens de firmaregels,
+maar het is wel een bescherming die weggaat. Dat moet hij weten, niet ontdekken.
+
+📌 **`firmPreset`-default:** je hebt gelijk, zeven van de negen funded scripts staan op
+`apex_50k_eod_pa` terwijl vijf van Ferry's zes PA's **legacy** zijn — trailing $2.500 en
+consistency 30, niet $2.000 en 50. Ik heb dat op 26-08 al gemeld in
+`docs/handoff/FLEET_SETTINGS_v3.md` en het is nooit omgezet. **Ik heb de default niet veranderd**:
+het is een config-wijziging in dertien live scripts en die zet volgens `CLAUDE.md` de OOS-klok op
+nul. Mijn advies is hem wél om te zetten naar `apex_50k_legacy_pa` voor de EOD-funded scripts —
+maar dat is Ferry's besluit, niet het mijne. Zet hem in de Approval Queue of geef me het akkoord.
+
+---
+
+### 🟠 D-107 — begrepen, maar ik start hem niet
+
+`D-86` zit in fase 3 en `CLAUDE.md` zegt dat fasen dwingend zijn. Ik claim hem dus niet.
+
+**Wel dit:** de dubbele sluiting is geen papieren risico. Twee van die vier paden — dag-halt en
+de auto-flat van 16:55 — kunnen realistisch op dezelfde bar vallen. De tweede `strategy.close_all()`
+is voor de strategie een no-op, **maar beide sturen `f_sendExec("close")`**, dus er gaan twee
+sluitorders naar PMT. Wat de tweede doet op een inmiddels vlakke positie is aan PMT, en dat weten
+we niet.
+
+De qty-helft (vijf van zes closes sturen `t_qty` in plaats van `math.abs(strategy.position_size)`)
+is **klein, los van de fase-3-herstructurering en in één regel per site te doen**. Wil je die
+vooruit hebben zonder op fase 3 te wachten, zeg het — dan lever ik hem als losse commit.

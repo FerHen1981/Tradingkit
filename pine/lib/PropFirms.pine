@@ -16,21 +16,28 @@ export rules(string preset) =>
         ddType := "Intraday"
         maxLoss := 6500.0
         goal := 15000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
+        acctSize := 250000.0
+    else if preset == "apex_250k_legacy_pa"
+        ddType := "EOD"
+        maxLoss := 6500.0
+        goal := 3000.0
+        dll := 0.0
+        consPct := 30.0
         acctSize := 250000.0
     else if preset == "apex_25k_legacy_eval"
         ddType := "Intraday"
         maxLoss := 1500.0
         goal := 1500.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 25000.0
     else if preset == "apex_50k_eod_eval"
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_eod_pa"
@@ -44,7 +51,7 @@ export rules(string preset) =>
         ddType := "Intraday"
         maxLoss := 2000.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_intraday_pa"
@@ -58,7 +65,7 @@ export rules(string preset) =>
         ddType := "Intraday"
         maxLoss := 2500.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "apex_50k_legacy_pa"
@@ -68,12 +75,26 @@ export rules(string preset) =>
         dll := 1000.0
         consPct := 30.0
         acctSize := 50000.0
+    else if preset == "blueguardian_50k_standard_eval"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 2000.0
+        consPct := 0.0
+        acctSize := 50000.0
+    else if preset == "blueguardian_50k_standard_pa"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 2000.0
+        consPct := 40.0
+        acctSize := 50000.0
     else if preset == "daytraders_s2f_25k_instant"
         ddType := "EOD"
         maxLoss := 1000.0
         goal := 3000.0
-        dll := 1000.0
-        consPct := 50.0
+        dll := 0.0
+        consPct := 0.0
         acctSize := 25000.0
     else if preset == "daytraders_static_25k_eval"
         ddType := "Static"
@@ -107,14 +128,14 @@ export rules(string preset) =>
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "takeprofittrader_50k_eval"
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "the5ers_hypergrowth_5k"
@@ -124,6 +145,20 @@ export rules(string preset) =>
         dll := 250.0
         consPct := 0.0
         acctSize := 5000.0
+    else if preset == "topone_50k_elite_eval"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1250.0
+        consPct := 0.0
+        acctSize := 50000.0
+    else if preset == "topone_50k_elite_pa"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1250.0
+        consPct := 40.0
+        acctSize := 50000.0
     else if preset == "topstep_50k_eval"
         ddType := "EOD"
         maxLoss := 2000.0
@@ -131,14 +166,28 @@ export rules(string preset) =>
         dll := 1000.0
         consPct := 0.0
         acctSize := 50000.0
+    else if preset == "tradeday_50k_eval"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 0.0
+        consPct := 30.0
+        acctSize := 50000.0
+    else if preset == "tradeday_50k_pa"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 0.0
+        consPct := 0.0
+        acctSize := 50000.0
     else if preset == "tradeify_advanced_25k_instant"
         ddType := "EOD"
         maxLoss := 1500.0
         goal := 3000.0
-        dll := 1000.0
-        consPct := 50.0
+        dll := 0.0
+        consPct := 0.0
         acctSize := 25000.0
     [ddType, maxLoss, goal, dll, consPct, acctSize]
 
 // Preset keys (for the strategy's input.string options=[...]):
-// "apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundingpips_10k_eval", "mffu_50k_eval", "takeprofittrader_50k_eval", "the5ers_hypergrowth_5k", "topstep_50k_eval", "tradeify_advanced_25k_instant"
+// "apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundingpips_10k_eval", "mffu_50k_eval", "takeprofittrader_50k_eval", "the5ers_hypergrowth_5k", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_advanced_25k_instant"

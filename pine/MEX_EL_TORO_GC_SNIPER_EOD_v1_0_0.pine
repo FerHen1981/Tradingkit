@@ -446,7 +446,7 @@ int rgRollHour = 18   // CME-roll; valt samen met het einde van de force-flat
 // Futures (trailing-DD) firms only. Forex/static firms run via the Python
 // backtester until the static-DD Pine engine is added. Manual inputs stay as override.
 useFirmPreset = input.bool(false, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_eod_eval", "Firm program", options=["apex_250k_legacy_eval", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topstep_50k_eval", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+firmPreset    = input.string("apex_50k_eod_eval", "Firm program", options=["apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "mffu_50k_eval", "takeprofittrader_50k_eval", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
@@ -457,19 +457,25 @@ f_firmRules(string _p) =>
         _dd := "Intraday"
         _ml := 6500.0
         _g := 15000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
+    else if _p == "apex_250k_legacy_pa"
+        _dd := "EOD"
+        _ml := 6500.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 30.0
     else if _p == "apex_25k_legacy_eval"
         _dd := "Intraday"
         _ml := 1500.0
         _g := 1500.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
     else if _p == "apex_50k_eod_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
     else if _p == "apex_50k_eod_pa"
         _dd := "EOD"
@@ -481,7 +487,7 @@ f_firmRules(string _p) =>
         _dd := "Intraday"
         _ml := 2000.0
         _g := 3000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
     else if _p == "apex_50k_intraday_pa"
         _dd := "Intraday"
@@ -493,7 +499,7 @@ f_firmRules(string _p) =>
         _dd := "Intraday"
         _ml := 2500.0
         _g := 3000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
     else if _p == "apex_50k_legacy_pa"
         _dd := "EOD"
@@ -501,40 +507,78 @@ f_firmRules(string _p) =>
         _g := 3000.0
         _dll := 1000.0
         _cons := 30.0
+    else if _p == "blueguardian_50k_standard_eval"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 2000.0
+        _cons := 0.0
+    else if _p == "blueguardian_50k_standard_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 2000.0
+        _cons := 40.0
     else if _p == "daytraders_s2f_25k_instant"
         _dd := "EOD"
         _ml := 1000.0
         _g := 3000.0
-        _dll := 1000.0
-        _cons := 50.0
+        _dll := 0.0
+        _cons := 0.0
     else if _p == "mffu_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
     else if _p == "takeprofittrader_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
-        _dll := 1000.0
+        _dll := 0.0
         _cons := 0.0
+    else if _p == "topone_50k_elite_eval"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 1250.0
+        _cons := 0.0
+    else if _p == "topone_50k_elite_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 1250.0
+        _cons := 40.0
     else if _p == "topstep_50k_eval"
         _dd := "EOD"
         _ml := 2000.0
         _g := 3000.0
         _dll := 1000.0
         _cons := 0.0
+    else if _p == "tradeday_50k_eval"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 30.0
+    else if _p == "tradeday_50k_pa"
+        _dd := "EOD"
+        _ml := 2000.0
+        _g := 3000.0
+        _dll := 0.0
+        _cons := 0.0
     else if _p == "tradeify_advanced_25k_instant"
         _dd := "EOD"
         _ml := 1500.0
         _g := 3000.0
-        _dll := 1000.0
-        _cons := 50.0
+        _dll := 0.0
+        _cons := 0.0
     [_dd, _ml, _g, _dll, _cons]
 f_firmMinPayout(string _p) =>
     float _mp = 500.0
     if _p == "apex_250k_legacy_eval"
+        _mp := 500.0
+    else if _p == "apex_250k_legacy_pa"
         _mp := 500.0
     else if _p == "apex_25k_legacy_eval"
         _mp := 500.0
@@ -550,25 +594,41 @@ f_firmMinPayout(string _p) =>
         _mp := 500.0
     else if _p == "apex_50k_legacy_pa"
         _mp := 500.0
+    else if _p == "blueguardian_50k_standard_eval"
+        _mp := 500.0
+    else if _p == "blueguardian_50k_standard_pa"
+        _mp := 500.0
     else if _p == "daytraders_s2f_25k_instant"
         _mp := 500.0
     else if _p == "mffu_50k_eval"
         _mp := 500.0
     else if _p == "takeprofittrader_50k_eval"
         _mp := 500.0
+    else if _p == "topone_50k_elite_eval"
+        _mp := 500.0
+    else if _p == "topone_50k_elite_pa"
+        _mp := 500.0
     else if _p == "topstep_50k_eval"
         _mp := 500.0
+    else if _p == "tradeday_50k_eval"
+        _mp := 500.0
+    else if _p == "tradeday_50k_pa"
+        _mp := 250.0
     else if _p == "tradeify_advanced_25k_instant"
         _mp := 500.0
     _mp
 f_firmLadder(string _p, int _n) =>
     float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
-    if _p == "apex_50k_eod_pa"
+    if _p == "apex_250k_legacy_pa"
+        _l := array.from(3000.0, 3000.0, 3000.0)
+    else if _p == "apex_50k_eod_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_intraday_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_legacy_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    else if _p == "blueguardian_50k_standard_pa"
+        _l := array.from(2500.0, 3000.0)
     array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
 f_firmDays(string _p) =>
     int _md = 0
@@ -577,6 +637,10 @@ f_firmDays(string _p) =>
     if _p == "apex_250k_legacy_eval"
         _md := 1
         _pd := 0
+        _qd := 50.0
+    else if _p == "apex_250k_legacy_pa"
+        _md := 8
+        _pd := 5
         _qd := 50.0
     else if _p == "apex_25k_legacy_eval"
         _md := 1
@@ -606,6 +670,14 @@ f_firmDays(string _p) =>
         _md := 8
         _pd := 5
         _qd := 50.0
+    else if _p == "blueguardian_50k_standard_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "blueguardian_50k_standard_pa"
+        _md := 0
+        _pd := 0
+        _qd := 50.0
     else if _p == "daytraders_s2f_25k_instant"
         _md := 1
         _pd := 0
@@ -618,8 +690,24 @@ f_firmDays(string _p) =>
         _md := 1
         _pd := 0
         _qd := 50.0
+    else if _p == "topone_50k_elite_eval"
+        _md := 1
+        _pd := 0
+        _qd := 50.0
+    else if _p == "topone_50k_elite_pa"
+        _md := 0
+        _pd := 0
+        _qd := 50.0
     else if _p == "topstep_50k_eval"
         _md := 2
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeday_50k_eval"
+        _md := 5
+        _pd := 0
+        _qd := 50.0
+    else if _p == "tradeday_50k_pa"
+        _md := 5
         _pd := 0
         _qd := 50.0
     else if _p == "tradeify_advanced_25k_instant"
@@ -1470,7 +1558,12 @@ lossHit     = enableDailyLossLimit and lossBasis <= -dailyLossLimit
 drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
-dllHit      = (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+// D-108: sinds D-68 schrijft de registry een eerlijke 0 waar een programma GEEN dagverlies-
+// limiet kent (alle Apex-evals, MFFU, TakeProfit, TradeDay, DayTraders, Tradeify). Pine las
+// die 0 als "limiet van nul" in plaats van "geen limiet": runningPnL <= -0 is waar zodra de
+// dag een cent onder nul staat, dus de dag werd meteen stilgelegd. Nul betekent hier GEEN
+// limiet -- dat is de registry-afspraak, niet mijn interpretatie.
+dllHit      = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
 // --- risk-gate: sessie-state op GEREALISEERDE P&L ---------------------------
 var float rgBaseNet    = na
 var float rgPeak       = 0.0
@@ -1522,7 +1615,9 @@ if phaseOn
 bool  acctLocked = phaseOn and acctHwm >= acctTrailDD + 100
 float acctFloor  = not phaseOn ? na : acctLocked ? 100.0 : acctHwm - acctTrailDD
 float ddRoom     = phaseOn ? acctPnL - acctFloor : na
-bool  consistencyOK = profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0
+// D-108, zelfde patroon: consistency 0 betekent "geen consistency-regel". Zonder deze
+// clausule is bestDaySince/profitSince < 0 nooit waar en komt payoutEligible nooit uit.
+bool  consistencyOK = consistencyPct <= 0 or (profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0)
 f_ladderCap(_n) =>
     _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
 int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr

@@ -189,6 +189,12 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
 - **Lees `docs/SPRINT.md` vóór je begint** en claim één item (status `wip` + owner +
   losse commit) — dat is het slot dat dubbel werk voorkomt. Beslissing die een ander
   raakt? Eén regel in `docs/DECISIONS.md`.
+- **D-nummers geeft alleen de Scrum Master uit.** Houdt een chat een eigen besluitregister
+  bij, dan krijgt dat een **eigen voorvoegsel** — Analyses & Data gebruikt `A-` (besluit
+  Ferry 28-09). Reikt zo'n besluit buiten het eigen werk, dan krijgt het daarnaast een
+  `D-`-nummer op het bord en verwijzen de twee naar elkaar. Twee registers met hetzelfde
+  voorvoegsel is hoe twee documenten met hetzelfde nummer naar verschillende besluiten gaan
+  wijzen.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
 - **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
   `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet

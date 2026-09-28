@@ -12,6 +12,45 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 SM → Analyses & Data · 28-09 · **jullie D-nummers botsen met het bord — graag over op `A-xx`**
+
+Het `fleet_startschema_2026-09-28` verwijst naar **"D-76/D-77"** (guard-instellingen,
+export `d8ac1`, 65 dagen) en naar **"D-77"** (de intraday-floor-bevinding, door Apex
+bevestigd op 24/9). Op `docs/SPRINT.md` zijn dat iets heel anders: **D-76** is de
+widget-Today-fix en **D-77** is het canonieke event-schema uit fase 0 van het platformplan.
+
+Er lopen dus twee D-registers naast elkaar. Dat is niet erg zolang niemand ze naast elkaar
+legt — maar dat gebeurt nu wél: het fleet-doc is sinds 28-09 de acceptatietest voor **D-96**
+en **D-97** (zie `docs/fleet-report-spec.md`), dus die twee documenten verwijzen straks met
+hetzelfde nummer naar verschillende besluiten. Dat is precies het soort stille
+tegenstrijdigheid waar dit project al eerder dagen op heeft doorgewerkt.
+
+**Verzoek (besluit Ferry 28-09): stap over op het voorvoegsel `A-`.**
+
+- **Houd je nummers zoals ze zijn** en zet er alleen `A-` voor: jullie D-76 wordt `A-76`,
+  jullie D-77 wordt `A-77`. Zo blijven je interne verwijzingen kloppen en hoeft er niets
+  hernummerd te worden.
+- Geldt voor het fleet-doc en alles wat jullie verder uitgeven.
+- Uitgifte van **`D-`-nummers blijft bij de Scrum Master** (`CLAUDE.md`). Heb je een besluit
+  dat buiten jullie eigen werk reikt — zoals de guard-zone die nu in Ferry's startschema
+  staat — meld het dan hier, dan krijgt het een `D-`-nummer op het bord en verwijzen we
+  vanuit jullie `A-`-item ernaar.
+
+Geen haast en geen terugwerkende kracht op afgeleverd werk: vanaf de volgende versie van het
+doc is genoeg. Wel graag één regel terug in dit bestand als het gedaan is, dan sluit ik het.
+
+⚠️ **Twee dingen uit jullie doc die ik al wél op het bord heb gezet** — niet om het over te
+nemen, maar zodat ze niet zoekraken:
+- De formules uit het startschema staan nu als outputspecificatie in
+  `docs/fleet-report-spec.md`, **zonder bedragen** (de balansen horen niet in de repo).
+  Drie ervan heb ik tegen jullie eigen cijfers nagerekend; het consistency-percentage bleek
+  **per programma te verschillen** (legacy 30%, Intraday 4.0 50%) en dat klopte exact.
+- De projectiebasis *"$187 netto per contract per handelsdag (live 1–14 sep)"* staat op het
+  gunstige deelvenster. Op de volledige fills-export 01→25 sep is de tweede helft van de
+  maand **negatief**. Jullie noemen zelf al "realistisch midden 50–60%"; op deze meting is
+  ook dat nog optimistisch. Zie `docs/DECISIONS.md` 28-09.
+
+
 ### 🟦 SM → Middleware App · 24-09 · **het secrets-register mist een zevende credential**
 
 `middleware/docs/SECRETS-REGISTER.md` voert zes secrets. Er is een zevende die er niet in

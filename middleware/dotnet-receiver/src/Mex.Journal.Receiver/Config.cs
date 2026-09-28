@@ -1,4 +1,4 @@
-// D-79 · ConfigProvider — de herlaadbare bron voor `AccountQty`,
+// D-79 + D-80 · ConfigProvider — de herlaadbare bron voor `AccountQty`,
 // `AccountBlockGate` en `AccountRiskGate`. Fase 1 van het herijkingsplan.
 //
 // Waarom nodig. Vandaag lezen die drie klassen hun waarden in een static
@@ -6,7 +6,7 @@
 // restart mex-receiver`. Ferry's antwoord 8 vraagt om optie b: een
 // configuratiebron die zónder herstart mee-beweegt.
 //
-// Wat dit is (fase 1) en wat het NIET is (fase 2 en verder):
+// Wat dit is (fase 1 · D-79 + D-80) en wat het NIET is (fase 2+):
 //   ✔ leest `docs/schema-config.md`-shape uit een JSON-file
 //   ✔ polls de file elke `MEX_CONFIG_POLL_MS` ms (default 5000) en herlaadt
 //     op een gewijzigde mtime
@@ -14,13 +14,18 @@
 //   ✔ per-account waarden (status, caps, contracts) worden geconsulteerd door
 //     de gates in `Program.cs`; het env-pad blijft als vangnet zolang D-81
 //     de migratie niet gedaan heeft
-//   ✘ geen validatie of laatst-goede-terugval bij een kapotte file — dat is D-80
+//   ✔ D-80 · valideert een nieuwe file vóór hij `Current` wordt; op fout
+//     blijft de laatst-goede staan, een luide melding gaat naar Discord
+//     (rate-limited per unieke bad-file-mtime zodat een blijvend kapotte
+//     file niet spammt)
 //   ✘ geen auditspoor — dat is D-81
 //   ✘ geen HTTP-schrijfpad — dat is D-82
 //
 // Zelfde gedrag, andere bron. Als de configuratiefile ontbreekt of leeg is,
 // werkt de receiver **exact als vandaag** — de env-vars blijven de waarheid.
-// Zodra een account in de file voorkomt, wint de file voor dat account.
+// Zodra een account in de file voorkomt en de file valideert, wint de file
+// voor dat account. Een kapotte file kan **nooit** een order beïnvloeden —
+// de snapshot swapt atomair pas nadat Validate() slaagt.
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -83,6 +88,15 @@ public static class ConfigProvider
     static DateTime _lastMtimeUtc = DateTime.MinValue;
     static long _lastLength = -1;
 
+    // D-80 · rate-limit voor de luide melding. Sla de mtime+length op van de
+    // laatste file waarvoor we een alarm hebben afgevuurd. Blijft de kapotte
+    // file staan, dan gaat er geen tweede melding uit — anders overspoelt één
+    // fout het Discord-kanaal en verliezen we het signaal in de ruis. Wordt
+    // gereset zodra een gezonde file laadt (dan is de reeks fouten voorbij).
+    static DateTime _lastAlarmMtimeUtc = DateTime.MinValue;
+    static long _lastAlarmLength = -1;
+    static Action<string, string>? _alarm;
+
     static Timer? _timer;
     static string _path = "";
     static int _pollMs = 5000;
@@ -93,12 +107,17 @@ public static class ConfigProvider
     /// <summary>Pad waar de configuratie vandaan komt (na Start()).</summary>
     public static string Path => _path;
 
-    /// <summary>Start de poll-loop. Idempotent — meerdere calls doen niks.</summary>
-    public static void Start()
+    /// <summary>Start de poll-loop. Idempotent — meerdere calls doen niks.
+    /// <paramref name="alarm"/> wordt aangeroepen (titel, beschrijving) op elke
+    /// unieke parse- of validatiefout. Zonder alarm-delegate blijft alles in
+    /// stderr; met alarm gaat er ook een luide melding uit — dat is D-80.
+    /// </summary>
+    public static void Start(Action<string, string>? alarm = null)
     {
         lock (_lock)
         {
             if (_timer is not null) return;
+            _alarm = alarm;
             _path = Environment.GetEnvironmentVariable("MEX_CONFIG_PATH")
                 ?? "/root/mex-config/mex.json";
             if (int.TryParse(Environment.GetEnvironmentVariable("MEX_CONFIG_POLL_MS"), out var ms)
@@ -117,64 +136,143 @@ public static class ConfigProvider
 
     static void TryReload()
     {
-        try
-        {
-            var info = new FileInfo(_path);
-            if (!info.Exists)
-            {
-                if (_current != ConfigDocument.Empty)
-                {
-                    // File verdween — val terug op leeg, zodat env-vangnet weer
-                    // wint. Ongewoon maar mogelijk (moved, atomic replace half).
-                    Console.Error.WriteLine($"[config] file missing, reverting to empty · path={_path}");
-                    lock (_lock)
-                    {
-                        _current = ConfigDocument.Empty;
-                        _lastMtimeUtc = DateTime.MinValue;
-                        _lastLength = -1;
-                    }
-                }
-                return;
-            }
-            if (info.LastWriteTimeUtc == _lastMtimeUtc && info.Length == _lastLength)
-                return;
-
-            var text = File.ReadAllText(info.FullName);
-            var parsed = Parse(text);
-            if (parsed is null) return;   // parse-fout gelogd door Parse()
-
-            lock (_lock)
-            {
-                _current = parsed;
-                _lastMtimeUtc = info.LastWriteTimeUtc;
-                _lastLength = info.Length;
-            }
-            Console.Error.WriteLine(
-                $"[config] loaded v{parsed.Version} · accounts={parsed.Accounts.Count} · " +
-                $"defaultCap={parsed.DefaultEntryCap?.ToString() ?? "—"} · updatedBy={parsed.UpdatedBy}");
-        }
+        FileInfo info;
+        try { info = new FileInfo(_path); }
         catch (Exception ex)
         {
-            // D-80 zal hier op landen (laatst-goede + luide melding). Voor
-            // fase 1: log naar stderr en houd de bestaande snapshot. Zelfs
-            // een kapotte file mag geen orders blokkeren of doen ontsnappen.
-            Console.Error.WriteLine($"[config] reload failed, keeping last-good v{_current.Version}: {ex.Message}");
+            Console.Error.WriteLine($"[config] path check failed, keeping last-good v{_current.Version}: {ex.Message}");
+            return;
+        }
+
+        if (!info.Exists)
+        {
+            if (_current != ConfigDocument.Empty)
+            {
+                // File verdween — val terug op leeg, zodat env-vangnet weer
+                // wint. Ongewoon maar mogelijk (moved, atomic replace half).
+                Console.Error.WriteLine($"[config] file missing, reverting to empty · path={_path}");
+                lock (_lock)
+                {
+                    _current = ConfigDocument.Empty;
+                    _lastMtimeUtc = DateTime.MinValue;
+                    _lastLength = -1;
+                }
+            }
+            return;
+        }
+        if (info.LastWriteTimeUtc == _lastMtimeUtc && info.Length == _lastLength)
+            return;
+
+        // Vanaf hier: nieuwe file, dus lezen + parse + valideren + (bij goed)
+        // atomair swappen. Bij fout: last-good blijft staan en het alarm
+        // schiet één keer af voor deze unieke mtime+length combinatie.
+
+        string text;
+        try { text = File.ReadAllText(info.FullName); }
+        catch (Exception ex)
+        {
+            FailAndMaybeAlarm(info, "read failed", ex.Message);
+            return;
+        }
+
+        var parsed = Parse(text, out var parseError);
+        if (parsed is null)
+        {
+            FailAndMaybeAlarm(info, "parse failed", parseError ?? "unknown parse error");
+            return;
+        }
+
+        var (ok, validateError) = ConfigValidator.Validate(parsed);
+        if (!ok)
+        {
+            FailAndMaybeAlarm(info, "validation failed", validateError);
+            return;
+        }
+
+        // D-80 · atomaire swap. Pas hier landt de nieuwe snapshot in `_current`,
+        // zodat een half-gelezen of ongeldige file **nooit** door een gate wordt
+        // geconsulteerd — de gates zien of de oude waarde of de nieuwe, nooit
+        // iets ertussenin.
+        lock (_lock)
+        {
+            _current = parsed;
+            _lastMtimeUtc = info.LastWriteTimeUtc;
+            _lastLength = info.Length;
+            // Gezonde load → reset de alarm-cursor, zodat een toekomstige fout
+            // meteen een melding krijgt in plaats van door de rate-limit gedempt
+            // te worden.
+            _lastAlarmMtimeUtc = DateTime.MinValue;
+            _lastAlarmLength = -1;
+        }
+        Console.Error.WriteLine(
+            $"[config] loaded v{parsed.Version} · accounts={parsed.Accounts.Count} · " +
+            $"defaultCap={parsed.DefaultEntryCap?.ToString() ?? "—"} · updatedBy={parsed.UpdatedBy}");
+    }
+
+    // Log + eenmalige luide melding voor deze exacte bad-file (mtime + length).
+    // De laatst-goede blijft draaien — dat is de kern van D-80's veiligheidseis
+    // "er wordt geen order op een half geladen config gestuurd".
+    static void FailAndMaybeAlarm(FileInfo info, string phase, string detail)
+    {
+        var stderrLine =
+            $"[config] {phase} for {_path}, keeping last-good v{_current.Version}: {detail}";
+        Console.Error.WriteLine(stderrLine);
+
+        // Rate-limit: alleen alarmeren als deze exacte (mtime+length) nog niet
+        // aan de melding is geweest. Anders blijft een blijvend kapotte file
+        // Discord vullen tot iemand hem repareert.
+        if (info.LastWriteTimeUtc == _lastAlarmMtimeUtc && info.Length == _lastAlarmLength)
+            return;
+
+        lock (_lock)
+        {
+            _lastAlarmMtimeUtc = info.LastWriteTimeUtc;
+            _lastAlarmLength = info.Length;
+        }
+
+        var alarm = _alarm;
+        if (alarm is null) return;
+
+        var current = _current;
+        var title = "⚠️ Config afgewezen — draai door op laatst-goede";
+        var desc =
+            $"**Reden:** {phase}\n" +
+            $"**Detail:** {Trunc(detail, 300)}\n" +
+            $"**Pad:** `{_path}`\n" +
+            $"**Bestand:** mtime={info.LastWriteTimeUtc:o}, {info.Length} bytes\n" +
+            $"**Nog actief:** v{current.Version} ({current.Accounts.Count} accounts)\n\n" +
+            "De receiver draait door op de laatst-goede configuratie. Geen order gebruikt de afgewezen file.";
+        try { alarm(title, desc); }
+        catch (Exception ex)
+        {
+            // Het alarm mag de provider zelf nooit stuk maken.
+            Console.Error.WriteLine($"[config] alarm delivery failed: {ex.Message}");
         }
     }
+
+    static string Trunc(string s, int max)
+        => (s ?? "").Length <= max ? (s ?? "") : (s![..max] + "…");
 
     // Parser is bewust JsonNode-based (zelfde patroon als Program.cs voor
     // TradingView-payloads). Geen source-generated System.Text.Json — dan
     // ontstaan nullable-annotation-issues die niets aan het gedrag toevoegen.
-    static ConfigDocument? Parse(string text)
+    // D-80: geeft nu een foutstring terug via `out error` zodat `TryReload`
+    // hem in het alarm kan meesturen.
+    static ConfigDocument? Parse(string text, out string? error)
     {
+        error = null;
         JsonNode? root;
         try { root = JsonNode.Parse(text); }
         catch (JsonException ex)
         {
-            Console.Error.WriteLine($"[config] JSON parse failed: {ex.Message}");
+            error = $"JSON parse: {ex.Message}";
             return null;
         }
-        if (root is not JsonObject obj) return null;
+        if (root is not JsonObject obj)
+        {
+            error = "top-level is not a JSON object";
+            return null;
+        }
 
         var accounts = new Dictionary<string, AccountConfig>(StringComparer.OrdinalIgnoreCase);
         if (obj["accounts"] is JsonObject accs)
@@ -221,5 +319,50 @@ public static class ConfigProvider
             return (int)v;
         }
         catch { return null; }
+    }
+}
+
+
+// -----------------------------------------------------------------------
+// D-80 · Validator. Werkt op een al-geparseerde `ConfigDocument`. Doet ver-
+// volg-controles die verder gaan dan "is dit geldig JSON": versienummer,
+// enum-waarden, integer-sanity. Faalt bij het eerste probleem — een pakket
+// met acht fouten hoeft alleen zijn eerste te tonen; de reparatie legt de
+// rest bloot.
+//
+// Contract: `Validate(doc)` → `(true, "")` als de config veilig kan draaien;
+// anders `(false, "<reden>")`. Reden is een korte machine-leesbare tekst,
+// ontworpen om in een Discord-melding leesbaar te zijn.
+// -----------------------------------------------------------------------
+
+public static class ConfigValidator
+{
+    static readonly HashSet<string> _statuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "active", "halted", "blocked", "archived",
+    };
+
+    public static (bool Ok, string Reason) Validate(ConfigDocument doc)
+    {
+        if (doc is null) return (false, "document is null");
+        if (doc.Version < 1)
+            return (false, $"version must be >= 1 (got {doc.Version})");
+
+        if (doc.DefaultEntryCap is int fd && fd < 0)
+            return (false, $"defaults.caps.entries_per_day must be >= 0 (got {fd})");
+
+        foreach (var (acct, cfg) in doc.Accounts)
+        {
+            if (string.IsNullOrWhiteSpace(acct))
+                return (false, "account with empty id");
+            if (!_statuses.Contains(cfg.Status))
+                return (false, $"account {acct}: unknown status '{cfg.Status}' (allowed: {string.Join(", ", _statuses)})");
+            if (cfg.DailyEntryCap is int cap && cap < 0)
+                return (false, $"account {acct}: caps.entries_per_day must be >= 0 (got {cap})");
+            if (cfg.Contracts is int c && c <= 0)
+                return (false, $"account {acct}: contracts must be > 0 (got {c})");
+        }
+
+        return (true, "");
     }
 }

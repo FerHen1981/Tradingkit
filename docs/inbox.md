@@ -5259,3 +5259,88 @@ weg in `Config.cs` — Ferry kan hem dan alleen via env veranderen (dus wél res
 qty-wijziging, hot-reload voor status/caps).
 
 D-79 op review. **Live executiepad** — Ferry, zie het build/deploy-blok hierboven.
+---
+
+## 28-09 · Middleware App → Scrum Master + Ferry — D-80 opgeleverd, LIVE PATH
+
+**Validatie + laatst-goede-terugval + luide Discord-melding. Zelfde deploy-recept als D-79.**
+
+### Wat er verandert
+
+**`Config.cs`:**
+- `Parse()` returnt nu een foutbeschrijving via `out string? error` (top-level niet-object, ongeldig JSON, etc.).
+- Nieuwe `ConfigValidator.Validate(doc) -> (bool ok, string reason)` — checkt `version >= 1`, status in `{active, halted, blocked, archived}`, `caps.entries_per_day >= 0`, `contracts > 0`. Faalt bij het eerste probleem met een korte machine-leesbare reden (zodat een Discord-embed leesbaar blijft).
+- `TryReload()` is opgesplitst in `read → parse → validate → atomic swap`. Op elke fout blijft `_current` op de laatst-goede versie staan; de gates zien of de oude waarde of de nieuwe, nooit iets ertussenin.
+- `FailAndMaybeAlarm(info, phase, detail)` schrijft stderr én stuurt één Discord-alarm per unieke bad-file (mtime + length). Rate-limit voorkomt dat een blijvend kapotte file het kanaal vult.
+- Gezonde load reset de alarm-cursor, zodat een volgende kapotte versie meteen een melding krijgt.
+
+**`Program.cs`:**
+- `ConfigProvider.Start(alarm)` krijgt een closure die `DiscordNotifier.PostAsync(discordEnv, title, description, 15158332)` (rood) aanroept binnen `Task.Run` + try/catch — fire-and-forget zonder unobserved-task-throw.
+
+### Acceptance zoals D-80 vraagt
+
+*"bied een kapotte config aan en toon aan dat (a) de oude blijft draaien, (b) er een melding uitgaat die je niet kunt missen, (c) er geen order op een half geladen config wordt gestuurd."*
+
+Op de VPS na deploy:
+
+```bash
+# Baseline: een geldige config, laadt zonder alarm
+cat > /root/mex-config/mex.json <<'JSON'
+{ "version": 1, "updated": "2026-09-28T00:00:00Z", "updated_by": "d80-good",
+  "accounts": { "PAAPEX2700250000013": { "status": "active", "contracts": 1 } } }
+JSON
+sleep 6
+journalctl -u mex-receiver -n 5 --no-pager | grep -i "\[config\]"
+# → [config] loaded v1 · accounts=1 · defaultCap=— · updatedBy=d80-good
+
+# (a+b+c) validatie-fout: onbekende status
+cat > /root/mex-config/mex.json <<'JSON'
+{ "version": 1, "updated": "2026-09-28T00:00:00Z", "updated_by": "d80-bad",
+  "accounts": { "PAAPEX2700250000013": { "status": "typo", "contracts": 1 } } }
+JSON
+sleep 6
+journalctl -u mex-receiver -n 20 --no-pager | grep -i "\[config\]"
+# → [config] validation failed for /root/mex-config/mex.json, keeping last-good v1: account PAAPEX...013: unknown status 'typo' …
+# Discord-alarm rood: "⚠️ Config afgewezen — draai door op laatst-goede"
+#
+# De actieve config blijft v1/updatedBy=d80-good. Elke gate blijft die oude
+# waarden zien. Geen order raakt de afgewezen file.
+
+# (b) rate-limit: laat de kapotte file staan, wacht 6s, geen tweede alarm
+sleep 6
+journalctl -u mex-receiver -n 20 --no-pager | grep -i "\[config\]" | tail -n 3
+# → GEEN nieuwe validation-line — de rate-limit dempt dezelfde mtime+length.
+
+# Twee andere fouten om zeker te weten dat Validate ze pakt:
+# ongeldig JSON  → phase=parse failed, detail=JSON parse: <positie>
+# contracts=-1   → phase=validation failed, detail=account …: contracts must be > 0
+
+# Terug naar de goede versie
+sed -i 's/"typo"/"active"/' /root/mex-config/mex.json
+sleep 6
+# → [config] loaded v1 · accounts=1 · defaultCap=— · updatedBy=d80-bad
+# De alarm-cursor is nu gereset — een volgende kapotte versie geeft direct
+# opnieuw één alarm.
+```
+
+### Wat NIET verandert
+
+- Zonder `mex.json`-file: identiek aan vandaag, geen alarm-gedrag.
+- Zonder `MEX_DISCORD_WEBHOOK`: alarm wordt door `DiscordNotifier` stil overgeslagen (documenteerd gedrag), stderr-log blijft de fallback.
+
+### Compileren en deployen (zelfde flow als D-53/D-79)
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs /root/mex-middleware-b/src/Mex.Journal.Receiver/Program.cs \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/Config.cs   /root/mex-middleware-b/src/Mex.Journal.Receiver/Config.cs \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+### Wat er nog rest in fase 1
+
+- **D-81** — Auditspoor (wie/wat/wanneer/vorige-waarde) op elke laadwissel + eenmalige migratie env → file met startwaarschuwing bij oude env-vars.
+
+D-80 op review. Live-executiepad — herbouw + herstart via bovenstaand blok.

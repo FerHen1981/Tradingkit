@@ -42,7 +42,23 @@ Directory.CreateDirectory(storePath);
 // D-79 · Herlaadbare configuratie. Start de poll-loop bij boot. Ontbreekt de
 // file, dan gedraagt de receiver zich als vandaag — de env-vangnetten winnen
 // voor elk account dat niet in de file staat.
-ConfigProvider.Start();
+// D-80 · Luide melding bij een afgewezen configuratie. De provider houdt zelf
+// last-good vast en rate-limit't per unieke mtime+length; dit closure geeft de
+// melding daadwerkelijk aan Discord. Werkt alleen als `MEX_DISCORD_WEBHOOK`
+// (of de env-naam die `discordEnv` draagt) gezet is — DiscordNotifier slaat
+// een lege URL stil over.
+ConfigProvider.Start((title, description) =>
+{
+    // Fire-and-forget: de provider mag niet blokkeren op een Discord-call.
+    // Rood, want dit is een noodmelding die niet in de ruis mag verdwijnen.
+    // Task.Run + try/catch zodat een async-throw niet als
+    // UnobservedTaskException in het niets verdwijnt.
+    _ = Task.Run(async () =>
+    {
+        try { await DiscordNotifier.PostAsync(discordEnv, title, description, 15158332); }
+        catch (Exception ex) { Console.Error.WriteLine($"[config] Discord post failed: {ex.Message}"); }
+    });
+});
 
 // Kaart-rendering: Discord-berichten van Tier A/B gaan als PNG i.p.v. tekst.
 // Zelf-configurerend: staat het render-script er niet, dan blijft alles tekst.

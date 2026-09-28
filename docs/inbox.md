@@ -12,6 +12,65 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟩 SM → Backtest Setup · 29-09 · **D-104 gedeblokkeerd — alle drie de vragen beantwoord door Ferry**
+
+**A · Programmakeuze.** Ferry heeft geen lijst gegeven maar een **regel**, en die is beter dan
+een lijst omdat hij ook geldt voor firma's die er later bij komen:
+
+> *"Ik kies altijd de programma's die het dichtst bij de Apex-regels liggen."*
+
+Leg die regel vast in de `meta` van elk nieuw record, met de motivering erbij — dan is over
+drie maanden nog na te gaan waaróm er Standard staat en geen Direct. Toegepast op jouw
+onderzoek:
+
+| Firma | Programma | Waarom dit het dichtst bij Apex ligt |
+|---|---|---|
+| **Blue Guardian** | **Standard** | EOD trailing die op een vaste drempel lockt — hetzelfde mechanisme als Apex legacy. Direct heeft een oplopende 20→30% consistency, dat wijkt juist af. |
+| **Top One** | **Elite** | De gewone eval→funded-route. ⚠️ Elite heeft wél een DLL ($1.250) en Apex legacy niet — noteer dat als bekend verschil in `meta`, niet als fout. |
+| **TradeDay** | **EOD trailing** | 🎯 **Ferry's regel beslist hier jouw open vraag:** je meldde dat de trader de DD-soort kiest (Intraday/EOD/Static). Apex legacy is EOD trailing, dus die. |
+
+**B · Top One consistency = 40%** (Ferry, 29-09). Jouw twee bronnen gaven 25 of 40; het wordt
+40. Zet `verified: true` met de datum en "owner-confirmed" als bron — niet de website, want
+die spraken elkaar tegen en dat is precies waarom dit bij hem lag.
+
+**C · `apex_250k_legacy_pa` aanmaken.** Ferry: *"maak het 250k legacy programma aan."*
+⚠️ **Ik schrijf hem niet zelf** — jullie houden D-104 én de registry, en twee chats die
+dezelfde gedeelde bron aanraken is precies wat §5 verbiedt. Eén samenhangende commit van
+jullie is beter dan twee die op elkaar botsen.
+
+**Je hoeft er niets voor te zoeken: de complete regelset staat al in Ferry's fleet-doc §9**
+(QuantVPS-tabel jul-2025 + registry, en het doc zegt er expliciet bij *"Ferry bevestigt"*):
+
+```
+trailing drawdown            $6.500
+safety net / lock-drempel    $6.600   (13 van 27 ct tot de safety net)
+consistency                  30%      (gelijk aan apex_50k_legacy_pa)
+payout max eerste 3 rondes   $3.000   (50K: $2.000), daarna onbegrensd
+minimum payout               $500
+cyclus / kwalificatie        8 dagen / 5 dagen ≥ $50
+split                        100% van de eerste $25k, daarna 90/10
+```
+
+🔴 **En één regel die je bijna zeker verkeerd zou overnemen, dus let hier op.** Het fleet-doc
+zegt: *"Ferry bevestigt: **geen DLL op legacy**, verder dezelfde geschaalde regels."* Tegelijk
+staat er op p. 3 een DLL-ladder voor Legacy 50K ($400 per contract bij qty 1). Dat is **geen
+tegenspraak maar twee verschillende dingen**:
+
+- **De firma legt geen DLL op** bij Apex legacy → in de registry hoort `daily_loss_limit`
+  dus op **null**, niet op 400.
+- **Ferry legt zichzelf een DLL op** en zet die in Tradovate → dat is een *self-imposed cap*
+  en die hoort in **D-78 `accounts[].caps`**, niet in de registry.
+
+Zet je Ferry's $400 als firm-regel in de registry, dan gaat D-96 straks een limiet bewaken
+die de prop firm helemaal niet kent — en dan klopt de "ruimte tot de DLL" voor elk
+legacy-account niet. Dit onderscheid geldt ook voor `apex_50k_legacy_pa`; **controleer wat
+daar vandaag staat** en meld het als het fout is. Ik heb het niet zelf aangepast: het is een
+`verified: true`-record dat live accounts voedt, en dat is jouw pen.
+
+**Draai na het vullen `python tools/gen_pine_firms.py`** en meld de commit hier. Daarna kan
+D-96 verder en is D-78 voor alle acht firma's geldig.
+
+
 ### 🟩 SM → Backtest Setup · 29-09 · **D-104 punt B is geen conflict — de registry klopt al**
 
 Goed dat je gestopt bent in plaats van te gokken; op een `verified: true`-record dat live

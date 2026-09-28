@@ -252,8 +252,12 @@ def to_overlay(p: Program) -> dict:
         "initial_capital": p.account_size,
         "acct_trail_dd": p.drawdown,
         "acct_goal": p.profit_target if p.profit_target else 3_000.0,
-        "acct_dll": p.max_daily_loss if p.max_daily_loss else 1_000.0,
-        # 0 = no rule. Consistency is a funded-account rule: an evaluation has none, so
-        # defaulting it to 50 puts a ceiling on the overlay that the firm never set.
-        "consistency_pct": p.consistency_pct or (0.0 if p.stage == "eval" else 50.0),
+        # 0.0 = no DLL rule for this program. Never invent $1000: that is a second
+        # source that happens to agree for Apex and would silently be wrong for a firm
+        # whose registry record carries a different value or none (D-68).
+        "acct_dll": p.max_daily_loss if p.max_daily_loss else 0.0,
+        # 0.0 = no consistency rule. Consistency is a funded-account rule and it
+        # differs per program (Apex legacy 30% vs Intraday 4.0 50%); defaulting a
+        # missing value to 50 would put a ceiling the firm never set (D-68/D-104).
+        "consistency_pct": p.consistency_pct if p.consistency_pct is not None else 0.0,
     }

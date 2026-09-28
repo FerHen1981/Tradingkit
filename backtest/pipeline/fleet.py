@@ -49,6 +49,7 @@ def engine_config(name: str) -> Config:
     """The Config that mirrors one released Pine script, 1:1."""
     (sym, qty, gmin, gmax, cvdn, stop, r, expiry, dex, act, give, cap,
      regime, program, sunday) = _SPEC[name]
+    acct_trail_dd, acct_dll, consistency_pct = _acct_rules(program, name)
     return Config(
         name=name,
         contract=contract(sym),
@@ -81,7 +82,7 @@ def engine_config(name: str) -> Config:
         # account layer — transcribed, and it MATTERS for the trade list: the PA
         # daily loss limit closes an open position, so leaving it implicit turns
         # every DLL exit into a full stop-out. Uniform across all nine.
-        acct_trail_dd=2000.0, acct_dll=1000.0, consistency_pct=50.0,
+        acct_trail_dd=acct_trail_dd, acct_dll=acct_dll, consistency_pct=consistency_pct,
         min_payout=500.0, payout_buffer=500.0,
         use_wait_for_cap=True, use_mae_guard=False,
         # account model — the scripts run with "Use firm preset" ON, so the
@@ -119,6 +120,32 @@ def drawdown_model(program: str) -> str:
 
 def firm_program(name: str) -> str:
     return _SPEC[name][13]
+
+
+def _acct_rules(program: str, name: str) -> tuple[float, float, float]:
+    """The funded-account rules (trailing DD, DLL, consistency %) for a fleet
+    engine, read from `data/propfirms.json` — never hardcoded (D-68). Fails HARD
+    when the program is absent or a required rule is missing, so a registry gap
+    surfaces instead of a silently-wrong fallback. The literals that used to sit
+    in engine_config (2000/1000/50) passed the sweep only because they happened to
+    equal the registry — a second source that happens to agree is an unexploded
+    bomb, not protection (D-67)."""
+    from ..firms import program as _firm_program
+    try:
+        p = _firm_program(program)
+    except KeyError as e:
+        raise ValueError(
+            f"{name}: firm program {program!r} is not in data/propfirms.json — "
+            f"add it (D-104) before this engine can be mirrored") from e
+    missing = [fld for fld, v in (("max_overall_loss", p.drawdown),
+                                  ("max_daily_loss", p.max_daily_loss),
+                                  ("consistency", p.consistency_pct)) if v is None]
+    if missing:
+        raise ValueError(
+            f"{name}: program {program!r} is missing {', '.join(missing)} in the "
+            f"registry — a funded mirror needs every account rule, and there is no "
+            f"safe fallback for a payout calculation")
+    return float(p.drawdown), float(p.max_daily_loss), float(p.consistency_pct)
 
 
 def trades_sunday(name: str) -> bool:

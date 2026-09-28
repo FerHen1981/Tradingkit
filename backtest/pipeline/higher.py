@@ -233,8 +233,15 @@ def _daily(res):
 def _funded(res, cfg, drawdown_type):
     from ..funded import simulate_funded, summarize
     daily = _daily(res)
+    # No silent fallback: acct_trail_dd is set from the registry in fleet.engine_config
+    # (D-68). A zero/None here means the account rule never reached the config — fail
+    # HARD rather than fall back to a magic 2500 that once masked a $2000/$2500 gap.
+    if not cfg.acct_trail_dd:
+        raise ValueError(
+            "acct_trail_dd is missing/zero — the trailing drawdown must come from "
+            "data/propfirms.json (D-68), never a hardcoded fallback")
     fr = simulate_funded(daily, account_size=50_000, drawdown_type=drawdown_type,
-                         drawdown=float(cfg.acct_trail_dd or 2500),
+                         drawdown=float(cfg.acct_trail_dd),
                          daily_loss_limit=float(cfg.acct_dll) if cfg.acct_dll else None)
     s = summarize(fr)
     days = s["trading_days"] or 0

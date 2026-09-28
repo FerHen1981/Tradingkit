@@ -11,9 +11,14 @@ def _days(vals, start=dt.date(2026, 1, 5)):
 
 # The mechanics tests pin their own rule set so they stay true regardless of what
 # data/propfirms.json currently says; separate tests below cover the registry path.
-LEGACY = {"min_qual_days": 8, "min_day_profit": 50.0, "consistency_limit": 0.30,
-          "safety_buffer": 100.0, "ladder": list(LADDER), "min_payout": 0.0,
-          "profit_split": 1.0, "daily_loss_limit": None}
+LEGACY = {"drawdown": 2_500.0, "min_qual_days": 8, "min_day_profit": 50.0,
+          "consistency_limit": 0.30, "safety_buffer": 100.0, "ladder": list(LADDER),
+          "min_payout": 0.0, "profit_split": 1.0, "daily_loss_limit": None}
+# NB: `drawdown` is pinned here on purpose. simulate_funded reads it from
+# apex_rules() (the registry) unless a rule set overrides it, so a fixture that
+# leaves it out is NOT registry-independent — it silently tracked the registry's
+# $2000 after the D-67 correction and broke these mechanics tests. Pinned = the
+# comment above is finally true.
 
 
 def test_no_payout_before_min_days():
@@ -110,7 +115,9 @@ def test_registry_supplies_apex_50k_rules():
     from backtest.funded import apex_rules
     r = apex_rules(50_000)
     assert r["source"] == "apex_50k_eod_pa"
-    assert r["drawdown"] == 2_500 and r["profit_split"] == 0.9
+    # $2000, not $2500: the D-67 correction fixed a half-year-old registry error.
+    # This is the registry-path test, so it asserts what the registry now holds.
+    assert r["drawdown"] == 2_000 and r["profit_split"] == 0.9
     assert r["daily_loss_limit"] == 1_000 and r["min_payout"] == 500
 
 

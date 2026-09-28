@@ -4953,3 +4953,54 @@ Fase 3 wordt **niet** kleiner dan gedacht, maar wel anders: de route-code ligt e
 knop niet (kleine kost), en er moeten drie ontwerpbeslissingen vallen vóór er een regel
 geschreven wordt — journaal op uitvoerende charts, order-versus-fill, en het volgnummer in `id`.
 Die drie zijn niet mijn beslissing; de rest los ik in dezelfde ronde op.
+---
+
+---
+
+## 28-09 · Middleware App → Scrum Master — D-78 review (schema-config.md)
+
+**Kort: schema is klaar om op te bouwen; drie kleine gaten in de env-audit gemeld, geen blokkers.**
+
+### Volledigheids-audit tegen de daadwerkelijke env-vars
+
+Alle 19 `MEX_*`-vars uit `Program.cs` + 25 python-app envs uit `middleware/app/*.py`
+gecheckt tegen §3/§7. **De acht die in de migratietabel §7 staan kloppen letterlijk.**
+Drie categorieën die nog buiten het schema vallen en waar ik graag een besluit op wil
+vóór ik de reader in D-79 bouw:
+
+1. 🟡 **`FUNDED_VERIFIED_AT` + `FUNDED_VERIFIED_WINDOW`** (viewer.py). Vandaag één
+   vlag voor de hele funded-stack (D-74's noodgreep). Tabel 2 van `execution-flow.md`
+   schrijft per-account `verified_amount` + `verified_at` voor. **Voorstel:** twee velden
+   op `accounts[]` in §3, optioneel en per default null. Dan valt D-75/D-93 hier vanzelf
+   op zijn plek en verdwijnt de fleet-brede env-vlag bij migratie.
+
+2. 🟡 **`WIDGET_GOAL`** (viewer.py). Displayed op de widget. Hoort in `defaults` van §4;
+   nu impliciet niet meegenomen.
+
+3. 🟡 **`MEX_SIGNAL_JSON` en `MEX_SIGNAL_OUT`** (renderpad). Vermoedelijk §6-categorie
+   "renderpaden", niet expliciet genoemd — graag bevestigen dat die daaronder vallen.
+
+**`PMT_MATCH_WINDOW_S`** (900s in `routed_journal.py`) is een reconciliatie-tuning en
+raakt Fase 4/T2. Kan wachten tot het schema van D-90 (per-firm bevestigingsvenster) af
+is; nu in defaults zetten is te vroeg.
+
+### Instemmingen zonder voorbehoud
+
+- **§0 raadt-firma-uit-naam** — dat is exact wat vandaag stuk gaat zodra Blue Guardian
+  binnenkomt. `NotifyRoute.cs` doet dit, en de vondst matcht wat ik in de code zie:
+  `PA`/`APEX`-prefix-check, geen echte firm/program/phase-veld. **Firma+programma+fase
+  als expliciete velden op `accounts[]` is de juiste fix.**
+- **§5 geheim-verwijzingen** — `token_ref`/`url_ref` in de config, waarden in een kluis,
+  auditspoor logt namen niet waarden. Dat is wat D-31 en `runtime-snapshot.md` al bewust
+  doen; consistent.
+- **§3 geen `contracts`-veld** — akkoord. D-53 blijft vangnet onder `MEX_ACCOUNT_QTY`,
+  niet naar de settings-tab. Anders krijgen we twee plekken die "hoeveel contracten" 
+  bepalen.
+- **`payouts` per account, verplicht** — bevestigd tegen wat ik uit fills-CSV zag: een
+  T3-balans zonder payout-lijst klopt nooit. Ferry's PA013-observatie is echt.
+
+**Conclusie: akkoord met §1-§8 zoals ze staan, drie kleine toevoegingen gemeld.**
+Ik start met D-79 (config-provider met herlaad) tegen deze shape; als de toevoegingen
+worden overgenomen zijn ze nog steeds toe te voegen zonder de provider te herschrijven.
+
+D-73 op review, D-79 op wip.

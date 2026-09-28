@@ -4812,3 +4812,144 @@ expliciete toestand, geen poort die dichtvalt).
     python3 middleware/tools/analyze_pmt_bodies.py --dir /root/intent-store --samples 20
 
 D-73 op review.
+## 28-09 · Pine Dev → Scrum Master / CLO · D-77 review: drie blokkades, vijf voorwaarden
+
+Getoetst op `MEX_EL_MATADOR_MES_PROD_EOD_v1_0_0.pine` (v3.4.0) en waar relevant tegen de
+andere twaalf. Antwoord op acceptatiecriterium 1: **nee, niet elk verplicht veld is vandaag te
+produceren.** Drie dingen kunnen echt niet, vijf kunnen alleen onder een voorwaarde.
+
+### 📌 Eerst een correctie op de vondst zelf
+
+`routeMiddleware` is **geen toggle meer**. In alle dertien scripts staat sinds v3.2.0:
+
+```pine
+bool routeMiddleware = false   // D-51/inbox 25: deze route plaatst geen order op het live pad; geen knop
+```
+
+Ik heb hem destijds zelf van input naar constante gezet, precies omdat hij niets deed op het
+live pad. **De route-code staat er wel** — dat deel van de vondst klopt volledig, `f_sendExec`
+bouwt het bericht nog steeds op r. 1862–1864. Maar er is geen knop: aanzetten is een
+code-wijziging, geen instelling. Voor de fase-3-raming scheelt dat minder dan het lijkt.
+
+---
+
+### 🔴 Blokkade 1 — `journal.*` is niet te produceren op een uitvoerende chart
+
+`f_journal` opent met `if useJournal and not execInstance`, en
+`execInstance = usePMT or useRithmic or usePineConnector or useMiddleware`.
+
+**Op elke chart die daadwerkelijk uitvoert wordt de journaalregel dus nooit geschreven.** Het
+veld staat in het schema als *verplicht*, maar juist op de charts waar het om gaat bestaat hij
+niet. Dat is geen randgeval: het is de normale live-stand.
+
+Oplossing is één regel (de `not execInstance`-clausule eruit), maar dat is een gedragswijziging
+op live charts — er komt een extra `alert()` per event bij. **Dat beslis ik niet alleen.** Zeg
+of ik hem eruit haal, dan doe ik het in dezelfde ronde als D-86.
+
+### 🔴 Blokkade 2 — order en fill zijn twee momenten, geen één
+
+Het schema gaat uit van één event per handeling. Pine emit de twee helften op **verschillende
+bars**:
+
+| | Waar | Wanneer |
+|---|---|---|
+| `f_sendExec("buy", …)` | r. 2043 | bij het **plaatsen** van de order |
+| `f_journal("FILL", …)` | r. 2107 | nadat de fill **gedetecteerd** is |
+| `f_sendDiscord(… FILL …)` | r. 2109 | idem, achter `notifyFills` |
+
+Bij een limietorder zit daar standaard tot `expiryBars` tussen. Een `kind:"entry"` dat zowel
+`order_type`/`price` als `journal.entry`/`journal.status` draagt, beschrijft dus twee
+verschillende momenten in één bericht.
+
+Twee uitwegen, allebei prima voor mij:
+- **`kind` splitsen** in `order` (plaatsing: action, qty, price, order_type, dollar_sl/tp) en
+  `fill` (uitvoering: journal.*). Dit sluit aan op wat de code echt doet.
+- **`journal` optioneel maken bij `kind:"order"`** en verplicht bij de fill.
+
+Zonder keuze hier bouwen we in fase 3 een bericht dat niet klopt met de werkelijkheid.
+
+### 🔴 Blokkade 3 — de voorgestelde `id` is niet uniek
+
+`strategy:ts:kind` collideert. `f_sendExec("close", …)` staat op **zes** plekken, waarvan vier
+alleen bewaakt worden door `if posSize != 0` zonder onderlinge uitsluiting: auto-flat (r. 2262),
+venster-grace (r. 2282), dag-halt (r. 2297) en account-halt (r. 2324). Twee daarvan kunnen op
+dezelfde bar vuren — een dag-halt op het moment dat ook de flat-window ingaat, bijvoorbeeld.
+Beide events krijgen dan dezelfde sleutel en de middleware gooit er één weg. Dat is precies de
+fout die `id` moest oplossen.
+
+**Nodig: een volgnummer.** `strategy:ts:kind:seq` met een `var int seq` die per verstuurd event
+ophoogt. Stabiel binnen een realtime bar, dus retries ontdubbelen nog steeds goed.
+
+_(Terzijde, bestaand en niet van mij: dat diezelfde vier plekken allemaal `strategy.close_all()`
+kunnen aanroepen op één bar is op zichzelf al een dubbele-sluiting op het live pad.)_
+
+---
+
+### ⚠️ Voorwaarde 1 — `qty` bij exit is de signaal-qty, niet de positie
+
+Vijf van de zes close-aanroepen geven `t_qty` mee. Dat is een `var float` die bij de **entry**
+gezet is (r. 2023) en blijft staan. Alleen de cap-lock (r. 1914) gebruikt
+`math.abs(strategy.position_size)` — de werkelijke positie. De codebase is hier dus met zichzelf
+in tegenspraak. Normaal vallen ze samen; na een gederiskte of gecapte fill niet.
+
+Het schema zegt *"contracten zoals de strategie ze bedoelt"*. Bij een exit wil je bijna zeker de
+**werkelijke** positie. Zeg welke van de twee en ik trek het gelijk.
+
+### ⚠️ Voorwaarde 2 — "resting order annuleren" gaat als `close` de deur uit
+
+r. 2065 vuurt terwijl `isFlat` waar is: een niet-opgepikte limietorder wordt geannuleerd en dat
+gaat als `f_sendExec("close", …)` naar buiten. Op de PMT-route is dat een sluitorder voor een
+positie die niet bestaat, op PineConnector een `exit`.
+
+Het schema kent geen soort voor "order ingetrokken". Dichtstbijzijnde is `info`, maar dan
+verdwijnt hij uit de exit-boekhouding. **Voorstel: `action:"cancel"` toevoegen** naast
+buy/sell/close. Eén woord, en het onderscheid is meteen hard.
+
+### ⚠️ Voorwaarde 3 — `text.title`/`text.body` gaan ongeschermd de JSON in
+
+`f_sendDiscord` plakt beide rauw in de payload (r. 1872). Dat werkt vandaag alleen omdat geen
+enkele kaarttekst een `"` bevat — geverifieerd, nul treffers. Het is discipline, geen garantie,
+en in het canonieke event geldt dezelfde discipline voor `text.body`. **Ik bouw er een
+`f_jsonEsc()` omheen** tenzij iemand bezwaar heeft; dat is goedkoop en haalt een stille
+faalmodus weg.
+
+### ⚠️ Voorwaarde 4 — `ts`: welke klok, en in welke zone
+
+Twee klokken in het script: `time` (bar-open, stabiel, ook historisch) en `timenow` (echte tijd,
+alleen realtime zinvol). Het journaal gebruikt `timenow` en formatteert **zonder tijdzone-
+markering** in exchange-tijd. UTC ISO-8601 is te maken, maar `str.format_time` met `'T'`- en
+`'Z'`-literals wil ik eerst op een chart zien voor ik zeg dat het werkt — anders bouw ik hem uit
+losse delen. **Zeg welke klok het schema bedoelt**; ik neem aan `timenow` op een realtime bar,
+want dat is het moment waarop het signaal echt ontstaat.
+
+### ⚠️ Voorwaarde 5 — de zestien journaalkolommen zijn er twaalf in het schema
+
+De huidige regel heeft er zestien; het `journal`-object in §2 telt er twaalf. De vier die
+ontbreken zijn niet kwijt — `ts` en `symbol` staan bovenin het event, `accountID` en `jrnlAcct`
+zijn configuratie. Prima, maar **`jrnlAcct` is afgeleid, niet ingevuld**:
+
+```pine
+f_autoAcctName() => <2 letters + 3 cijfers van accountID> + "-" + <evalStartBal/1000>k + "-" + <validFrom als yyMMdd>
+```
+
+Verhuist `account_id` naar de configuratie, dan moet de middleware die afleiding **exact**
+overnemen — inclusief `validFrom`, dat sinds v3.4.0 het venster is. Doet hij dat niet, dan
+verandert kolom 3 van het journaal stilletjes en breekt de koppeling met bestaande regels.
+Dit is een kolom die er in het schema niet meer staat maar wel gemaakt moet blijven worden.
+
+---
+
+### ✅ Wat gewoon kan, zonder voorbehoud
+
+`v` · `strategy` (= `mwStrategy`) · `symbol` (= `syminfo.ticker`) · `action` · `price` ·
+`order_type` · `dollar_sl` / `dollar_tp` — die zitten alle zeven al in het bestaande
+middleware-bericht op r. 1864. `kind` is te maken met een vaste afbeelding: 29 `f_sendDiscord`-
+aanroepen per script, die op de zeven soorten uit §2 passen zonder rest. Die mapping schrijf ik
+in fase 3 op, tenzij jullie hem nu al willen.
+
+### Samengevat voor de planning
+
+Fase 3 wordt **niet** kleiner dan gedacht, maar wel anders: de route-code ligt er (winst), de
+knop niet (kleine kost), en er moeten drie ontwerpbeslissingen vallen vóór er een regel
+geschreven wordt — journaal op uitvoerende charts, order-versus-fill, en het volgnummer in `id`.
+Die drie zijn niet mijn beslissing; de rest los ik in dezelfde ronde op.

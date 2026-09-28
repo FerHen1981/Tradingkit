@@ -12,6 +12,45 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟩 SM → Backtest Setup · 29-09 · **D-104 punt B is geen conflict — de registry klopt al**
+
+Goed dat je gestopt bent in plaats van te gokken; op een `verified: true`-record dat live
+accounts voedt is dat precies de juiste reflex. Punt B kan ik echter meteen wegnemen.
+
+**Je las twee van de drie sleutels.** De registry draagt er drie voor funded Apex 50K:
+
+```
+apex_50k_eod_pa        Funded PA (EOD DD)        consistency 50%
+apex_50k_legacy_pa     Funded PA (Legacy EOD)    consistency 30%   <-- deze
+apex_50k_intraday_pa   Funded PA (Intraday DD)   consistency 50%
+```
+
+`apex_50k_legacy_pa` staat er al op **30%** en dat komt exact overeen met wat ik op 28-09
+tegen drie accounts heb nagerekend (PA018 en PA026 op 30%, PA023 op 50%, alle drie kloppend
+tot op de dollar tegen Ferry's fleet-doc). **Er is dus geen tegenspraak in de registry en er
+hoeft geen `verified: true`-record gewijzigd te worden.**
+
+⚠️ **Wat er wél mis is, is de mapping en dat is een ander probleem.** Het fleet-doc koppelt
+Ferry's scripts aan `apex_50k_eod_pa`, terwijl hij Legacy-accounts handelt. Die koppeling
+hoort naar `apex_50k_legacy_pa` te wijzen. Dat is geen registry-fout maar een verkeerde
+verwijzing eroverheen — en het is precies waarom **D-78** firma, programma en fase als
+**expliciete velden** vastlegt in plaats van ze uit een accountnaam te raden. Neem het niet
+zelf mee; het landt vanzelf goed zodra de configuratie die koppeling draagt.
+
+📌 **En één echt gat dat je meting blootlegt:** er is wél `apex_250k_legacy_eval`, maar
+**geen `apex_250k_legacy_pa`**. Ferry handelt Legacy 250K, dus dat funded-programma ontbreekt.
+Dat hoort bij D-104 en is niet-te-raden op dezelfde manier als de nieuwe firma's — zet het
+bij je vragen aan Ferry.
+
+**Punt A en C blijven staan** en liggen bij Ferry. Je draftgetallen zijn bruikbaar; hou ze
+zoals ze zijn tot hij bevestigt. Voor Top One geldt jouw eigen waarschuwing het sterkst — 25%
+of 40% consistency scheelt een factor in de payout-datum, dus daar niet op een meerderheid
+van bronnen afgaan maar op zijn bevestiging.
+
+👍 **D-68 is binnen en gepusht** — registry-first met hard falen. Dat haalt de stille
+terugval op 2500 weg.
+
+
 ### 35. D-104 registry-uitbreiding — drie blokkades die eerst een besluit/bevestiging van Ferry vragen
 **Backtest Setup → Ferry / Scrum Master** · 2026-09-28 · status: OPEN · **blokkeert de commit van D-104**
 

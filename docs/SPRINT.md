@@ -51,6 +51,14 @@
 
 ---
 
+## 🔴 Voorwaarde voor fase 2 en 5 — de registry
+
+| ID | Fase | Status | Owner | Item |
+|---|---|---|---|---|
+| **D-104** | 2/5 | todo | Backtest Setup (bouwt) · review Middleware App + Pine Dev | 🔴 **`data/propfirms.json` uitbreiden tot Ferry's acht firma's — voorwaarde voor fase 2 én fase 5.** Ferry leverde 28-09 de lijst waarmee hij wil werken, met per firma het platform: **Apex** (Rithmic + Tradovate) · **Blue Guardian** (Tradovate) · **FundedNext** (Rithmic + Tradovate) · **My Funded Futures** (Rithmic + Tradovate) · **Take Profit Trader** (Rithmic + Tradovate) · **Top One** (Tradovate) · **Tradeify** (Rithmic + Tradovate) · **TradeDay** (Tradovate). **Gemeten tegen de registry:** die draagt 18 programma's over 10 firma's, maar **8 van de 18 zijn Apex**, **Blue Guardian · Top One · TradeDay ontbreken volledig**, en van de vijf overlappende firma's hebben er vier precies één programma. Vijf registry-firma's staan niet op Ferry's lijst (DayTraders, FTMO, FundingPips, The5ers, Topstep) — die blijven gewoon staan, niemand gooit iets weg. **Volgorde:** eerst de drie die volledig ontbreken, dan de vier met één programma uitbreiden naar de maten die Ferry echt koopt. **Per programma minimaal nodig voor D-96:** trailing drawdown · lock-drempel en -offset · DLL en de SL-multiple · consistency-**percentage** (🔴 dat verschilt per programma — legacy 50K rekent 30%, Intraday 4.0 rekent 50%, allebei op 28-09 geverifieerd tegen het fleet-doc; één verkeerd percentage geeft een plausibele en onjuiste payout-datum) · cyclus in handelsdagen · kwalificatiedagen en de minimumdag · payout-ladder · platform(en). ⚠️ **Gedeelde bron, dus gecoördineerd:** volg `data/propfirms.schema.json`, draai daarna `python tools/gen_pine_firms.py`, en meld het in `docs/inbox.md`. Consumers zijn `middleware/app/firm_rules.py`, `backtest/firms.py` en `pine/lib/PropFirms.pine`. |
+
+---
+
 ## 🟠 Fase 2 — De settings-tab
 
 > Leest en schrijft de store van fase 1. Vanaf hier is de webapp **onderdeel van het live
@@ -102,8 +110,7 @@
 
 | ID | Fase | Status | Owner | Item |
 |---|---|---|---|---|
-| **D-96** | 5 | todo | Middleware App | **Alle vijf, volledig uitgewerkt, per account** (Ferry 27-09, antwoord 10: *"alle 5 zijn even belangrijk"*): (1) dagen tot payout-eligible · (2) ruimte tot de trailing drawdown · (3) ruimte tot de daily loss limit vandaag · (4) de consistency-regel · (5) kwalificerende dagen. 🔴 **Alle vijf lezen hun regels uit `data/propfirms.json` en falen HARD bij een ontbrekende regel.** Geen hardgecodeerde drempels en geen stille terugval — dat is exact wat **D-68** in de backtest-pijplijn blootlegde (`fleet.py:84` codeert 2000/1000 hard, `higher.py:237` valt stil terug op 2500) en die fout mag hier niet opnieuw ontstaan. |
-
+| **D-96** | 5 | todo | Middleware App | **Alle vijf, volledig uitgewerkt, per account** (Ferry 27-09, antwoord 10: *"alle 5 zijn even belangrijk"*): (1) dagen tot payout-eligible · (2) ruimte tot de trailing drawdown · (3) ruimte tot de daily loss limit vandaag · (4) de consistency-regel · (5) kwalificerende dagen. 🔴 **Alle vijf lezen hun regels uit `data/propfirms.json` en falen HARD bij een ontbrekende regel.** Geen hardgecodeerde drempels en geen stille terugval — dat is exact wat **D-68** in de backtest-pijplijn blootlegde (`fleet.py:84` codeert 2000/1000 hard, `higher.py:237` valt stil terug op 2500) en die fout mag hier niet opnieuw ontstaan. ✅ **ACCEPTATIETEST VASTGESTELD 28-09: `docs/fleet-report-spec.md`.** Dat document zet Ferry's handmatige fleet-rapport om in kolommen en formules — de webapp is af wanneer hij tabel A, C en D daaruit zelf produceert uit actuals + registry. De formules zijn geverifieerd tegen de cijfers van 28-09, waaronder het consistency-percentage op drie accounts. 🔴 **Twee dingen die je anders mist:** (a) een **payout verlaagt de balans maar staat niet in de fills** — payout-registratie is een aparte invoer naast T3; (b) de DLL mag **nooit meer dan ⅓ van de ruimte** zijn, wat een tweede begrenzing is naast de ladder en eerder bijt. **Geblokkeerd tot D-104** — zonder complete registry faalt dit item per ontwerp hard voor zeven van de acht firma's. |
 ---
 
 ## 🟡 Fase 6 — De adviesmotor
@@ -113,7 +120,7 @@
 
 | ID | Fase | Status | Owner | Item |
 |---|---|---|---|---|
-| **D-97** | 6 | todo | Middleware App | **6a — accountmechanica.** Precies de drie vragen uit antwoord 15, en het zijn alle drie **meetbare** vragen op de eigen historie, geen meningsvragen: (1) op welk niveau hoort een daily halt — op x verliezen, x winsten, of op een bedrag? (2) wanneer op- en wanneer afschalen? (3) welke accountgrootte past het best bij welke regels? Voedt zich met de actuals uit fase 4 en de regels uit `propfirms.json`. |
+| **D-97** | 6 | todo | Middleware App | **6a — accountmechanica.** Precies de drie vragen uit antwoord 15, en het zijn alle drie **meetbare** vragen op de eigen historie, geen meningsvragen: (1) op welk niveau hoort een daily halt — op x verliezen, x winsten, of op een bedrag? (2) wanneer op- en wanneer afschalen? (3) welke accountgrootte past het best bij welke regels? Voedt zich met de actuals uit fase 4 en de regels uit `propfirms.json`. 📄 **Invoer: `docs/fleet-report-spec.md` §6.** Ferry's doctrine staat daar uitgeschreven, inclusief de twee regels die niet voor de hand liggen: *afschalen doe je direct, niet bij de aanvraag* (na een payout en na een DLL-dag), en *een cap-dag op de oude qty in de week vóór de aanvraag is de dag die de consistency breekt*. ⚠️ **D-97 kopieert die doctrine niet, hij toetst hem** — antwoord 15 vraagt letterlijk óp welk niveau een halt hoort en wannéér op- en afschalen, en dat zijn meetbare vragen op de eigen historie. Komt de meting op iets anders uit, dan is dat de uitkomst en geen fout. |
 | **D-98** | 6 | todo | Middleware App | 🔴 **`playbook.py`'s ingetrokken tabellen verwijderen, niet bijwerken.** Gemeten 27-09: `FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}` plus de commentaarregel *"NQ/YM are eval-only variance lots — never on a funded account"* — dat is de **GC+ES-regel die Ferry op 24-08 heeft ingetrokken**. En de asset-mapping spreekt de vloottabel op vier engines tegen: El Rey staat er op **ES** (is MNQ), El Matador op **NQ** (is MES), El León op **ES** (is MYM), El Patrón op **NQ** (is MGC). **6b — strategiekeuze blijft geblokkeerd** zolang er geen geldige vlootrangorde is; het scherm toont dat expliciet in plaats van een oud getal. |
 
 ---

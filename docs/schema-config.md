@@ -150,6 +150,45 @@ en nu in `defaults` zetten is te vroeg. Komt terug bij **D-91**.
 
 ---
 
+## 3c. ✅ Ferry's eigen daglimiet — per firma × accountgrootte (besluit 29-09)
+
+Ferry: *"Dat is per accountsize en firm, die verschillen en moeten daar onderdeel van zijn."*
+Zijn eigen DLL is dus **geen los getal per account** maar een tabel op dezelfde sleutel als
+de registry.
+
+```json
+"owner_caps": {
+  "apex_50k_legacy_pa":   { "daily_loss": 400 },
+  "apex_250k_legacy_pa":  { "daily_loss": 1200 },
+  "blueguardian_50k_standard_pa": { "daily_loss": 400 }
+}
+```
+
+**De sleutel is de `program`-sleutel uit `data/propfirms.json`.** Eén plek om te zeggen
+*"Apex Legacy 50K remt op X, Legacy 250K op Y"*, en `accounts[].caps` blijft bestaan als
+**uitzondering per account** — die wint als hij gezet is.
+
+### 🔴 Waarom dit NIET in `data/propfirms.json` komt
+
+Het ligt voor de hand, want de sleutel is dezelfde. Toch niet, om drie redenen:
+
+1. **D-109 trok net de grens:** de registry draagt **firmaregels**, en een firmaregel is een
+   feit over de firma. Ferry's rem is een operationele keuze van Ferry.
+2. **De registry wordt gedeeld met de backtester en de Pine-generator.** Zet je zijn caps
+   erin, dan simuleert de pijplijn straks zijn operationele keuze in plaats van de
+   firmaregels — en dat is precies het soort vermenging waar D-68 mee afrekende.
+3. **`verified: true` betekent iets.** Dat vlaggetje zegt *"bij de firma bevestigd"*. Een
+   eigen cap is nooit bij een firma te bevestigen.
+
+➡️ **Dus: gescheiden bestanden, identieke sleutel.** De settings-tab toont ze naast elkaar —
+*firmaregel $1.000 · jouw rem $400* — en dat naast elkaar zien is precies wat D-109 vraagt.
+
+⚠️ **Nog in te vullen door Ferry:** de waarden per programma. Zonder die tabel kan **D-110**
+niet veilig uitgevoerd worden, want dan valt de firm-rem weg zonder dat er een eigen rem
+voor in de plaats komt.
+
+---
+
 ## 4. `defaults`
 
 **Toegevoegd 29-09 uit de D-77-audit:** de **Notion-database-id's** — vandaag `NOTION_JOURNAL_DB`

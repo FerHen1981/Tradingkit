@@ -150,42 +150,71 @@ en nu in `defaults` zetten is te vroeg. Komt terug bij **D-91**.
 
 ---
 
-## 3c. ✅ Ferry's eigen daglimiet — per firma × accountgrootte (besluit 29-09)
+## 3c. ✅ Ferry's eigen daglimiet — als FORMULE, per firma × accountgrootte
 
-Ferry: *"Dat is per accountsize en firm, die verschillen en moeten daar onderdeel van zijn."*
-Zijn eigen DLL is dus **geen los getal per account** maar een tabel op dezelfde sleutel als
-de registry.
+Ferry 29-09: *"Dat is per accountsize en firm, die verschillen en moeten daar onderdeel van
+zijn"* en vervolgens: *"ja leg maar als formule vast."*
+
+### De formule
+
+```
+owner_dll(account) = min( sl_per_contract × dll_sl_multiple × qty ,
+                          ruimte × max_fraction_of_room )
+
+ruimte = balans − liq_niveau        (liq_niveau uit de registry-regels)
+```
+
+**Geverifieerd tegen zeven onafhankelijke punten uit Ferry's fleet-doc van 28-09**, met
+`sl_per_contract = 100` en `dll_sl_multiple = 4`:
+
+| Geval | qty | Doc | Formule |
+|---|--:|--:|--:|
+| PA013 · Legacy 50K | 3 | $1.200 | $1.200 ✅ |
+| PA018 · Legacy 50K | 4 | $1.600 | $1.600 ✅ |
+| PA022 · Legacy 50K | 2 | $800 | $800 ✅ |
+| 250K eval B1 | 3 | $1.200 | $1.200 ✅ |
+| 300K eval B1 | 4 | $1.600 | $1.600 ✅ |
+| ladder qty 1 / qty 5 | 1 / 5 | $400 / $2.000 | $400 / $2.000 ✅ |
+
+De tweede term is de regel die het doc apart noemt: *"DLL 4 × SL per contract **maar nooit
+meer dan ⅓ van de ruimte**"*. Beide termen gelden en **de strengste wint**.
+
+### Waar de drie parameters staan
 
 ```json
 "owner_caps": {
-  "apex_50k_legacy_pa":   { "daily_loss": 400 },
-  "apex_250k_legacy_pa":  { "daily_loss": 1200 },
-  "blueguardian_50k_standard_pa": { "daily_loss": 400 }
+  "_default":            { "sl_per_contract": 100, "dll_sl_multiple": 4, "max_fraction_of_room": 0.3333 },
+  "apex_50k_legacy_pa":  {},
+  "apex_250k_legacy_pa": {}
 }
 ```
 
-**De sleutel is de `program`-sleutel uit `data/propfirms.json`.** Eén plek om te zeggen
-*"Apex Legacy 50K remt op X, Legacy 250K op Y"*, en `accounts[].caps` blijft bestaan als
-**uitzondering per account** — die wint als hij gezet is.
+Gesleuteld op de `program`-sleutel uit `data/propfirms.json`. Vandaag zijn alle drie de
+parameters **uniform** — de $100 SL per contract blijkt een eigenschap van de stop en niet
+van de accountgrootte, en wat per grootte verschilt is de **qty** (via de ladder) en de
+**ruimte** (via de trailing drawdown uit de registry). De structuur laat afwijking per
+programma toe zodat een firma met andere stops of een andere ruimteverhouding er zonder
+herbouw in past. `accounts[].caps` blijft de uitzondering per account.
 
-### 🔴 Waarom dit NIET in `data/propfirms.json` komt
+### 🔴 Consequentie die de plek van de rem bepaalt
 
-Het ligt voor de hand, want de sleutel is dezelfde. Toch niet, om drie redenen:
+De formule heeft **drie invoeren uit drie verschillende bronnen**:
 
-1. **D-109 trok net de grens:** de registry draagt **firmaregels**, en een firmaregel is een
-   feit over de firma. Ferry's rem is een operationele keuze van Ferry.
-2. **De registry wordt gedeeld met de backtester en de Pine-generator.** Zet je zijn caps
-   erin, dan simuleert de pijplijn straks zijn operationele keuze in plaats van de
-   firmaregels — en dat is precies het soort vermenging waar D-68 mee afrekende.
-3. **`verified: true` betekent iets.** Dat vlaggetje zegt *"bij de firma bevestigd"*. Een
-   eigen cap is nooit bij een firma te bevestigen.
+| Invoer | Waar vandaan |
+|---|---|
+| `qty` | Pine (Ferry's antwoord 9: contracten blijven in Pine) |
+| `liq_niveau` | de registry |
+| `balans` | **T3** — de fills plus het payout-log (D-92) |
 
-➡️ **Dus: gescheiden bestanden, identieke sleutel.** De settings-tab toont ze naast elkaar —
-*firmaregel $1.000 · jouw rem $400* — en dat naast elkaar zien is precies wat D-109 vraagt.
+➡️ **Pine kan deze formule niet zelf uitrekenen**, want hij kent de balans niet. Wil je de
+⅓-ruimtegrens werkelijk laten meewegen — en die bijt eerder dan de ladder zodra de ruimte
+klein wordt — dan moet de rem in de **middleware** zitten, niet in het script.
 
-⚠️ **Nog in te vullen door Ferry:** de waarden per programma. Zonder die tabel kan **D-110**
-niet veilig uitgevoerd worden, want dan valt de firm-rem weg zonder dat er een eigen rem
-voor in de plaats komt.
+Dat beslecht de open vraag bij **D-110**: de eigen rem hoort aan de middlewarekant, met de
+waarde uit deze formule. Pine houdt `acctDLL` alleen nog als weergave. ⚠️ **En het betekent
+dat D-110 niet vóór fase 4 kan** — zonder T3 is er geen balans en dus geen ruimte. Tot dan
+kan alleen de eerste term (`4 × SL × qty`) worden gehandhaafd; dat is de veilige deelmenging
+en die mag wel vast in Pine.
 
 ---
 

@@ -153,3 +153,53 @@ firma oplegt én wat hij zichzelf oplegt, zonder ze te verwarren.
 ⚠️ En het punt dat bepaalt wat "af" betekent: **met dit scherm wordt de webapp onderdeel van
 het live executiepad.** Vandaag toont een fout daar een verkeerd getal; straks stuurt hij
 een order naar het verkeerde account.
+
+---
+
+## 🟧 Analyses & Data — vanaf nu vast in de ronde
+
+> **Waarom deze rol er eerst niet in stond:** de eigenaarstabel is op **mappen** gebouwd en
+> deze chat bezit er geen. Daardoor viel hij sinds de herijking uit elke ronde — terwijl hij
+> wél het fleet-startschema levert, dat de acceptatietest is voor D-96 en D-97. Besluit
+> Ferry 29-09: **rollen zonder map staan expliciet in de ronde**, ook als het antwoord
+> "niets deze ronde" is.
+
+```
+git pull origin claude/middleware-setup-guide-afhvtk
+
+Jullie zijn sinds de herijking van 27-09 overgeslagen in de rondes. Dat is mijn omissie en
+de oorzaak is structureel: de eigenaarstabel gaat over mappen en jullie bezitten er geen.
+Dat is nu rechtgezet — jullie staan vanaf deze ronde vast in de lijst.
+
+WAT ER IS VERANDERD
+Het project draait sinds 27-09 volgens docs/PLAN-2026-09-27-herijking.md: zeven fasen plus
+twee parallelsporen. Van de 33 open items zijn er 12 geparkeerd, 7 opgegaan in een fase en
+4 afgesloten; docs/ARCHIVE.md draagt de volledige tekst. Fase 0 en 1 zijn af, fase 2 loopt.
+
+🔴 DIT RAAKT JULLIE DIRECT: jullie fleet-startschema van 28-09 is sinds die datum DE
+ACCEPTATIETEST voor D-96 (de vijf vooruitblikken) en D-97 (het schaaladvies).
+
+DOE NU — D-112, één review die ertoe doet:
+Lees docs/fleet-report-spec.md. Dat heb ik opgesteld door de formules uit jullie PDF te
+reconstrueren — kolommen en formules, ZONDER bedragen, want balansen horen niet in de repo.
+Drie formules heb ik tegen jullie eigen cijfers nagerekend en ze klopten: het
+consistency-percentage bleek PER PROGRAMMA te verschillen (legacy 30%, Intraday 4.0 50%) en
+klopte exact op PA018, PA026 en PA023. De rest is AFGELEID, niet geverifieerd.
+Toets §2 (stand per account), §3 (startschema), §4 (payout-poorten), §6 (schaal-ladder).
+Wat ik verkeerd heb begrepen wil ik nu weten en niet als D-96 al gebouwd is.
+
+TWEE DINGEN DIE AL OPENSTAAN ZONDER ANTWOORD:
+1. Het A-voorvoegsel (inbox 28-09, besluit Ferry). Jullie doc verwijst naar "D-76/D-77"
+   terwijl dat op het bord de widget-fix en het event-schema zijn. Houd je nummers, zet er
+   alleen A- voor. Eén regel terug in docs/inbox.md als het gedaan is.
+2. De projectiebasis. Jullie $442.745 staat op "$187 netto per contract per handelsdag
+   (live 1-14 sep)". Ik heb de volledige fills-export 01-25 sep gekoppeld: de tweede helft
+   van de maand is NEGATIEF (-$4.414 over 69 account-dagen), en over het hele venster kom
+   ik op ongeveer een zevende van jullie basis. Jullie noemen zelf "realistisch midden
+   50-60%"; op deze meting is ook dat optimistisch. Graag jullie reactie — misschien zie ik
+   iets over het hoofd in hoe die basis bedoeld is.
+
+NIET OPPAKKEN: de vlootrangorde, de eval-lens en de decorrelatiemeting zijn bewust
+GEPARKEERD tot het platform staat (Ferry: "dit gaan we opnieuw doen als dit allemaal
+staat"). Zie D-54, D-38 en D-39 in docs/ARCHIVE.md.
+```

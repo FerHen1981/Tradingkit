@@ -1,17 +1,25 @@
 #!/usr/bin/env python3
-"""D-110 stap 1 -- controleert de EIGEN dagrem in de dertien v1_0_0-scripts.
+"""D-110 -- controleert de EIGEN dagrem in de dertien v1_0_0-scripts.
 
 Twee dingen, en het tweede is de poort naar stap 2:
 
 1. LEEST de defaults uit de .pine-bron zelf (niet overgetypt) en rekent de formule na:
-       owner_dll = stop-per-contract x stops-per-dag x qty
-   plus een gedragstoets op de haltvoorwaarde `lossBasis <= -dailyLossLimitEff`.
+       owner_dll = min( stop-per-contract x stops-per-dag x qty , firm_dll )
+   De derde term van D-110 (ruimte x fractie) staat er bewust niet in: die heeft de
+   balans nodig en blijft een middleware-signaal.
+   Plus een gedragstoets op de haltvoorwaarde `lossBasisEff <= -dailyLossLimitEff`.
 
 2. VERGELIJKT de eigen rem met de firm-rem (`acctDLL`, uit het firm-preset als
    useFirmPreset aan staat). Stap 2 van D-110 -- `dllHit` eruit -- mag PER SCRIPT pas
    als de eigen rem daar de strengste is. Is hij dat niet, dan zou het weghalen van de
    firm-rem de bescherming juist LOSSER maken, en dat is precies de volgorde die D-110
    verbiedt.
+
+3. TOETST DE BRON, niet alleen de rekensom. Drie dingen moeten in elk script staan,
+   anders is de gelijkwaardigheid met `dllHit` een aanname in plaats van een feit:
+   de samenvoeging (`firmDllActive` met exact de voorwaarden van `dllHit`), de
+   `lossBasisEff`-regel (zonder die regel verliest stap 2 dekking als
+   `includeOpenInLoss` uit staat) en `lossHit` die op `dailyLossOn` hangt.
 
 Exit 0 = alle scripts gelezen en de gedragstoets slaagt. Exit 1 = een leesfout of een
 toets die faalt. Een script waar stap 2 nog niet mag is GEEN fout -- dat is de uitslag.
@@ -39,16 +47,18 @@ def _default(src: str, name: str, kind: str) -> float | bool | str | None:
         return raw
 
 
-def firm_dll(preset: str) -> float | None:
-    """De daglimiet van een programma, uit de registry -- dezelfde bron als de generator."""
+def firm_program(preset: str) -> tuple[float, str] | None:
+    """(daglimiet, dd-model) van een programma, uit de registry -- de bron van de generator."""
     data = json.loads((ROOT / "data" / "propfirms.json").read_text())
     progs = data.get("programs", data)
     if isinstance(progs, dict):
         progs = list(progs.values())
     for p in progs:
         if p.get("key") == preset:
-            mdl = p.get("targets_limits", {}).get("max_daily_loss")
-            return float(mdl["value"]) if mdl else 0.0
+            tl = p.get("targets_limits", {})
+            mdl = tl.get("max_daily_loss")
+            dd = "EOD" if tl.get("drawdown_type") == "eod_trailing" else "Intraday"
+            return (float(mdl["value"]) if mdl else 0.0), dd
     return None
 
 
@@ -76,31 +86,57 @@ def main() -> int:
             continue
 
         owner = sl * stops * max(qty, 1.0)
-        eff = override if override > 0 else owner
-        firm = firm_dll(preset) if use_fp else acct
-        if firm is None:
-            bad.append(f"{name}: preset {preset} niet in de registry")
-            continue
+        base = override if override > 0 else owner
+        phase = _default(src, "accountPhase", "string")
+        dd_in = _default(src, "ddModel", "string")
+        if use_fp:
+            prog = firm_program(preset)
+            if prog is None:
+                bad.append(f"{name}: preset {preset} niet in de registry")
+                continue
+            firm, dd_eff = prog
+        else:
+            firm, dd_eff = acct, dd_in
+
+
+        # De firm-rem geldt alleen op PA of op een EOD-eval (dllHit-voorwaarde), en
+        # 0 betekent sinds D-108 GEEN limiet. Sinds stap 1b doet hij mee in de eigen rem.
+        # Exact de voorwaarde van dllHit -- en dus van firmDllActive in de bron.
+        firm_active = firm > 0 and (phase == "Funded" or (phase == "Eval" and dd_eff == "EOD"))
+        eff = min(base, firm) if firm_active else base
+        step2_ok = (not firm_active) or eff <= firm
+
+        # Bron-eisen: zonder deze drie regels is de gelijkwaardigheid met dllHit een aanname.
+        for needle, why in (
+            ("bool  firmDllActive = acctDLL > 0 and (isPA or (isEval and ddModel == \"EOD\"))",
+             "de samenvoeging ontbreekt of wijkt af van de dllHit-voorwaarden"),
+            ("float lossBasisEff = firmDllActive ? math.min(lossBasis, runningPnL) : lossBasis",
+             "lossBasisEff ontbreekt -- stap 2 verliest dekking als includeOpenInLoss uit staat"),
+            ("lossHit     = dailyLossOn and lossBasisEff <= -dailyLossLimitEff",
+             "lossHit hangt niet op dailyLossOn"),
+        ):
+            if needle not in src:
+                bad.append(f"{name}: {why}")
 
         # Gedragstoets: net binnen de limiet houdt de dag open, net erover sluit hem.
         if halts(-eff + 0.01, eff, on) or not halts(-eff, eff, on):
             bad.append(f"{name}: haltvoorwaarde vuurt niet op {-eff:.0f}")
 
-        # De firm-rem geldt alleen op PA of op een EOD-eval (dllHit-voorwaarde), en
-        # 0 betekent sinds D-108 GEEN limiet.
-        firm_active = firm > 0
-        step2_ok = (not firm_active) or eff <= firm
-        rows.append((name, qty, owner, override, eff, preset, firm, step2_ok, trail))
+        rows.append((name, qty, owner, override, eff, preset, firm, step2_ok, trail, firm_active))
 
     w = max(len(r[0]) for r in rows) if rows else 10
-    print(f"{'script':<{w}} {'qty':>4} {'eigen rem':>10} {'firm-rem':>9}  stap 2")
+    print(f"{'script':<{w}} {'qty':>4} {'formule':>9} {'firm-rem':>9} {'eigen rem':>10}  stap 2")
+    print("  een firm-rem tussen haakjes geldt niet op deze fase/dd-combinatie -- dllHit")
+    print("  vuurt daar sowieso niet, dus weghalen is daar een no-op.")
     print("-" * (w + 40))
-    for name, qty, owner, override, eff, preset, firm, ok, trail in rows:
+    for name, qty, owner, override, eff, preset, firm, ok, trail, act in rows:
         note = "MAG" if ok else "NOG NIET -- eigen rem is losser"
         fm = f"${firm:,.0f}" if firm > 0 else "geen"
+        if firm > 0 and not act:
+            fm = f"(${firm:,.0f})"
         extra = f"  (override ${override:,.0f})" if override > 0 else ""
         dd = "  ⚠️ > trailing DD" if trail > 0 and eff > trail else ""
-        print(f"{name:<{w}} {qty:>4.0f} {'$'+format(eff, ',.0f'):>10} {fm:>9}  {note}{extra}{dd}")
+        print(f"{name:<{w}} {qty:>4.0f} {'$'+format(owner, ',.0f'):>9} {fm:>9} {'$'+format(eff, ',.0f'):>10}  {note}{extra}{dd}")
 
     blocked = [r[0] for r in rows if not r[7]]
     over_dd = [r[0] for r in rows if r[8] > 0 and r[4] > r[8]]
@@ -110,9 +146,9 @@ def main() -> int:
         print(f"⛔ stap 2 (dllHit eruit) mag NOG NIET op {len(blocked)} van de {len(rows)}:")
         for b in blocked:
             print(f"   - {b}")
-        print("   Daar is 4 x SL x qty GROTER dan de firmalimiet, dus de firm-rem is nog")
-        print("   de strengste. Verlaag qty naar wat er echt gehandeld wordt, of zet een")
-        print("   override, en draai dit opnieuw.")
+        print("   De eigen rem is daar losser dan de firmalimiet. Sinds stap 1b hoort dat")
+        print("   niet meer voor te komen -- staat hier toch iets, dan is de samenvoeging")
+        print("   met firm_dll stuk en mag dllHit NERGENS weg.")
     if over_dd:
         print()
         print(f"⚠️ Bij {len(over_dd)} van de {len(rows)} is de eigen rem GROTER dan de trailing")

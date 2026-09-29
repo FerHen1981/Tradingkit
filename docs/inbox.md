@@ -12,6 +12,74 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Ferry + Middleware App · 29-09 · **D-118 HERZIEN — het gaat om de webhook-routing per account, niet om Pine**
+
+🔴 **Eerst: mijn vorige hypothese vervalt.** Ferry: *"Het is nog steeds hetzelfde script, die is niet
+gewijzigd of aangepast."* De dertien scripts op v3.8.0 staan **alleen in de repo**, niet op zijn
+charts. Mijn hele runtime-error-verhaal hing op die deploy en is daarmee weg. Ferry had het bij het
+rechte eind dat het elders zit.
+
+✅ **De echte verklaring staat in de code, en het discriminerende kenmerk is niet het berichttype maar
+of de kaart een ACCOUNT draagt.** `NotifyRoute.AccountFrom()` documenteert het zelf (r. 1018–1027):
+
+> *"lang niet elke kaart draagt een account. **FILL, EXIT, DERISK, PA DERISK en ACCOUNT STARTED**
+> zetten `jrnlAcct` vooraan; (…) DAY HALT, LIMIT EXPIRED, AUTO FLAT, ACCOUNT HALT, SIGNAL BLOCKED,
+> **CONFIG**, PAYOUT en PASSED/FAILED dragen er **géén**."*
+
+➡️ **En die twee groepen gaan naar verschillende webhooks.** `WebhookFor()` (r. 999):
+
+```csharp
+if (firm.Length  > 0)      names.Add(prefix + "_" + firm);    // NOTIFY_WEBHOOK_APEX
+if (phase != "OTHER")      names.Add(prefix + "_" + phase);   // NOTIFY_WEBHOOK_FUNDED
+                           names.Add(prefix);                 // NOTIFY_WEBHOOK
+```
+
+Zonder herkend account vallen de eerste twee weg en gaat de kaart naar de **kale** `NOTIFY_WEBHOOK`,
+of anders naar `MEX_DISCORD_WEBHOOK`.
+
+🔑 **Dus: staat `NOTIFY_WEBHOOK_APEX` of `NOTIFY_WEBHOOK_FUNDED` gezet en is die kapot, verlopen of
+naar een ander kanaal gericht, dan verdwijnen precies FILL, EXIT, TP/SL en RISK OFF terwijl CONFIG
+blijft aankomen.** Dat is het symptoom, letterlijk.
+
+🔴 **Prime suspect: een geroteerde of opnieuw gegenereerde Discord-webhook.** Dat is een **open
+borditem** — **D-11, "drie secrets roteren"**, inclusief de Discord-webhook-URL. Een vervangen URL
+geeft 401/404 en het bericht verdwijnt zonder dat iemand het merkt.
+
+📌 **Wat ik heb uitgesloten.** Zeven commits raakten het live pad sinds 27-09 (D-79, D-80, D-81,
+D-82 ×2, D-85, D-111A), maar **geen enkele raakte `NotifyRoute`** — alleen `Config.cs`,
+`ConfigApi.cs`, `Secrets.cs` en toevoegingen in `Program.cs`. En `NotifyRoute.Env()` leest
+**uitsluitend** environment-variabelen, dus D-82 en D-85 hebben de webhook-resolutie níét overgenomen.
+**De routeringslogica is ongewijzigd; wat veranderd kan zijn is een waarde, geen code.**
+
+## Twee metingen, en de eerste is decisief
+
+**1 — `routed_*.jsonl` draagt per kaart de post-uitkomst** (`Audit.AppendAsync(..., "discord-card",
+title, result)`). Daar staat letterlijk `error 401`, `404` of `card failed`:
+
+```
+grep '"kind":"discord-card"' /root/intent-store/routed_$(date -u +%Y%m%d).jsonl \
+  | python3 -c 'import sys,json; [print(json.loads(l)["result"][:90],"|",json.loads(l)["body"][:60]) for l in sys.stdin]' \
+  | sort | uniq -c | sort -rn | head -20
+```
+
+**2 — welke webhook-namen staan gezet:**
+
+```
+systemctl show mex-receiver -p Environment | tr ' ' '\n' | grep -o '^[A-Z_]*WEBHOOK[A-Z_]*'
+systemctl cat mex-receiver | grep -i environmentfile
+```
+
+⚠️ Namen, geen waarden — een webhook-URL is een secret en hoort niet in de chat of in de repo.
+
+🔴 **En de tweede vraag blijft staan: draaien er trades?** Zonder trades is er niets te bezorgen en is
+de webhook onschuldig. Die twee metingen samen sluiten het af.
+
+📌 **Voor Middleware App, apart van dit incident:** in `RenderAndPostAsync` heeft de `catch` **geen
+tekst-fallback**, terwijl de takken `if (!ok)` en `if (result.StartsWith("error"))` die wél hebben.
+Een uitzondering betekent dus: bericht weg, alleen een auditregel. Dat is een tweede stille
+verliespad naast D-116 en hoort in dezelfde fix.
+
+
 ### 🔴 SM → Ferry · 29-09 · **D-118 — kijk eerst op de chart, niet op de VPS. En mijn vorige verklaring was fout.**
 
 Jouw nieuwe observatie (alleen CONFIG, geen fills/TP/SL/halt) **sluit de middleware juist uit**, en

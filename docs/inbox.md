@@ -6491,3 +6491,89 @@ regel uit `CLAUDE.md` toegepast, geen nieuw oordeel — maar het staat in `DEPLO
 het zichtbaar is en niet stilletjes gebeurt.
 
 ➡️ Hierna: **D-85 met Middleware App** (D-82 staat er nu). D-86 wacht op fase 2.
+
+---
+
+## 29-09 · Pine Dev → Scrum Master + Ferry — D-110 **af**: derde term erin, dllHit eruit
+
+Drie stappen, drie commits, in de bindende volgorde. Alle dertien staan op **v3.8.0**.
+
+### Stap 1b — `min(SL × stops × qty, firm_dll)` — `2b00e38`, v3.7.0
+
+```pine
+bool  firmDllActive = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD"))
+float ownerLimitUSD = enableDailyLossLimit ? (dailyLossLimit > 0 ? dailyLossLimit : ownerDllUSD) : na
+float firmLimitUSD  = firmDllActive ? acctDLL : na
+float dailyLossLimitEff = na(ownerLimitUSD) ? firmLimitUSD : na(firmLimitUSD) ? ownerLimitUSD : math.min(ownerLimitUSD, firmLimitUSD)
+```
+
+`firmDllActive` draagt **letterlijk** de twee voorwaarden van `dllHit`. Dat is geen
+netheid maar de kern van het argument: gelijke voorwaarden + een min betekent dat `lossHit`
+per definitie op of vóór `dllHit` vuurt. Zou ik daar "ongeveer hetzelfde" hebben gebouwd,
+dan was stap 2 een gok geweest.
+
+⛔ **De derde term staat er niet in**, zoals je zei. Die blijft een middleware-signaal.
+
+📌 **De samenvoeging staat ná het firm-preset, niet in het inputblok.** `acctDLL` krijgt
+zijn waarde pas op `acctDLL := pfDLL` (r. ±1052); in het inputblok (r. ±540) draagt hij nog
+de rauwe default 1000. Daar had het stil fout kunnen gaan: op een script met een ander
+preset zou de rem dan op een verzonnen $1.000 hebben gestaan.
+
+**Twee dingen worden hierdoor strenger, en dat is bedoeld:**
+1. Waar de formule losser was dan de firma (qty 3+) remt het script nu op $1.000 in plaats
+   van $1.200 t/m $3.200.
+2. De rem meet op `lossBasisEff`, niet op `runningPnL`. Met `includeOpenInLoss` aan is dat
+   `min(gerealiseerd, lopend)` — een dag met −$1.000 gerealiseerd en open winst erboven
+   stopt nu wél en stopte eerder niet.
+
+🔧 `lossBasisEff` neemt bovendien expliciet de min met `runningPnL` zodra de firmaterm
+meedoet. Met de huidige defaults verandert die min niets; **zonder hem** zou stap 2 dekking
+verliezen op een chart waar `includeOpenInLoss` uit staat — daar zou `lossBasis` op
+gerealiseerd rekenen terwijl `dllHit` op lopend rekende, en dan vuurt de nieuwe rem later
+dan de oude. Eén regel, en het gat is dicht.
+
+### Stap 2 — de poort, groen op 13/13
+
+```
+script                        qty   formule  firm-rem  eigen rem  stap 2
+MEX_EL_MATADOR_MES_PROD_EOD     6    $2,400    $1,000     $1,000  MAG
+MEX_EL_PATRON_MGC_AGG_EOD       8    $3,200    $1,000     $1,000  MAG
+MEX_EL_LEON_MYM_CON_EOD_Q2      2      $800    $1,000       $800  MAG
+MEX_EL_TORO_NQ_SNIPER_INTRA     7    $2,800  ($1,000)     $2,800  MAG  ⚠️ > trailing DD
+…                                                     13 van 13 MAG
+```
+
+`owner_dll_check.py` is uitgebreid en toetst nu ook **de bron**, niet alleen de rekensom:
+`firmDllActive` moet er letterlijk staan met de `dllHit`-voorwaarden, `lossBasisEff` moet
+bestaan, `lossHit` moet op `dailyLossOn` hangen. Ontbreekt er één, dan faalt de toets — want
+dan is de gelijkwaardigheid een aanname in plaats van een feit. Hij modelleert ook de
+fase/dd-voorwaarde, vandaar de haakjes.
+
+### Stap 3 — `dllHit` eruit — `bd89678`, v3.8.0
+
+Weg: de declaratie, `dllHit` uit de halt-voorwaarde, `"PA Daily Loss Limit"` uit de
+haltReason-keten en uit de DLL-annotatie op de chart. **`acctDLL` blijft** — D-96 heeft hem
+als weergave en de eigen rem leest hem. De poort bewaakt nu ook dat hij niet terugkomt.
+
+⚠️ **Zichtbaar gevolg:** een dag die op de firmawaarde stopt heet voortaan **"Daily Loss"**
+in plaats van "PA Daily Loss Limit". Dat raakt de Discord-kaart en de journaalkolom
+`exitReason`. Wie op die string filtert moet het weten — vandaar deze regel.
+
+### 🔴 Eén restrisico, en het is ouder dan deze ronde
+
+Op **TOR-ES-FI, TOR-NQ-HF en TOR-NQ-SN** legt Apex geen daglimiet op (intraday-eval,
+`max_daily_loss: null`). Daar is de firmaterm dus `na` en blijft de eigen rem ongedekt op
+**$2.400 t/m $2.800 — boven de $2.000 trailing drawdown**. `dllHit` vuurde daar ook al niet,
+dus zijn vertrek verandert er niets; het zat er al. Het zit in de **qty**, niet in de
+formule: op qty 1–3 valt het vanzelf goed. Dit is dezelfde muur als in `CLAUDE.md`.
+
+### Wat ik nog steeds niet kon bewijzen
+
+Een echte backtest. Geen marktdata in de container, en `backtest/engine.py` remt alleen op
+`cfg.acct_dll`. **Daar zit nu wel een concrete vraag aan Backtest Setup:** sinds vandaag
+remt Pine op `min(4 × SL × qty, firm_dll)` en de Python-motor op `acct_dll` alleen. Dat is
+een **pariteitsverschil** zolang het zo staat — geen fout in Pine, maar het maakt elke
+vergelijking tussen de twee op dagniveau scheef. Eén regel in `engine.py` sluit hem.
+
+➡️ Hierna: **D-85 met Middleware App**, met de ordeningsvraag uit mijn vorige bericht nog
+open (Pine bouwt de PMT-JSON mét token, dus D-85 kan niet vóór D-86/D-87).

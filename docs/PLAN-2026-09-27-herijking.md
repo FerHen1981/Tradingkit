@@ -244,6 +244,41 @@ De twee niveaus uit 0.3, als scherm. Leest en schrijft de config-store van fase 
 **Wat we in fase 2 NIET doen:** geen contractvelden (zie 0.3), geen advieslogica, geen
 strategie-instellingen. Het scherm beheert distributie, niet handel.
 
+#### 2a — Eerst LEZEN, dan schrijven (toegevoegd 29-09 na vier incidenten op één dag)
+
+Ferry, 29-09: *"Allemaal redenen waarom ik het beheer van de fanout in het settings dashboard
+wil hebben, er gebeuren nu op de achtergrond ongecontroleerde dingen."* Dat is de goede
+conclusie, en de incidenten van die dag scherpen hem op twee punten.
+
+🔴 **Punt één: de settings-tab wordt gesplitst in een leeshelft en een schrijfhelft, en de
+leeshelft gaat eerst.** Op 29-09 bleek ons beeld van de fan-out **twee keer in één uur
+onjuist** — eerst werd de rate-limit als oorzaak aangewezen (weerlegd: CONFIG is tier B en
+EXIT tier A, dus de limiter zou het omgekeerde doen), daarna een Pine-runtime-error (weerlegd:
+de scripts op de charts waren niet gewijzigd). **Een scherm dat naar het live pad schrijft
+terwijl ons model van dat pad onjuist is, is gevaarlijker dan PowerShell** — want het voelt
+betrouwbaar. Dus: eerst een scherm dat toont wat de fan-out *doet*, geverifieerd tegen de
+werkelijkheid, daarna pas de knoppen.
+
+🔴 **Punt twee: een settings-tab toont configuratie, en dat is niet wat er vandaag miste.**
+Van de vijf bevindingen van 29-09 zou het scherm er **drie** hebben voorkomen of binnen
+seconden hebben gevonden — de webhook-routing per account (D-118), de dempingsdrempel van 12
+tegen een budget van 30 (D-116), en de tier→kanaal-indeling (D-117). **Twee niet:** dat een
+gedempte kaart wordt weggegooid in plaats van als tekst verstuurd, en dat de `catch` in
+`RenderAndPostAsync` geen fallback heeft. Dat zijn codefouten van één soort — **een pad dat
+stilvalt zonder het te melden** — en daar helpt geen instelling tegen.
+
+➡️ **Daarom krijgt fase 2 een tweeling: een fan-out-statusvenster.** Niet "wat staat er
+ingesteld" maar "wat is er de afgelopen periode gebeurd": per kanaal het aantal verstuurd ·
+gedempt · mislukt, met de laatste foutcode. **De data bestaat al** — `routed_*.jsonl` draagt
+per bericht `kind`, `account`, `transport` en `result`, inclusief `card rate-limited` en
+`error 401`. Het is een lezing van een bestand dat al geschreven wordt, geen nieuwe telemetrie.
+
+📌 **En het sluit een derde gat dat vandaag pijnlijk werd:** zeven commits raakten het live
+pad in twee dagen en niemand — Ferry noch dit bord — kon vaststellen welke binary er draaide,
+omdat `docs/runtime-snapshot.md` niet bestaat (**D-31**). Een statusvenster dat de draaiende
+versie noemt maakt "ongecontroleerde dingen op de achtergrond" onmogelijk in plaats van
+onwaarschijnlijk.
+
 ---
 
 ### Fase 3 — Kanaalrouting uit Pine · Pine Dev + Middleware App · 🔴 LIVE PATH

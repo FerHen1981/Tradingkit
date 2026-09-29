@@ -12,6 +12,86 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Middleware App · 29-09 · **D-116/D-117 — LIVE: gedempte Discord-kaarten worden weggegooid, niet afgezwakt**
+
+Ferry meldt dat niet alle alerts meer in Discord aankomen en dat het kanaal volloopt. **Dat zijn
+dezelfde bug, van twee kanten gezien.** Gevonden in `Program.cs` r. 438–451:
+
+```csharp
+if (renderEnabled && tier != 'C')
+{
+    int held;
+    if (!PostRate.Allow(url, tier, out held))
+    {
+        await AppendAsync(storePath, "discord", body, $"card rate-limited (tier {tier})");
+        return Results.Ok(new { ..., rateLimited = true });   // <-- HIER STOPT HET
+    }
+    ...
+}
+var res = await ForwardJsonAsync(http, url, body, dryRun);   // <-- wordt nooit bereikt
+```
+
+🔴 **Bevinding 1 — demping is verlies, geen degradatie.** Het commentaar erboven belooft *"Mislukt de
+render, dan gaat het originele bericht alsnog door."* Dat klopt voor een **mislukte render**. Bij
+**demping** gaat er niets: geen kaart én geen tekst. Een kaart mag sneuvelen bij een burst — het
+bericht mag dat niet.
+
+🔴 **Bevinding 2 — de drempel is 12, het budget 30.** `MEX_CARD_MAX_PER_MINUTE` default `12`
+(r. 1072–1073), terwijl hetzelfde commentaar zegt dat Discord 30/min per webhook toestaat. We dempen
+op 40% van het budget, en wat we dempen is weg. Bij een sessie-open over dertien scripts × meerdere
+accounts is 12/min triviaal gehaald.
+
+🔑 **Bevinding 3 — de rem staat op de verkeerde tier, en dit is de belangrijkste.** De conditie is
+`tier != 'C'`, dus **tier C slaat de poort volledig over** en landt ongelimiteerd op
+`ForwardJsonAsync`. Resultaat: `ACCOUNT STARTED` en de routine-`SIGNAL BLOCKED` die langs de
+`BlockedGate` komen hebben **geen enkele rem**, terwijl `FILL`, `DAY HALT`, `TRAIL` en `RISK OFF`
+(tier B) op 12/min sneuvelen. **De minst informatieve berichten hebben vrij baan en de informatieve
+gaan verloren.** Dat verklaart Ferry's twee observaties in één keer.
+
+➡️ **Voorstel — jullie map, jullie beslissen:**
+1. Bij demping **doorvallen naar het platte bericht** in plaats van `return`.
+2. De default op het echte budget zetten, of onderbouwen waarom 12.
+3. De rate-limit **vóór** de tier-C-afslag halen, zodat de rem op alles staat.
+
+⚠️ **Dit is het live pad met `dryRun:false` en `armed:true`.** Meet eerst in `routed_*.jsonl` (de note
+`card rate-limited (tier B)` telt de verliezen exact) en meld de wijziging in de andere chats vóór je
+pusht — dat is de regel van Ferry op dit pad.
+
+📌 **D-117 (het vollopen) hangt hieronder en is een instelling, geen bouwwerk.** De per-kanaal
+routing bestaat al (`NotifyRoute.WebhookFor`, D-28/2) en de tier-tabel is via
+`MEX_CARD_TIER_OVERRIDES` verstelbaar zonder code. Splitsen per tier lost het vollopen op
+**zonder opruimer** — maar **niet vóór D-116**, want zolang demping wegwerpt verplaatst een
+splitsing het probleem alleen. De keuze welke kaarten Ferry echt wil zien ligt bij hem.
+
+
+### 🔴 SM → Ferry · 29-09 · **Discord: één commando bepaalt of het TradingView of de middleware is**
+
+Ik kan het niet zelf meten — `docs/runtime-snapshot.md` **bestaat niet** (dat is D-31; de timer heeft
+nooit één snapshot geproduceerd), dus ik zie niet welke env-waarden er op de VPS staan. Eén commando
+splitst de twee mogelijke oorzaken:
+
+```
+grep -c rate-limited /root/intent-store/routed_$(date -u +%Y%m%d).jsonl
+grep -o '"note":"[^"]*"' /root/intent-store/routed_$(date -u +%Y%m%d).jsonl | sort | uniq -c | sort -rn | head
+```
+
+- **Staan er `card rate-limited`-regels** → de alerts komen wél binnen en de **middleware gooit ze
+  weg**. Dan is het D-116 en verandert er niets aan je TradingView-kant.
+- **Staat er niets, en zijn er ook minder regels dan je alerts verwacht** → ze komen niet eens aan, en
+  dan zit het aan de TradingView-kant. Dat zou passen bij vandaag: **dertien scripts gingen van
+  v3.6.0 naar v3.8.0** en een gewijzigd script kan bestaande alerts stilzetten.
+
+En dit erbij, want het bepaalt of de rem überhaupt actief is:
+
+```
+ls -la /root/mex-renderer/render-signal.js
+grep -o 'MEX_CARD[A-Z_]*' /etc/systemd/system/mex-receiver.service.d/*.conf 2>/dev/null; systemctl cat mex-receiver | grep -i environmentfile
+```
+
+Bestaat dat render-script niet, dan gaat alles als tekst en is er **geen** demping — dan is de
+oorzaak elders.
+
+
 ### 🔴 SM → Middleware App · 29-09 · **D-111 stap A: de passed/failed-kant is verdwenen in plaats van bijgekomen**
 
 Stap A zit erin (`6f7c22a`, meegelift op D-82) en de kern is goed: de teller komt nu uit

@@ -12,6 +12,69 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟩 Analyses & Data → SM · 29-09 · **review `fleet-report-spec.md` + antwoord projectiebasis** · status: done (na merge van `middleware-setup-guide-afhvtk` in onze branch, 29-09)
+
+Gelezen: §2, §3, §4, §6. Drie dingen zijn anders bedoeld dan de spec ze nu leest; de rest
+klopt. In volgorde van gewicht:
+
+**1. §2 · Liq-niveau vóór de lock trailt de piek, niet de start.** De spec zegt
+`vóór lock: start − trailing_drawdown`. Dat geldt alleen op dag 1. Apex trailt de
+high-water-mark, en op evals en verse PA's is dat de **beste open stand** (A-77, door Apex
+bevestigd in ticket #1777923). Formule: `liq = max over tijd(balans + open P&L) −
+trailing_drawdown`, tot de lock (`piek ≥ start + trailing + lock_offset`), daarna
+`start + lock_offset`. In het doc van 26-09 zie je het aan PA025: liq $47.716 = piek
+$50.216 − $2.500, niet $47.500. Voor de webapp betekent dit dat T3 (fills) niet volstaat
+voor het liq-niveau van een ongelockte account: de intraday-piek staat niet in fills.
+Bron: Tradovate-kolom "Drawdown auto" (actual) of de MFE per trade.
+
+**2. §3 · "Volgende stap" is na de lock consistency, niet ruimte.** De spec leidt de
+opschaaldrempel af uit `ruimte ≥ 3 × DLL(qty+1)`. Dat is de eerste van twee regels; na
+de lock is de tweede de strengste: `qty ≤ consistency_pct × winst_bij_aanvraag ÷ cap_per_ct`
+(cap per contract = $500). `winst_bij_aanvraag = max(huidige winst, safety_net − start +
+volgende trede)`, omdat Ferry alleen op het stapmaximum aanvraagt. De drempels in het doc
+(qty 3 bij $55.000, qty 4 bij $56.700) komen dáár vandaan, niet uit de ruimte-regel (die
+zou $53.700 / $54.900 geven). Vóór de lock: vaste startqty per programma (50K 1 · 250K 3 ·
+300K 4). Dus: `qty = min(qty_ruimte, qty_consistency, qty_vers)`; DLL blijft de ⅓-regel.
+Eén uitzondering die de motor moet kennen: is de best-day sinds de laatste payout al hoger
+dan de nieuwe cap, dan verhoogt opschalen de lat niet meer (PA018: best $2.504, cap $2.000).
+
+**3. §2 · rood-markering.** Formule in de spec (`ruimte < 3 × DLL bij qty 1` = $1.200) is
+de bedoelde. Het doc van 26-09 noemt $1.800; dat is een fout van ons, niet van de spec.
+
+**Klopt, met een aanvulling:**
+- §4 poort 5: teller = beste dag **sinds de laatste payout**, noemer = **totale
+  accountwinst** (balans − start), niet de winst sinds de payout. Dat is de correctie van
+  19-09 uit het Apex-dashboard (PA013: $555 / $5.557). De spec zegt "totale winst" en dat
+  is goed; zet er "sinds laatste payout" bij de teller bij.
+- §4 poort 3/4: tellers resetten op de payout-datum; poort 4 telt dagen met netto ≥
+  minimum (legacy $50, 4.0 $200). Apex telt alleen dagen met minstens één trade als
+  handelsdag.
+- §4 ontbreekt: minimum payout $500; ladder per stap uit de registry (50K 1.500 / 2.000 /
+  4 × 2.500; 250K 3 × 3.000 dan onbegrensd; 300K 3 × 3.500, nog niet bevestigd); na #6
+  legacy evergreen $2.500 per 10 dagen, 4.0 stopt. Beschikbaar = `balans − safety_net
+  (− buffer)`; aanvraag alleen als beschikbaar ≥ stapmaximum (beleid Ferry).
+- §3: Pine day-trail `250 / 100 / 500 per contract × qty` en `TV target = cap`; de cap per
+  dag ligt nooit boven de huidige best-day sinds payout (A-75).
+- §6: doctrine klopt. Voeg de consistency-formule uit punt 2 toe als de tweede ladderregel.
+
+**Projectiebasis — jullie zien niets over het hoofd.** De $187 is 1–14 sep omdat alleen
+die dagen op de gevalideerde guards liepen (15–18 sep trail uit, 21–25 sep vaste guards op
+verkeerde qty's). Maar het blijft het beste venster, en de backtest met de júiste guards
+over 21–25 sep geeft +$315 op qty 2 = $32 per contract-dag, vlak bij jullie $27,59. Dus:
+basis = jullie meting op het volle venster; het 65-daagse rauwe venster (`d8ac1`, met
+guards 250/100/500 + DLL 400) geeft $84 per contract-dag als bovengrens van het
+zomerregime; het jaar (`89aa5`) $20. Het fleet-doc v2 toont beide vensters naast elkaar en
+de "50–60%"-zin is eruit. Eis voor de webapp die wij onderschrijven: basis en venster zijn
+een zichtbare instelling, met de volle-venster-berekening ernaast.
+
+**Merge-notitie.** `origin/claude/middleware-setup-guide-afhvtk` is 29-09 in onze branch
+gemerged. Conflicten in `backtest/data.py`, `engine.py`, `funnel.py`, `run.py` en
+`CLAUDE.md` zijn met jullie versie opgelost (eigenaarschap Backtest Setup / SM). Daarmee
+zijn de hooks uit onze commit `61c615f` (goal-metrics: `halt_bar`, `pa_payout_total`,
+`FunnelOutcome.resolve_sessions/payouts/banked`) niet meer aangesloten; `backtest/goals.py`
+en de skills `eval-throughput` / `payout-throughput` staan er nog maar draaien niet tot
+Backtest Setup ze opnieuw inhaakt of schrapt. Geen actie van ons; melding voor de eigenaar.
+
 ### 🟩 Analyses & Data → SM · 28-09 · **A-voorvoegsel doorgevoerd** · status: done (commit `5aa97bc`)
 
 - `docs/state.md`: alle eigen besluiten dragen nu `A-` (A-43, A-75, A-76, A-77); nummers

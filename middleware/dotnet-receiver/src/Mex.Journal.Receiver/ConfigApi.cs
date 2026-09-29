@@ -167,6 +167,84 @@ public static class ConfigApi
     }
 
     // --------------------------------------------------------------
+    // D-82-completion · Dry-run validatie. Board-entry noemt letterlijk
+    // "lezen, valideren, schrijven" — dit is de tweede werkwoord. De
+    // settings-tab kan hiermee een concept tonen zonder dat er iets op
+    // disk terechtkomt of een auditregel wordt geschreven.
+    // --------------------------------------------------------------
+
+    public static (bool Ok, string Error, int ProposedVersion) ValidateOnly(string body)
+    {
+        JsonNode? root;
+        try { root = JsonNode.Parse(body); }
+        catch (JsonException ex) { return (false, $"JSON parse: {ex.Message}", 0); }
+        if (root is not JsonObject obj)
+            return (false, "top-level must be a JSON object", 0);
+
+        // We spelen dezelfde server-side-overschrijvingen na als in WriteAsync
+        // zodat de client dezelfde validatie krijgt die live zou draaien.
+        var nextVersion = ConfigProvider.Current.Version + 1;
+        obj["version"] = nextVersion;
+        obj["updated"] = DateTime.UtcNow.ToString("o");
+        obj["updated_by"] = "validate-only";
+
+        var normalized = obj.ToJsonString();
+        var (ok, reason) = ConfigProvider.TryParseAndValidate(normalized);
+        return (ok, reason, nextVersion);
+    }
+
+    // --------------------------------------------------------------
+    // D-82-completion · Audit-log leesbaarheid. Web moet een history-
+    // paneel kunnen tonen ("wie/wat/wanneer, laatste 50"). We lezen
+    // rechtstreeks van disk zodat we geen state hoeven bij te houden;
+    // het bestand is append-only (D-81) en tail-N is een goedkope
+    // operatie.
+    // --------------------------------------------------------------
+
+    public static JsonObject BuildAuditResponse(int limit)
+    {
+        var path = Environment.GetEnvironmentVariable("MEX_CONFIG_AUDIT_PATH")
+            ?? "/root/mex-config/audit.log";
+        var entries = new JsonArray();
+        int total = 0;
+
+        if (File.Exists(path))
+        {
+            // ReadAllLines op een groeiend bestand is fine — audit.log
+            // is één JSON-regel per gebeurtenis en groeit niet gigabyte-
+            // groot. Als het ooit een issue wordt: reverse-read met
+            // fixed buffer. Vandaag over-engineering.
+            var lines = File.ReadAllLines(path);
+            total = lines.Length;
+            var take = Math.Clamp(limit, 1, 500);
+            var start = Math.Max(0, total - take);
+            for (var i = start; i < total; i++)
+            {
+                var line = lines[i];
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    var node = JsonNode.Parse(line);
+                    if (node is not null) entries.Add(node);
+                }
+                catch
+                {
+                    // Kapotte regel? Ignore — audit-lezen mag nooit
+                    // faalgeschrei geven; het scherm toont wat er is.
+                }
+            }
+        }
+
+        return new JsonObject
+        {
+            ["path"] = path,
+            ["total"] = total,
+            ["returned"] = entries.Count,
+            ["entries"] = entries,
+        };
+    }
+
+    // --------------------------------------------------------------
     // D-85 · Secrets-endpoints. Namen worden geretourneerd, waarden nooit.
     // De GET is bewust minimalistisch (naam + last_written_utc) zodat de
     // settings-tab kan tonen *"apex_pmt · ✓ gezet · laatst gewijzigd 12-09"*

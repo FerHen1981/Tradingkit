@@ -587,21 +587,23 @@ function yesterdaySnapshot(d) {
 // → "—". Format funded-half: `moneyK(bedrag)` of "—" als er geen bedrag is.
 function evalFundedSplit(d, fundedAmount) {
 
-  const counts =
-    (d.eval_stats || {}).counts_50k_eq || {}
+  // D-111 stap A · Eval-half toont het AANTAL ACTIEVE evals uit
+  // `raw_counts.running`, niet de 50k-genormaliseerde teller. Ferry:
+  // *"RAW counts, niet counts_50k_eq — op zijn telefoon is 5 accounts
+  // gewoon 5."* De 50k-normalisatie blijft voor de publieke site (D-74).
+  //
+  // Stap B (passed/failed-tellers per handelsdag) volgt zodra de
+  // `passed_at`-afleiding uit de eerste fill per account is geland;
+  // de failed-teller krijgt daar een "unknown"-marker mee omdat een
+  // stille nul niet mag — Ferry benadrukte dat expliciet.
+  const raw =
+    (d.eval_stats || {}).raw_counts || {}
 
-  const passed =
-    num(counts.passed, 0)
-
-  const breached =
-    num(counts.breached, 0)
+  const running =
+    num(raw.running, 0)
 
   const evText =
-    (passed === 0 && breached === 0)
-      ? "—"
-      : (
-          fmtCount(passed) + "p·" + fmtCount(breached) + "b"
-        )
+    String(running) + " act"
 
   const fuText =
     (fundedAmount === null || fundedAmount === undefined)

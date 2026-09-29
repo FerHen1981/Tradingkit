@@ -159,11 +159,64 @@ app.MapPost("/killswitch", (string token, bool armed) =>
 // D-82 · Config-API. Auth: Bearer-token via `MEX_CONFIG_API_TOKENS` (map
 // naam:token) of `MEX_CONFIG_API_TOKEN` (single-token + optionele
 // `MEX_CONFIG_API_USER`). Zonder env-vars: locked-by-default → 401.
+//
+// D-82-completion (29-09) · CORS voor het settings-scherm. Alleen als
+// `MEX_CONFIG_API_CORS_ORIGIN` gezet is stuurt de receiver een
+// `Access-Control-Allow-Origin`-header terug — zo blijft locked-by-default
+// intact voor productie achter Caddy (same-origin), en werkt Web wél als
+// hij lokaal ontwikkelt op een andere origin. Meerdere origins → comma-lijst.
+var corsOrigins = (Environment.GetEnvironmentVariable("MEX_CONFIG_API_CORS_ORIGIN") ?? "")
+    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+    .Select(x => x.Trim())
+    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+app.Use(async (ctx, next) =>
+{
+    var origin = ctx.Request.Headers["Origin"].ToString();
+    if (!string.IsNullOrEmpty(origin) && corsOrigins.Contains(origin))
+    {
+        ctx.Response.Headers["Access-Control-Allow-Origin"] = origin;
+        ctx.Response.Headers["Vary"] = "Origin";
+        ctx.Response.Headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+        ctx.Response.Headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, OPTIONS";
+        ctx.Response.Headers["Access-Control-Max-Age"] = "600";
+        if (ctx.Request.Method == "OPTIONS")
+        {
+            ctx.Response.StatusCode = 204;
+            return;
+        }
+    }
+    await next();
+});
+
 app.MapGet("/api/config", (HttpContext ctx) =>
 {
     var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
     if (user is null) return Results.Unauthorized();
     return Results.Json(ConfigApi.BuildGetResponse());
+});
+
+// D-82-completion · Valideer zonder te schrijven. Board-entry noemt letterlijk
+// "lezen, valideren, schrijven" — dit is de tweede werkwoord. De settings-tab
+// kan hiermee een concept toetsen vóór hij hem PUT.
+app.MapPost("/api/config/validate", async (HttpContext ctx) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    string body;
+    using (var r = new StreamReader(ctx.Request.Body)) body = await r.ReadToEndAsync();
+    if (string.IsNullOrWhiteSpace(body)) return Results.BadRequest(new { ok = false, error = "empty body" });
+    var (ok, error, proposedVersion) = ConfigApi.ValidateOnly(body);
+    return Results.Ok(new { ok, error, proposed_version = proposedVersion });
+});
+
+// D-82-completion · Audit-log lezen. Web toont hiermee "wie/wat/wanneer,
+// laatste 50" in de settings-tab. Auth-gate, geen schrijfpad.
+app.MapGet("/api/config/audit", (HttpContext ctx, int? limit) =>
+{
+    var user = ConfigApi.AuthorizeBearer(ctx.Request.Headers["Authorization"]);
+    if (user is null) return Results.Unauthorized();
+    return Results.Json(ConfigApi.BuildAuditResponse(limit ?? 50));
 });
 
 app.MapPut("/api/config", async (HttpContext ctx) =>

@@ -6265,3 +6265,102 @@ cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afh
 ```
 
 D-85 (middleware-helft) op review.
+
+---
+
+## 29-09 · Middleware App → Scrum Master + Ferry — D-82 afgemaakt, D-111 stap A live
+
+**D-82 sluit met validate + audit-read + CORS. D-111 stap A is één regel in de widget.**
+
+### D-82 · de drie werkwoorden staan nu compleet — LIVE PATH
+
+Board-entry noemt letterlijk "**lezen, valideren, schrijven**". Lezen en schrijven stonden er sinds `a8ae39a`; **valideren** en één ondersteunend endpoint voor Web's history-paneel ontbraken. Plus opt-in CORS zodat Web vanaf een dev-origin kan werken zonder dat productie open gaat.
+
+- **`POST /api/config/validate`** — parseert + valideert een concept-body via `ConfigProvider.TryParseAndValidate` (dezelfde regels als een echte PUT), schrijft niks, geen auditregel. Return: `{ ok, error, proposed_version }`. Web toont hiermee live-feedback vóór de gebruiker op *"Opslaan"* drukt.
+- **`GET /api/config/audit?limit=50`** — laatst-N regels uit `audit.log`. `limit` clamped naar `[1, 500]`. Returns `{ path, total, returned, entries: [...] }`. Kapotte regels worden overgeslagen; audit-lezen mag nooit falen.
+- **CORS opt-in via `MEX_CONFIG_API_CORS_ORIGIN`** — comma-lijst van toegestane origins. Zonder env-var: geen CORS-header, dus productie achter Caddy (same-origin) blijft gesloten voor buiten. Web zet in dev bijv. `MEX_CONFIG_API_CORS_ORIGIN=http://localhost:5173`. `OPTIONS`-preflight geeft 204 met `Access-Control-Allow-{Headers,Methods}`.
+
+**Auth is en blijft bearer-token** — geen enkele van de drie nieuwe endpoints wijzigt daar iets aan.
+
+### Acceptance na deploy
+
+```bash
+# Setup token
+mkdir -p /etc/systemd/system/mex-receiver.service.d
+cat > /etc/systemd/system/mex-receiver.service.d/config-api.conf <<'CONF'
+[Service]
+Environment=MEX_CONFIG_API_TOKENS=ferry:test-token-abc123
+CONF
+systemctl daemon-reload && systemctl restart mex-receiver
+
+TOKEN="test-token-abc123"
+
+# valideer geldige config zonder te schrijven
+curl -s -X POST http://localhost:5000/api/config/validate \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"accounts":{"PA013":{"status":"active","contracts":1}}}'
+# → {"ok":true,"error":"","proposed_version":N+1}
+
+# valideer ongeldige config
+curl -s -X POST http://localhost:5000/api/config/validate \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"accounts":{"PA013":{"status":"nope"}}}'
+# → {"ok":false,"error":"account PA013: unknown status 'nope' …","proposed_version":N+1}
+
+# lees audit tail
+curl -s "http://localhost:5000/api/config/audit?limit=5" -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+
+# CORS smoketest (na env-set + restart met MEX_CONFIG_API_CORS_ORIGIN=http://localhost:5173)
+curl -s -i -X OPTIONS http://localhost:5000/api/config \
+  -H "Origin: http://localhost:5173" \
+  -H "Access-Control-Request-Method: PUT" | head -12
+# → HTTP/1.1 204
+# → Access-Control-Allow-Origin: http://localhost:5173
+```
+
+### Wat Web hiermee kan
+
+- **GET /api/config** → toon huidig
+- **POST /api/config/validate** → live feedback bij editen
+- **PUT /api/config** → opslaan
+- **GET /api/config/audit** → history-paneel
+- **GET /api/secrets** + **PUT /api/secrets/{name}** → tokens beheren
+
+**D-82 is inhoudelijk compleet**; Web (D-83/D-84) is niet meer geblokkeerd. Wat er verder nog zou kunnen komen (schema-doc-endpoint, live-preview, RBAC voor tweede gebruiker) valt onder latere iteraties, niet onder D-82's scope zoals SM hem beschreven heeft.
+
+---
+
+### D-111 stap A — één regel in de widget
+
+`middleware/scriptable/MEX_Today.js` · `evalFundedSplit()`:
+
+- Vroeger toonde de eval-helft `<passed_50k>p·<breached_50k>b` (50k-genormaliseerd, D-74's publieke publicatie-format).
+- Nu toont hij `<running_raw> act` — **raw** running-count uit `d.eval_stats.raw_counts.running`. Ferry: *"op zijn telefoon is 5 accounts gewoon 5"*.
+- `node --check` schoon. Gedaan wat Ferry vroeg: *"één regel"*.
+
+### Stap B — voorstel voor de opslag
+
+Volgorde volgens Ferry:
+1. **Afleiding uit eerste fill (vorige handelsdag met feestdagen-tabel)** geeft `passed_at` voor 10 bestaande PA-accounts. Dat kan **middleware-side** — ik heb de fills en de session_date-logica al staan in `dashboard_state.py`.
+2. **Failed-kant begint bij nul** en gaat vanaf-nu bijhouden. Elk `BREACHED`-record dat in Notion (of straks in T2/T3) landt krijgt een `breached_at`.
+3. **Zichtbaarheid van de stille nul.** Failed-teller in de widget krijgt een indicator (bijv. `0*` met voetnoot in het widget-label of een suffix `— sinds 29-09`) — *iets* dat de kijker verklapt dat de teller pas vanaf nu telt.
+
+Voor het opslagformaat: **derived-in-place vs. persist**. Als we `passed_at` elke keer uit fills afleiden, blijft het datamodel schoon (geen dubbele bron), maar rekent hij bij elke widget-poll. Bij 10 accounts triviaal, bij 1000 niet. Voorstel: **derived-in-place** in `_build_eval_stats`, cache 60s (dezelfde `DASH_TTL_S`), en persist alleen bij overname naar Notion voor journalistieke doeleinden. **Failed-kant** persist wél direct — omdat hij niet afleidbaar is.
+
+Feestdagenlijst haal ik uit `docs/PLAN-…` of fleet-doc; bevestig even welke bron gezaghebbend is voordat ik hem in `dashboard_state.py` hard-code.
+
+**Wachten op je akkoord** op deze opzet voordat ik stap B bouw — hij raakt het datamodel (nieuwe velden op eval-records) en verdient één rondje instemming voordat er code landt.
+
+### Deploy voor D-82 + D-111 stap A
+
+```bash
+cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afhvtk https://github.com/FerHen1981/Tradingkit.git tk \
+  && cp /tmp/tk/middleware/dotnet-receiver/src/Mex.Journal.Receiver/{Program.cs,Config.cs,ConfigApi.cs,Secrets.cs} /root/mex-middleware-b/src/Mex.Journal.Receiver/ \
+  && cd /root/mex-middleware-b \
+  && dotnet build src/Mex.Journal.Receiver -c Release \
+  && systemctl restart mex-receiver
+```
+
+Widget-file (`MEX_Today.js`) wordt handmatig naar Scriptable geplakt zoals altijd.
+
+D-82 op review-akkoord (Web ontblokkerd). D-111 stap A op review; stap B wacht op je datamodel-akkoord.

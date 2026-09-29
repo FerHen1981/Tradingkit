@@ -1,0 +1,19 @@
+---
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Button from "@mex/brand/components/Button.astro";
+---
+
+<Base title="Pagina niet gevonden" description="Deze pagina bestaat niet." noindex>
+  <Hero
+    eyebrow="404"
+    headline="Deze pagina bestaat niet"
+    lead="De link is verlopen of er staat een typefout in het adres."
+    size="md"
+  >
+    <Button slot="actions" href="/">Terug naar de homepage</Button>
+    <Button slot="actions" href="/resultaten" variant="secondary">
+      Naar de resultaten
+    </Button>
+  </Hero>
+</Base>

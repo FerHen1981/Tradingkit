@@ -1,0 +1,23 @@
+---
+term: Latency
+short: "De vertraging tussen het versturen van een order en de uitvoering ervan."
+category: handel
+aliases:
+  - vertraging
+authority: false
+sources: []
+related:
+  - slippage
+  - fill
+  - reconciliatie
+updated: 2026-08-15
+draft: false
+---
+
+Tussen jouw signaal en de fill zit een keten: je platform, je internetverbinding,
+de broker, de beurs. Elke schakel kost milliseconden tot seconden.
+
+Voor een strategie die op minutenbasis handelt is een halve seconde meestal
+onschuldig. Het wordt pas een probleem wanneer de vertraging systematisch samenvalt
+met snelle markten — precies de momenten waarop de prijs het hardst wegloopt. Meet
+latency daarom samen met slippage, niet los ervan.

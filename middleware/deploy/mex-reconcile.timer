@@ -1,0 +1,18 @@
+# Run the reconciliation right after the session closes.
+#
+# The CME day rolls at 18:00 ET and 17:00-18:00 ET is the maintenance break, so 17:30 ET is a
+# dead hour: the session is complete, nothing new can arrive, and the day's trades are final.
+# That is the same boundary the dashboard buckets on (fills_pairing.SESSION_ROLL_ET).
+#
+# The timezone is written out so this follows US DST rather than drifting an hour twice a year
+# (needs systemd >= 252; on older systemd use OnCalendar=*-*-* 21:30 UTC and fix it in autumn).
+[Unit]
+Description=Run the MEX reconciliation after the session close (17:30 ET)
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 17:30 America/New_York
+Persistent=true
+Unit=mex-reconcile.service
+
+[Install]
+WantedBy=timers.target

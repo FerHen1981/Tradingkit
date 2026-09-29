@@ -1,0 +1,25 @@
+---
+term: Positiegrootte
+short: "Het aantal contracten of lots dat volgt uit je risico per trade en de afstand tot je stop."
+category: risico
+aliases:
+  - position sizing
+  - sizing
+authority: false
+sources: []
+related:
+  - risico-per-trade
+  - tickwaarde
+  - hefboom
+  - micro-contract
+updated: 2026-08-15
+draft: false
+---
+
+De rekensom is simpel: het bedrag dat je wilt riskeren, gedeeld door de afstand tot
+je stop in ticks maal de tickwaarde. Wil je vijfhonderd dollar riskeren met een
+stop van vijftig ticks op goud, dan is dat 500 / (50 × 10) = één contract.
+
+Bij futures loop je hier tegen de ondeelbaarheid aan: de uitkomst is zelden precies
+een heel getal, en naar boven afronden betekent stilzwijgend meer risico nemen dan
+je had bepaald. Naar beneden afronden is bijna altijd de juiste keuze.

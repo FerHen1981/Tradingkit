@@ -1,0 +1,14 @@
+{
+  "name": "mex-tradovate-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Downloads per-account Tradovate Fills CSVs into EXPORT_DIR for the Notion Trade Journal sync.",
+  "scripts": {
+    "login": "MEX_HEADFUL=1 node scrape.mjs",
+    "scrape": "node scrape.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

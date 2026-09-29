@@ -12,6 +12,57 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Ferry · 29-09 · **D-118 — kijk eerst op de chart, niet op de VPS. En mijn vorige verklaring was fout.**
+
+Jouw nieuwe observatie (alleen CONFIG, geen fills/TP/SL/halt) **sluit de middleware juist uit**, en
+daarmee ook mijn uitleg van een half uur geleden.
+
+🔴 **Waarom D-116 dit niet kan zijn.** In `CardTier.Table` is `CONFIG` **tier B**, en `EXIT`,
+`PASSED`, `FAILED` en `ACCOUNT HALT` zijn **tier A** — en tier A wordt **nooit** gedempt. Zou de
+rate-limit dit veroorzaken, dan raakte je **CONFIG kwijt en hield je EXIT**. Je ziet het omgekeerde.
+De bug in D-116 is echt en blijft staan, maar hij verklaart dit incident niet.
+
+📌 En fills gaan door hetzelfde gat als CONFIG: `FILL` (r. 2436), `EXIT` (r. 2519) en `DAY HALT`
+(r. 2628) lopen alle drie via `f_sendDiscord()` → `alert()`. Er is dus geen apart kanaal dat stuk kan
+zijn.
+
+✅ **Wat het patroon wél zegt.** CONFIG is het enige bericht zonder handelsvoorwaarde:
+
+```pine
+var bool cfgSent = false
+if sendCfgOnStart and barstate.isrealtime and not cfgSent
+    cfgSent := true
+```
+
+`cfgSent` is een `var`, dus dit vuurt **precies één keer per script-instantie**. TradingView
+herinitialiseert een instantie bij herladen, hercompileren, een symbool- of timeframe-wissel — **en na
+een runtime-error.**
+
+➡️ **"Uit het niets" is dus zelf de diagnose: de instantie herstart steeds.** Elke herstart zet
+`cfgSent` terug op `false` en je krijgt opnieuw CONFIG. Een herstart reset ook alle andere
+`var`-state: de dag-halt-vlaggen, `armedSent` en de positie-tracking.
+
+🔴 **Leidende hypothese: een Pine runtime-error ná het CONFIG-blok.** Dat verklaart alle drie je
+observaties in één keer — CONFIG gaat uit (r. 2205, vóór de handelslogica), daarna sterft de
+instantie, TradingView herstart hem, CONFIG opnieuw, geen fill en geen halt. **Vandaag gingen dertien
+scripts in één dag van v3.6.0 naar v3.8.0**, dus dit is waarschijnlijk niet oud.
+
+## Drie metingen, in deze volgorde
+
+1. **Staan er vandaag trades op de chart?** Tien seconden werk en het splitst alles. **Wél** trades op
+   de chart en niets in Discord → bezorgprobleem. **Geen** trades → het script handelt niet en
+   Discord is onschuldig.
+2. **Krijg je de ARMED-kaart nog?** `armedNow` eist `timeGatePass and not timeGatePass[1]` — een
+   **overgang**. Herstart de instantie midden in een geopend venster, dan is `timeGatePass[1]` al
+   `true` en **blijft ARMED uit terwijl het venster open staat**. Geen ARMED + wel CONFIG is een sterk
+   signaal voor de herstart-hypothese.
+3. **Staat er een rood uitroepteken op het script, of een fout in je alert-overzicht?** Bij een
+   runtime-error logt TradingView dat. Dat is het directe bewijs.
+
+⚠️ **Zet niets recht vóór meting 1.** Bij een herstart-lus is elke wijziging aan de dertien scripts
+een gok, en de drie versies van vandaag zijn precies wat we moeten kunnen uitsluiten.
+
+
 ### 🔴 SM → Middleware App · 29-09 · **D-116/D-117 — LIVE: gedempte Discord-kaarten worden weggegooid, niet afgezwakt**
 
 Ferry meldt dat niet alle alerts meer in Discord aankomen en dat het kanaal volloopt. **Dat zijn

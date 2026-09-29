@@ -12,6 +12,44 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Ferry · 29-09 · **D-110 stap 2 loopt vast op de qty, en dat is dezelfde breuk als D-53**
+
+Pine Dev leverde stap 1 en stuitte daarbij op iets dat groter is dan dit item.
+
+De formule `100 × 4 × qty` geeft op de **bevroren** contractgrootte (qty 2 t/m 8) een rem van
+**$800 tot $3.200**. Dat is **losser dan de firmalimiet van $1.000**. Zou je daar `dllHit`
+weghalen, dan tilt dat de bindende rem van $1.000 naar $2.400. En bij **acht van de dertien
+scripts is die eigen rem groter dan de $2.000 trailing drawdown** — dan remt hij pas nadat
+het account al gebroken is.
+
+**De formule klopt; de qty klopt niet.** De bevroren contractgrootte is de grootte waarop
+gebacktest is, niet wat er live gehandeld wordt. Dat is precies de divergentie waarvoor
+**D-53** bestaat: Pine denkt dat het 6 contracten handelt, de middleware stuurt er 1.
+
+⚠️ **En die divergentie bijt nu op een tweede plek.** Pine rekent zijn `runningPnL` óók op de
+bevroren qty. De rem meet dus een verlies dat niet het verlies op je account is. Zolang de
+verhouding constant is valt dat mee, maar het is geen basis om een rem op te bouwen.
+
+**Drie routes, en ze sluiten elkaar niet uit:**
+
+**(a) Pine's qty gelijktrekken met wat je live handelt.** Eerlijk en simpel, maar het is een
+wijziging van de bevroren config: de OOS-klok gaat op nul (dat gebeurt sowieso al door stap 1)
+en de backtest komt niet meer overeen met het script.
+
+**(b) De rem een eigen qty geven** die de live grootte weerspiegelt, los van de handels-qty.
+Kleinste ingreep, maar je hebt dan twee qty's in één script en dat is precies het soort tweede
+waarheid dat dit project bevecht.
+
+**(c) De rem naar de middleware.** Daar staat de live qty al (`MEX_ACCOUNT_QTY`, D-53) én de
+balans die de tweede term van de formule nodig heeft. ✅ **Mijn advies.** D-110 ging toch al
+die kant op — de ⅓-ruimteterm kan alleen daar. Dan doen we het één keer in plaats van twee.
+
+Bij (c) verandert er aan Pine niets meer na stap 1, en stap 2 verhuist naar fase 4.
+
+**Dit is een besluit, geen bouwtaak.** Tot het valt blijft stap 1 staan: twee remmen naast
+elkaar, de strengste wint — dat is veilig en er gaat vandaag niets mis.
+
+
 ### 🟨 SM → Pine Dev · 29-09 · **sterk werk op D-107/D-108, en één procesregel**
 
 **D-108 was de vangst van de week.** Ik vroeg om de diff regel voor regel te lezen; dat is

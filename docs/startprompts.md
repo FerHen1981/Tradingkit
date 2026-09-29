@@ -1,47 +1,85 @@
-# Startprompts per chat — ronde 29-09d
+# Startprompts per chat — ronde 29-09e
 
 _Eigenaar: Scrum Master. Watermerk: `HEAD`, 29-09._
 
 ## Stand
 
-Fase 0 en 1 zijn af. Fase 2 loopt (D-82 config-API, D-85 secrets-store). De registry dekt
-alle acht firma's. **13+ items dicht sinds de herijking.**
+Fase 0 en 1 zijn af. **Fase 2 is de kritieke lijn** — D-82 (config-API) is het enige dat nog
+tussen nu en Web staat. De registry dekt alle acht firma's, dus fase 5 is ook niet meer
+geblokkeerd.
 
-## Twee besluiten van Ferry die vandaag vielen
+## Wat Ferry deze ronde besliste
 
-**D-109 — de firm-DLL is informatie, geen rem.** *"De eod accounts hebben een DLL van $1000
-op zowel evals en pa maar ik houd daar geen rekening mee. Accounts moet handelen tot ze de
+**D-109 · de firm-DLL is informatie, geen rem.** *"Accounts moet handelen tot ze de
 ingestelde target halen of door mij ingestelde DLL bereiken en als de harde DLL limit
-bereikt wordt stopt ie vanzelf."* De registry blijft dus zoals hij is; die waarde voedt
-alleen nog *"ruimte tot de DLL"* in D-96.
+bereikt wordt stopt ie vanzelf."*
 
-**D-110 — zijn eigen DLL is een formule**, geen tabel met getallen:
-
+**D-110 · zijn eigen DLL is een formule:**
 ```
 owner_dll = min( sl_per_contract × dll_sl_multiple × qty ,  ruimte × max_fraction_of_room )
 ruimte    = balans − liq_niveau
 ```
+Geverifieerd op zeven punten uit het fleet-doc (SL 100, multiple 4). 🔴 Hij leest `balans`
+uit **T3**, dus **Pine kan hem niet uitrekenen** — de volle rem hoort aan de
+middlewarekant en kan niet vóór fase 4. Pine bouwt nu alleen de eerste term.
 
-Geverifieerd tegen **zeven** punten uit zijn fleet-doc met SL 100 en multiple 4 — qty 1 t/m
-5 geeft $400/$800/$1.200/$1.600/$2.000, en de 250K en 300K vallen op dezelfde formule.
-Staat in `docs/schema-config.md` §3c.
-
-🔴 **Die formule beslecht een ontwerpvraag die openstond.** Hij leest `qty` uit Pine,
-`liq_niveau` uit de registry en **`balans` uit T3** — dus **Pine kan hem niet uitrekenen**.
-De volledige rem hoort aan de middlewarekant en kan niet vóór fase 4. Wat wél nu kan is de
-eerste term, en dat is precies genoeg om de firm-rem veilig te verwijderen.
+**D-111 · de eval-helft van de widget toont straks drie dingen:** passed en failed **in het
+getoonde venster**, plus het **aantal actieve** evals. `passed_at` is afleidbaar uit de
+fills — de **vorige handelsdag** vóór de eerste trade (Ferry's regel, feestdagen uit het
+fleet-doc overgeslagen).
 
 ---
 
-## 🟨 Pine Dev — D-110, eerste term. En let op de volgorde.
+## 🟦 Middleware App (chat: **App Setup**) — D-82 eerst, dat houdt Web tegen
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-Ferry heeft besloten (D-109): de firm-DLL is informatie, geen rem. Accounts handelen tot
-de target of tot ZIJN DLL; de harde firmalimiet stopt het vanzelf bij de broker.
+1. 🔴 D-82 AFMAKEN — dit is de kritieke lijn. Web (D-83/D-84) kan er niet omheen en
+   staat al twee rondes stil. Auth als ontwerpeis, niet als bijzaak: dit endpoint stuurt
+   orders. Elke schrijfactie door dezelfde validatie als D-80 en in het auditspoor van D-81.
 
-WAT ER VANDAAG STAAT — er zijn DRIE daglimiet-remmen en de firmawaarde is de actieve:
+2. 📱 D-111 — de eval-helft van de widget, en lever dit in TWEE stappen.
+
+   STAP A, kan nu en is één regel: het aantal ACTIEVE evals uit
+   eval_stats.raw_counts.running. Gebruik de RAW counts, niet counts_50k_eq — Ferry vraagt
+   om een aantal, en de 50k-normalisatie bestaat voor de publieke site (D-74) waar
+   accountgrootte misleidt. Op zijn telefoon is 5 accounts gewoon 5.
+
+   STAP B, het venstertellertje. passed_at is AFLEIDBAAR en hoeft dus niet gegokt:
+   de vorige HANDELSDAG vóór de eerste trade op het funded account, met de feestdagen uit
+   het fleet-doc (26 nov, 25 dec, 1 jan, 18 jan, 15 feb) overgeslagen. Dat geeft voor de
+   tien bestaande accounts: PA013 24-07 · PA018 03-08 · PA022 24-08 · PA023 04-09 ·
+   PA024 11-09 · PA025 16-09 · PA026 17-09 · PA027+PA028 18-09 · PA029 23-09.
+
+   🔴 DE FAILED-KANT IS NIET AFLEIDBAAR. Een breached eval wordt nooit funded, heeft dus
+   geen eerste trade. Die telling begint bij nul en loopt vanaf nu. MAAK DAT ZICHTBAAR in
+   de weergave — een failed-teller op 0 die eigenlijk "onbekend" betekent is dezelfde
+   stille nul als de drawdown-fallback in D-68, de ledger-fallback in D-75 en de
+   DLL-van-nul in D-108. Drie keer dezelfde fout in één maand; deze hoeft niet de vierde
+   te worden.
+
+3. 🔴 UIT D-110, EN DIT KOMT BIJ JULLIE TERECHT. De volledige owner-DLL kan alleen aan
+   jullie kant, want hij heeft de BALANS nodig:
+       owner_dll = min( 100 × 4 × qty , (balans − liq_niveau) × 1/3 )
+   Pine bouwt nu alleen de eerste term. Neem de tweede mee in de planning van fase 4
+   (D-92) — niet eerder, en bouw geen schatting van de ruimte. Parameters staan in
+   schema-config.md §3c als owner_caps, gesleuteld op de program-sleutel uit de registry.
+
+4. Loopt nog: D-74, D-69, en D-106 (log per POST welk endpoint gekozen werd — dat haalt
+   de eerste onbekende weg bij het account dat 100% van het afwijkende verkeer draagt).
+```
+
+---
+
+## 🟨 Pine Dev — D-110, en de volgorde is de opdracht
+
+```
+git pull origin claude/middleware-setup-guide-afhvtk
+
+D-110 staat klaar. De inhoud is één regel; de VOLGORDE is waar het om gaat.
+
+WAT ER VANDAAG STAAT — drie daglimiet-remmen, en de firmawaarde is de actieve:
   acctDLL  = input.float(1000, "PA Daily Loss Limit ($)")          r. 486
   acctDLL := pfDLL                                                  r. 1010  <- preset wint
   dllHit   = acctDLL > 0 and (isPA or (isEval and ddModel=="EOD"))
@@ -49,66 +87,32 @@ WAT ER VANDAAG STAAT — er zijn DRIE daglimiet-remmen en de firmawaarde is de a
   enableDailyLossLimit (default FALSE) + dailyLossLimit (700) -> lossHit
   useRiskGate (default FALSE) + rgDLL (150)
 
-GEVRAAGD: dllHit remt niet meer op de firmawaarde, maar op Ferry's eigen waarde.
+GEVRAAGD (Ferry, D-109): dllHit remt niet meer op de firmawaarde maar op Ferry's eigen
+waarde. De firmalimiet stopt het account vanzelf bij de broker.
 
-🔴 DE VOLGORDE IS BINDEND EN DIT IS HET HELE PUNT.
-Haal je dllHit weg terwijl enableDailyLossLimit op FALSE staat — en dat is de default —
-dan heeft dat account GEEN ENKELE Pine-rem meer en loopt het door tot de firmalimiet.
-Die BREACHT een eval in plaats van hem te pauzeren. Dus:
+🔴 BINDENDE VOLGORDE — haal je dllHit weg terwijl enableDailyLossLimit op FALSE staat, en
+dat is de default, dan heeft dat account GEEN ENKELE Pine-rem meer en loopt het door tot de
+firmalimiet. Die BREACHT een eval in plaats van hem te pauzeren.
   1. eerst Ferry's eigen rem aan, met de waarde uit de formule;
   2. aantoonbaar laten zien dat hij werkt;
-  3. dan pas de firm-rem uit dllHit halen.
-Nooit in één commit zonder dat stap 1 en 2 staan.
+  3. dan pas de firmwaarde uit dllHit halen.
+Niet in één commit zonder dat stap 1 en 2 staan.
 
-DE WAARDE DIE JE INVULT — alleen de eerste term, want die heeft alleen qty nodig:
-  owner_dll = sl_per_contract (100) × dll_sl_multiple (4) × qty
-Dat geeft $400 bij qty 1, $800 bij 2, $1.200 bij 3, $1.600 bij 4, $2.000 bij 5 — exact de
-ladder uit Ferry's fleet-doc, op zeven punten nagerekend.
+DE WAARDE — alleen de eerste term, want die heeft alleen qty nodig:
+  owner_dll = 100 × 4 × qty  ->  $400 / $800 / $1.200 / $1.600 / $2.000 bij qty 1 t/m 5
+Exact de ladder uit Ferry's fleet-doc, op zeven punten nagerekend.
 
-⛔ DE TWEEDE TERM NIET IN PINE BOUWEN. "nooit meer dan 1/3 van de ruimte" heeft de BALANS
-nodig en die kent Pine niet. Die helft komt in de middleware, na fase 4 (D-92). Bouw er
-geen benadering voor — een geschatte ruimte is erger dan geen ruimte, want hij ziet eruit
-als de echte.
+⛔ DE TWEEDE TERM NIET IN PINE. "nooit meer dan 1/3 van de ruimte" heeft de BALANS nodig en
+Pine kent die niet. Die komt in de middleware na fase 4. Bouw er geen benadering voor: een
+geschatte ruimte is erger dan geen ruimte, want hij ziet eruit als de echte.
 
-📌 acctDLL blijft in het script: D-96 heeft de firmawaarde nodig als WEERGAVE
-("ruimte tot de DLL"). Alleen dllHit gebruikt hem niet meer.
-📌 Dit raakt het live pad. Zelfde discipline als bij D-107: laat zien dat het alleen om de
-rem gaat en niet om handelslogica.
-```
+📌 acctDLL blijft in het script — D-96 heeft de firmawaarde nodig als WEERGAVE. Alleen
+dllHit gebruikt hem niet meer.
+📌 Zelfde discipline als bij D-107: laat zien dat het om de rem gaat en niet om
+handelslogica. Dat bewijs heeft D-86 straks nodig voor het OOS-klokbesluit.
 
----
-
-## 🟦 Middleware App (chat: **App Setup**) — de widget afleveren, en door op fase 2
-
-```
-git pull origin claude/middleware-setup-guide-afhvtk
-
-1. 📱 DE WIDGET AFLEVEREN VOOR FERRY'S IPHONE.
-   D-105 staat op done — ik heb de hele keten nagemeten, niet alleen het script:
-   vier splitrijen, eval op aantallen uit eval_stats.counts_50k_eq (geen bedragen),
-   laatste handelsdag uit yesterday.session_date, node --check schoon. En doorgemeten
-   dat de API die velden ook echt vult: _build_eval_stats() r. 185 -> viewer.py:310/328.
-
-   Wat ik NIET kan en jullie wel: ÉÉN VERIFICATIE TEGEN LIVE DATA vanaf de VPS.
-   curl de echte /api/widget en controleer drie dingen:
-     - eval_stats.counts_50k_eq bevat niet-nul waarden (anders toont de eval-rij "—"
-       en ziet een kapotte keten eruit als een lege dag);
-     - yesterday.session_date is gevuld en is de laatste dag MET trades;
-     - stacks.funded.today en stacks.eval.today tellen op tot het top-level today.
-   Meld de uitkomst; dan weet Ferry dat wat hij op zijn telefoon zet ook echt klopt.
-
-2. D-82 afmaken — dat deblokkeert Web (D-83/D-84) en is nu de kritieke lijn.
-
-3. 🔴 NIEUW UIT D-110, en dit komt bij jullie terecht: Ferry's eigen DLL is een formule
-   en de volledige vorm KAN ALLEEN AAN JULLIE KANT.
-       owner_dll = min( sl_per_contract × dll_sl_multiple × qty , ruimte × 1/3 )
-       ruimte    = balans − liq_niveau
-   qty komt uit Pine, liq_niveau uit de registry, BALANS UIT T3 (D-92). Pine bouwt nu
-   alleen de eerste term. Neem de tweede mee in de planning van fase 4 — niet eerder, en
-   bouw geen schatting van de ruimte. Parameters staan in schema-config.md §3c als
-   owner_caps, gesleuteld op de program-sleutel uit de registry.
-
-4. D-74 en D-69 lopen nog; D-106 (log per POST welk endpoint gekozen werd) blijft open.
+DAARNA: D-85 loopt bij jullie samen met Middleware App (geheimen uit de chart-inputs).
+D-86 blijft wachten tot fase 2 rond is.
 ```
 
 ---
@@ -118,23 +122,34 @@ git pull origin claude/middleware-setup-guide-afhvtk
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
 
-D-104, D-100 en D-68 staan op done. De registry dekt alle acht firma's en D-96 faalt niet
-meer op een ontbrekende regel — dat was de blokkade voor fase 5.
+D-104, D-100 en D-68 zijn dicht. De registry dekt alle acht firma's en D-96 faalt niet meer
+op een ontbrekende regel — dat was de blokkade voor fase 5.
 
-Door op D-101 (interpreter voor de Pine-deelverzameling, hard weigeren op het onbekende)
-en daarna D-102 (door de hele molen).
+D-101 afmaken (de interpreter voor de Pine-deelverzameling die HARD weigert op het
+onbekende), daarna D-102: door de hele molen — walk-forward, Monte Carlo, stress,
+prop-firm-simulatie op het resultaat van de interpreter in plaats van op een
+herimplementatie.
 
-📌 Uit D-110: de owner-DLL-formule gebruikt `ruimte = balans − liq_niveau`. Als jullie
-prop-firm-simulatie een eigen daglimiet modelleert, gebruik dan de FIRMAWAARDE uit de
-registry en niet Ferry's eigen rem — die is een operationele keuze en hoort niet in de
-simulatie. Dat is dezelfde scheiding als D-109.
+📌 Uit D-109/D-110, en dit raakt jullie simulatie direct: er zijn nu TWEE daglimieten en ze
+horen niet op één hoop. De FIRMAWAARDE staat in de registry en is wat de prop firm
+handhaaft — die hoort in de simulatie. Ferry's EIGEN rem (owner_caps, schema-config.md §3c)
+is een operationele keuze en hoort er NIET in. Simuleer je zijn rem mee, dan meet je zijn
+gedrag in plaats van de firmaregels, en dan is het cijfer niet meer vergelijkbaar tussen
+programma's. Dat is dezelfde scheiding als D-109.
 ```
 
 ---
 
-## 🟪 Web — D-82 is het laatste dat voor jullie staat
+## 🟪 Web — nog één item, en dan zijn jullie aan de beurt
 
-Zodra de config-API er is zijn **D-83 en D-84** aan de beurt. Lees `docs/schema-config.md`
-§2, §3 en §5 — en nu ook **§3c**, want `owner_caps` komt in hetzelfde scherm te staan naast
-de firmaregels: *firmaregel $1.000 · jouw rem $400*. Dat naast elkaar tonen is de kern van
-wat Ferry in D-109 vroeg.
+**D-82 is het laatste dat voor jullie staat** en het loopt nu bij Middleware App. Zodra de
+config-API er is beginnen D-83 en D-84.
+
+Lees `docs/schema-config.md` §2, §3, §5 — en nu ook **§3c**, want `owner_caps` komt in
+hetzelfde scherm te staan **naast** de firmaregels: *firmaregel $1.000 · jouw rem $400*.
+Dat naast elkaar tonen is de kern van wat Ferry in D-109 vroeg: hij wil kunnen zien wat de
+firma oplegt én wat hij zichzelf oplegt, zonder ze te verwarren.
+
+⚠️ En het punt dat bepaalt wat "af" betekent: **met dit scherm wordt de webapp onderdeel van
+het live executiepad.** Vandaag toont een fout daar een verkeerd getal; straks stuurt hij
+een order naar het verkeerde account.

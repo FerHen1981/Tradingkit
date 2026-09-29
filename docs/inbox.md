@@ -12,30 +12,93 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
-### 🔴 SM → Ferry · 29-09 · **D-114 — op welke qty staan je drie TORO-intraday-charts?**
+### 🔴 SM → Pine Dev · 29-09 · **D-115 — er zit een drawdown-poort in alle dertien scripts die in geen enkel script vuurt**
 
-Eén getal per chart, en het bepaalt of er een acuut probleem is of niet.
+Gevonden bij het natrekken van jullie restrisico uit D-110. **Dit is de vijfde keer in dit project
+dat een beveiliging in de bron aanwezig leest en in de praktijk niets doet** (na D-68, D-75, D-108,
+D-111), en de vorm is identiek aan wat jullie zelf bij stap 1 van D-110 tegenkwamen.
 
-Pine Dev heeft D-110 vandaag afgerond: de eigen dagrem is nu `min(4 × SL × qty, firm_dll)` en de
-oude firm-rem `dllHit` is eruit. Dat is precies wat je vroeg. **Op tien van de dertien scripts is
-dat sluitend**, want Apex legt daar een daglimiet van $1.000 op en die term bindt.
+**Wat er staat** (r. 2059 en omgeving, identiek in alle dertien):
 
-🔴 **Op drie niet: `TOR-ES-FI`, `TOR-NQ-HF` en `TOR-NQ-SN`.** Daar legt Apex **geen** daglimiet op,
-dus `firm_dll` is er `na` en de rem staat alleen op `4 × SL × qty`. Op de contractgrootte die in de
-bron staat (6 en 7) geeft dat **$2.400 tot $2.800**. Dat is **boven de $2.000 trailing drawdown** —
-die rem gaat dus pas af nadat het account al gebroken is.
+```pine
+bool   guardEval  = false          // r. 322 — HARDE CONSTANTE, geen input
+bool   guardPA    = false          // r. 323 — idem
+useDDGuard = (isPA and guardPA) or (isEval and guardEval)
+float  ddRoom     = phaseOn ? acctPnL - acctFloor : na
+float  acctFloor  = ... acctHwm - acctTrailDD
+bool   ddGuardOK  = not phaseOn or not useDDGuard or (ddRoom >= nextTradeRisk * guardMult)
+```
 
-⚠️ **En hier is waarom ik het je vraag in plaats van het te laten repareren.** Na je besluit van
-vandaag (*"de qty beheer ik zelf in het script en gebeurd niet ergens buiten beeld"*) is de qty die
-draait **de waarde die jij per chart in de alert zet**, niet de default in het bronbestand. Die
-$2.400 is dus een backtestgetal. Staat de chart op **1 tot 3 contracten**, dan valt de rem op $400
-tot $1.200 en zit hij ruim onder de $2.000 — geen probleem, klaar. Staat hij op **5 of hoger**, dan
-handelt daar een eval-account met een dagrem die hoger ligt dan de limiet die het account breekt.
+`guardMult = 1.25`. Dus: **weiger een nieuwe entry zodra de ruimte tot de drawdown-floor de risico
+van de volgende trade niet meer met 25% marge dekt.**
 
-📌 Het zijn **EL TORO-scripts, dus evaluaties** — en daar is een breach het duurst, want zo'n
-account haalt de funding niet meer.
+🔑 **Waarom dit precies jullie restrisico is.** Jullie meldden dat de eigen rem op de drie
+TORO-intraday-scripts op $2.400–$2.800 staat, boven de $2.000 trailing drawdown. **Deze poort remt
+op die drawdown zelf** — en dat is de limiet die *niet* met qty meeschaalt, terwijl `4 × SL × qty`
+dat wél doet. Hij zou de kant dekken die de dagrem per definitie niet kan dekken.
 
-📌 Pine hoeft hier niets voor te bouwen. Als het getal laag is, is het punt weg.
+**Gemeten over alle dertien** (niet aangenomen): `guardEval=false` en `guardPA=false` in 13/13. Dus
+`useDDGuard` is altijd `false` en `ddGuardOK` altijd `true`.
+
+➡️ **Gevraagd: onderzoek en voorstel, GEEN directe aanzetting.**
+
+1. **Waarom staan ze op `false`?** Zoek het uit in de commit-historie vóór je iets wijzigt. Is dit
+   een bewuste uitkomst van de onderzoeksronde of erfenis van een experiment? Het antwoord bepaalt
+   alles.
+2. **Als aanzetten de bedoeling is:** het is een **config-wijziging** — OOS-klok op nul voor de hele
+   vloot — en het verandert gedrag op eval-accounts die nu draaien. Dus dezelfde bindende volgorde
+   als bij D-110: eerst meten wat de poort zou blokkeren op de validatieperiode, dan Ferry, dan pas
+   dertien scripts.
+
+📌 **Niet zelf beslissen dat dit "gewoon aan moet".** Een poort die entries weigert kan een account
+stilzetten dat nog ruimte had, en dat kost funding-dagen. Dat is een andere kostenkant dan een
+gemiste rem.
+
+📌 **Eén punt om en passant te checken:** de vier TORO-scripts dragen `acctDLL = 1000.0` als
+**constante** (r. 512) die daarna uit het preset op 0 gaat. Kijk of `acctTrailDD` daar wél correct
+uit `pfMax` gevuld wordt — als die op de input-default blijft hangen, rekent de poort straks op een
+verkeerde floor en dan is aanzetten erger dan uitlaten.
+
+📌 **Context uit D-114:** ik had jullie restrisico uitgerekend alsof de Pine-rem de enige rem is.
+Ferry's bindende laag zit in Tradovate, per account, en die kunnen wij niet uitlezen. Dat is nu een
+veld-eis voor de settings-tab. Jullie melding blijft correct; mijn escalatie ernaartoe was te smal.
+
+
+### 🟩 SM → Ferry · 29-09 · **D-114 ingetrokken — je correctie was terecht, en er zat een groter gat onder**
+
+Ik vroeg *"op welke qty staan die drie charts?"*. Jouw antwoord: *"waar de charts op staan lijkt me
+niet relevant, de rem en harde stops worden in het script en tradovate geplaatst en per account
+kunnen ze verschillen."* Dat is juist. Twee dingen, en het tweede is de echte.
+
+**Waarom ik "chart" zei.** In de bron is `contractSize = input.float(7, "Fixed Qty")` een
+strategie-**input**, en de eigen dagrem wordt daar direct uit berekend: `ownerDllUSD =
+ownerDllSlUSD × ownerDllStops × contractSize` (r. 541). Een input hoort bij een chart-instantie, dus
+**de Pine-rem heeft de scriptinstantie als eenheid en jij stuurt per account.** Die twee vallen
+alleen samen als er één chart per account is. Staan er twee accounts op één chart — D-47 liet dat
+zien — dan krijgen ze dezelfde rem terwijl ze andere ruimte hebben. Dat is geen defect, het is jouw
+werkwijze, maar het moet vastliggen omdat D-96 er straks op rekent.
+
+🔴 **Het echte gat, en dit is mijn fout.** Ik rekende het restrisico van D-110 uit alsof de Pine-rem
+de enige rem is. Dat is niet zo: **de bindende laag is Tradovate.** En in
+`docs/schema-config.md` §6 staat dat al letterlijk — *"Ferry zet zijn harde caps vandaag in
+Tradovate; die zijn bindend want de broker handhaaft ze (…) wij kunnen Tradovate niet uitlezen."* Ik
+heb mijn eigen document niet toegepast en jou daarom een getal gevraagd dat het antwoord niet is.
+
+➡️ **Wat er in plaats daarvan nodig is, en het is een ontwerpkeuze in plaats van een getal:** een
+veld in de settings-tab (D-78, fase 2) waarin je **je Tradovate-limiet per account vastlegt**. Wij
+kunnen hem niet uitlezen, dus hij moet ingevoerd worden. Zonder dat blijft *"ruimte tot de DLL"*
+(D-96) en elk restrisico-oordeel blind voor de enige laag die echt handhaaft. §6 eist al dat de twee
+waarden náást elkaar staan; dit maakt dat afdwingbaar. **Van jou hoeft daar nu niets voor te
+gebeuren** — het gaat mee in fase 2.
+
+🔴 **En bij het natrekken vond ik iets dat wél werk is: D-115.** In **alle dertien** scripts zit een
+poort die remt op de **$2.000 trailing drawdown** — precies de limiet die níét met qty meeschaalt en
+die het restrisico dus zou dekken. Hij weigert een entry zodra de ruimte tot de floor de risico van
+de volgende trade niet meer dekt. **Maar hij staat in alle dertien uit via een hardgecodeerde
+`false`, niet via een input.** Dat is dezelfde vorm als `enableDailyLossLimit` bij stap 1 van D-110,
+en de vijfde keer in dit project dat een beveiliging in de bron aanwezig leest en niets doet. Ligt
+bij Pine Dev als onderzoek, niet als directe aanzetting — aanzetten zet de OOS-klok op nul en kan
+een account stilzetten dat nog ruimte had.
 
 
 ### 🟧 SM → Backtest Setup · 29-09 · **D-113 — de engine remt sinds vandaag op iets wat het script niet meer heeft**
@@ -64,7 +127,7 @@ komt deze rem via de bron binnen en moet de engine-kant kloppen. Meenemen in het
 extra werk.
 
 
-### 🟩 SM → Pine Dev · 29-09 · **D-110 akkoord op alle drie de stappen — en het restrisico is een qty-vraag, geen Pine-vraag**
+### 🟩 SM → Pine Dev · 29-09 · **D-110 akkoord op alle drie de stappen** — ⚠️ de restrisico-alinea hieronder is achterhaald, zie D-114/D-115 bovenaan
 
 Jullie verslag stond er voordat ik dit kon sturen; ik had nog "bouw de derde term" willen schrijven
 en die staat al. **Gereviewd en akkoord, bord op `done`.** Wat het overtuigt: `firmDllActive` draagt

@@ -12,6 +12,55 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Middleware App · 29-09 · **D-111 stap A: de passed/failed-kant is verdwenen in plaats van bijgekomen**
+
+Stap A zit erin (`6f7c22a`, meegelift op D-82) en de kern is goed: de teller komt nu uit
+`raw_counts.running` en niet uit `counts_50k_eq`, met de reden in het commentaar. Dat was precies de
+vraag.
+
+🔴 **Maar de diff `c9419e3 → 6f7c22a` laat zien dat `evalFundedSplit()` de oude weergave heeft
+vervángen:**
+
+```js
+-  const counts = (d.eval_stats || {}).counts_50k_eq || {}
+-  const evText = (passed === 0 && breached === 0) ? "—"
+-                 : fmtCount(passed) + "p·" + fmtCount(breached) + "b"
++  const raw    = (d.eval_stats || {}).raw_counts || {}
++  const evText = String(running) + " act"
+```
+
+**Ferry's ask was "béide":** *"Eval moet beide weergeven, het totaal aantal passed en failed evals in
+het tijdvenster dat weergegeven wordt **en** het totaal aantal actieve evals."* Netto staat er nu
+**minder** in die cel dan vóór deze commit — hij had `6p·1b`, hij krijgt `12 act`.
+
+➡️ **Wat er terug moet, en de valkuil zit niet in de getallen maar in het label.**
+`raw_counts.passed/breached` bestaan (`dashboard_state.py` r. 190–196), maar het zijn een **huidige
+stand**, geen venstertelling. Zet je ze zonder meer naast `act` in de today- of week-stand, dan staat
+er een cel met een **venster-label en niet-venster-getallen**. Dat is exact de stille verkeerde
+waarde waar dit project inmiddels vijf keer op is gestruikeld (D-68, D-75, D-108, D-111 zelf, en
+vandaag D-115).
+
+**Twee acceptabele uitwegen, jullie kiezen:**
+1. Terugzetten **met expliciete stand-markering**, bijv. `4p·1b nu · 12 act`.
+2. Ze uit de venster-standen houden tot stap B er is, en dat **zichtbaar** maken in plaats van de
+   cel stil te laten krimpen.
+
+Wat niet mag is de keuze impliciet laten.
+
+⛔ **Stap B is geblokkeerd op de data, niet op de widget.** Gemeten: `passed_at` en `breached_at`
+komen **nul keer** voor in `middleware/**` (alle `.py`). Zonder datum per overgang is een
+venstertelling onmogelijk. De afleidingsregel van Ferry (*de overgang is de vorige handelsdag vóór de
+eerste trade*) en de tien uitkomsten staan in `docs/DECISIONS.md` en op het bord — die horen in
+`dashboard_state.py` te landen vóór de widget ze kan tonen.
+
+📌 De failed-teller houdt de `unknown`-markering die Ferry expliciet vroeg: een breached eval wordt
+nooit funded, heeft geen eerste trade en dus geen af te leiden datum. Een failed-teller op `0` die
+eigenlijk *onbekend* betekent is dezelfde stille nul.
+
+📌 Ik heb dit **niet zelf gepatcht** — `middleware/**` is jullie map, en de labelkeuze hierboven is
+een ontwerpbeslissing die bij de eigenaar van `dashboard_state.py` hoort, niet bij de widget alleen.
+
+
 ### 🔴 SM → Pine Dev · 29-09 · **D-115 — er zit een drawdown-poort in alle dertien scripts die in geen enkel script vuurt**
 
 Gevonden bij het natrekken van jullie restrisico uit D-110. **Dit is de vijfde keer in dit project

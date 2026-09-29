@@ -6364,3 +6364,92 @@ cd /tmp && rm -rf tk && git clone --depth 1 -b claude/middleware-setup-guide-afh
 Widget-file (`MEX_Today.js`) wordt handmatig naar Scriptable geplakt zoals altijd.
 
 D-82 op review-akkoord (Web ontblokkerd). D-111 stap A op review; stap B wacht op je datamodel-akkoord.
+## 29-09 · Pine Dev → Scrum Master + Ferry — D-110 **stap 1** gedaan, stap 2 kan nog niet
+
+Stap 1 staat, alle dertien op **v3.6.0**. En de volgorde die je oplegde blijkt geen
+formaliteit te zijn: **op elf van de dertien scripts mag stap 2 vandaag niet.** Dat is de
+belangrijkste uitkomst van deze ronde, dus die eerst.
+
+### 🔴 De formule is op de bevroren contractgrootte LOSSER dan de firmalimiet
+
+`4 × $100 × qty` geeft $400 bij qty 1 — maar de scripts staan bevroren op qty 2 t/m 8:
+
+| Script | qty | eigen rem | firm-rem | stap 2? |
+|---|---|---|---|---|
+| LEON MYM CON EOD Q2 · CON INTRA Q2 | 2 | **$800** | $1.000 | ✅ mag |
+| LEON MYM PROD EOD | 3 | $1.200 | $1.000 | ⛔ |
+| BANDIDO · TORO GC | 5 | $2.000 | $1.000 | ⛔ |
+| MATADOR · REY EOD · REY INTRA · TORO ES | 6 | $2.400 | $1.000 | ⛔ |
+| TESORO · TORO NQ HF · TORO NQ SNIPER | 7 | $2.800 | $1.000 | ⛔ |
+| PATRON | 8 | $3.200 | $1.000 | ⛔ |
+
+Haal je `dllHit` weg op MATADOR zoals hij nu staat, dan gaat de bindende rem van **$1.000
+naar $2.400**. Dat is dezelfde faalmodus die jouw volgorde-instructie moest voorkomen —
+alleen in slow motion, want er blijft wél een rem staan. Hij is alleen ruimer dan wat je
+weghaalt.
+
+⚠️ **En bij acht van de dertien is de eigen rem groter dan de $2.000 trailing drawdown.**
+Eén dag op die limiet breekt het account voordat de firma of Pine iets hoeft te doen. Dat is
+geen fout in de formule — hij klopt op qty 1 t/m 5 zoals je hem gaf — maar in de **qty**: de
+bevroren contractgrootte is de *backtest*grootte, niet wat jij live handelt (D-53, en het is
+exact de muur uit `CLAUDE.md`: *"de bevroren volle contractgrootte is niet
+fresh-account-funderbaar"*).
+
+➡️ **Stap 2 wordt dus geen ronde over dertien scripts maar per script.** Zodra de qty op een
+script staat wat je er echt op handelt (1–3), valt de eigen rem op $400–$1.200 en wordt hij
+vanzelf de strengste. Dán mag `dllHit` daar weg.
+
+### Wat er nu in de dertien staat
+
+Drie zichtbare inputs plus een override, in groep 7 naast de firmawaarde:
+
+```pine
+ownerDllSlUSD  = input.float(100, "Owner DLL - stop per contract ($)", …)
+ownerDllStops  = input.float(4,   "Owner DLL - stops per dag", …)
+dailyLossLimit = input.float(0,   "Owner DLL - override ($, 0 = formule)", …)
+float ownerDllUSD       = ownerDllSlUSD * ownerDllStops * math.max(contractSize, 1.0)
+float dailyLossLimitEff = dailyLossLimit > 0 ? dailyLossLimit : ownerDllUSD
+```
+
+`enableDailyLossLimit` stond in **twaalf van de dertien** als harde constante `false` — de
+machinerie eronder werkte, maar niets kon haar ooit voeden. Alleen MATADOR had er inputs van.
+Nu is het in alle dertien dezelfde vorm, en hij staat **aan**.
+
+⛔ **De ⅓-ruimteterm zit er bewust niet in**, zoals je zei. Die heeft balans en
+liquidatieniveau nodig, en de balans komt uit T3. Een benadering in Pine zou een tweede
+stille saldobron zijn — dat is dezelfde regel die D-110 zelf hanteert om de rem uiteindelijk
+in de middleware te leggen.
+
+📌 **`acctDLL` en `dllHit` zijn niet aangeraakt.** D-96 heeft de waarde nodig als weergave,
+en twee remmen naast elkaar is veilig: de strengste wint.
+
+📌 **Eén neveneffect, en het is er geen:** `dailyLossLimitEff` verloor zijn `* dailyScaleMult`.
+`dailyScaleMode` is in alle dertien de constante `"Fixed USD"`, dus die factor was altijd
+1.0. De qty zit nu in de formule zelf; zo kan hij er niet per ongeluk twee keer in.
+
+### "Aantoonbaar laten werken" — wat ik wél en niet kon bewijzen
+
+✅ **`pine/tools/owner_dll_check.py`** (nieuw, mijn map). Die leest de defaults **uit de
+`.pine`-bron zelf** — niet overgetypt — rekent de formule na, toetst de haltvoorwaarde
+(`−limiet + $0,01` houdt de dag open, `−limiet` sluit hem) en zet de firm-rem ernaast. **Die
+laatste kolom is de poort naar stap 2** en staat vandaag op ⛔ voor elf scripts. Draai hem
+opnieuw zodra een qty verandert.
+
+✅ **De haltmachinerie is al live-beproefd.** `lossHit` en `dllHit` komen samen op dezelfde
+regel uit in `dayHalted`; er komt geen nieuw pad bij, alleen een tweede voeding van een pad
+dat vandaag al draait.
+
+🔴 **Wat ik NIET kon doen: een echte backtest.** Er staat geen marktdata in deze container,
+en `backtest/engine.py` modelleert alleen de firm-DLL (`cfg.acct_dll`), niet de eigen rem —
+dat zou een wijziging in Backtest Setup's map zijn. Ik heb dus de **rekenkundige en
+structurele** kant bewezen, niet de uitkomst op historische dagen. Wil je dat laatste, dan is
+het een vraag aan Backtest Setup: `acct_dll = 4 × SL × qty` zetten in een run reproduceert de
+eigen rem exact, want de voorwaarde heeft dezelfde vorm.
+
+### OOS-klok
+
+**Ja, hele vloot.** Een rem die aan gaat is een config-wijziging, geen plumbing. Dat is de
+regel uit `CLAUDE.md` toegepast, geen nieuw oordeel — maar het staat in `DEPLOYED.md` zodat
+het zichtbaar is en niet stilletjes gebeurt.
+
+➡️ Hierna: **D-85 met Middleware App** (D-82 staat er nu). D-86 wacht op fase 2.

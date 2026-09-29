@@ -250,8 +250,26 @@
 //   meedoet. Met de huidige defaults verandert die min niets; zonder hem zou stap 2
 //   dekking verliezen op een chart waar `includeOpenInLoss` uit staat.
 //   DE KLOK: die staat sinds v3.6.0 al op nul; deze versie zet hem niet opnieuw.
+// v3.8.0 (29-09, D-110 stap 2): `dllHit` is weg. Eén dagrem over.
+//   Hij remde op de firmawaarde en stond los van de eigen rem. Sinds v3.7.0 zit diezelfde
+//   firmawaarde IN de eigen rem, met exact zijn twee voorwaarden in `firmDllActive`, dus
+//   `lossHit` haltte per definitie al op of vóór het punt waarop hij zou vuren. Niet
+//   "ongeveer overbodig" maar strikt overbodig -- en dat is de enige reden dat hij nu weg
+//   mag. `pine/tools/owner_dll_check.py` toetste dat per script tegen de bron en stond op
+//   alle dertien groen vóórdat deze regel verdween; hij bewaakt nu ook dat `dllHit` niet
+//   terugkomt.
+//   WAT ER NIET VERANDERT: `acctDLL` blijft staan. D-96 heeft de firmawaarde nodig als
+//   weergave ("ruimte tot de DLL") en de eigen rem leest hem. Ook de tooltip bij die input
+//   blijft, zodat op de chart zichtbaar blijft wat de firma oplegt naast wat jij oplegt.
+//   ZICHTBAAR: een dag die op de firmawaarde stopt heet voortaan "Daily Loss" in plaats
+//   van "PA Daily Loss Limit" -- dat was de naam van de rem die weg is. De DLL-annotatie
+//   op de chart luistert nog steeds mee (op "Daily Loss" en "Risk-gate DLL").
+//   ⚠️ RESTRISICO, en dat is ouder dan deze wijziging: op de drie TORO-intraday-evals geldt
+//   er geen firmalimiet (Apex legt er geen op), dus daar is de eigen rem ongedekt op
+//   $2.400 t/m $2.800 -- boven de $2.000 trailing drawdown. `dllHit` vuurde daar ook al
+//   niet, dus zijn vertrek verandert er niets. Het zit in de qty, niet in de formule.
 var string SCRIPT_NAME = "MΞX ΞL TORO · GC SNIPER EOD"
-var string currentVersion = "v3.7.0"
+var string currentVersion = "v3.8.0"
 strategy("MΞX ΞL TORO · GC SNIPER EOD · " + currentVersion, shorttitle="TOR-GC-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1756,12 +1774,18 @@ lossHit     = dailyLossOn and lossBasisEff <= -dailyLossLimitEff
 drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
-// D-108: sinds D-68 schrijft de registry een eerlijke 0 waar een programma GEEN dagverlies-
-// limiet kent (alle Apex-evals, MFFU, TakeProfit, TradeDay, DayTraders, Tradeify). Pine las
-// die 0 als "limiet van nul" in plaats van "geen limiet": runningPnL <= -0 is waar zodra de
-// dag een cent onder nul staat, dus de dag werd meteen stilgelegd. Nul betekent hier GEEN
-// limiet -- dat is de registry-afspraak, niet mijn interpretatie.
-dllHit      = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+// D-110 stap 2 (29-09): `dllHit` STOND HIER en is weg. Hij remde op de firmawaarde:
+//     dllHit = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+// Sinds stap 1b zit diezelfde firmawaarde IN de eigen rem (`firmDllActive` draagt exact
+// deze twee voorwaarden, `dailyLossLimitEff` is er de min mee). Daardoor halteert `lossHit`
+// per definitie op of vóór het punt waarop `dllHit` zou vuren, en was hij niet "ongeveer
+// overbodig" maar strikt overbodig. `pine/tools/owner_dll_check.py` toetst dat per script
+// tegen de bron en stond op alle dertien groen voordat deze regel verdween.
+// ⚠️ `acctDLL` zelf BLIJFT: D-96 heeft de firmawaarde nodig als weergave ("ruimte tot de
+// DLL"), en de eigen rem leest hem. Alleen de tweede, losse halt is weg.
+// 📌 De D-108-notitie die hier stond -- nul in de registry betekent GEEN limiet, niet een
+// limiet van nul -- geldt onverminderd. Hij leeft nu in `firmDllActive` (`acctDLL > 0`) en
+// in `consistencyOK` (`consistencyPct <= 0`).
 // --- risk-gate: sessie-state op GEREALISEERDE P&L ---------------------------
 var float rgBaseNet    = na
 var float rgPeak       = 0.0
@@ -1794,9 +1818,9 @@ bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Tr
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
 dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dayTrailUSD
 dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSD)
-if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
+if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
     dayHalted := true
-    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
+    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : "Equity Lock"
 
 // === ACCOUNT ENGINE (trailing floor / eval goal / payout) ====================
 float acctPnL      = acctPnlOffset + strategy.netprofit - paResetPnLPrev + strategy.openprofit
@@ -2688,7 +2712,7 @@ f_evtLabel(string _txt, color _col) =>
     f_capDrawings()
 bool _haltEdge = dayHalted and not dayHalted[1]
 if inDrawWin and barstate.isconfirmed
-    if lblDll and _haltEdge and (haltReason == "PA Daily Loss Limit" or haltReason == "Risk-gate DLL" or haltReason == "Daily Loss")
+    if lblDll and _haltEdge and (haltReason == "Risk-gate DLL" or haltReason == "Daily Loss")
         f_evtLabel("⛔ DLL · " + haltReason + " $" + str.tostring(runningPnL, "#"), color.new(vNEG, 20))
     if lblDayCap and _haltEdge and (haltReason == "Day-cap" or haltReason == "Day-trail" or haltReason == "Daily Target")
         f_evtLabel("🎯 Day cap · " + haltReason + " $" + str.tostring(riskDayPeak, "#"), color.new(vPOS, 20))

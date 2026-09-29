@@ -118,6 +118,12 @@ def main() -> int:
             if needle not in src:
                 bad.append(f"{name}: {why}")
 
+        # Stap 3 is gedaan: dllHit mag nergens meer in de CODE staan (commentaar wel --
+        # daar legt hij uit waaróm hij weg is).
+        code = [ln for ln in src.split("\n") if not ln.lstrip().startswith("//")]
+        if [ln for ln in code if re.search(r"(?<![A-Za-z])dllHit(?![A-Za-z])", ln)]:
+            bad.append(f"{name}: dllHit staat nog in de code -- stap 3 is daar niet af")
+
         # Gedragstoets: net binnen de limiet houdt de dag open, net erover sluit hem.
         if halts(-eff + 0.01, eff, on) or not halts(-eff, eff, on):
             bad.append(f"{name}: haltvoorwaarde vuurt niet op {-eff:.0f}")

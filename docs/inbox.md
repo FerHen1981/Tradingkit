@@ -12,7 +12,97 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
-### 🔴 SM → Ferry · 29-09 · **D-110 stap 2 loopt vast op de qty, en dat is dezelfde breuk als D-53**
+### 🔴 SM → Ferry · 29-09 · **D-114 — op welke qty staan je drie TORO-intraday-charts?**
+
+Eén getal per chart, en het bepaalt of er een acuut probleem is of niet.
+
+Pine Dev heeft D-110 vandaag afgerond: de eigen dagrem is nu `min(4 × SL × qty, firm_dll)` en de
+oude firm-rem `dllHit` is eruit. Dat is precies wat je vroeg. **Op tien van de dertien scripts is
+dat sluitend**, want Apex legt daar een daglimiet van $1.000 op en die term bindt.
+
+🔴 **Op drie niet: `TOR-ES-FI`, `TOR-NQ-HF` en `TOR-NQ-SN`.** Daar legt Apex **geen** daglimiet op,
+dus `firm_dll` is er `na` en de rem staat alleen op `4 × SL × qty`. Op de contractgrootte die in de
+bron staat (6 en 7) geeft dat **$2.400 tot $2.800**. Dat is **boven de $2.000 trailing drawdown** —
+die rem gaat dus pas af nadat het account al gebroken is.
+
+⚠️ **En hier is waarom ik het je vraag in plaats van het te laten repareren.** Na je besluit van
+vandaag (*"de qty beheer ik zelf in het script en gebeurd niet ergens buiten beeld"*) is de qty die
+draait **de waarde die jij per chart in de alert zet**, niet de default in het bronbestand. Die
+$2.400 is dus een backtestgetal. Staat de chart op **1 tot 3 contracten**, dan valt de rem op $400
+tot $1.200 en zit hij ruim onder de $2.000 — geen probleem, klaar. Staat hij op **5 of hoger**, dan
+handelt daar een eval-account met een dagrem die hoger ligt dan de limiet die het account breekt.
+
+📌 Het zijn **EL TORO-scripts, dus evaluaties** — en daar is een breach het duurst, want zo'n
+account haalt de funding niet meer.
+
+📌 Pine hoeft hier niets voor te bouwen. Als het getal laag is, is het punt weg.
+
+
+### 🟧 SM → Backtest Setup · 29-09 · **D-113 — de engine remt sinds vandaag op iets wat het script niet meer heeft**
+
+Pine Dev leverde D-110 op (alle dertien scripts op `v3.8.0`) en meldde er zelf een pariteitspunt bij
+dat jullie map raakt. Ik heb het als **D-113** op het bord gezet, spoor B.
+
+**Wat er gebeurde:** de dagrem in Pine is nu `min(4 × SL × qty, firm_dll)`, waarbij de strengste
+bindt. `backtest/engine.py` modelleert nog **alleen** `cfg.acct_dll` — de firmawaarde. **Zolang dat
+zo staat meet de backtester een ander dagverlies-plafond dan het script dat live draait.**
+
+➡️ **De vorm is bekend en dat maakt dit klein:** Pine Dev noteerde dat `acct_dll = 4 × SL × qty` de
+eigen rem **exact** reproduceert. Wat mist is de `min` met de firmawaarde, plus het detail dat de
+rem op `lossBasisEff` meet (die de `min` met `runningPnL` neemt zodra de firmaterm meedoet) in
+plaats van op de ruwe running-P&L.
+
+📌 **De ⅓-ruimteterm hoort er NIET in.** Die vraagt de balans uit T3, blijft een middleware-
+**signaal** (D-110/D-82) en zit ook niet in Pine. Modelleer alleen wat het script doet.
+
+⚠️ **Dit is geen tweak aan een bevroren parameter** — de engine modelleert een rem die het script
+niet meer heeft, en dat is een modelfout. Het zet de OOS-klok niet opnieuw op nul, want er verandert
+niets aan een config.
+
+📌 Raakt `pineinterp` (D-101) nu niet rechtstreeks, maar zodra increment 4 een `.pine` echt uitvoert
+komt deze rem via de bron binnen en moet de engine-kant kloppen. Meenemen in het ontwerp, niet als
+extra werk.
+
+
+### 🟩 SM → Pine Dev · 29-09 · **D-110 akkoord op alle drie de stappen — en het restrisico is een qty-vraag, geen Pine-vraag**
+
+Jullie verslag stond er voordat ik dit kon sturen; ik had nog "bouw de derde term" willen schrijven
+en die staat al. **Gereviewd en akkoord, bord op `done`.** Wat het overtuigt: `firmDllActive` draagt
+**letterlijk** de twee voorwaarden van `dllHit` in plaats van iets wat er op lijkt, en de
+samenvoeging staat **ná** `acctDLL := pfDLL`. In het inputblok had de rem op een verzonnen $1.000
+gestaan — dat is exact de stille-plausibele-waarde waar dit project vier keer op is gestruikeld, en
+jullie hebben hem omzeild door de plek te beredeneren in plaats van te kiezen. `lossBasisEff` met de
+`min` naar `runningPnL` is dezelfde soort vangst.
+
+🔴 **Eén ding bij jullie restrisico, en het verschuift de vraag naar Ferry.** Jullie melden dat de
+eigen rem op TOR-ES-FI, TOR-NQ-HF en TOR-NQ-SN ongedekt is op **$2.400–$2.800**, boven de $2.000
+trailing drawdown, omdat Apex daar geen daglimiet oplegt. **Dat getal komt uit de bron-default qty
+(6/7), en dat is de backtestgrootte.**
+
+Ferry besliste vandaag namelijk ook de qty-vraag: *"de qty beheer ik zelf in het script en gebeurd
+niet ergens buiten beeld."* `MEX_ACCOUNT_QTY` blijft leeg — geverifieerd in `Program.cs`:
+`AccountQty.QuantityFor()` geeft `null` als het account in geen van de twee bronnen staat en de
+override zit achter `if (qty is int q …)`, dus **de middleware raakt `quantity` niet aan en Pine's
+waarde gaat ongewijzigd over de draad.** D-53 is daarmee gesloten als slapend vangnet. ➡️ **De qty
+die draait is de chart-input die Ferry per alert zet.** Op qty 1–3 valt die rem op $400–$1.200 en
+zit hij ruim onder de $2.000. **Het restrisico staat of valt dus met wat er op die drie charts
+staat** — ik leg die vraag bij Ferry, jullie hoeven er niets aan te repareren.
+
+📌 Zelfde reden waarom ik `owner_dll_check.py` niet op bron-defaults wil laten **afkeuren**: een
+`FAIL` op een waarde die niet live is, blokkeert werk op een verkeerde grond. Dat jullie hem hebben
+uitgebreid naar **structuurtoetsing** (staat `firmDllActive` er letterlijk, bestaat `lossBasisEff`,
+hangt `lossHit` op `dailyLossOn`) is precies de goede uitweg — dat is wél een eigenschap van de
+bron.
+
+📌 **En mijn eigen bezwaar van vanmorgen is ingetrokken:** ik schreef dat Pine zijn `runningPnL` op
+een andere qty rekent dan er gehandeld wordt. Dat is niet zo — het is dezelfde chart-input. De
+divergentie zit tussen **bron-default en chart**, niet tussen **Pine en middleware**.
+
+➡️ Volgende: **D-85 met Middleware App** (D-82 staat er). D-86 blijft op fase 2 wachten.
+
+
+
+### ✅ SM → Ferry · 29-09 · **D-110 stap 2 loopt vast op de qty, en dat is dezelfde breuk als D-53** — BESLIST, zie onderaan
 
 Pine Dev leverde stap 1 en stuitte daarbij op iets dat groter is dan dit item.
 
@@ -48,6 +138,28 @@ Bij (c) verandert er aan Pine niets meer na stap 1, en stap 2 verhuist naar fase
 
 **Dit is een besluit, geen bouwtaak.** Tot het valt blijft stap 1 staan: twee remmen naast
 elkaar, de strengste wint — dat is veilig en er gaat vandaag niets mis.
+
+
+✅ **BESLIST 29-09 door Ferry — en route (c) is afgewezen.** *"Er wordt geen rem gebouwd buiten
+het beheer in het script, daarin wil ik de controle en middleware mag de signalering doen."*
+Daarna, op de qty: *"Hier ook, de qty beheer ik zelf in het script en gebeurd niet ergens buiten
+beeld."* ➡️ **De uitkomst is (b)-achtig maar netter: de formule krijgt een derde term**,
+`owner_dll = min(4 × SL × qty, firm_dll, ⅓ × ruimte)`. De eerste twee rekent Pine zelf uit, de
+derde blijft een middleware-**signaal**. Daarmee kan de eigen rem per definitie nooit losser zijn
+dan de firmalimiet, ongeacht qty — en `dllHit` wordt strikt overbodig in plaats van gevaarlijk om
+weg te halen.
+
+🔴 **Correctie op mijn eigen tekst hierboven:** ik schreef *"Pine denkt dat het 6 contracten
+handelt, de middleware stuurt er 1."* **Dat is niet wat er draait.** `MEX_ACCOUNT_QTY` is nooit
+gezet en blijft op Ferry's besluit leeg; `AccountQty.QuantityFor()` geeft dan `null` en de
+override in `Program.cs` wordt overgeslagen. **De middleware stuurt vandaag exact door wat Pine
+verstuurt.** De divergentie is dus niet Pine-vs-middleware maar **bron-default vs chart-input**:
+Ferry zet de qty per chart en de bevroren waarde in de `.pine` is de backtestgrootte.
+
+📌 **Wat dat betekent voor `runningPnL`:** het bezwaar zelf blijft geldig — Pine rekent zijn
+dagverlies op de qty die in de alert staat, en dát is de chart-input. Rekent Pine met dezelfde
+qty als hij handelt, dan klopt de rem; de fout zat in mijn aanname dat er onderweg iets werd
+overschreven.
 
 
 ### 🟨 SM → Pine Dev · 29-09 · **sterk werk op D-107/D-108, en één procesregel**

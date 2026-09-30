@@ -147,6 +147,52 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
+## A-78 — Exit- en dagguard-varianten op MGC 1m-bars (30 sep 2026, voorstel; Pine-test nodig)
+
+**Data.** Ferry's "3y MGC tickdata" = 1-minuut-OHLC MGC1! 26-09-2023 → 25-09-2026 (1,05 mln
+bars). Entries uit de exports `89aa5` (jaar) en `d8ac1` (65 d) op de bars nagespeeld met
+alternatieve exits (script `replay.py`, scratchpad). Pariteit: 65 d rauw 53,1% / $5.730 per
+contract vs export 53,4% / $6.564 (verschil = commissie/slippage-conventie en same-bar
+conservatief: stop vóór TP). **Nov-2025 t/m feb-2026 valt uit** — de bars staan daar op een
+ander contract dan de chart van de export (entryprijs 6–9 punten buiten de bar); 8 maanden
+over (sep–okt 2025, apr–sep 2026, 152 dagen, 1.720 entries). Same-bar-regels conservatief
+(BE/trail geraakt als de bar door het niveau sluit). Sequencing benaderd: entry overgeslagen
+als de vorige nagespeelde trade nog open is.
+
+**Exit-varianten, netto per contract (jaar-8-mnd / 65 d), basis TP 85 / SL 100 = 2.016 / 4.367:**
+
+| variant | jaar | 65 d | PF | opmerking |
+|---|---:|---:|---|---|
+| TP 70 | 4.156 (+106%) | 6.154 (+41%) | 1,06 / 1,16 | winrate 61–62%, robuust op beide vensters |
+| BE 80t → +1 (Ferry's idee) | 2.569 (+27%) | 4.914 (+13%) | 1,04 / 1,12 | near-miss-redding bestaat, is klein |
+| BE 75t → +40 | 3.268 (+62%) | 5.032 (+15%) | | |
+| trail act 40t / buffer 60t | 5.240 (+160%) | 6.608 (+51%) | 1,12 / 1,25 | max DD −44% / −47% |
+| **TP 70 + trail 40/60** | **5.827 (+189%)** | **6.907 (+58%)** | 1,13 / 1,27 | winstdagen 56% / 71% |
+| trail 30/60 | 5.857 | 3.920 (−10%) | | niet robuust |
+| SL 80 / SL 120 / TP 100 / TP 122 | slechter of gelijk | | | |
+
+**Dagguards op minuutniveau (echte intraday-trail incl. open P&L), per contract, 152 d:**
+basis 2.016 → 5.653 met 250/25/–/400 (giveback 25!) en 5.232 met de live set 250/100/500/400;
+TP70+trail40/60: 5.827 → 7.021 met 250/50/500/150. Activatie 250/ct bevestigd; giveback
+25–50 doet het op minuutniveau beter dan 100; cap 500 neutraal; DLL 150–400.
+
+**Qty × strakke $-guards, Apex 50K vers (rolling starts om de 6 dagen, intraday floor incl.
+open winst, ladder met 8-dagen/kwal/consistency, geen buffer):** qty 1–2 geschaald: basis
+qty 2 met $250/$200/$500/$300 → 0% breach, ≈ $10,7k payouts/jaar; trail40/60 qty 2 met
+$500/$100/$1.000/$300 → 0%, ≈ $21,8k. **Qty 4 met vaste strakke guards** (per ct 80/25/125/150
+= $320/$100/$500/$600): TP70 → 0% breach, ≈ $22k/jaar; basis → 23%, ≈ $16k. Qty 6–8: breach
+≥ 55% bij vrijwel elke set (uitzondering TP70+trail op qty 6, $300/$150/$750/$900: 18%).
+**De DLL is de knop bij hoge qty**: 125/50/250 per ct met DLL 300/ct (= $1.200 op qty 4) →
+95% breach; dezelfde set met DLL 150/ct (= $600) → 36%. Absolute payout-cijfers zijn ruis
+(22 starts, 0,6 jaar); de volgorde niet.
+
+**Voorstel (niet live).** Pine-exports ter bevestiging op 90 d + jaar, verder identiek aan
+d8ac1: (a) TP 70; (b) TP 85 + Enable Trailing On, Trail Activation MFE 40, Trail Buffer 60;
+(c) TP 70 + trail 40/60. Daarna dagguards: activatie 250/ct, giveback 50/ct, cap 500/ct,
+DLL 150–300/ct; en de qty-4-variant $320/$100/$500/$600 als aparte test. Trail-definitie in
+de replay: na MFE ≥ 40t staat de stop op hoogste high sinds activatie − 60t, per bar
+bijgewerkt; controleer of de Pine-trail hetzelfde doet vóór je de cijfers vergelijkt.
+
 ## A-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
 
 **Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.

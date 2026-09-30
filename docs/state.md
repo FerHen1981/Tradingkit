@@ -231,6 +231,26 @@ een muntworp; bevestigt qty 1 tot de lock.
 76% winstdagen, worst −949, maxDD 3.061, breach 53%, payouts $4.520. Past in de ruimte van
 013/018 (maxDD 3k); TP-85-tegenhanger nog niet getest (export aangevraagd). Geschaald TP 85
 qty 4 DLL 800: $28.398 maar maxDD 8.359 → past niet in $5k ruimte.
+**A-78 — slot 30 sep (exports 793f1 = qty 4 TP 85 vaste guards, a67c4 = qty 2 TP 85 geschaald + Pine-DLL 600).**
+(4) **De vaste qty-4-set is TP-specifiek.** Met TP 85 stort hij in: $8.379/jr (2.095/ct) tegen
+$18.109 met TP 70. Mechanisme: activatie $320 < één TP op qty 4 ($340), dus de day-trail armt
+na één winnaar en de eerste terugval van $100 sluit de dag; met TP 70 ($280) zijn twee
+winnaars nodig. De "fixed-$ wurgt"-bevinding van A-75 is dus een verhouding activatie/TP,
+geen qty-effect. Geen vaste-guard-set voor TP 85 zonder nieuwe test (activatie ≥ 1,2 TP).
+(5) **Geschaald qty 2 TP 85 (500/200/1.000, Pine-DLL 600)**: $13.869/jr, 58% winstdagen, worst
+−689, maxDD 5.673, 53 gate-exits. Verse 50K: 77% breach (niet doen). **Gelockt met $5.000
+ruimte: 2% breach, volle ladder 6/6 binnen het jaar, #1 na ~60 dagen.** Met $3.000 ruimte 26%.
+Qty 4 TP 70 vast op $3k/$5k ruimte: 2%/0%, eveneens volle ladder — gelijkwaardig, maar vraagt
+TP 70 (config-wijziging, OOS-klok). Qty 1 TP 85 gelockt: 0–6%, $7,6–8k/jr, #1 na ~100 dagen.
+**Ruimte-eis in de ladder wordt de maxDD van de geschaalde set, niet 3 DLL-dagen:** qty 2 ≈
+$5.700 (2% breach bij $5k), qty 3 ≈ $7.700, qty 4 ≈ $8.400 (trade-close-sim op c92d9). Post-lock
+is ruimte = balans − 50.100, dus qty 2 vanaf ≈ $55.000, qty 3 vanaf ≈ $57.800, qty 4 vanaf
+≈ $58.500 — samen met de consistency-drempels (55.000 / 56.700) is dit de bindende reeks.
+
+**Besluit A-78 (30 sep).** TP 85 / SL 100 blijft; geen BE, geen trail. Verse 50K: qty 1, day-trail
+250/100/500, **geen Tradovate-DLL**. Gelockt: qty 2 met 500/200/1.000 en DLL 600 zodra ruimte
+≥ $5.000 (balans ≥ 55.000); qty 3 bij ≥ 57.800; qty 4 bij ≥ 58.500 met DLL 4 × SL/ct. Replay
+alleen nog voor dagguards op een gegeven stroom; exit-wijzigingen uitsluitend via Pine-exports.
 ## A-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
 
 **Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.

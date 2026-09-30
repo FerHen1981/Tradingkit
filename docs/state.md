@@ -106,7 +106,9 @@ huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakk
 
 Weg per 28/9: PA021 (breached) en de evals 238, 240–245, 247, 248, 251, 252. Erbij: PA
 uit eval 249 (gehaald) en 2 nieuwe 50K. Volledig schema met schaal-ladder en payout-
-projectie: `fleet_startschema_2026-09-28.pdf` (scratchpad/Ferry, niet in repo).
+projectie: `fleet_startschema_2026-10-01.pdf` (A-78-regels; vervangt 28-09 v1/v2; scratchpad/Ferry, niet in repo).
+**Per 1 okt (A-78):** qty 1 zonder Tradovate-DLL waar ruimte ≥ $1.300 (022, 026, 027, 029, ex-249, nieuw);
+023/024/025/028 houden de ⅓-DLL; 013 en 018 qty 2 met 500/200/1.000 en DLL 600; 022 terug naar qty 1.
 
 | Account | Product | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|

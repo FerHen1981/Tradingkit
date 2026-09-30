@@ -147,7 +147,7 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
-## A-78 — Exit- en dagguard-varianten op MGC 1m-bars (30 sep 2026; trail ingetrokken na Pine-test, TP 70 bevestigd)
+## A-78 — Exit- en dagguard-varianten (30 sep 2026; replay ongeschikt voor exits, TP 85 blijft, DLL pas vanaf qty 2)
 
 **Data.** Ferry's "3y MGC tickdata" = 1-minuut-OHLC MGC1! 26-09-2023 → 25-09-2026 (1,05 mln
 bars). Entries uit de exports `89aa5` (jaar) en `d8ac1` (65 d) op de bars nagespeeld met
@@ -212,6 +212,25 @@ $7.794, breach ≈ 40%. Op dit jaar breacht een verse 50K in 40–85% van de sta
 ook; de fixed-$-conclusie van A-75 ("vaste guards wurgen per-contract") geldt niet met TP 70
 + activatie 80t/ct. Kandidaat voor gelockte accounts met ≥ $3.000 ruimte (013/018): qty 4,
 Pine 320/100/600, TV target $600, TV DLL $800.
+**A-78 — correctie 30 sep (exports c92d9 = TP 85 baseline, 973b3 = qty 4 met Pine-DLL).**
+(1) **TP 85 blijft.** Zelfde jaar, zelfde guards 250/100/500, qty 1: TP 85 **$9.342/ct**
+(3.627 trades, 56% winrate, 66% winstdagen, worst −1.255, maxDD 4.547) tegen TP 70 $7.381
+(4.156 trades). TP 85 wint in 9 van 13 maanden. De TP-70-claim uit de replay (+106%) was net
+als de trail een sequencing-artefact: eerdere exits geven nieuwe entries die de replay niet
+ziet. **Conclusie over de methode: de bar-replay is ongeschikt voor elke exit-wijziging
+(TP, SL, BE, trail); alleen Pine-exports tellen.** Replay alleen nog voor dagguards op een
+gegeven trade-stroom.
+(2) **DLL op qty 1 kost op dit jaar geld en verhoogt de breach-kans**: qty 1 zonder DLL 8%
+verse-breach / $7.376 payouts/jr (#1 na ~100 dagen); met DLL 400 42% / $2.860. Reden: 52
+dagen ≤ −400 waarvan veel herstellen; de day-trail houdt de worst day op −1.255, binnen de
+$2.500. **Regel wordt: geen Tradovate-DLL op qty 1 zolang de day-trail aan staat; DLL vanaf
+qty 2 (worst day anders −2.510 > trailing).** Qty 2 geschaald (500/200/1.000) met DLL 600:
+$15.966/jr, breach 56%, payouts $6.981, #1 na 25 dagen — verse 50K op qty 2 is op dit jaar
+een muntworp; bevestigt qty 1 tot de lock.
+(3) **Qty 4 vaste guards 320/100/600 + TP 70 met Pine-risk-gate DLL 800** (973b3): $18.109/jr,
+76% winstdagen, worst −949, maxDD 3.061, breach 53%, payouts $4.520. Past in de ruimte van
+013/018 (maxDD 3k); TP-85-tegenhanger nog niet getest (export aangevraagd). Geschaald TP 85
+qty 4 DLL 800: $28.398 maar maxDD 8.359 → past niet in $5k ruimte.
 ## A-77 — Eval near-miss: intraday trailing vs TP 122t (24 sep 2026, mechanisme bevestigd; trailing-stop = voorstel)
 
 **Bewijs.** Fills_42 (APEX…244): 5 NQ short, −1 tick gerealiseerd, account *breached*.

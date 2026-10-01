@@ -102,37 +102,27 @@ is de beste dag sinds de laatste payout. Per account geldt dus:
 `daily target ≤ min(30% × (balance − 50.000), huidige best-day)` — een dag boven de
 huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakker.
 
-### Per-account set (26 sep, stand Tradovate na sluiting — vervangt 23 sep)
+### Per-account set (1 okt, stand Tradovate 30 sep na sluiting — vervangt 26 sep)
 
-Weg per 28/9: PA021 (breached) en de evals 238, 240–245, 247, 248, 251, 252. Erbij: PA
-uit eval 249 (gehaald) en 2 nieuwe 50K. Volledig schema met schaal-ladder en payout-
-projectie: `fleet_startschema_2026-10-01.pdf` (A-78-regels; vervangt 28-09 v1/v2; scratchpad/Ferry, niet in repo).
-**Per 1 okt (A-78):** qty 1 zonder Tradovate-DLL waar ruimte ≥ $1.300 (022, 026, 027, 029, ex-249, nieuw);
-023/024/025/028 houden de ⅓-DLL; 013 en 018 qty 2 met 500/200/1.000 en DLL 600; 022 terug naar qty 1.
+16 PA's (013, 018, 022–035; 030–033 nieuw, 034/035 vers) + 3 × 250K-eval (267–269, vers).
+Alle 50K-evals van vorige week zijn weg. Regels A-78; schema `fleet_startschema_2026-10-01.pdf`.
+30 sep: elke account −$400 tot −$1.600 (één SL-dag).
 
-| Account | Product | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
-|---|---|---:|---:|---:|---|---:|---:|---|
-| PA013 | Legacy 50K | 55.242 | 5.142 | 3 | 750 / 300 / 1.500 | $1.500 | $1.200 | #1 ontvangen 10/9; **#2 $2.000** zodra 5 kwal.dagen vol; na #2 ruimte 3.142 → qty 2 tot 53.700 |
-| PA018 | Legacy 50K | 56.007 | 5.907 | 4 | 1.000 / 400 / 2.000 | $2.000 | $1.600 | #1 geblokkeerd door best-day $2.504 → balans ≥ 58.348; cap 2.000 verhoogt de lat niet |
-| PA022 | Legacy 50K | 52.671 | 2.571 | 2 | 500 / 200 / 1.000 | $1.000 | $800 | +1.429 tot max #1 (54.100) |
-| PA023 | Intraday 4.0 | 50.585 | 485 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL was 1.000; 2 verliesdagen tot liq; best $621 → consistency 50% vraagt winst ≥ 1.242 |
-| PA024 | Intraday 4.0 | 49.000 | 511 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL was 1.000; 2 verliesdagen tot liq |
-| PA025 | Legacy 50K | 48.723 | 1.006 | 1 | 250 / 100 / 500 | $500 | $300 | ⅓-regel |
-| PA026 | Legacy 50K | 50.788 | 1.642 | 1 | 250 / 100 / 500 | $500 | $400 | best $1.010 → winst ≥ 3.367 vóór #1 |
-| PA027 | Legacy 50K | 49.913 | 1.767 | 1 | 250 / 100 / 500 | $500 | $400 | |
-| PA028 | Legacy 50K | 49.023 | 1.250 | 1 | 250 / 100 / 500 | $500 | $400 | |
-| PA029 | Legacy 50K | 48.945 | 1.411 | 1 | 250 / 100 / 500 | $500 | $400 | nieuw (ex-239) |
-| PA ex-249, Nieuw A/B | Legacy 50K | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | $400 | qty 2 bij lock |
-| 253–257 | 50K eval | 50.000 | 2.500 | 5 NQ | geen day-guards | — | — | lottery; 250 ($219 ruimte) niet handelbaar |
-
-Week 21–25 sep live: alle PA's negatief tot vlak (013 −196, 018 −600, 023 −1.065, 025 −1.028,
-028 −910, 029 −1.055); backtest qty 2 zelfde week +315 (ma/wo/vr verlies in de US-sessie).
-**Projectiebasis (meting Scrum Master 28-09, `docs/DECISIONS.md`):** de fleet-projectie rekent
-met $187 netto per contract per handelsdag (live 1–14 sep). Op de volledige fills 01→25 sep:
-1–14 sep +$12.110 (31 account-dagen), 15–25 sep −$4.414 (69 account-dagen), heel venster
-$76,97 per account-dag = **$27,59 per contract-dag**, een zevende van de basis. Vanaf de
-volgende versie toont het fleet-doc beide vensters naast elkaar; het "realistisch midden
-50–60%" is op deze meting nog optimistisch.
+| Account | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
+|---|---:|---:|---:|---|---:|---:|---|
+| PA013 | 54.927 | 4.827 | **1** | 250 / 100 / 500 | $500 | geen | #2 $2.000 aanvraagbaar (zonder buffer) zodra 5 kwal.dagen vol; qty 2 bij 55.100 |
+| PA018 | 55.444 | 5.344 | 2 | 500 / 200 / 1.000 | $1.000 | $600 | #1 geblokkeerd tot 58.348 (best-day 2.504) |
+| PA022 | 52.797 | 2.697 | 1 | 250 / 100 / 500 | $500 | geen | +1.303 tot max #1 |
+| PA023 (4.0) | 50.374 | 274 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL staat nog op 1.000; 1 verliesdag tot liq |
+| PA024 (4.0) | 48.931 | 443 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL staat nog op 1.000 |
+| PA025 | 48.414 | 698 | 1 | 250 / 100 / 500 | $500 | $200 | |
+| PA026 | 50.615 | 1.469 | 1 | 250 / 100 / 500 | $500 | geen | |
+| PA027 | 49.737 | 1.591 | 1 | 250 / 100 / 500 | $500 | geen | |
+| PA028 | 48.848 | 1.076 | 1 | 250 / 100 / 500 | $500 | $300 | |
+| PA029 | 48.777 | 1.242 | 1 | 250 / 100 / 500 | $500 | $400 | |
+| PA030–033 | 49.2–49.8k | 1.35–1.9k | 1 | 250 / 100 / 500 | $500 | geen | nieuw |
+| PA034, PA035 | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | geen | vers |
+| 267–269 | 250K eval | 6.500 | 5 NQ | geen guards | — | — | keuze Ferry: meerdere trades (p 2–16%, A-77) |
 
 Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
 is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.

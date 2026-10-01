@@ -139,6 +139,33 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
+## A-79 — Sneller vooruit op verse 50K: dynamische qty-regel (1 okt 2026, voorstel)
+
+**Vraag Ferry 1/10:** accounts boeken geen of trage vooruitgang. **Diagnose:** structureel. De
+qty-1-set doet op het Pine-jaar $36 per account-dag; eerste payout (winst ≥ 4.100 + 8 dagen +
+5 kwal.dagen) ligt daarmee op ~100 handelsdagen, en de week 21–30 sep was op elke account
+negatief (US-sessie). Accounts met ruimte < $1.300 (023, 024, 025, 028, 029) zitten bovendien
+aan een DLL die hun herstel knipt; die kunnen niet sneller, alleen overleven of niet.
+
+**Simulatie (Pine-jaar c92d9/a67c4, verse 50K, rolling starts om de 3 dagen, floor incl. pad):**
+
+| beleid | breach | haalt #1 | #1 na | payouts/jr (geen buffer) | met buffer 2.000 |
+|---|---:|---:|---:|---:|---:|
+| A-78: qty 1, qty 2 na lock én ruimte ≥ 5.000 | 8% | 86% | 104 d | $6.715 | $5.328 (126 d) |
+| qty 2 altijd | 76% | 30% | 20 d | $2.797 | |
+| **qty 1 tot winst ≥ 1.000, dan 2 zolang ruimte ≥ 2.000, anders terug naar 1** | **10%** | 84% | 96 d | **$11.534** | $8.460 (102 d) |
+| qty 2 zolang ruimte ≥ 2.000, anders 1 | 13% | 80% | 93 d | $10.587 | $7.928 |
+| qty 1 tot lock, dan 2 ongeacht ruimte | 27% | 73% | 78 d | $9.084 | |
+
+**Voorstel.** (1) Dynamische regel: vers qty 1; vanaf winst ≥ $1.000 qty 2 (500/200/1.000, DLL
+600) zolang ruimte ≥ $2.000; zakt de ruimte eronder → terug naar qty 1 (geen DLL als ruimte ≥
+1.300). Dat is +72% payouts per account-jaar voor 2 punt extra breach; de eerste payout komt
+nauwelijks eerder, de volgende wel. Vervangt de $55.000-drempel voor qty 2 op verse accounts;
+gelockte accounts houden A-78. (2) Buffer van $2.000 kost op dit jaar $1,4–3k per account-jaar
+en 20+ dagen op #1; de bescherming na een payout is in deze sim niet zichtbaar. Keuze Ferry.
+(3) Intraday 4.0 (023: ruimte 274, 024: 443) à $100/maand: kans op #1 vanaf hier verwaarloosbaar;
+laten lopen tot breach zonder reset of opzeggen — keuze Ferry.
+
 ## A-78 — Exit- en dagguard-varianten (30 sep 2026; replay ongeschikt voor exits, TP 85 blijft, DLL pas vanaf qty 2)
 
 **Data.** Ferry's "3y MGC tickdata" = 1-minuut-OHLC MGC1! 26-09-2023 → 25-09-2026 (1,05 mln

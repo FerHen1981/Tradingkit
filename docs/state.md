@@ -3,7 +3,13 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-09-23 (Analyses & Data chat)_
+_Last updated: 2026-10-02 (Analyses & Data chat)_
+
+> **Het doel (besluit Ferry 2 okt 2026):** continuïteit op dagbasis, en per account het maximum
+> van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de strategie. Elke
+> aanbeveling in dit bestand wordt gelezen op twee meetlatten, in deze volgorde: breach-kans en
+> gelijkmatigheid van de dagen; handelsdagen tot het stapmaximum. Dollars per jaar zijn uitleg,
+> geen criterium. Vastgelegd in `.claude/skills/payout-throughput/SKILL.md`.
 
 ## Live settings — de werkende config (A-75, vervangt A-43)
 

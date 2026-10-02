@@ -3,6 +3,12 @@ name: eval-throughput
 description: Answer "how fast and how cheaply does this config get an account funded" for a MEX strategy on a given asset — pass rate, sessions to pass, attempts and cost per funded account. Use when the user asks about passing evals, time-to-funded, which config to run on an eval, or how many evals to buy. Invoke with /eval-throughput <preset> <data.parquet> [symbol]. Not for funded accounts — use /payout-throughput for those.
 ---
 
+> **Target (besluit Ferry 2 okt 2026):** er is één vlootdoel — continuïteit op dagbasis en
+> het maximum van elke payout-trede per account in zo kort mogelijke tijd (zie
+> `payout-throughput`). Evals dienen dat doel: een pass levert een account dat daarna op die
+> twee meetlatten wordt gestuurd. Pass-snelheid is hier een middel, geen doel op zich.
+
+
 # Goal A — pass evals fast
 
 ## The question this answers

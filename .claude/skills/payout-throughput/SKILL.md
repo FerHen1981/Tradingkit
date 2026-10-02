@@ -3,18 +3,33 @@ name: payout-throughput
 description: Answer "how much does this funded account actually pay out before it dies" for a MEX strategy on a given asset — payouts per account-year, odds of the full 6/6 ladder, breaches and survival. Use when the user asks about funded accounts, milking, payout cadence, the 6-step ladder, or how long an account survives. Invoke with /payout-throughput <preset> <data.parquet> [symbol]. Not for evals — use /eval-throughput for those.
 ---
 
-# Goal B — milk funded accounts to 6/6 payouts
+# Het doel (besluit Ferry, 2 okt 2026) — dit is het enige target
 
-## The question this answers
+> **Continuïteit op dagbasis, en per account het maximum van elke payout-trede in zo
+> kort mogelijke tijd.** Niet: maximale winst op de strategie. Niet: netto per
+> contract per jaar. Elke instelling, size en regel wordt hierop beoordeeld en
+> nergens anders op.
 
-A funded account never "passes". It earns until the trailing drawdown ends it. So
-the question is **cadence and survival**: how many payouts per account-year, and
-how likely is the full six-step ladder before a breach resets everything.
+Concreet betekent dat twee meetlatten, in deze volgorde:
 
-This is the opposite optimisation from Goal A. There, a fast breach is fine
-because it frees the slot. Here, a breach destroys the ladder — `pa_payouts_this_cycle`
-resets to zero (`engine.py:531`), so five payouts followed by a breach leaves you
-starting from step one. Survival outranks return.
+1. **Continuïteit** — het account blijft leven en de dagen blijven gelijkmatig:
+   breach-kans (vers én gelockt), slechtste dag, max drawdown, aandeel winstdagen.
+   Een set die meer verdient maar vaker breacht of grilliger is, verliest.
+2. **Tijd tot het stapmaximum** — handelsdagen tot payout #1 op het volle bedrag van
+   de trede, en daarna tot elke volgende trede (8-dagen-regel, kwalificatiedagen,
+   consistency, safety net). Payouts worden alleen op het maximum aangevraagd.
+
+Netto per jaar, profit factor en winrate zijn hulpcijfers om de twee meetlatten te
+verklaren, nooit het criterium. Wie een set aanbeveelt, zet breach-kans en dagen tot
+het stapmaximum vooraan en laat de dollars erachter staan. Andere doelen uit eerdere
+versies van deze skill (Goal A / Goal B, "milk to 6/6", maximaal rendement) vervallen.
+
+## De vraag die dit beantwoordt
+
+Een funded account "slaagt" niet; het verdient tot de trailing drawdown het beëindigt.
+De vraag is dus **overleving en cadans**: hoe zeker haalt dit account elke trede, en hoe
+snel. Een breach reset de ladder — `pa_payouts_this_cycle` gaat naar nul
+(`engine.py:531`) — dus vijf payouts gevolgd door een breach is een nieuwe start.
 
 ## What it reports
 
@@ -23,7 +38,7 @@ starting from step one. Survival outranks return.
 | payouts per window — median, p25, p75 | the realistic cadence, not the best case |
 | payouts per account-year | comparable across horizons |
 | P(any payout) | does this account ever pay at all |
-| P(full 6/6 ladder) | the actual goal |
+| P(full 6/6 ladder) | de ladder volledig halen |
 | banked per account-year, and in DD-units | comparable across firms and account sizes |
 | breaches per account-year | how often the ladder resets |
 | survival rate | share of windows that finished untouched |
@@ -74,8 +89,9 @@ different strategy than the one live. Propose a solution and wait for approval.
      --goal payout --funnel-step 10 --funnel-horizon 126
    ```
    126 sessions ≈ half a year; the report scales rates to a full account-year.
-3. Lead with payouts per account-year and P(6/6). Banked dollars come after —
-   dollars without the ladder context describe a lucky window.
+3. Lead with breach-kans en dagen tot het stapmaximum (#1 en volgende), dan payouts per
+   account-year en P(6/6). Banked dollars come last — dollars without the ladder context
+   describe a lucky window.
 4. State the horizon, the wait-for-cap mode, and the window used.
 
 ## Reading it honestly

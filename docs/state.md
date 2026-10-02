@@ -164,6 +164,13 @@ charts zonder trail op vier van die vijf de TP (+84t) boekten (8 TP tegen 4 TP).
 kostte op het jaar alles (−$414 tegen +$9.342); 61/26 is strakker. **Advies: Enable Trailing Off
 op alle zeven.** Break-even staat nergens aan; evals zonder trail/BE.
 
+**Pine-jaar-bevestiging 2 okt (exports 8f3b5 / 8bc3d / f2c7a, 1-10-2025 → 2-10-2026, qty 1, TP 82 / SL 100):**
+250/100/500 zonder trail → **$8.087**, 65% winstdagen, maxDD 4.651, verse-breach 8%, payouts
+$8.167/jr. 320/100/900 zonder trail → $7.648, 59%, maxDD 5.854, **verse-breach 44%**, $4.489/jr
+(gelockt $5k: 2%, $7.736). 300/110/900 **met trail 61/26** (de live set van 013/018/025/028/029/
+033/035) → **−$1.207**, 1.689 trail-exits à +$37, maxDD 11.009, breach 58%. Conclusie staat:
+alle PA-charts op 250/100/500 × qty, trailing uit. (TP 82 in deze run; TP 85 blijft de referentie.)
+
 **250K-eval pass-kans per qty (Monte Carlo A-77, winrate 33/42/50%):** 5 NQ 2/6/16 · 8 NQ 3/6/11 ·
 12 NQ 4/8/13 · 15 NQ 10/16/23 · 26 NQ 20/25/31%. 15 NQ: één SL = einde, tolerantie 87t, 2 TP's.
 

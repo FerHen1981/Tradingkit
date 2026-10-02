@@ -251,3 +251,38 @@ tr '\0' '\n' < /proc/$(systemctl show mex-receiver -p MainPID --value)/environ \
   | grep '^MEX_ACCOUNT_QTY=' | cut -d= -f2- \
   | awk '{print (length($0)==0 ? "LEEG - geen override, D-53 klopt" : split($0,a,",") " account(s) met een qty-override")}'
 ```
+
+---
+
+## 🔴 D-122 — uitkomst: 39 accounts met een qty-override (02-10)
+
+De controle gaf **`39 account(s) met een qty-override`**. Dat is geen restwaarde maar een actieve
+override op het **orderpad**.
+
+⛔ **Haal hem NIET leeg.** Zonder map valt elk account terug op Pine's bevroren volle
+contractgrootte (qty 2 t/m 8), en de sweep van 25-08 stelde vast dat die **niet
+fresh-account-funderbaar** is. Leeghalen kan schadelijker zijn dan laten staan.
+
+### Vervolgmeting 1 — de verdeling, zonder accountnummers
+
+```bash
+tr '\0' '\n' < /proc/$(systemctl show mex-receiver -p MainPID --value)/environ \
+  | grep '^MEX_ACCOUNT_QTY=' | cut -d= -f2- | tr ',' '\n' \
+  | awk -F= 'NF==2{print $2}' | sort -n | uniq -c \
+  | awk '{print $1" account(s) op qty "$2}'
+```
+
+Toont bijvoorbeeld `20 account(s) op qty 1` — aantallen en contractgroottes, geen id's.
+
+### Vervolgmeting 2 — waar en wanneer is hij gezet
+
+De unit heeft **geen `EnvironmentFile`**, dus de variabele staat in de unit zelf of in een drop-in.
+Dit geeft alleen bestandsnamen en datums, nooit de inhoud:
+
+```bash
+grep -rl 'MEX_ACCOUNT_QTY' /etc/systemd/system/mex-receiver.service* 2>/dev/null
+ls -l --time-style=long-iso /etc/systemd/system/mex-receiver.service.d/ 2>/dev/null
+```
+
+Pas als beide metingen binnen zijn valt er een besluit te nemen: klopt de map, moet hij opgeschoond,
+of gaat de sizing terug naar Pine. Dat laatste is een besluit van Ferry, geen opruimactie.

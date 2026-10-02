@@ -171,6 +171,18 @@ $8.167/jr. 320/100/900 zonder trail → $7.648, 59%, maxDD 5.854, **verse-breach
 033/035) → **−$1.207**, 1.689 trail-exits à +$37, maxDD 11.009, breach 58%. Conclusie staat:
 alle PA-charts op 250/100/500 × qty, trailing uit. (TP 82 in deze run; TP 85 blijft de referentie.)
 
+**Diversificatie via verschillende day-caps (argument Ferry 2/10) — gemeten op het Pine-jaar:**
+correlatie dag-P&L 250/100/500 ~ 320/100/900 = 0,92; alle 91 verliesdagen van de ene set zijn
+ook verliesdagen van de andere, gemiddeld verlies identiek (−347 / −346); alleen de winstdagen
+verschillen. Vloot van 16 × qty 1: 16 × 250/100/500 → $129k/jr, std $5.385/dag, maxDD $74k;
+8 × A + 8 × B → $126k, std 5.481, maxDD 84k; de live-mix (4 A, 5 B, 7 trail) → $62k, maxDD 103k.
+**Cap-diversiteit diversifieert niet, hij kost alleen edge.** Wat wél decorreleert binnen de
+strategie: de sessie. Globex-deel ~ US-deel dag-P&L correlatie **0,00** (jaar c92d9: Globex
+$7.714, US $1.628 per ct). Vloot 8 × alleen-Globex + 8 × alle sessies: $136k (−9%), std 4.472
+(−16%), maxDD 64k (−13%); 16 × alleen-Globex: $123k, maxDD 56k. Dat is de enige verdeelsleutel
+in deze strategie die de verliesdagen uit elkaar trekt; bevestiging via Pine-export met US- en
+IB-venster uit nog nodig (sessiefilter wijzigt entries).
+
 **250K-eval pass-kans per qty (Monte Carlo A-77, winrate 33/42/50%):** 5 NQ 2/6/16 · 8 NQ 3/6/11 ·
 12 NQ 4/8/13 · 15 NQ 10/16/23 · 26 NQ 20/25/31%. 15 NQ: één SL = einde, tolerantie 87t, 2 TP's.
 

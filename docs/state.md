@@ -145,6 +145,35 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
+## A-81 — Diversificatie getoetst aan het doel (2 okt 2026)
+
+Meetlatten: breach-kans en gelijkmatigheid eerst, dan dagen tot het stapmaximum. Stroom: Pine-jaar
+c92d9 (TP 85, 250/100/500, qty 1), guards op trade-closes, rolling starts om de 3 dagen.
+
+| variant (qty 1) | vers: breach / #1 na / payouts-jr | winstdagen | gelockt $3k: breach / #1 na |
+|---|---|---:|---|
+| 250/100/500 · alle sessies | 8% / 102 d / 7.120 | 66% | 8% / 42 d |
+| 200/75/400 · alle | 8% / 105 d / 6.334 | 68% | — |
+| **150/50/300 · alle** | 8% / 112 d / 5.537 | **74%** | **1% / 36 d** |
+| 250/100/500 · alleen Globex | **33%** / 75 d / 4.341 | 59% | 13% / 32 d |
+| 250/100/500 · entries tot 12:00 | 34% / 71 d | 62% | — |
+| qty 2 · 500/200/1.000 · alleen Globex | — | — | 53% ($3k) / 32% ($5k) |
+
+**Conclusies.** (1) **Sessie-split afgewezen voor dit doel.** Alleen-Globex verlaagt de
+drawdown in dollars maar verhoogt de breach-kans (vers 8% → 33%, gelockt 8% → 13%, qty 2 tot
+53%): minder winst per dag houdt het account langer bij de floor, en op evals/verse PA's is
+snelheid naar de lock zelf continuïteit. De correlatie 0,00 uit A-80 is echt, maar helpt het
+account niet. (2) **Strakkere caps zijn de enige diversificatie die het doel dient**: 150/50/300
+per contract geeft dezelfde verse breach-kans, 74% winstdagen, en op gelockte accounts met
+kleine ruimte 1% breach en een snellere #1 (36 tegen 42 dagen), voor ~10% langzamer op verse
+accounts. Giveback 50 is op trade-closes niet te onderscheiden van 100; de Pine-intraday-trail
+kan anders knippen → export nodig. (3) **Strategie-aanpassingen**: niets gevalideerds verbetert
+continuïteit (TP 70, BE, trail allemaal slechter op het jaar); alleen via Pine-exports. (4) Echte
+diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
+
+**Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
+200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
+
 ## A-80 — Live config uit de alerts (2 okt) ≠ advies; fase op ruimte, size op saldo (2 okt 2026)
 
 **Alerts-log 2 okt (`5d1d1`), laatste alert per account:** 013/018 qty 2 met 300/110/900;

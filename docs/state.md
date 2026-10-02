@@ -139,6 +139,27 @@ Het adem-profiel hierboven op qty 2 over het jaar: 3 payouts, 46% breach (bij DL
 $13,4k, 56% winstdagen — beter in goede periodes (aug–sep: 82%), slechter in de staart.
 Keuze Ferry 18/9: adem-profiel; herzien na 4 weken live op de sample-check.
 
+## A-80 — Live config uit de alerts (2 okt) ≠ advies; fase op ruimte, size op saldo (2 okt 2026)
+
+**Alerts-log 2 okt (`5d1d1`), laatste alert per account:** 013/018 qty 2 met 300/110/900;
+022/026/027/032 qty 1 250/100/500; 023 250/130/750; 024 250/100/750; 025/028/029/033/035
+300/110/900; 030/031 320/170/1.000; 034 qty 2 320/260/1.000. Evals: 267 op 15 NQ, 268/269 op
+12 NQ, 270–273 (50K) op 5 NQ, allemaal phase **Research (none)** → geen halt na pass/breach.
+
+**Toets van die sets** (basis-stroom TP 85, 8 pariteitsmaanden, minuutniveau, per contract):
+250/100/500 → 5.230 (61% winstdagen, maxDD 2.659); 250/100/750 → 4.854; 250/130/750 → 3.600;
+300/110/900 → 2.815 (maxDD 4.104); 320/170/1.000 → 1.875; 300/110/900 op qty 2 (= 150/55/450
+per ct) → 2.650; geen guards → 2.016. Advies: alle PA-charts op 250 / 100 / 500 × qty.
+
+**Fase-logica (verzoek Ferry):** fase uit ruimte tot liq, size uit saldo. A kwetsbaar: ruimte
+< 1.300 → qty 1, DLL ⅓ ruimte. B opbouw: ruimte ≥ 1.300, niet gelockt → qty 1, geen DLL
+(A-79-optie: qty 2 bij winst ≥ 1.000 én ruimte ≥ 2.000). C gelockt: size op saldo — 55.000 → 2,
+57.800 → 3, 58.500 → 4. Payout-poorten los daarvan. In het fleet-doc van 2 okt staat per account
+fase, saldo, live config, advies en het verschil.
+
+**250K-eval pass-kans per qty (Monte Carlo A-77, winrate 33/42/50%):** 5 NQ 2/6/16 · 8 NQ 3/6/11 ·
+12 NQ 4/8/13 · 15 NQ 10/16/23 · 26 NQ 20/25/31%. 15 NQ: één SL = einde, tolerantie 87t, 2 TP's.
+
 ## A-79 — Sneller vooruit op verse 50K: dynamische qty-regel (1 okt 2026, voorstel)
 
 **Vraag Ferry 1/10:** accounts boeken geen of trage vooruitgang. **Diagnose:** structureel. De

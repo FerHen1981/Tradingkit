@@ -111,7 +111,7 @@ huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakk
 ### Per-account set (1 okt, stand Tradovate 30 sep na sluiting — vervangt 26 sep)
 
 16 PA's (013, 018, 022–035; 030–033 nieuw, 034/035 vers) + 3 × 250K-eval (267–269, vers).
-Alle 50K-evals van vorige week zijn weg. Regels A-78; schema `fleet_startschema_2026-10-01.pdf`.
+Alle 50K-evals van vorige week zijn weg. Regels A-78/A-81; schema `fleet_startschema_2026-10-02_v2.pdf` (doel vooraan; gemengde vloot: fase A/B 250/100/500, fase C 150/50/300 × qty; live config uit alerts 2 okt).
 30 sep: elke account −$400 tot −$1.600 (één SL-dag).
 
 | Account | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |

@@ -157,6 +157,13 @@ per ct) → 2.650; geen guards → 2.016. Advies: alle PA-charts op 250 / 100 / 
 57.800 → 3, 58.500 → 4. Payout-poorten los daarvan. In het fleet-doc van 2 okt staat per account
 fase, saldo, live config, advies en het verschil.
 
+**Intra-trade trailing live (PMT-payload `trail=1`, 2 okt):** 013, 018, 025, 028, 029, 033, 035
+draaien Enable Trailing On met trigger 6,1 pt = 61t en buffer 2,6 pt = 26t (de zeven 300/110/900-
+charts). 1–2 okt: vijf trail-exits per account op MFE 63–76t, gesloten op +21 tot +46t, waar de
+charts zonder trail op vier van die vijf de TP (+84t) boekten (8 TP tegen 4 TP). A-78: trail 40/60
+kostte op het jaar alles (−$414 tegen +$9.342); 61/26 is strakker. **Advies: Enable Trailing Off
+op alle zeven.** Break-even staat nergens aan; evals zonder trail/BE.
+
 **250K-eval pass-kans per qty (Monte Carlo A-77, winrate 33/42/50%):** 5 NQ 2/6/16 · 8 NQ 3/6/11 ·
 12 NQ 4/8/13 · 15 NQ 10/16/23 · 26 NQ 20/25/31%. 15 NQ: één SL = einde, tolerantie 87t, 2 TP's.
 

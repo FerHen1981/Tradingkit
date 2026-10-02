@@ -1,0 +1,34 @@
+# ICT Silver Bullet — the first CONFLUENCE strategy (Level C).
+# NOT a single trigger: the silver_bullet group switches the engine to confluence
+# mode, where an FVG entry (limit @ 50%) only fires when ALL of these hold:
+#   1. inside an ICT kill-zone hour (03-04 / 10-11 / 14-15 ET)  <- set automatically
+#   2. a same-direction liquidity sweep fired within the last confl_lookback bars
+#   3. price is on the correct side of session VWAP (bias)
+#   4. the FVG passes the displacement gap filter below
+# Stop beyond the swept wick (swing_stops); R-multiple TP from EL_SILVER.
+#
+# base_preset EL_SILVER = confluence-reversal management: limit entry + swing
+# stop, but break-even and trailing OFF with a clean 2R target. The first SB run
+# (on EL_DORADO) hit 60.7% win but only PF 0.91 because BE/trail scratched the
+# winners (351 BE-stops, 58 TPs); a high hit-rate edge must be allowed to run.
+name: Silver_Bullet
+base_asset: NQ
+base_preset: EL_SILVER      # let winners run: BE/trail OFF, clean 2R target
+
+policy:
+  price_action_only: true
+  max_active_groups: 5
+
+groups:
+  silver_bullet:
+    require_sweep: true       # sweep must precede the FVG (sequence)
+    require_bias: true        # only take FVGs with VWAP bias
+    entry_fill_pct: 0.5       # 50% mean-threshold limit
+  fvg:
+    gap_min_ticks: 9          # displacement-grade gap, not drift
+    gap_max_ticks: 40
+  liquidity_eqhl:
+    eqhl_tolerance_ticks: 2   # (sweep uses the confirmed swing for now)
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

@@ -1,0 +1,171 @@
+---
+/**
+ * Bronvermelding.
+ *
+ * Op een site die over geld en regelgeving schrijft is de bron geen voetnoot
+ * maar onderdeel van de bewering. Daarom staat er bij elke bron wie hem
+ * uitgeeft en wanneer wij hem voor het laatst hebben nagelopen: een lezer kan
+ * dan zelf inschatten of de informatie nog vers genoeg is.
+ */
+interface Source {
+  title: string;
+  publisher: string;
+  url: string;
+  kind?: string;
+  retrieved?: string;
+  note?: string;
+}
+
+interface Props {
+  sources: Source[];
+  title?: string;
+  /** Toon een regel die uitlegt dat er geen officiële definitie bestaat. */
+  practiceNote?: boolean;
+}
+
+const { sources, title = "Bronnen", practiceNote = false } = Astro.props;
+
+const KIND_LABEL: Record<string, string> = {
+  toezichthouder: "Toezichthouder",
+  beurs: "Beurs",
+  reglement: "Reglement",
+  wetgeving: "Wetgeving",
+  belastingdienst: "Belastingdienst",
+  wetenschappelijk: "Wetenschappelijk",
+  aanbieder: "Aanbieder",
+};
+
+const fmtDate = (value?: string) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString("nl-NL", { day: "numeric", month: "long", year: "numeric" });
+};
+---
+
+{(sources.length > 0 || practiceNote) && (
+  <aside class="sources">
+    <h2 class="sources__title">{title}</h2>
+
+    {practiceNote && (
+      <p class="sources__practice">
+        Voor dit begrip bestaat geen definitie van een toezichthouder of beurs.
+        Het is een term uit de handelspraktijk; de omschrijving hierboven is hoe
+        wij hem gebruiken.
+      </p>
+    )}
+
+    {sources.length > 0 && (
+      <ol class="sources__list">
+        {sources.map((source) => (
+          <li class="source">
+            <a class="source__title" href={source.url} rel="noopener noreferrer" target="_blank">
+              {source.title}
+            </a>
+            <p class="source__meta">
+              {source.kind && (
+                <span class="source__kind">{KIND_LABEL[source.kind] ?? source.kind}</span>
+              )}
+              <span>{source.publisher}</span>
+              {fmtDate(source.retrieved) && (
+                <span class="source__date">nagelopen {fmtDate(source.retrieved)}</span>
+              )}
+            </p>
+            {source.note && <p class="source__note">{source.note}</p>}
+          </li>
+        ))}
+      </ol>
+    )}
+  </aside>
+)}
+
+<style>
+  .sources {
+    margin-top: var(--sp-7);
+    padding-top: var(--sp-5);
+    border-top: 1px solid var(--line);
+  }
+
+  .sources__title {
+    font-family: var(--mono);
+    font-size: var(--t-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    margin-bottom: var(--sp-4);
+  }
+
+  .sources__practice {
+    font-size: 0.875rem;
+    color: var(--muted);
+    margin-bottom: var(--sp-4);
+    max-width: 62ch;
+  }
+
+  .sources__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-4);
+    counter-reset: source;
+  }
+
+  .source {
+    padding-left: var(--sp-5);
+    position: relative;
+    counter-increment: source;
+  }
+
+  .source::before {
+    content: counter(source);
+    position: absolute;
+    left: 0;
+    top: 0.1em;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--accent);
+  }
+
+  .source__title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+
+  .source__title:hover {
+    color: var(--accent);
+  }
+
+  .source__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-1) var(--sp-3);
+    margin: var(--sp-1) 0 0;
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--dim);
+  }
+
+  .source__kind {
+    color: var(--accent-2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .source__date {
+    color: var(--dim);
+  }
+
+  .source__note {
+    margin: var(--sp-2) 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--muted);
+    max-width: 62ch;
+  }
+</style>

@@ -25,6 +25,9 @@ class FunnelOutcome:
     trades: int
     net_profit: float
     bars: int
+    days: int = -1       # TRADING days until pass/breach (-1 = never resolved).
+                         # The prop-firm question is "how fast", and firms count
+                         # trading days, not calendar days or bars.
 
 
 def _session_starts(df: pd.DataFrame) -> np.ndarray:
@@ -50,9 +53,15 @@ def run_funnel(cfg: Config, df: pd.DataFrame, ind: pd.DataFrame,
             r = "BREACH"
         else:
             r = "TIMEOUT"
+        # trading days to resolve = session-starts between the eval's first bar
+        # and the bar the account halted on (inclusive of the opening session).
+        days = -1
+        if res.resolve_bar >= 0:
+            days = int(np.searchsorted(starts, res.resolve_bar, side="right")
+                       - np.searchsorted(starts, sb, side="left"))
         outcomes.append(FunnelOutcome(
             start_bar=sb, start_time=pd.Timestamp(times.iloc[sb]), result=r,
-            trades=len(res.trades), net_profit=eng.net_profit, bars=eb - sb))
+            trades=len(res.trades), net_profit=eng.net_profit, bars=eb - sb, days=days))
     return outcomes
 
 
@@ -74,4 +83,13 @@ def summarize(outcomes: list[FunnelOutcome]) -> dict:
         "pass_rate_pct": round(100 * npass / n, 1),
         "pass_rate_of_resolved_pct": round(100 * npass / resolved, 1) if resolved else 0.0,
         "median_trades_to_resolve": int(np.median(trades)) if n else 0,
+        "median_days_to_pass": _median_days(outcomes, "PASS"),
+        "median_days_to_breach": _median_days(outcomes, "BREACH"),
     }
+
+
+def _median_days(outcomes: list[FunnelOutcome], result: str):
+    """Median TRADING days to reach `result` — the 'how fast' half of the
+    question. None when no attempt ended that way."""
+    d = [o.days for o in outcomes if o.result == result and o.days >= 0]
+    return int(np.median(d)) if d else None

@@ -1,0 +1,25 @@
+---
+term: Doorrollen
+short: "Het verplaatsen van een positie van het aflopende contract naar het volgende."
+category: futures
+aliases:
+  - rollover
+  - roll
+authority: false
+sources: []
+related:
+  - contractmaand
+  - backtest
+  - open-interest
+updated: 2026-08-15
+draft: false
+---
+
+Omdat elk contract een einddatum heeft, moet je vóór afloop naar de volgende
+contractmaand als je in de markt wilt blijven. Dat betekent het oude contract
+sluiten en het nieuwe openen.
+
+De twee contracten noteren zelden op precies dezelfde prijs. Op een doorlopende
+chart wordt dat verschil weggerekend, waardoor de grafiek er glad uitziet terwijl
+de werkelijke prijs een sprong maakte. Bij het testen van strategieën is dat een
+bekende bron van resultaten die in het echt niet bestonden.

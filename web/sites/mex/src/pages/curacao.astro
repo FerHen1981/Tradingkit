@@ -1,0 +1,188 @@
+---
+import { getCollection, render } from "astro:content";
+
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+import Button from "@mex/brand/components/Button.astro";
+
+const entries = (await getCollection("journey", ({ data }) => !data.draft)).sort(
+  (a, b) => a.data.date.valueOf() - b.data.date.valueOf()
+);
+
+const milestones = await Promise.all(
+  entries.map(async (entry) => ({
+    entry,
+    Content: (await render(entry)).Content,
+  }))
+);
+
+const STATUS_LABEL = {
+  done: "Afgerond",
+  running: "Loopt",
+  planned: "Gepland",
+} as const;
+---
+
+<Base
+  title="Curaçao"
+  description="Waarom MEX Traders zich op Curaçao vestigde, en hoe die transitie in de praktijk verliep — inclusief het administratieve deel."
+>
+  <Hero
+    eyebrow="De transitie"
+    headline="Verhuizen is een structuurbeslissing"
+    lead="Een handelsbedrijf verplaatst zich niet voor het uitzicht. Hieronder de route van besluit naar operatie, met de stappen die in de praktijk het meeste tijd kostten."
+    size="md"
+  />
+
+  <Section>
+    <ol class="timeline">
+      {milestones.map(({ entry, Content }) => (
+        <li class:list={["milestone", `is-${entry.data.status}`]}>
+          <div class="milestone__meta">
+            <time datetime={entry.data.date.toISOString()}>
+              {entry.data.date.toLocaleDateString("nl-NL", {
+                month: "long",
+                year: "numeric",
+              })}
+            </time>
+            {entry.data.phase && <span class="milestone__phase">{entry.data.phase}</span>}
+            <span class="milestone__status">{STATUS_LABEL[entry.data.status]}</span>
+          </div>
+
+          <div class="milestone__body">
+            <h2>{entry.data.title}</h2>
+            <p class="milestone__summary">{entry.data.summary}</p>
+            <div class="prose milestone__prose">
+              <Content />
+            </div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </Section>
+
+  <Section
+    eyebrow="De praktijk"
+    title="En de rest van het verhaal"
+    lead="De zakelijke kant staat hierboven. De persoonlijke kant van emigreren als daytrader — de verhuizing, het leven op het eiland, en de dingen die niemand je vooraf vertelt — houden we bewust apart."
+    raised
+  >
+    <Button href="https://www.pipsandpalmtrees.com" external>
+      Lees Pips &amp; Palm Trees
+    </Button>
+  </Section>
+
+  <Section narrow>
+    <Callout variant="legal">
+      Deze pagina beschrijft de eigen bedrijfsgeschiedenis van MEX Traders N.V.
+      Zij bevat geen fiscaal, juridisch of emigratieadvies, en is niet bedoeld om
+      als zodanig te worden gebruikt. Wie een vergelijkbare stap overweegt, doet
+      er goed aan zich te laten adviseren over de eigen situatie.
+    </Callout>
+  </Section>
+</Base>
+
+<style>
+  .timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0;
+  }
+
+  .milestone {
+    display: grid;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-7);
+    position: relative;
+    padding-left: var(--sp-6);
+  }
+
+  /* The rail and its node. A single border on the item plus an absolutely
+     placed dot beats a wrapper element per row. */
+  .milestone::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 0.5rem;
+    bottom: -0.5rem;
+    width: 1px;
+    background: var(--line);
+  }
+
+  .milestone:last-child::before {
+    bottom: auto;
+    height: 0;
+  }
+
+  .milestone::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.4rem;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+  }
+
+  .milestone.is-running::after {
+    border-color: var(--accent-2);
+  }
+
+  .milestone.is-planned::after {
+    border-color: var(--dim);
+  }
+
+  @media (min-width: 860px) {
+    .milestone {
+      grid-template-columns: 210px 1fr;
+      gap: var(--sp-6);
+      padding-left: var(--sp-6);
+    }
+  }
+
+  .milestone__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-1) var(--sp-3);
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  @media (min-width: 860px) {
+    .milestone__meta {
+      flex-direction: column;
+      gap: var(--sp-2);
+      padding-top: 0.2rem;
+    }
+  }
+
+  .milestone__phase { color: var(--accent); }
+  .is-running .milestone__status { color: var(--accent-2); }
+
+  .milestone__body h2 {
+    font-size: var(--t-h3);
+    margin-bottom: var(--sp-2);
+  }
+
+  .milestone__summary {
+    color: var(--ink);
+    font-size: var(--t-lead);
+    max-width: 60ch;
+  }
+
+  .milestone__prose {
+    font-size: 0.9375rem;
+    color: var(--muted);
+    margin-top: var(--sp-3);
+  }
+</style>

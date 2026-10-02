@@ -1,0 +1,244 @@
+---
+/**
+ * Gedeelde kopbalk.
+ *
+ * Het merk komt via de `brand`-slot binnen, zodat MEX zijn beeldmerk kan
+ * doorgeven en Pips & Palm Trees zijn eigen woordmerk houdt — één component,
+ * twee merken, zonder dat het ene merkteken op het andere merk belandt.
+ * Zonder slot valt het terug op een woordmerk volgens de merkregel: de naam
+ * claimt in 800, de toevoeging beschrijft in 400 met +0,10em.
+ */
+interface NavItem {
+  label: string;
+  href: string;
+}
+
+interface Props {
+  /** Short mark inside the gold badge, e.g. "MEX". */
+  mark: string;
+  /** Wordmark next to it, e.g. "Traders". */
+  word: string;
+  /** Optional third segment in aqua, e.g. "Curaçao". */
+  tag?: string;
+  nav: NavItem[];
+  /** Actie rechts — doorgaans de inlog op het dashboard. */
+  cta?: NavItem;
+  /** Current path, for aria-current. */
+  path: string;
+  home?: string;
+}
+
+const { mark, word, tag, nav, cta, path, home = "/" } = Astro.props;
+
+const isCurrent = (href: string) =>
+  href === home ? path === home : path === href || path.startsWith(`${href}/`);
+---
+
+<header class="masthead">
+  <div class="wrap bar">
+    <a class="brand" href={home} aria-label={`${mark} ${word} — home`}>
+      <slot name="brand">
+        <span class="brand__word">
+          <strong>{mark}</strong><em>{word}</em>
+        </span>
+      </slot>
+      {tag && <span class="brand__tag">{tag}</span>}
+    </a>
+
+    <nav class="nav" aria-label="Hoofdnavigatie">
+      {nav.map((item) => (
+        <a
+          class="nav__link"
+          href={item.href}
+          aria-current={isCurrent(item.href) ? "page" : undefined}
+        >
+          {item.label}
+        </a>
+      ))}
+    </nav>
+
+    <div class="actions">
+      <button
+        class="theme"
+        type="button"
+        data-theme-toggle
+        aria-label="Wissel tussen licht en donker"
+        title="Wissel tussen licht en donker"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true" width="17" height="17">
+          <path
+            d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      {cta && (
+        <a class="cta" href={cta.href}>
+          {cta.label}
+        </a>
+      )}
+    </div>
+  </div>
+</header>
+
+<style>
+  .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-4);
+    min-height: 64px;
+    padding-block: var(--sp-3);
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    margin-right: auto;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .brand__word {
+    font-family: var(--display);
+    font-size: 1.0625rem;
+    color: var(--ink);
+  }
+
+  .brand__word strong {
+    font-weight: 800;
+    letter-spacing: -0.03em;
+  }
+
+  .brand__word em {
+    font-style: normal;
+    font-weight: 400;
+    letter-spacing: 0.1em;
+    margin-left: 0.4em;
+    color: var(--muted);
+  }
+
+  .brand__tag {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+  }
+
+  .nav {
+    display: none;
+    gap: var(--sp-1);
+  }
+
+  .nav__link {
+    font-size: 0.875rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    transition: color 0.15s ease, background 0.15s ease;
+  }
+
+  .nav__link:hover {
+    color: var(--ink);
+    background: var(--surface);
+  }
+
+  .nav__link[aria-current="page"] {
+    color: var(--accent);
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+  }
+
+  .theme {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .theme:hover {
+    color: var(--accent);
+    border-color: var(--line-strong);
+  }
+
+  /* De navigatie-CTA is een omlijnde knop, geen goudvlak: goud is voor het
+     merkteken en accenten. De mockup gebruikt dezelfde behandeling. */
+  .cta {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+    padding: 0.55rem 1rem;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .cta:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* The nav collapses to a scrollable rail on small screens rather than
+     hiding behind a hamburger — fewer taps, no JS, nothing hidden. */
+  @media (max-width: 799px) {
+    .nav {
+      display: flex;
+      order: 3;
+      width: 100%;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding-bottom: var(--sp-1);
+      margin-inline: calc(-1 * var(--sp-3));
+      padding-inline: var(--sp-3);
+    }
+    .nav::-webkit-scrollbar { display: none; }
+  }
+
+  @media (min-width: 800px) {
+    .nav { display: flex; }
+  }
+</style>
+
+<script>
+  const toggle = document.querySelector("[data-theme-toggle]");
+  toggle?.addEventListener("click", () => {
+    const root = document.documentElement;
+    const current =
+      root.dataset.theme ||
+      (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    const next = current === "dark" ? "light" : "dark";
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem("theme", next);
+    } catch (e) {
+      /* storage unavailable — the choice simply won't persist */
+    }
+  });
+</script>

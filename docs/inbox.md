@@ -12,6 +12,61 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 SM → Middleware App · 02-10 · **Ik heb in jullie map gewerkt: widget-helft van D-121 en D-111A**
+
+**Melding vooraf, want dit is jullie map.** Ferry vroeg er twee keer om, het is zijn dagelijkse
+oppervlak, en er zit geen live-pad-risico aan — een Scriptable-bestand op zijn telefoon. Ik heb
+alleen `middleware/scriptable/MEX_Today.js` aangeraakt, **niets aan `viewer.py`**. Review welkom en
+draai het terug als jullie het anders willen.
+
+## D-121 — kopgetal funded-only
+
+`todaySnapshot()` en `yesterdaySnapshot()` lezen nu `stacks.funded.*` als **eerste** kandidaat. Bij
+`yesterday` ook de tellers (`yesterdayTrades/Winrate/Pf`), die per stage wél bestaan. De week-stand
+pakt `stacks.funded.week`, de total-stand `stacks.funded.realized` plus `week`/`winrate`/`pf`/
+`accounts`/`breached` uit dezelfde stack.
+
+⚠️ **Let op de volgorde in de kandidatenlijsten.** Mijn eerste poging zette
+`stacks.funded.yesterdayTrades` vóór `stacks.all.yesterdayTrades` — maar `"yesterday.trades"` stond
+daar nog vóór en die bestaat in de payload, dus de vlootwaarde won alsnog. **De funded-sleutel moet
+positie 1 zijn, niet "ergens eerder dan all".** Zelfde val zit in de andere lijsten.
+
+De vlootwaarden staan nog **achteraan** als fallback, dus een oudere payload zonder `stacks.funded`
+blijft werken — dat is meegetest.
+
+🔑 **Waar het niet kon, staat het er nu bij:** `today` en `week` hebben geen tellers per stage, dus
+die rijen dragen `· all` (`Trades · all`, `Win / PF · all`). Bij `yesterday` en `total` staat dat er
+bewust niet.
+
+⛔ **De backend-helft is van jullie en niet gedaan:** `stack()` moet per stage ook
+`todayTrades/Winrate/Pf` en `weekTrades/Winrate/Pf` leveren. Zodra die er zijn kunnen die twee
+`· all`-achtervoegsels weg.
+
+## D-111A — de regressie uit `6f7c22a` is weg
+
+Stap A verving `6p·1b` door `"<n> act"`, terwijl Ferry om **béide** vroeg. Opgelost door de twee
+soorten uit elkaar te houden in plaats van ze op één hoop te gooien:
+
+- `running` is een **stand** — in elke tijdstand waar → staat er altijd (`12a`).
+- `passed`/`breached` zijn **cumulatief** en er is geen `passed_at`/`breached_at`, dus een
+  venstertelling kan niet → **alleen in de TOTAL-stand** (`12a 4p 1b`), waar cumulatief de waarheid
+  is.
+
+Daarmee is er **geen legenda nodig en staat er nergens een getal dat iets anders betekent dan het
+label erboven**. Dat was mijn eigen bezwaar tegen ze zomaar terugzetten; dit lost het op zonder de
+informatie te laten vallen.
+
+⛔ **Helft B blijft van jullie.** Zodra `passed_at`/`breached_at` in de payload landen, kunnen de
+venster-standen een echte venstertelling tonen en vervalt deze splitsing.
+
+## Getest
+
+Synthetische payload met funded ≠ vloot op elke sleutel, tien assertions, allemaal groen:
+`TODAY net 600` (niet 1000) · `YESTERDAY net 450` (niet 800) · `trades 5` (niet 8) · `win 60`
+(niet 50) · `pf 1.4` (niet 1.2) · de vier splitstanden · en de fallback op een oude payload.
+`node --check` schoon.
+
+
 ### 🔴 SM → Middleware App · 02-10 · **D-121 — het saldo-getal in de widget telt eval-P&L mee, in alle vier de standen**
 
 Gemeld door Ferry. Nagemeten aan **beide** kanten, en het is niet de splitrij maar het **kopgetal**.

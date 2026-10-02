@@ -360,10 +360,17 @@ function todaySnapshot(d) {
     d.stacks || {}
 
 
+  // D-121 · Het KOPGETAL is de saldo-ontwikkeling van de FUNDED-stack, niet van
+  // de vloot. Ferry 27-09 (antwoord 11): "saldo ontwikkeling op funded accounts,
+  // account ontwikkeling op evals (saldo doet er niet toe)". Hiervoor stond
+  // "today" vooraan — en dat is `command_state("day")["fleet"]`, dus funded PLUS
+  // eval. De vlootwaarden blijven als fallback achteraan staan zodat een oudere
+  // payload zonder `stacks.funded` nog steeds een getal oplevert.
   const net =
     firstNum(
       d,
       [
+        "stacks.funded.today",
         "today",
         "today.net",
         "day.net",
@@ -470,6 +477,7 @@ function yesterdaySnapshot(d) {
     firstNum(
       d,
       [
+        "stacks.funded.yesterday",
         "yesterday",
         "yesterday.net",
         "prevDay.net",
@@ -485,6 +493,7 @@ function yesterdaySnapshot(d) {
     firstNum(
       d,
       [
+        "stacks.funded.yesterdayTrades",
         "yesterday.trades",
         "prevDay.trades",
         "previousDay.trades",
@@ -499,6 +508,7 @@ function yesterdaySnapshot(d) {
     firstNum(
       d,
       [
+        "stacks.funded.yesterdayWinrate",
         "yesterday.winrate",
         "prevDay.winrate",
         "previousDay.winrate",
@@ -513,6 +523,7 @@ function yesterdaySnapshot(d) {
     firstNum(
       d,
       [
+        "stacks.funded.yesterdayPf",
         "yesterday.pf",
         "prevDay.pf",
         "previousDay.pf",
@@ -585,25 +596,47 @@ function yesterdaySnapshot(d) {
 //
 // Format eval-half: `<passed>p·<breached>b` in 50k-eq (bv. "6p·1b"). Beide 0
 // → "—". Format funded-half: `moneyK(bedrag)` of "—" als er geen bedrag is.
-function evalFundedSplit(d, fundedAmount) {
+function evalFundedSplit(d, fundedAmount, mode) {
 
-  // D-111 stap A · Eval-half toont het AANTAL ACTIEVE evals uit
-  // `raw_counts.running`, niet de 50k-genormaliseerde teller. Ferry:
-  // *"RAW counts, niet counts_50k_eq — op zijn telefoon is 5 accounts
+  // D-111 · Eval-half toont RAW counts, niet de 50k-genormaliseerde teller.
+  // Ferry: *"RAW counts, niet counts_50k_eq — op zijn telefoon is 5 accounts
   // gewoon 5."* De 50k-normalisatie blijft voor de publieke site (D-74).
   //
-  // Stap B (passed/failed-tellers per handelsdag) volgt zodra de
-  // `passed_at`-afleiding uit de eerste fill per account is geland;
-  // de failed-teller krijgt daar een "unknown"-marker mee omdat een
-  // stille nul niet mag — Ferry benadrukte dat expliciet.
+  // Ferry vroeg om BEIDE: het aantal actieve evals én passed/failed. Die twee
+  // zijn niet van dezelfde soort, en daar hangt de weergave op:
+  //
+  //   `running`  is een STAND — hoeveel evals lopen er NU. Een stand is in
+  //              elke tijdstand waar, dus die tonen we altijd.
+  //   `passed` / `breached` zijn CUMULATIEF — de huidige status van elk
+  //              account opgeteld. Er is nergens vastgelegd wannéér een eval
+  //              passeerde of brak (`passed_at`/`breached_at` bestaan niet in
+  //              de payload), dus een venstertelling is niet mogelijk.
+  //
+  // Zouden we die cumulatieve tellers onder de kop "TODAY" of "WEEK" zetten,
+  // dan staat er een venster-label boven een niet-venster-getal. Dat is exact
+  // de stille verkeerde waarde waar dit project al zes keer op viel. Daarom:
+  // **passed/breached alleen in de TOTAL-stand**, waar cumulatief de waarheid
+  // is; in de andere standen alleen het actieve aantal. Geen legenda nodig en
+  // nergens een getal dat iets anders betekent dan het label zegt.
+  //
+  // Zodra `passed_at`/`breached_at` in de payload landen (D-111 helft B) kunnen
+  // de venster-standen een echte venstertelling tonen en vervalt deze splitsing.
   const raw =
     (d.eval_stats || {}).raw_counts || {}
 
   const running =
     num(raw.running, 0)
 
+  const passed =
+    num(raw.passed, 0)
+
+  const breached =
+    num(raw.breached, 0)
+
   const evText =
-    String(running) + " act"
+    mode === "total"
+      ? String(running) + "a " + String(passed) + "p " + String(breached) + "b"
+      : String(running) + "a"
 
   const fuText =
     (fundedAmount === null || fundedAmount === undefined)
@@ -959,10 +992,16 @@ if (
     )
 
 
+  // D-121 · Het kopgetal is funded-only, maar deze twee tellers kunnen dat
+  // (nog) niet zijn: de payload draagt per stage wél `yesterdayTrades/Winrate/
+  // Pf`, maar géén `todayTrades/Winrate/Pf`. Ze blijven dus vlootbreed, en dat
+  // staat erbij — een funded saldo met stilzwijgend vloot-statistieken eronder
+  // is precies het half-kloppende getal dat we niet willen. Zodra `stack()` de
+  // dag-tellers per stage levert, vervalt het achtervoegsel `· all`.
   rows = [
 
     [
-      "Trades",
+      "Trades · all",
 
       t.trades === null
         ? "—"
@@ -970,7 +1009,7 @@ if (
     ],
 
     [
-      "Win / PF",
+      "Win / PF · all",
 
       (
         t.winrate === null
@@ -991,7 +1030,7 @@ if (
 
 
   split =
-    evalFundedSplit(d, t.fu)
+    evalFundedSplit(d, t.fu, mode)
 
 }
 
@@ -1089,10 +1128,14 @@ else if (
     ]
 
 
+    // D-121 · In deze stand zijn OOK de tellers funded-only: de payload draagt
+    // `stacks.funded.yesterdayTrades/Winrate/Pf`. Daarom geen `· all` in de
+    // labels hierboven — kopgetal en tellers gaan hier over dezelfde groep.
     split =
       evalFundedSplit(
         d,
-        y.fu === null ? null : y.fu
+        y.fu === null ? null : y.fu,
+        mode
       )
 
   }
@@ -1115,8 +1158,13 @@ else if (
   mode === "week"
 ) {
 
+  // D-121 · `d.week.net` is `command_state("week")["fleet"]` — funded PLUS eval.
+  // Het kopgetal moet de funded-stack zijn, dus die lezen we apart.
   const wk =
     d.week || {}
+
+  const fundedWk =
+    (d.stacks || {}).funded || {}
 
 
   const all =
@@ -1132,10 +1180,9 @@ else if (
     "This week"
 
   big =
-    num(
-      wk.net,
-      0
-    )
+    typeof fundedWk.week === "number"
+      ? fundedWk.week
+      : num(wk.net, 0)
 
 
   breached =
@@ -1145,6 +1192,10 @@ else if (
     )
 
 
+  // D-121 · "Today" volgt het kopgetal en is dus óók funded — `todaySnapshot()`
+  // leest sinds deze versie `stacks.funded.today` als eerste. Trades en Win/PF
+  // kunnen dat nog niet: de payload draagt geen week-tellers per stage, dus die
+  // blijven vlootbreed en dragen `· all`.
   rows = [
 
     [
@@ -1156,7 +1207,7 @@ else if (
     ],
 
     [
-      "Trades",
+      "Trades · all",
 
       String(
         num(
@@ -1167,7 +1218,7 @@ else if (
     ],
 
     [
-      "Win / PF",
+      "Win / PF · all",
 
       num(
         wk.winrate,
@@ -1193,7 +1244,8 @@ else if (
   split =
     evalFundedSplit(
       d,
-      typeof funded.week === "number" ? funded.week : null
+      typeof funded.week === "number" ? funded.week : null,
+      mode
     )
 
 }
@@ -1211,6 +1263,22 @@ else {
     ).all || {}
 
 
+  // D-121 · In deze stand kan ALLES funded-only: `stack("funded")` draagt
+  // `realized`, `week`, `trades`, `winrate`, `pf`, `accounts` en `breached`,
+  // en die komen uit `command_state("all", "funded")` — dus all-time, wat hier
+  // precies het juiste venster is. Geen `· all`-achtervoegsels nodig: kopgetal
+  // en tellers gaan over dezelfde groep.
+  const fu =
+    (
+      d.stacks || {}
+    ).funded || {}
+
+
+  const pick =
+    (a, b) =>
+      typeof a === "number" ? a : num(b, 0)
+
+
   title =
     "TOTAL"
 
@@ -1218,9 +1286,9 @@ else {
     "All-time"
 
   big =
-    num(
-      all.realized,
-      0
+    pick(
+      fu.realized,
+      all.realized
     )
 
 
@@ -1237,9 +1305,9 @@ else {
       "Week",
 
       moneyK(
-        num(
-          all.week,
-          0
+        pick(
+          fu.week,
+          all.week
         )
       )
     ],
@@ -1247,31 +1315,34 @@ else {
     [
       "Win / PF",
 
-      num(
-        all.winrate,
-        0
+      pick(
+        fu.winrate,
+        all.winrate
       )
       +
       "% · "
       +
       pfStr(
-        all.pf
+        typeof fu.pf === "number" ? fu.pf : all.pf
       )
     ],
 
+    // Funded-accounts en hun breaches. De EVAL-kant staat in de splitrij
+    // hieronder (`<n>a <n>p <n>b`), dus samen is het beeld compleet en telt
+    // niets dubbel.
     [
-      "Accounts",
+      "Funded",
 
-      num(
-        all.accounts,
-        0
+      pick(
+        fu.accounts,
+        all.accounts
       )
       +
       " · "
       +
-      num(
-        all.breached,
-        0
+      pick(
+        fu.breached,
+        all.breached
       )
       +
       " br"
@@ -1288,7 +1359,8 @@ else {
   split =
     evalFundedSplit(
       d,
-      typeof funded.realized === "number" ? funded.realized : null
+      typeof funded.realized === "number" ? funded.realized : null,
+      mode
     )
 
 }

@@ -180,3 +180,74 @@ Dit is een **noodmaatregel**, geen fix. Wat er structureel moet gebeuren staat o
 - **D-118** — de oorzaak zelf, en of de webhook geroteerd is (**D-11**).
 - **D-119** — het fan-out-statusvenster, zodat dit de volgende keer zichtbaar is in plaats van
   gemeld door jou.
+
+---
+
+## ✅ UITKOMST VAN DE METING — 02-10-2026
+
+Ferry draaide stap 1 op `mex-mw-01`. Service actief sinds 01-10 06:14:57 UTC.
+
+**Gezette env-namen:** `MEX_ACCOUNT_QTY` · `MEX_CARD_MAX_PER_MINUTE` · `MEX_DISCORD_WEBHOOK` ·
+`MEX_DRY_RUN` · `MEX_RENDER_OUT_DIR` · `MEX_RENDER_SCRIPT` · `MEX_WEBHOOK_SECRET`.
+
+**Webhook-test:** `MEX_DISCORD_WEBHOOK` → **200 OK**. (`MEX_WEBHOOK_SECRET` → `000`, verwacht: dat
+is de alert-token en geen URL; het naamfilter van het script pakt hem ten onrechte mee. Cosmetisch.)
+
+**Journaal van vandaag (1584 regels):**
+
+| aantal | kind | result |
+|---:|---|---|
+| 592 | `discord-card` | `card sent 200 (poging 1)` |
+| 390 | `discord` | `card queued (tier B)` |
+| 174 | `discord` | `card queued (tier A)` |
+| **103** | `discord` | **`card rate-limited (tier B)`** |
+| 27 | `discord` | `blocked-notice suppressed` |
+| 21 | `discord` | `card queued (tier B) (+2…+18 gedempt)` |
+| 2 | `discord` | `sent 204 (poging 1)` |
+
+### Conclusies
+
+✅ **D-116 bevestigd en dit is de oorzaak.** 688 pogingen, **103 weggegooid = 15,0%**. Over alleen
+tier B (514 pogingen): **20,0% verdwenen.**
+
+🔑 **Waarom CONFIG wél en fills niet:** CONFIG vuurt alleen bij sessiestart en haalt de drempel
+nooit. **Fills clusteren in de tijd** en lopen precies tegen de burst-limiet. De suffixen
+`(+18 gedempt)` en `(+17 gedempt)` zijn het bewijs. Het is geen berichtsoort die faalt — het is een
+tijdstip.
+
+❌ **D-118 weerlegd.** Er is **geen enkele `NOTIFY_WEBHOOK*`** gezet, dus geen routing-splitsing;
+alles gaat naar één webhook die 200 geeft.
+
+📌 **De `catch`-tak vuurde niet:** nul `card exception`, nul `card failed`. Latent risico, geen
+actieve oorzaak — hoort nog wel in dezelfde fix.
+
+🔴 **`MEX_ACCOUNT_QTY` staat gezet** — tegen D-53 in. Zie **D-122**.
+
+### Bijgestelde herstelactie
+
+**2A is NIET nodig** — die webhooks waren al leeg. Alleen **2B**:
+
+```bash
+sudo mkdir -p /etc/systemd/system/mex-receiver.service.d
+sudo tee /etc/systemd/system/mex-receiver.service.d/99-notify-herstel.conf >/dev/null <<'EOF'
+# 02-10-2026 - D-116 bevestigd: 103 van 688 berichten weggegooid. Kaarten uit, alles als tekst.
+[Service]
+Environment=MEX_RENDER_ENABLED=false
+EOF
+sudo systemctl daemon-reload && sudo systemctl restart mex-receiver
+```
+
+Terugdraaien zodra Middleware App de fall-through heeft gebouwd:
+
+```bash
+sudo rm /etc/systemd/system/mex-receiver.service.d/99-notify-herstel.conf
+sudo systemctl daemon-reload && sudo systemctl restart mex-receiver
+```
+
+### Controle voor D-122 — toont géén accountnummers
+
+```bash
+tr '\0' '\n' < /proc/$(systemctl show mex-receiver -p MainPID --value)/environ \
+  | grep '^MEX_ACCOUNT_QTY=' | cut -d= -f2- \
+  | awk '{print (length($0)==0 ? "LEEG - geen override, D-53 klopt" : split($0,a,",") " account(s) met een qty-override")}'
+```

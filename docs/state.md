@@ -108,27 +108,31 @@ is de beste dag sinds de laatste payout. Per account geldt dus:
 `daily target ≤ min(30% × (balance − 50.000), huidige best-day)` — een dag boven de
 huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakker.
 
-### Per-account set (1 okt, stand Tradovate 30 sep na sluiting — vervangt 26 sep)
+### Per-account set (5 okt, stand Tradovate 2 okt na sluiting — vervangt 1 okt)
 
-16 PA's (013, 018, 022–035; 030–033 nieuw, 034/035 vers) + 3 × 250K-eval (267–269, vers).
-Alle 50K-evals van vorige week zijn weg. Regels A-78/A-81; schema `fleet_startschema_2026-10-02_v2.pdf` (doel vooraan; gemengde vloot: fase A/B 250/100/500, fase C 150/50/300 × qty; live config uit alerts 2 okt).
-30 sep: elke account −$400 tot −$1.600 (één SL-dag).
+14 PA's (013, 018, 022, 025–035) + evals 275, 276 (50K, vers) en 277 (300K, vers). Weg sinds 30 sep:
+PA023, PA024 (Intraday 4.0) en de evals 267–273. Regels A-78/A-81, gemengde vloot (fase A/B
+250/100/500, fase C 150/50/300 × qty); schema `fleet_startschema_2026-10-05.pdf` met maandag-checklist.
+1–2 okt: PA013 −$2.800 (qty 2, 300/110/900 + trail) → ruimte 2.026, #2 pas weer bij 54.600;
+PA018 −$1.419 → ruimte 3.925 → qty 1; PA022 onder safety net; PA025 nog $130 ruimte.
 
-| Account | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
-|---|---:|---:|---:|---|---:|---:|---|
-| PA013 | 54.927 | 4.827 | **1** | 250 / 100 / 500 | $500 | geen | #2 $2.000 aanvraagbaar (zonder buffer) zodra 5 kwal.dagen vol; qty 2 bij 55.100 |
-| PA018 | 55.444 | 5.344 | 2 | 500 / 200 / 1.000 | $1.000 | $600 | #1 geblokkeerd tot 58.348 (best-day 2.504) |
-| PA022 | 52.797 | 2.697 | 1 | 250 / 100 / 500 | $500 | geen | +1.303 tot max #1 |
-| PA023 (4.0) | 50.374 | 274 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL staat nog op 1.000; 1 verliesdag tot liq |
-| PA024 (4.0) | 48.931 | 443 | 1 | 250 / 100 / 500 | $500 | $200 | TV DLL staat nog op 1.000 |
-| PA025 | 48.414 | 698 | 1 | 250 / 100 / 500 | $500 | $200 | |
-| PA026 | 50.615 | 1.469 | 1 | 250 / 100 / 500 | $500 | geen | |
-| PA027 | 49.737 | 1.591 | 1 | 250 / 100 / 500 | $500 | geen | |
-| PA028 | 48.848 | 1.076 | 1 | 250 / 100 / 500 | $500 | $300 | |
-| PA029 | 48.777 | 1.242 | 1 | 250 / 100 / 500 | $500 | $400 | |
-| PA030–033 | 49.2–49.8k | 1.35–1.9k | 1 | 250 / 100 / 500 | $500 | geen | nieuw |
-| PA034, PA035 | 50.000 | 2.500 | 1 | 250 / 100 / 500 | $500 | geen | vers |
-| 267–269 | 250K eval | 6.500 | 5 NQ | geen guards | — | — | keuze Ferry: meerdere trades (p 2–16%, A-77) |
+| Account | Fase | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
+|---|---|---:|---:|---:|---|---:|---:|---|
+| PA013 | C | 52.126 | 2.026 | 1 | 150 / 50 / 300 | $300 | geen | trail uit; #2 bij 54.600 |
+| PA018 | C | 54.025 | 3.925 | 1 (was 2) | 150 / 50 / 300 | $300 | geen | trail uit; #1 geblokkeerd tot 58.348 |
+| PA022 | C | 52.072 | 1.972 | 1 | 150 / 50 / 300 | $300 | geen | +2.028 tot #1 |
+| PA025 | A | 47.847 | 130 | 1 | 250 / 100 / 500 | $500 | — | één SL = einde; lot of uit (keuze Ferry) |
+| PA026 | A | 50.401 | 1.254 | 1 | 250 / 100 / 500 | $500 | $400 | |
+| PA027 | B | 49.522 | 1.377 | 1 | 250 / 100 / 500 | $500 | geen | |
+| PA028 | A | 48.316 | 543 | 1 | 250 / 100 / 500 | $500 | $200 | trail uit |
+| PA029 | A | 48.243 | 708 | 1 | 250 / 100 / 500 | $500 | $200 | trail uit |
+| PA030, 031 | B | 49.2k | 1.31k | 1 | 250 / 100 / 500 | $500 | geen | was 320/170/1.000 |
+| PA032 | B | 49.262 | 1.413 | 1 | 250 / 100 / 500 | $500 | geen | |
+| PA033 | A | 48.652 | 814 | 1 | 250 / 100 / 500 | $500 | $200 | trail uit |
+| PA034 | B | 50.095 | 2.473 | 1 (was 2) | 250 / 100 / 500 | $500 | geen | |
+| PA035 | B | 49.875 | 2.177 | 1 | 250 / 100 / 500 | $500 | geen | trail uit |
+| 275, 276 | 50K eval | 50.000 | 2.500 | 5 NQ | geen guards, Apex Eval | — | — | lottery p ≈ 1/3 |
+| 277 | 300K eval | 300.000 | 7.500 | 35 NQ | geen guards, Apex Eval, goal 20.000 | — | — | one-shot p ≈ 1/4,75 (handoff) |
 
 Pine voor alle PA's: TP **Fixed 85t** (export d8ac1 draaide op R-multiple 1 = 100t, dat
 is níet de live waarde), Day-profit exit mode **Trail + cap**, Daily risk-gate **Off**.

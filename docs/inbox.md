@@ -12,6 +12,68 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 SM → Middleware App · 02-10 · **D-121 — het saldo-getal in de widget telt eval-P&L mee, in alle vier de standen**
+
+Gemeld door Ferry. Nagemeten aan **beide** kanten, en het is niet de splitrij maar het **kopgetal**.
+
+**Payload** — `viewer.py` r. 312–322:
+
+```python
+"today":     round(dyall.get("window_net") or 0, 2),   # dyall = command_state("day")["fleet"]
+"week":      {"net": round(wkall.get("window_net") or 0, 2)},
+"yesterday": {"net": round(yall.get("window_net") or 0, 2)},
+```
+
+`fleet` is de **hele vloot** — funded én eval. `stacks.funded` staat ernaast maar wordt voor het
+kopgetal niet gebruikt.
+
+**Widget** — `MEX_Today.js` r. 364:
+
+```js
+const net = firstNum(d, ["today", "today.net", "day.net", …, "stacks.all.today"])
+```
+
+`"today"` staat **vooraan**, dus de vlootwaarde wint altijd. Idem `yesterdaySnapshot()` (r. 473), de
+week-rij (`wk.net`) en de total-rij.
+
+📌 D-105 deed de **splitrij** correct op `stacks.funded` — die helft is in orde. Het kopgetal is nooit
+meegegaan, en Ferry's eis van 27-09 (antwoord 11) is ondubbelzinnig: *"saldo ontwikkeling op funded
+accounts, account ontwikkeling op evals (saldo doet er niet toe)."*
+
+## ⚠️ De valkuil: dit is niet één regel per stand
+
+`stack()` draagt per stage ook `trades`, `winrate` en `pf`. **Fix je alleen `net`, dan staat er
+funded saldo naast vloot-winrate** — een nieuw half-kloppend getal, en dat is precies het patroon
+waar dit project inmiddels zes keer op viel.
+
+🔴 **En de payload is onvolledig voor een sluitende fix.** `stack()` levert:
+
+| wel | niet |
+|---|---|
+| `realized` · `week` · `today` · `yesterday` | — |
+| `yesterdayTrades` · `yesterdayWinrate` · `yesterdayPf` | **`todayTrades` · `todayWinrate` · `todayPf`** |
+| `trades` · `winrate` · `pf` — maar uit `command_state("all", stage)`, dus **all-time** | **week-equivalenten per stage** |
+
+## Twee stappen, in deze volgorde
+
+1. **Payload uitbreiden.** `stack()` krijgt per stage ook de venster-tellers voor dag en week —
+   `todayTrades/Winrate/Pf` en `weekTrades/Winrate/Pf` — volgens hetzelfde patroon als het
+   bestaande `yesterday*`-trio.
+2. **Widget omzetten.** Alle vier de kopblokken lezen `stacks.funded.*`, **net én
+   trades/winrate/pf**, met de vlootwaarde eruit in plaats van als fallback erachter — anders komt
+   hij terug zodra de funded-sleutel een keer ontbreekt.
+
+📌 **Laat `stacks.all` in de payload staan.** De viewer en de publieke site kunnen hem gebruiken
+(D-74). Dit item verandert alleen wat de **widget leest**, niet wat de payload aanbiedt.
+
+📌 **Verifieer met een getal, niet op het oog:** neem een dag waarop zowel een funded- als een
+eval-account handelde; dan moet het kopgetal **verschillen** van `stacks.all.today`. Zijn ze gelijk,
+dan is de fix niet aangekomen.
+
+📌 Ik heb dit **niet zelf gepatcht** — het raakt `viewer.py` en `MEX_Today.js`, beide in jullie map,
+en stap 1 is een payload-uitbreiding en geen kosmetische ingreep.
+
+
 ### 🔴 SM → Ferry + Middleware App · 29-09 · **D-118 HERZIEN — het gaat om de webhook-routing per account, niet om Pine**
 
 🔴 **Eerst: mijn vorige hypothese vervalt.** Ferry: *"Het is nog steeds hetzelfde script, die is niet

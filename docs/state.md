@@ -3,7 +3,7 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-10-02 (Analyses & Data chat)_
+_Last updated: 2026-10-03 (Analyses & Data chat)_
 
 > **Het doel (besluit Ferry 2 okt 2026):** continuïteit op dagbasis, en per account het maximum
 > van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de strategie. Elke
@@ -176,6 +176,72 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
+
+## A-86 — BT_90_days (6 jul–2 okt) + fase-varianten van het Pine-script (3 okt 2026)
+
+**Exports (v3.2.2, TP 85 / SL 100, BE Off, trailing stop Off, Trail + cap, risk-gate Off, 65 dagen,
+guards als vaste dollars, dus níet × qty):**
+
+| set | qty | trades | net | net/ct | winstdagen | best / worst dag | maxDD |
+|---|---:|---:|---:|---:|---:|---|---:|
+| 250/200/1.000 (`89de0`, `d70a8`) | 1 | 908 | 6.532 / 6.613 | 6.532 | 75% | +848 / −834 | 979 |
+| 320/270/1.000 (`af520`) | 1 | 1.063 | 5.468 | 5.468 | 66% | +848 / −834 | 1.009 |
+| 250/200/1.000 (`1bd17`) | 2 | 582 | 8.199 | 4.100 | 80% | +1.021 / −1.668 | 1.957 |
+| 250/200/1.000 (`4bfd2`) | 3 | 410 | 7.715 | 2.572 | 85% | +1.055 / −2.523 | 2.956 |
+| 250/200/1.000 (`ca714`) | 4 | 317 | 11.313 | 2.828 | 88% | +1.059 / −2.547 | 2.547 |
+| 320/270/1.000 (`7bcca`) | 4 | 394 | 10.741 | 2.685 | 83% | +1.059 / −2.547 | 3.126 |
+
+**Account-simulatie op deze stromen (rolling starts, horizon 40 d, haal-% / breach-% / mediaan dagen
+tot de volgende trede):**
+
+| export | qty | vers 50K (#1 $1.500) | gelockt, winst 3.100 (#1) | gelockt, winst 5.000 (#2) |
+|---|---:|---|---|---|
+| `89de0` | 1 | 55 / 0 / 28 | 89 / 0 / 8 | 100 / 0 / 8 |
+| `1bd17` | 2 | **65 / 0 / 20** | 96 / 0 / 8 | 100 / 0 / 8 |
+| `4bfd2` | 3 | 38 / **60** / 20 | 95 / 5 / 8 | 100 / 0 / 8 |
+| `ca714` | 4 | 41 / **50** / 14 | 91 / 9 / 8 | 100 / 0 / 8 |
+
+**Lezing op het doel.** (1) Een vaste cap van $1.000 op hogere qty geeft veel groene dagen (88% op
+qty 4) omdat de cap de winstkant knipt, maar de verlieskant blijft 100t × qty per trade: de slechtste
+dag blijft −2.5k op qty 3/4 en dat is op een vers 50K-account een breach (60% / 50% in 40 dagen).
+Op gelockte accounts met ≥ $3k ruimte is diezelfde set wél bruikbaar (5–9% breach, 8 dagen tot de
+trede). Dit bevestigt A-83: de DLL hoort alleen waar één dag kan doden, en op qty ≥ 3 vers hoort hij
+er dus bij of de qty omlaag. (2) **Qty 2 met vaste 250/200/1.000 is in dit venster de beste verse
+set** (65% haal in 40 d, 0% breach, mediaan 20 d) — beter dan qty 1 (55%, 28 d). Dat spoort met A-79.
+(3) Giveback 200 (vast) versus 100 per contract: in dit venster geen verschil van betekenis op qty 1
+(6.532 vs A-85 250/100/500 op 30 d); het verschil zit in de cap. (4) **Caveat: 6 jul–2 okt is één
+positief regime**; de 0%-breaches zijn venstergebonden. Het jaar (A-81) geeft 8% vers op qty 1.
+Daarom het voorstel hieronder voor 90-daagse batches over drie jaar.
+
+**90-daagse batches over de 3-jaarsdata.** Niet met de Python-replay: die is alleen geldig voor
+dagguards op bestaande entries (A-78), en er bestaan geen Pine-entries voor 2023–2025. Twee routes:
+(a) in TradingView het `validFrom`/`validUntil`-venster per kwartaal zetten (12 kwartalen × 2–3
+sets, Deep Backtesting) en exporteren; wij zetten ze dan in één tabel per kwartaal (haal/breach/
+mediaan); (b) Backtest Setup draait de Python-engine op dezelfde kwartalen — via de SM, hun map.
+Route (a) kan vandaag; (b) is de duurzame.
+
+**Fase-varianten van het script (geleverd, buiten de repo — `pine/**` is van Pine Dev).** Zes kopieën
+van EL TESORO v3.2.2 → v3.3.0, zelfde engine, alleen defaults en naam/shorttitle/`mwStrategy`:
+
+| script | shorttitle | fase | qty | day-trail act/gb/cap | risk-gate |
+|---|---|---|---:|---|---|
+| EL PATRON | `PAT-MGC-A` | A — ruimte < $1.300 | 1 | 150 / 50 / 300 | On, DLL 300 |
+| EL TESORO | `TES-MGC-B` | B — vers / ruimte ≥ $1.300 | 1 | 250 / 100 / 500 | Off |
+| EL DORADO | `DOR-MGC-B2` | B2 — vers, ruimte ≥ $2.000 (A-79) | 2 | 300 / 100 / 600 | On, DLL 600 |
+| EL MATADOR | `MAT-MGC-C2` | C2 — gelockt, ruimte ≥ $2.000 | 2 | 300 / 100 / 600 | On, DLL 600 |
+| EL REY | `REY-MGC-C3` | C3 — gelockt, ruimte ≥ $3.000 | 3 | 450 / 150 / 900 | On, DLL 900 |
+| EL LEON | `LEO-MGC-C4` | C4 — gelockt, ruimte ≥ $4.000 | 4 | 600 / 200 / 1.200 | On, DLL 1.200 |
+
+Gemeenschappelijke defaults gelijk aan de live config (A-75): All sessions, TP Fixed 85 / SL 100,
+BE Off, trailing stop Off, Trail + cap met Activation + giveback, FVG 8–23, confirm 4, streak 5,
+Delta filter Off, phase Developer, firm preset Off, consistency 30, kwalificatiedag $50, payout-buffer
+0, risk-gate alleen DLL (`rgTriggerT` 0). Afwijkingen van v3.2.2-defaults die zijn rechtgezet:
+R-multiple 2,25 → Fixed 85; Liquidity Core → All sessions; qty 4 → per fase; Funded → Developer;
+50%/$250 → 30%/$50; CVD-filter aan → uit (live-stand; botst met CLAUDE.md "CVD never disabled",
+besluit bij SM/Pine Dev); streak 6 → 5; FVG 11–16 → 8–23; confirm 0 → 4; firm preset aan → uit.
+Wissel van fase = ander script op het chart; de guards van A-76 schalen per contract, de vaste-cap-
+variant van dit BT_90-pakket is via de inputs te zetten. Bestand: `MEX_fase_varianten_v3_3_0.zip`.
+Gemeld aan de SM in `docs/inbox.md` (3 okt).
 
 ## A-85 — Fleet-doc 5 okt v2: per account op maat, uit fills + dashboard + varianten (3 okt 2026)
 

@@ -12,6 +12,93 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (cc Pine Dev, Backtest Setup) · 03-10 · **doel herijkt, fase-varianten van het MGC-script, en wat wij sinds 28-09 hebben vastgesteld** · status: open
+
+Alles hieronder staat met cijfers in `docs/state.md` (A-76 t/m A-86, onze branch
+`claude/analyses-data-chat-org-3tii8j`). Dit is de samenvatting voor het bord; vijf dingen
+vragen een besluit of een D-nummer.
+
+**0. Het doel is door Ferry opnieuw gezet (2 okt).** *Continuïteit op dagbasis en per account
+het maximum van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de
+strategie.* Vastgelegd in `.claude/skills/payout-throughput/SKILL.md`,
+`eval-throughput/SKILL.md` en bovenaan `docs/state.md`. Elke rangorde, projectie of
+"beste set" wordt sindsdien op twee meetlatten gelezen: breach-kans en gelijkmatigheid eerst,
+dan dagen tot het stapmaximum. Dollars per jaar zijn uitleg, geen criterium. **Vraag: neem dit
+over als doelstelling op het bord (D-nummer), zodat Backtest Setup en Web dezelfde meetlat
+gebruiken.** Ferry's aanvulling 3 okt: *koersen op cashflow, niet per definitie op
+accountbehoud* — per account andere settings zijn de regel, niet de uitzondering (A-84).
+
+**1. Wat we hebben vastgesteld (kort).**
+- A-76/A-83: day-trail 250 / 100 / 500 per contract × qty is robuust; de DLL heeft alleen
+  waarde waar één dag het account kan doden (ruimte < ~3 × slechtste dag); daarboven kost hij
+  alleen tijd. Cap dient consistency, niet winst.
+- A-78: de 1-minuut-replay is **ongeschikt voor exit-wijzigingen** (Pine neemt na een vroege
+  exit nieuwe entries; de reeks verandert). Exits alleen via Pine-exports. Op het jaar: TP 85
+  > TP 70, BE en trailing stop afgewezen.
+- A-80/A-82: de live configs wijken af van het advies; **zeven charts (013, 018, 025, 028, 029,
+  033, 035) draaien nog de per-trade trailing stop (61/26)** — stand alerts 2 okt 19:40 UTC.
+  1 okt was −$800 per contract op elke account; fills op 013/018 tonen een hogere qty dan de
+  alerts → PMT-multiplier wordt door Ferry nagekeken.
+- A-81: sessie-split (alleen Globex) verhoogt de breach-kans (8% → 33% vers) en is afgewezen;
+  strakkere caps (150/50/300) zijn de enige diversificatie die het doel dient.
+- A-84/A-85: per-account model (`tailor.py`, score = haal-40d − ½ × breach-40d) en fleet-doc
+  5 okt v2. Alle 14 PA's zijn Legacy 50K (30%, 8 dagen, 5 × ≥ $50); PA013 payout #2 $2.000 op
+  1 okt.
+- A-86: BT_90_days (6 jul–2 okt): qty 2 met vaste 250/200/1.000 is in dat venster de beste
+  verse set (65% haal / 0% breach / 20 d); qty 3–4 met vaste cap breacht vers 50–60% en is
+  alleen gelockt bruikbaar. Eén positief regime — vandaar punt 4.
+
+**2. Fase-varianten van het script — vraag aan Pine Dev, D-nummer gevraagd.** Ferry wil
+per fase een eigen script met de juiste defaults, met eigen naam, en daarmee de bestaande
+merken op MGC hergebruiken. Wij hebben zes kopieën van `EL TESORO v3.2.2` → `v3.3.0`
+gemaakt (zelfde engine, alleen defaults + naam/shorttitle/`mwStrategy`) en aan Ferry geleverd
+als `MEX_fase_varianten_v3_3_0.zip`. **Niet in `pine/**` gezet — jullie map.**
+
+| script | shorttitle | fase | qty | act/gb/cap | risk-gate |
+|---|---|---|---:|---|---|
+| EL PATRON | `PAT-MGC-A` | ruimte < $1.300 | 1 | 150/50/300 | On, DLL 300 |
+| EL TESORO | `TES-MGC-B` | vers, ruimte ≥ $1.300 | 1 | 250/100/500 | Off |
+| EL DORADO | `DOR-MGC-B2` | vers, ruimte ≥ $2.000 | 2 | 300/100/600 | On, DLL 600 |
+| EL MATADOR | `MAT-MGC-C2` | gelockt, ruimte ≥ $2.000 | 2 | 300/100/600 | On, DLL 600 |
+| EL REY | `REY-MGC-C3` | gelockt, ruimte ≥ $3.000 | 3 | 450/150/900 | On, DLL 900 |
+| EL LEON | `LEO-MGC-C4` | gelockt, ruimte ≥ $4.000 | 4 | 600/200/1.200 | On, DLL 1.200 |
+
+Consequenties die bij jullie liggen:
+- **Merknamen verschuiven van markt naar fase.** EL MATADOR (MES), EL REY (MNQ), EL LEON (MYM)
+  en EL PATRON (MGC aggressive) in de vloottabel van `CLAUDE.md` worden MGC-fasescripts. Dat
+  is een besluit van Ferry ("daarmee gaan we ook bestaande scripts vervangen"); de
+  `v1_0_0`-lijn voor MES/MNQ/MYM blijft research tot iemand anders beslist.
+- **`mwStrategy`-sleutels** in de middleware (`accounts.yaml`/receiver-config) moeten de zes
+  nieuwe shorttitles kennen; `TES-MGC-C` blijft bestaan zolang de huidige charts draaien.
+- **Delta/CVD-filter staat in de live config en in de varianten Off.** Dat botst met
+  CLAUDE.md ("CVD is never disabled") en SM-05. Wij hebben de live-stand gevolgd; besluit
+  is aan jullie.
+- **De `validFrom`/`validUntil`-klok (D-71):** een nieuw script op een chart is een
+  config-wijziging, dus de OOS-klok gaat opnieuw op nul. Dat is de prijs van de regel.
+- **Risk-gate wordt alleen als DLL gebruikt** (`rgTriggerT` 0, geen tweede day-trail). Als
+  Pine Dev de gate later splitst (D-02/D-40), graag die semantiek behouden.
+
+**3. Bevroren parameters.** De fase-scripts wijzigen niets aan de entry/exit-engine; TP 85 /
+SL 100, FVG 8–23, confirm 4, streak 5 zijn de live-stand van A-75. Wel wijken de
+v3.2.2-defaults af van die stand (R-multiple 2,25, Liquidity Core, qty 4, phase Funded,
+50%/$250, CVD aan, streak 6, FVG 11–16, confirm 0, firm preset aan). Weet iemand waarom die
+defaults zo stonden? Als v3.2.2 een eigen validatie heeft, horen we dat graag vóór de
+fase-scripts live gaan.
+
+**4. Verzoek aan Backtest Setup (via jullie): 90-daagse batches over de 3-jaarsdata.** Ferry
+wil de sets per kwartaal zien omdat alles langer dan 90 dagen seizoensgebonden is. De
+Python-replay van A&D kan dat niet (geen Pine-entries vóór sep 2025). Route a: Ferry zet in
+TradingView het `validFrom`/`validUntil`-venster per kwartaal en exporteert (12 × 2–3 sets);
+wij bouwen de kwartaaltabel haal/breach/mediaan. Route b: de Python-engine op dezelfde
+kwartalen met de sets 250/100/500 × qty, 150/50/300 en vaste 250/200/1.000 bij qty 1–4.
+Graag een slot op het bord voor b; a start Ferry zelf.
+
+**5. Openstaand bij Ferry** (geen actie SM, ter info): jaar-exports 250/200/1.000 en
+150/50/300; keuze 018 (qty 4 of 3); keuze 025/028/029/033 (lot/afstoten); eval 277 sizing;
+PMT-multiplier 013/018; trailing stop uit op de zeven charts.
+
+Drie eerdere A-besluiten wachten nog op een D-nummer (zie item 28-09 hieronder).
+
 ### 🟩 Analyses & Data → SM · 29-09 · **review `fleet-report-spec.md` + antwoord projectiebasis** · status: done (na merge van `middleware-setup-guide-afhvtk` in onze branch, 29-09)
 
 Gelezen: §2, §3, §4, §6. Drie dingen zijn anders bedoeld dan de spec ze nu leest; de rest

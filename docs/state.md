@@ -178,6 +178,35 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
 
+## A-83 — Waarde van de DLL en van de cap, getoetst aan het doel (3 okt 2026)
+
+**Stelling Ferry:** een DLL vertraagt alleen (stoppen op verlies haalt het herstel weg); een cap
+heeft wél waarde voor consistency boven een bedrag x. **Meting** (Pine-jaar c92d9, 250/100/500 × qty,
+zelfde trades, met/zonder Tradovate-DLL op trade-closes, rolling starts):
+
+| situatie | zonder DLL: breach / payouts-jr | met DLL 300–400/ct: breach / payouts-jr |
+|---|---|---|
+| vers 50K, qty 1 | **8% / 7.462** | 33–43% / 2.837–3.839 |
+| vers 50K, qty 2 | 76% / 4.078 | 56–61% / 6.084–6.813 |
+| gelockt $3k, qty 1 | 8% / 11.791 | **0% / 9.262–10.401** |
+| gelockt $3k, qty 2 | **11% / 20.290** | 44–48% / 11.677–12.737 |
+| gelockt $5k, qty 2 | 8% / 21.213 | 1–19% / 17.419–21.235 |
+| gelockt $5k, qty 3 | **10% / 20.711** | 43–44% / 14.639–15.403 |
+
+**Conclusie.** Ferry heeft gelijk op de hoofdregel: de DLL knipt herstel-dagen weg (52 dagen ≤ −400
+op het jaar, de meeste herstellen) en verlaagt daarmee zowel het tempo als — door de lagere
+cumulatieve stand — meestal ook de overleving. **Een DLL heeft alleen waarde waar één dag de
+account kan doden:** fase A (ruimte < de slechtste dag van de set, $1.255 op qty 1) en verse
+accounts op qty 2 (slechtste dag −2.510 > trailing 2.500). Overal elders: geen Tradovate-DLL.
+Bij gelockt qty 1 met kleine ruimte is DLL 300 een lichte continuïteitswinst (8% → 0%) voor 12%
+minder payouts — keuze per account. **De cap** heeft geen dollarwaarde (cap uit = cap 500, A-76)
+maar wél consistency-waarde: hij houdt de best-day onder 30% van de winst bij aanvraag. Regel:
+cap per dag ≤ 0,3 × verwachte winst bij de eerstvolgende aanvraag; 500/ct volstaat tot qty 2,
+en een account met een al hoge best-day (018: $2.504) mag tot die waarde. De day-trail
+(activatie/giveback) is wat de winstdagen van 51% naar 66% brengt; dat is de continuïteitsknop,
+niet de DLL. **Besluit A-83:** Tradovate-DLL alleen in fase A en op verse qty-2-accounts;
+fase-B/C-accounts zonder DLL; cap 500/ct (fase C 300/ct), of hoger tot de consistency-grens.
+
 ## A-82 — Volledige analyse alerts-log 1–2 okt (`3ed21`, 3 okt 2026)
 
 **Stand van de config op vrijdagavond:** niets omgezet. Laatste entry-payload 2 okt 19:40 UTC:

@@ -111,8 +111,7 @@ huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakk
 ### Per-account set (5 okt, stand Tradovate 2 okt na sluiting — vervangt 1 okt)
 
 14 PA's (013, 018, 022, 025–035) + evals 275, 276 (50K, vers) en 277 (300K, vers). Weg sinds 30 sep:
-PA023, PA024 (Intraday 4.0) en de evals 267–273. Regels A-78/A-81, gemengde vloot (fase A/B
-250/100/500, fase C 150/50/300 × qty); schema `fleet_startschema_2026-10-05.pdf` met maandag-checklist.
+PA023, PA024 (Intraday 4.0) en de evals 267–273. Per account op maat (A-84/A-85); schema `fleet_startschema_2026-10-05_v2.pdf` met maandag-checklist.
 1–2 okt: PA013 ontving payout #2 ($2.000) en verloor ≈ $800 (qty 2, 300/110/900 + trail) → ruimte 2.026, volgende is #3 $2.500 bij 55.100;
 PA018 −$1.419 → ruimte 3.925 → qty 1; PA022 onder safety net; PA025 nog $130 ruimte.
 
@@ -177,6 +176,28 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
+
+## A-85 — Fleet-doc 5 okt v2: per account op maat, uit fills + dashboard + varianten (3 okt 2026)
+
+**Feiten 3/10.** Apex-dashboard: alle 14 PA's zijn Legacy 50K Tradovate met dezelfde regels (safety
+net $52.600, 8 dagen, 5 × ≥ $50, consistency 30%) — de eerdere melding van 50%/$250-accounts is
+ingetrokken. PA013 payouts: #1 $1.500 (10 sep), #2 $2.000 (1 okt). Fills 27/9–3/10 (14 accounts,
+FIFO, sluiten op de dashboard-balansen): elke account negatief; **1 okt −$800 per contract op elke
+account** (013 qty 3 −2.309, 018 qty 4 −2.773, 022 qty 2 −1.312) — fills tonen op 013/018 een
+hogere qty dan de alerts (2): PMT-multiplier controleren.
+**Ferry's varianten (exports 3 okt):** laatste 2–3 weken negatief op elke set: 250/100/500 −537,
+150/50/300 −1.443, 320/150/750 −364 per ct; 30 d (24 aug–2 okt): 250/200/1.000 +2.536 (73%
+winstdagen, maxDD 979), qty 4 vast 320/270/1.000 +1.119/ct (83% winstdagen, worst −2.547).
+Niet op het jaar getest; kandidaten zodra de jaar-exports er zijn.
+**Model (`tailor.py`, stand 3 okt, score haal-40d − ½ breach-40d):** 022 → qty 2 · 300/100/600 ·
+DLL 600 (73% / 19%, mediaan 19 d); 018 → qty 4 · 600/200/1.200 · DLL 1.200 (73% / 19%, 20 d) of
+qty 3 · 450/150/900 · DLL 900 (66% / 11%, 26 d); 013 (→ #3 $2.500, cyclusdag 1) → qty 2 ·
+300/100/600 · DLL 600 (66% / 17%, 28 d); 034 → qty 2 · 300/100/600 · DLL 600 (42% / 26%); 035
+idem (28% / 43%); 026/027/030/031/032 (ruimte ≈ 1.300) → qty 1 · 150/50/300 · DLL 300 (0% in 40 d,
+11–13% in 60 d, breach 25–35%); 025/028/029/033 (ruimte < 820) → geen set met waarde (breach
+88–100% in 60 d). Caveat: in het huidige verliesregime verliest 150/50/300 het meest (knipt de
+goede dagen, de slechte blijven); het model kiest hem op jaarniveau voor kwalificatiedagen en
+breach-kans. Doc: `fleet_startschema_2026-10-05_v2.pdf` (vervangt 5 okt v1) met maandag-checklist.
 
 ## A-84 — Van generiek naar per account: settings op cashflow (3 okt 2026)
 

@@ -119,7 +119,7 @@ PA018 −$1.419 → ruimte 3.925 → qty 1; PA022 onder safety net; PA025 nog $1
 | Account | Fase | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|
 | PA013 | C | 52.126 | 2.026 | 1 | 150 / 50 / 300 | $300 | geen | trail uit; #2 bij 54.600 |
-| PA018 | C | 54.025 | 3.925 | 1 (was 2) | 150 / 50 / 300 | $300 | geen | trail uit; #1 geblokkeerd tot 58.348 |
+| PA018 | C | 54.025 | 3.925 | 1 (was 2) | 150 / 50 / 300 | $300 | geen | trail uit; #1 geblokkeerd tot 58.348 (+4.322). Kans binnen 5 dagen op elke size ≤ 12% bij gelijke breach-kans; qty 1: 11–13% in 40 d / 0–2% breach; qty 2 500/200/1.000 DLL 600: 29% / 10%; qty 3: 52% / 21%; qty 5: 57% / 42% (rolling windows Pine-jaar) |
 | PA022 | C | 52.072 | 1.972 | 1 | 150 / 50 / 300 | $300 | geen | +2.028 tot #1 |
 | PA025 | A | 47.847 | 130 | 1 | 250 / 100 / 500 | $500 | — | één SL = einde; lot of uit (keuze Ferry) |
 | PA026 | A | 50.401 | 1.254 | 1 | 250 / 100 / 500 | $500 | $400 | |

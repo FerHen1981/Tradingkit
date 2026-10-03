@@ -178,6 +178,42 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
 
+## A-82 — Volledige analyse alerts-log 1–2 okt (`3ed21`, 3 okt 2026)
+
+**Stand van de config op vrijdagavond:** niets omgezet. Laatste entry-payload 2 okt 19:40 UTC:
+trail=1 op 013, 018, 025, 028, 029, 033, 035; guards nog 300/110/900 (die zeven), 320/170/1.000
+(030/031), 320/260/1.000 qty 2 (034), 250/100/500 (022/026/027/032). Evals 268–274 phase
+Research (none). 4 webhook-timeouts = Discord-embeds, geen PMT-orders.
+
+**Live-resultaat 1–2 okt per set (per contract, dezelfde trades):**
+
+| set | accounts | exits | TP / SL / trail | P&L per ct (2 dagen) |
+|---|---|---:|---|---:|
+| 250/100/500, geen trail | 022, 026, 027, 032 | 12–17 | 7–8 TP / 4 SL | **+150 tot +330** (022 −515 door 1/10) |
+| 300/110/900 + trail 61/26 | 013, 018, 025, 028, 029, 033, 035 | 24 | 5 TP / 12 SL / 6 trail | **−620 tot −780** |
+| 320/170/1.000, geen trail | 030, 031 | 20 | 11 TP / 9 SL | −16 |
+| 320/260/1.000 qty 2 | 034 | 9 | 5 TP / 3 SL | +106 |
+
+De trail-charts namen drie keer zoveel SL's (12 tegen 4): elke trail-exit op +21 tot +46t gaf
+een her-entry die in de US-sessie verloor. Verschil met de 250/100/500-charts: ≈ $900 per
+contract in twee dagen. 030/031 lieten de dag open tot in de middag en gaven de ochtend terug.
+Uur-profiel MGC (alle accounts, per ct): 00h +1.343, 03h +1.476, 11h +1.469 tegen 06h −1.967,
+12h −959, 14h −2.978. 191 Day-trail-halts, 184 geblokkeerde signalen na een halt (de guards
+werken zoals bedoeld).
+
+**Evals 1–2 okt:** 268 (12 NQ) +1.486 (TP, SL); 269 (12 NQ) −11.354 (2 SL, dood); 270 (5 NQ)
+−4.731 (2 SL, dood); 273 −2.440; 274 (5 NQ) **4 SL's = −9.762 op een account dat na de eerste
+al dood was** — phase Research (none) stopt niet; 271 +469. Zeven 50K/250K-evals weg in twee
+dagen; alleen 275/276/277 over.
+
+**Advies voor het doel (continuïteit, dan tijd tot stapmaximum):** (1) maandag vóór 18:00 ET
+de checklist uit `fleet_startschema_2026-10-05.pdf`: trail uit op de zeven, fase C op
+150/50/300, fase B/A op 250/100/500, 034 naar qty 1; (2) evals op phase Apex Eval met trailing en
+goal, zodat een dode account geen orders meer stuurt; (3) US-middag blijft de verliespost maar
+geen sessieschakelaar (A-81: verhoogt breach); sample-check 16 okt; (4) PA025 ($130 ruimte):
+beslissen; (5) geen verdere config-wijzigingen tot de Pine-exports 150/50/300 en 200/75/400 er
+zijn.
+
 ## A-80 — Live config uit de alerts (2 okt) ≠ advies; fase op ruimte, size op saldo (2 okt 2026)
 
 **Alerts-log 2 okt (`5d1d1`), laatste alert per account:** 013/018 qty 2 met 300/110/900;

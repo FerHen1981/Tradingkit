@@ -113,12 +113,12 @@ huidige best-day verhoogt de lat. Na een payout wordt de cap ruimer, niet strakk
 14 PA's (013, 018, 022, 025–035) + evals 275, 276 (50K, vers) en 277 (300K, vers). Weg sinds 30 sep:
 PA023, PA024 (Intraday 4.0) en de evals 267–273. Regels A-78/A-81, gemengde vloot (fase A/B
 250/100/500, fase C 150/50/300 × qty); schema `fleet_startschema_2026-10-05.pdf` met maandag-checklist.
-1–2 okt: PA013 −$2.800 (qty 2, 300/110/900 + trail) → ruimte 2.026, #2 pas weer bij 54.600;
+1–2 okt: PA013 ontving payout #2 ($2.000) en verloor ≈ $800 (qty 2, 300/110/900 + trail) → ruimte 2.026, volgende is #3 $2.500 bij 55.100;
 PA018 −$1.419 → ruimte 3.925 → qty 1; PA022 onder safety net; PA025 nog $130 ruimte.
 
 | Account | Fase | Balans | Ruimte | Qty | Pine act/gb/cap | TV target | TV DLL | Status |
 |---|---|---:|---:|---:|---|---:|---:|---|
-| PA013 | C | 52.126 | 2.026 | 1 | 150 / 50 / 300 | $300 | geen | trail uit; #2 bij 54.600 |
+| PA013 | C | 52.126 | 2.026 | 1 | 150 / 50 / 300 | $300 | geen | trail uit; #1 10/9 en #2 ($2.000) begin okt ontvangen; #3 $2.500 bij 55.100 |
 | PA018 | C | 54.025 | 3.925 | 1 (was 2) | 150 / 50 / 300 | $300 | geen | trail uit; #1 geblokkeerd tot 58.348 (+4.322). Kans binnen 5 dagen op elke size ≤ 12% bij gelijke breach-kans; qty 1: 11–13% in 40 d / 0–2% breach; qty 2 500/200/1.000 DLL 600: 29% / 10%; qty 3: 52% / 21%; qty 5: 57% / 42% (rolling windows Pine-jaar) |
 | PA022 | C | 52.072 | 1.972 | 1 | 150 / 50 / 300 | $300 | geen | +2.028 tot #1 |
 | PA025 | A | 47.847 | 130 | 1 | 250 / 100 / 500 | $500 | — | één SL = einde; lot of uit (keuze Ferry) |
@@ -177,6 +177,36 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
+
+## A-84 — Van generiek naar per account: settings op cashflow (3 okt 2026)
+
+**Besluit Ferry 3/10:** per account bepalen welke qty en act/gb/cap (en of een DLL) het snelst
+naar het eerstvolgende stapmaximum leiden, op basis van ruimte tot liq, best-day sinds laatste
+payout, de regels van dat account (consistency 30% óf 50%, kwalificatiedag $50 óf $250) en de
+payout-stand. Koers op cashflow, niet per definitie op accountbehoud; verschillende settings per
+account zijn een bijkomende spreiding. Feiten verwerkt: 013 staat ná payout #2 ($2.000, begin
+okt), dus volgende is #3 $2.500; consistency en kwal.minimum verschillen per account (lijst per
+account nog aan te leveren; default 30% / $50).
+
+**Methode (`tailor.py`, scratchpad):** per account alle 24 sets (qty 1–4 × 150/50/300, 250/100/500,
+320/100/900 per ct × DLL geen/3 SL) op rolling windows van het Pine-jaar (8bc3d, TP 82);
+meet P(stapmaximum gehaald binnen 20/40/60 d) en P(breach); score = haal-40d − 0,5 × breach-40d.
+Fresh floor trailt de piek; gelockt floor vast op −ruimte; poorten 8 dagen, 5 kwal.dagen op het
+account-minimum, consistency op het account-%.
+
+**Uitkomst stand 2 okt (default 30%/$50), beste set en haal/breach binnen 40 d:**
+013 (gelockt, ruimte 2.026, → #3 $2.500): qty 2 · 300/100/600 · DLL 600 → 66%/17%, mediaan 28 d.
+018 (ruimte 3.925, best 2.504): qty 4 · 600/200/1.200 · DLL 1.200 → 73%/19%, 20 d; qty 3 ·
+450/150/900 · DLL 900 → 66%/11%, 26 d. 022 (ruimte 1.972): qty 2 · 300/100/600 · DLL 600 →
+73%/19%, 19 d. 034 (vers, ruimte 2.473): qty 2 · 300/100/600 · DLL 600 → 42%/26%, 38 d (qty 1:
+0% in 40 d, 5% breach). 035 (2.177): qty 2 idem → 28%/43%; qty 1 → 0%/5%. 026/027/030/031/032
+(ruimte 1.250–1.400, onder start): qty 1 · 150/50/300 · DLL 300 → 0% in 40 d, 11–13% in 60 d,
+breach 25–40%. 025/028/029/033 (ruimte < 820): breach 88–100% binnen 60 d bij elke set — geen
+cashflow-waarde meer; laten lopen als lot of afstoten. **Patroon:** waar één dag kan doden
+kiest de score tóch een DLL (A-83 bevestigd); strakke caps (150/50/300 × qty) winnen op haal-kans
+omdat kwalificatiedagen sneller vol zijn; ruime caps (320/100/900) zijn sneller maar breachen meer.
+Nog niet verwerkt: per account 50%-consistency en $250-kwal.minimum (voorbeeld op 022: zelfde
+set, haal-kans gelijk) — lijst van Ferry nodig.
 
 ## A-83 — Waarde van de DLL en van de cap, getoetst aan het doel (3 okt 2026)
 

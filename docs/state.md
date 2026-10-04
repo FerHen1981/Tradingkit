@@ -3,7 +3,7 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-10-03 (Analyses & Data chat)_
+_Last updated: 2026-10-04 (Analyses & Data chat)_
 
 > **Het doel (besluit Ferry 2 okt 2026):** continuïteit op dagbasis, en per account het maximum
 > van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de strategie. Elke
@@ -176,6 +176,38 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
+
+## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
+
+**Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE
+per exit): 24 TP (32%), 51 SL. MFE/MAE komen uit de Pine op barbasis (SL-trades tonen mediaan MAE 75 bij
+een stop van 90), dus de echte excursies zijn groter en elk cijfer hieronder is eerder te gunstig.
+**Structuur.** 300K: target 20.000, trailing 7.500, max 35 contracten. Target ÷ trailing = 2,67 (50K: 1,2).
+Op 35 NQ ligt de Apex-floor 42,9 ticks onder de beste open stand; de SL van 90 bestaat daar feitelijk niet.
+
+| variant | P(pass) | basis |
+|---|---|---|
+| **35 NQ, één TP 122 (huidig)** | **13–19%** | 14 van 24 TP-trades hebben MAE < 43; 19% negeert tussentijdse retrace, 13% rekent 31% retrace (handoff) |
+| 35 NQ, TP 116–118 | idem | één extra trade in 75 haalt 116; verschil is ruis; netto bij 116 = $20.192 (marge $192) |
+| 33–34 NQ | 20% bovengrens | floor 44–45t; 33 NQ TP 122 netto $20.028 — te dun |
+| El Toro meerdere trades, 8–30 NQ | 0–8% | live-reeks heeft −23t verwachting per trade; elke extra trade is een extra kans om te verliezen |
+| El Toro TP 100 / SL 60 / SL 45 op 12–17 NQ | 0–3% | kortere SL raakt vaker (MAE), lagere TP wint te weinig |
+| El Tesoro MGC 6–15 ct, geen guards | 5–12% pass / 88–95% breach | Pine-jaar, trailing 7.500 op trade-close-piek |
+| **35 NQ + Pine trailing stop act 42t / buffer 36t + SL 40t** | **14–34%** | 24 van 51 SL-trades hadden MFE ≥ 42: die worden ≈ +6t i.p.v. account dood; account leeft voor een volgende poging |
+
+**Lezing.** (1) Op 35 NQ is de trailing stop geen afweging meer maar de enige hefboom: zonder trail is
+elke trade met MFE ≥ 43 die omkeert het einde van het account; mét trail (buffer 36 < floor 43, 7 ticks
+voor slippage op 35 contracten) wordt dat een kleine winst en blijft de poging open. Wat je verliest zijn
+TP-trades die na 42t eerst 36t terugvallen en daarna alsnog de 122 halen — die eindigen nu op +6t in
+plaats van pass; het aandeel is zonder pad-data niet te meten (vandaar 14–34%). (2) Zet de Pine-SL op 40t
+zodat engine en Apex hetzelfde zien; een SL-hit op 40t (−$7.000) laat $500 over en is praktisch ook het
+einde. (3) Lagere size met meer trades verliest op de 300K altijd: de live-winrate van 32% bij 122/90 is
+negatief, en El Tesoro op MGC breacht 9 van de 10. (4) Verwachte pogingen per funded 300K: 3 (optimistisch)
+tot 7 (pessimistisch) met trail, 5–8 zonder. **Script:** `MEX_EL_TORO_NQ_HF_INTRA_v1_0_0` heeft `Enable
+Trailing`, `Trail Activation MFE`, `Trail Buffer`, `Fixed Stop`, `Eval Profit Goal` en `Trailing Drawdown`
+als inputs — geen Pine-wijziging nodig. Zelfde conclusie als A-77 voor de 50K (act 95 / buf 10), nu
+gekwantificeerd. **Test vóór live** blijft: El Toro-export TP 122 / SL 40 / trail 42-36 naast de huidige,
+tel TP-exits en trail-exits.
 
 ## A-86 — BT_90_days (6 jul–2 okt) + fase-varianten van het Pine-script (3 okt 2026)
 

@@ -211,7 +211,7 @@ varianten) slechter. Guards × qty bevestigen A-79/A-84 (qty 2 alleen gelockt of
 **Andere markten, Tesoro-profiel (geschaald):** GC-data −27% net vs MGC-data op dezelfde config (twin-
 voorbehoud werkt beide kanten op); NQ/MNQ: geen payout op qty 1, 58–88% breach op qty ≥ 2 → af;
 ES/MES −$16k…−$23k/ct → af; MYM −$10k → af; MCL −$2k…−$4k, 4 van 12 kwartalen met ≥ 30 handelsdagen → af;
-6E/6B/6J: range 1–2 ticks, tick-grid zinloos, ATR-grid zie rapport. **El Tesoro is een MGC-engine.**
+6E/6B/6J: range 1–2 ticks, tick-grid zinloos; 180 ATR-varianten per markt allemaal negatief (beste 6E −$16k, 6B −$5,7k, 6J −$12k per contract, 0% hits) → af. **El Tesoro is een MGC-engine.**
 
 **Eval (exacte funnel, 377 starts, 3 jaar NQ):**
 
@@ -224,7 +224,7 @@ ES/MES −$16k…−$23k/ct → af; MYM −$10k → af; MCL −$2k…−$4k, 4 v
 | El Tesoro MGC one-hit | 37 MGC · 85 | 39,5% | — | — |
 | El Tesoro MGC meerdere trades | 3 MGC · 85 | 29,4% (+20% time-out) | — | — |
 
-Sizing is geen hefboom (6·102 / 4·152 / 3·202 → 39,5–41,1%). ES/MES 17–19%, MYM/MCL 0% → af. Toro-exits
+Sizing is geen hefboom (6·102 / 4·152 / 3·202 → 39,5–41,1%). ES/MES 17–19%, MYM/MCL/6E/6B/6J 0–2% → af. Toro-exits
 als funded-engine (MNQ) → 50% winstdagen, negatief → El Toro blijft eval-only.
 
 **Aanbevelingen (alle onder voorbehoud van een Pine-export vóór live; elke wijziging reset de OOS-klok):**

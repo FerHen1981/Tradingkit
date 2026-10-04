@@ -193,7 +193,9 @@ Op 35 NQ ligt de Apex-floor 42,9 ticks onder de beste open stand; de SL van 90 b
 | El Toro meerdere trades, 8–30 NQ | 0–8% | live-reeks heeft −23t verwachting per trade; elke extra trade is een extra kans om te verliezen |
 | El Toro TP 100 / SL 60 / SL 45 op 12–17 NQ | 0–3% | kortere SL raakt vaker (MAE), lagere TP wint te weinig |
 | El Tesoro MGC 6–15 ct, geen guards | 5–12% pass / 88–95% breach | Pine-jaar, trailing 7.500 op trade-close-piek |
-| **35 NQ + Pine trailing stop act 42t / buffer 36t + SL 40t** | **14–34%** | 24 van 51 SL-trades hadden MFE ≥ 42: die worden ≈ +6t i.p.v. account dood; account leeft voor een volgende poging |
+| 35 NQ + Pine trailing stop act 42t / buffer 36t + SL 40t | 14–34% → **16% (correctie 4 okt, exacte engine-funnel over 3 jaar NQ: 16,4% tegen 15,9% zonder trail)** | 24 van 51 SL-trades hadden MFE ≥ 42 en worden ≈ +6t i.p.v. account dood, maar de volgende pogingen op hetzelfde account falen bijna even vaak; de optimistische bovengrens van 34% was te hoog |
+
+**Correctie 4 okt (A-88, onderzoeksronde op de 3-jaars NQ-data met de Python-engine, exacte intraday-floor):** 35 NQ één TP = **15,9%** pass over 377 verse starts; met trail 42/36 + SL 40 **16,4%**. De trail is dus geen hefboom van betekenis; de 300K blijft een loterij van ~1 op 6. Het onderstaande is de oorspronkelijke lezing op de 75 live-trades.
 
 **Lezing.** (1) Op 35 NQ is de trailing stop geen afweging meer maar de enige hefboom: zonder trail is
 elke trade met MFE ≥ 43 die omkeert het einde van het account; mét trail (buffer 36 < floor 43, 7 ticks

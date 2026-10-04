@@ -177,6 +177,64 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
 
+## A-88 — Onderzoeksronde El Tesoro & El Toro op elf 1-minuutdatasets (4 okt 2026)
+
+**Opzet.** Python-engine uit `backtest/` (pessimistisch fillmodel) op MGC, GC, NQ, MNQ, ES, MES, MYM,
+MCL, 6E, 6B, 6J (okt 2023 → okt 2026). Twee profielen per markt — Tesoro (TP < SL) en Toro (TP > SL) —
+met parameters geschaald op de mediane 1-minuut true range in ticks (MGC 21 · GC 20 · NQ 34 · MNQ 35 ·
+ES 6 · MES 6 · MYM 9 · MCL 6 · 6E 2 · 6B 1 · 6J 1). Trappen: A entry-grid (136 sets) · B exit-grid (TP ×
+SL) op de top-4 · C dagguards × qty · D ATR-relatief. Finalisten met de volledige engine (intraday
+day-trail + Apex-overlay; exacte eval-funnel met floor op open P&L). Meetlat = het doel (A-84):
+P(payout #1 binnen 60/90 d) en P(breach), winstdagen, per kwartaal en per jaar. Rapport:
+`onderzoeksronde_2026-10-04_tesoro_toro.pdf`; scripts `research.py`, `goalmetrics.py`, `confirm.py` (scratchpad).
+
+**Pariteit (trap 1).** El Tesoro live-config op MGC vs Pine-jaar `c92d9`: 3.566 vs 3.627 trades, 92%
+gepaarde instapmomenten, winrate 55,0 vs 55,5, PF 1,02 vs 1,06, winstdagen 64 vs 66, exit-mix 78/69/13
+vs 79/69/12 → **poort dicht**. Engine is ≈ $1,5/trade pessimistischer (stop-first). El Toro op NQ: 73 van
+74 live-trades op dezelfde minuut geplaatst; exits niet toetsbaar (logs afgekapt) → **export gevraagd**.
+Live Pine "Delta engine = Research OHLCV proxy" = de engine-definitie.
+
+**El Tesoro funded (MGC, qty 1, 250/100/500, 375 verse starts, 3 jaar):**
+
+| set (8–23 · c4 · e12 · CVD uit) | trades | net/ct | wd | hit60 / br60 | hit90 / br90 | mediaan | slechtste kwartaal |
+|---|---:|---:|---:|---|---|---:|---|
+| TP 85 / SL 100 — live | 5.904 | 12.546 | 58,0 | 8,5 / 14,1 | 23,5 / 22,9 | 68 d | −2.775 |
+| **TP 120 / SL 100** | 4.684 | 15.455 | 57,8 | **15,7 / 11,5** | 26,9 / 17,3 | 54 d | −4.545 |
+| TP 120 · guards 150/50/300 | 3.489 | 14.867 | **66,3** | 8,8 / **5,6** | 20,5 / 14,4 | 64 d | −3.139 |
+| TP 100 / SL 100 | 5.214 | 13.924 | 57,6 | 11,2 / 19,2 | 20,3 / 28,8 | 56 d | −2.627 |
+
+Per jaar: 2023/24 alles vlak (range 3–7 ticks, te weinig FVG's ≥ 8); 2024/25 live beter (hit90 14,6 vs
+10,6); 2025/26 TP 120 veel beter (hit60 46 vs 18, breach 18 vs 25). Entries doen weinig (live set in de
+kop; 6–46 + CVD 3 proxy +40% hits bij TP 85). VWAP-veto uit = −$10k/ct. ATR-relatieve parameters (72
+varianten) slechter. Guards × qty bevestigen A-79/A-84 (qty 2 alleen gelockt of met DLL 300/ct).
+
+**Andere markten, Tesoro-profiel (geschaald):** GC-data −27% net vs MGC-data op dezelfde config (twin-
+voorbehoud werkt beide kanten op); NQ/MNQ: geen payout op qty 1, 58–88% breach op qty ≥ 2 → af;
+ES/MES −$16k…−$23k/ct → af; MYM −$10k → af; MCL −$2k…−$4k, 4 van 12 kwartalen met ≥ 30 handelsdagen → af;
+6E/6B/6J: range 1–2 ticks, tick-grid zinloos, ATR-grid zie rapport. **El Tesoro is een MGC-engine.**
+
+**Eval (exacte funnel, 377 starts, 3 jaar NQ):**
+
+| variant | qty · TP | 50K pass | per jaar | 300K pass |
+|---|---|---:|---|---:|
+| El Toro live (4–12 · c2 · e9 · CVD 3) | 5 · 122 | 35,5% | 30,5 · 37,0 · 38,3 | 15,9% (35 NQ) |
+| **El Toro FVG 19–27 · c4 · e9 · CVD 3** | 5 · 122 | **39,3%** | 35,6 · 43,7 · 40,0 | 21,8% (30 NQ · TP 138) |
+| 300K: FVG 19–20 · c4 · e12 · CVD uit | 30 · 138 | 34,5% | — | **24,1%** (IS 24,3 · OOS 25,0; buren 19,6–24,1) |
+| live + trailing stop 42/36 + SL 40 (A-87) | 35 · 122 | — | — | 16,4% → geen hefboom |
+| El Tesoro MGC one-hit | 37 MGC · 85 | 39,5% | — | — |
+| El Tesoro MGC meerdere trades | 3 MGC · 85 | 29,4% (+20% time-out) | — | — |
+
+Sizing is geen hefboom (6·102 / 4·152 / 3·202 → 39,5–41,1%). ES/MES 17–19%, MYM/MCL 0% → af. Toro-exits
+als funded-engine (MNQ) → 50% winstdagen, negatief → El Toro blijft eval-only.
+
+**Aanbevelingen (alle onder voorbehoud van een Pine-export vóór live; elke wijziging reset de OOS-klok):**
+(1) Funded MGC: **TP 120** bij ongewijzigde entries, guards 250/100/500 × qty; 150/50/300 voor gelockte
+accounts met kleine ruimte. (2) Eval 50K NQ: **FVG 19–27, confirm 4, expiry 9, CVD 3**, 5 NQ, TP 122.
+(3) Eval 300K: **30 NQ, TP 138**, brede FVG-band (19–27 of 13–37), confirm 4. (4) Alternatief eval 50K:
+El Tesoro op MGC met 37 contracten (39,5%). (5) Niet: ES/MES, MYM, MCL, Tesoro op NQ, ATR-parameters,
+trailing stop op de 300K. Gevraagd aan Ferry: Pine-jaarexports TP 120 (MGC) en El Toro FVG 19–27 (NQ),
+beide naast de huidige sets op hetzelfde venster.
+
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 
 **Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE

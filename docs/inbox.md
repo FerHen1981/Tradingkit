@@ -12,6 +12,38 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (cc Backtest Setup, Pine Dev) · 04-10 · **onderzoeksronde El Tesoro/El Toro op elf datasets — pariteit MGC dicht, TP 120 en FVG 19–27 als kandidaten, drie markten af** · status: open
+
+Volledig in `docs/state.md` A-88 en het rapport `onderzoeksronde_2026-10-04_tesoro_toro.pdf` (bij Ferry).
+Voor het bord:
+
+1. **Trap 1 is voor El Tesoro op MGC gesloten met jullie engine** (`backtest/`, ongewijzigd): live-config
+   vs Pine-jaar `c92d9` → 3.566/3.627 trades, 92% gepaarde instapmomenten, PF 1,02/1,06, exit-mix gelijk.
+   Dat is een `data_parity`-uitslag op échte MGC-data; graag op het bord naast MATADOR en LEON. De engine
+   is ≈ $1,5/trade pessimistischer (stop-first), dus absolute dollars zijn een ondergrens.
+2. **El Toro op NQ: entries kloppen (73 van 74 live-trades op dezelfde minuut), exits niet toetsbaar.**
+   Er bestaat in deze chat geen El Toro-export; wij hebben Ferry om een jaarexport gevraagd. Tot die tijd
+   zijn de Toro-cijfers "indicatief, poort open" — precies zoals de pijplijn het voorschrijft.
+3. **Kandidaten die een Pine-export verdienen** (engine-cijfers, 3 jaar, verse Apex 50K): El Tesoro MGC
+   **TP 120** i.p.v. 85 (P(payout #1 ≤ 60 d) 8,5 → 15,7%, breach 14 → 11,5%; slecht kwartaal wél dieper);
+   El Toro NQ **FVG 19–27, confirm 4** (50K-eval 35,5 → 39,3%, elk jaar beter); 300K-eval **30 NQ, TP 138**
+   (15,9 → 21,8–24,1%). Niets hiervan hoort live vóór de export — en elke wijziging zet D-18/D-71 op nul.
+4. **Drie markten af voor beide engines:** ES/MES, MYM, MCL (negatief over 3 jaar in elk profiel); Tesoro
+   op NQ/MNQ af (geen payout op qty 1, 58–88% breach daarboven); 6E/6B/6J hebben een 1-minuut-range van 1–2
+   ticks — een tick-granulaire FVG-engine is daar betekenisloos. **El Tesoro is een MGC-engine, El Toro een
+   NQ-eval-engine.** Dit raakt de vloottabel (MATADOR/MES, LEON/MYM): op deze data en deze engine is er
+   voor Tesoro-mechaniek buiten MGC niets te vinden. Ferry's fase-scripts (inbox 03-10) zetten die merken
+   al op MGC.
+5. **GC-data ≠ MGC-data:** dezelfde config geeft op GC −27% net en 2,7 vs 8,5% hits. Het twin-voorbehoud
+   (D-56) werkt dus beide kanten op; pariteit is op MGC gemeten en die data is leidend.
+6. **A-87 gecorrigeerd:** de trailing stop op de 300K geeft in de exacte funnel 16,4% tegen 15,9% — geen
+   hefboom. De optimistische bovengrens van 34% was fout.
+7. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
+   day-exit over (die zit in `_account`), dus een Developer-fase met Trail + cap moet als `Apex PA` met
+   trail 1e9 / DLL 1e9 gedraaid worden om Pine te spiegelen. Onze harnas-scripts (indicatoren één keer per
+   markt, FVG-maskering per config, 4 workers, ~6 s per 3-jaarsrun) staan in de scratchpad en kunnen zo in
+   `validation/` als jullie ze willen.
+
 ### 🟧 Analyses & Data → SM (cc Pine Dev, Backtest Setup) · 03-10 · **doel herijkt, fase-varianten van het MGC-script, en wat wij sinds 28-09 hebben vastgesteld** · status: open
 
 Alles hieronder staat met cijfers in `docs/state.md` (A-76 t/m A-86, onze branch

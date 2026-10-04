@@ -243,6 +243,16 @@ Wissel van fase = ander script op het chart; de guards van A-76 schalen per cont
 variant van dit BT_90-pakket is via de inputs te zetten. Bestand: `MEX_fase_varianten_v3_3_0.zip`.
 Gemeld aan de SM in `docs/inbox.md` (3 okt).
 
+**Aanvulling 4 okt — eval-variant (zevende script, `TOR-MGC-E`).** El Tesoro op een 50K-eval, Pine-jaar
+8bc3d, trailing 2.500 op de trade-close-piek (de echte Apex-floor volgt de open piek en is strenger),
+goal 3.000, pass/breach binnen 60 d: qty 1 42/33 (mediaan 40 d) · qty 2 41/59 (15 d) · qty 3 34/66
+(5 d) · qty 4 30/70 (3 d) · qty 5 32/68 (3 d); qty 5 met vaste cap 1.000 44/56 (4 d). Day-guards
+helpen op een eval niet (geen consistency-regel) behalve die ene cap-variant, één jaar, dus geen
+besluit. Eval-defaults: qty 3, Day-profit exit Off, risk-gate Off, phase Eval, firm preset
+`apex_50k_legacy_eval` (250K: qty 8 + `apex_250k_legacy_eval`; 300K heeft geen preset, goal staat
+hard op 3.000 → Developer of preset vragen bij Pine Dev). Op NQ blijft TOR-NQ-HF de one-TP-lottery
+(p ≈ 1/3, A-77).
+
 ## A-85 — Fleet-doc 5 okt v2: per account op maat, uit fills + dashboard + varianten (3 okt 2026)
 
 **Feiten 3/10.** Apex-dashboard: alle 14 PA's zijn Legacy 50K Tradovate met dezelfde regels (safety

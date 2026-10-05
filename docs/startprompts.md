@@ -1,205 +1,175 @@
-# Startprompts per chat — ronde 29-09e
+# Startprompts per chat — ronde 05-10
 
-_Eigenaar: Scrum Master. Watermerk: `HEAD`, 29-09._
+_Eigenaar: Scrum Master. Watermerk: `HEAD`, 05-10._
 
 ## Stand
 
-Fase 0 en 1 zijn af. **Fase 2 is de kritieke lijn** — D-82 (config-API) is het enige dat nog
-tussen nu en Web staat. De registry dekt alle acht firma's, dus fase 5 is ook niet meer
-geblokkeerd.
+**Fase 0 en 1 zijn af. Fase 2 is de kritieke lijn en is sinds deze ronde gedeblokkeerd.**
+D-120 is beslist: de settings-tab komt **in de bestaande cockpit, direct vóór de Live-tab**.
+Daarmee verhuizen D-83 en D-84 van Web naar Middleware App, is er géén nieuwe app-shell
+nodig, en erft het scherm de bestaande auth.
 
-## Wat Ferry deze ronde besliste
+⚠️ **En er loopt een incident op het live pad.** Zie D-116, D-122 en D-123 hieronder. Lees die
+drie vóór je iets aan de middleware doet.
 
-**D-109 · de firm-DLL is informatie, geen rem.** *"Accounts moet handelen tot ze de
-ingestelde target halen of door mij ingestelde DLL bereiken en als de harde DLL limit
-bereikt wordt stopt ie vanzelf."*
+## De les van deze week, en hij geldt voor iedereen
 
-**D-110 · zijn eigen DLL is een formule:**
-```
-owner_dll = min( sl_per_contract × dll_sl_multiple × qty ,  ruimte × max_fraction_of_room )
-ruimte    = balans − liq_niveau
-```
-Geverifieerd op zeven punten uit het fleet-doc (SL 100, multiple 4). 🔴 Hij leest `balans`
-uit **T3**, dus **Pine kan hem niet uitrekenen** — de volle rem hoort aan de
-middlewarekant en kan niet vóór fase 4. Pine bouwt nu alleen de eerste term.
+🔴 **Vier keer in drie dagen heb ik een verklaring uit de code afgeleid in plaats van gemeten,
+en drie daarvan waren fout.** De rate-limit als oorzaak (weerlegd door de tier-tabel), een
+Pine-runtime-error (weerlegd: de charts waren niet gewijzigd), de webhook-routing (weerlegd:
+er is geen enkele `NOTIFY_WEBHOOK*` gezet), en D-53 gesloten op de aanname dat
+`MEX_ACCOUNT_QTY` leeg was (er staan **39 accounts** in).
 
-**D-111 · de eval-helft van de widget toont straks drie dingen:** passed en failed **in het
-getoonde venster**, plus het **aantal actieve** evals. `passed_at` is afleidbaar uit de
-fills — de **vorige handelsdag** vóór de eerste trade (Ferry's regel, feestdagen uit het
-fleet-doc overgeslagen).
+**Werkregel vanaf nu: een uitspraak over het live pad vraagt een meting, geen leesbeurt.** De
+code zegt wat er *kan* gebeuren; alleen het journaal zegt wat er *is* gebeurd. Schrijf in je
+oplevering erbij *hoe* je het gemeten hebt — en als je het niet kon meten, schrijf dát.
 
----
-
-## 🟦 Middleware App (chat: **App Setup**) — D-82 eerst, dat houdt Web tegen
-
-```
-git pull origin claude/middleware-setup-guide-afhvtk
-
-1. 🔴 D-82 AFMAKEN — dit is de kritieke lijn. Web (D-83/D-84) kan er niet omheen en
-   staat al twee rondes stil. Auth als ontwerpeis, niet als bijzaak: dit endpoint stuurt
-   orders. Elke schrijfactie door dezelfde validatie als D-80 en in het auditspoor van D-81.
-
-2. 📱 D-111 — de eval-helft van de widget, en lever dit in TWEE stappen.
-
-   STAP A, kan nu en is één regel: het aantal ACTIEVE evals uit
-   eval_stats.raw_counts.running. Gebruik de RAW counts, niet counts_50k_eq — Ferry vraagt
-   om een aantal, en de 50k-normalisatie bestaat voor de publieke site (D-74) waar
-   accountgrootte misleidt. Op zijn telefoon is 5 accounts gewoon 5.
-
-   STAP B, het venstertellertje. passed_at is AFLEIDBAAR en hoeft dus niet gegokt:
-   de vorige HANDELSDAG vóór de eerste trade op het funded account, met de feestdagen uit
-   het fleet-doc (26 nov, 25 dec, 1 jan, 18 jan, 15 feb) overgeslagen. Dat geeft voor de
-   tien bestaande accounts: PA013 24-07 · PA018 03-08 · PA022 24-08 · PA023 04-09 ·
-   PA024 11-09 · PA025 16-09 · PA026 17-09 · PA027+PA028 18-09 · PA029 23-09.
-
-   🔴 DE FAILED-KANT IS NIET AFLEIDBAAR. Een breached eval wordt nooit funded, heeft dus
-   geen eerste trade. Die telling begint bij nul en loopt vanaf nu. MAAK DAT ZICHTBAAR in
-   de weergave — een failed-teller op 0 die eigenlijk "onbekend" betekent is dezelfde
-   stille nul als de drawdown-fallback in D-68, de ledger-fallback in D-75 en de
-   DLL-van-nul in D-108. Drie keer dezelfde fout in één maand; deze hoeft niet de vierde
-   te worden.
-
-3. 🔴 UIT D-110, EN DIT KOMT BIJ JULLIE TERECHT. De volledige owner-DLL kan alleen aan
-   jullie kant, want hij heeft de BALANS nodig:
-       owner_dll = min( 100 × 4 × qty , (balans − liq_niveau) × 1/3 )
-   Pine bouwt nu alleen de eerste term. Neem de tweede mee in de planning van fase 4
-   (D-92) — niet eerder, en bouw geen schatting van de ruimte. Parameters staan in
-   schema-config.md §3c als owner_caps, gesleuteld op de program-sleutel uit de registry.
-
-4. Loopt nog: D-74, D-69, en D-106 (log per POST welk endpoint gekozen werd — dat haalt
-   de eerste onbekende weg bij het account dat 100% van het afwijkende verkeer draagt).
-```
+📌 Mijn eigen env-meting van 02-10 was óók te smal: de grep miste `MEX_HALTED_ACCOUNTS` en
+`MEX_ACCOUNT_ENTRY_CAPS`, en die zijn nu juist de hoofdverdachten in D-123. Een filter is een
+aanname.
 
 ---
 
-## 🟨 Pine Dev — D-110, en de volgorde is de opdracht
+## 🟦 Middleware App — drie dingen, en D-123 gaat voor
 
-```
-git pull origin claude/middleware-setup-guide-afhvtk
+### 1. D-123 — waarom kreeg account …018 geen entries? 🔴 LIVE
 
-D-110 staat klaar. De inhoud is één regel; de VOLGORDE is waar het om gaat.
+Gemeten op Ferry's PMT-export: op 05-10 vuurden **8 signalen** naar 7–8 kern-accounts en
+**…018 ontbreekt bij alle acht**, terwijl het om 06:21 wél een `close` qty 4 kreeg. Op 02-10
+deed het nog gewoon mee (22 alerts, qty 2).
 
-WAT ER VANDAAG STAAT — drie daglimiet-remmen, en de firmawaarde is de actieve:
-  acctDLL  = input.float(1000, "PA Daily Loss Limit ($)")          r. 486
-  acctDLL := pfDLL                                                  r. 1010  <- preset wint
-  dllHit   = acctDLL > 0 and (isPA or (isEval and ddModel=="EOD"))
-             and runningPnL <= -acctDLL                             r. 1760
-  enableDailyLossLimit (default FALSE) + dailyLossLimit (700) -> lossHit
-  useRiskGate (default FALSE) + rgDLL (150)
+**Entries weg, exits door** — dat is precies de vorm van allebei jullie poorten: `if (isEntry
+&& …)` op r. 312 (D-40) en r. 330 (D-02).
 
-GEVRAAGD (Ferry, D-109): dllHit remt niet meer op de firmawaarde maar op Ferry's eigen
-waarde. De firmalimiet stopt het account vanzelf bij de broker.
+➡️ **Doe de meting, niet de redenering.** `routed_*.jsonl` van 05-10, `kind: "pmt"`, account
+op …018. Het `result`-veld onderscheidt alle vier de kandidaten:
 
-🔴 BINDENDE VOLGORDE — haal je dllHit weg terwijl enableDailyLossLimit op FALSE staat, en
-dat is de default, dan heeft dat account GEEN ENKELE Pine-rem meer en loopt het door tot de
-firmalimiet. Die BREACHT een eval in plaats van hem te pauzeren.
-  1. eerst Ferry's eigen rem aan, met de waarde uit de formule;
-  2. aantoonbaar laten zien dat hij werkt;
-  3. dan pas de firmwaarde uit dllHit halen.
-Niet in één commit zonder dat stap 1 en 2 staan.
+| wat je ziet | wat het is |
+|---|---|
+| `GEWEIGERD lokaal — risk-gate: <reden>` | `MEX_HALTED_ACCOUNTS` of `MEX_ACCOUNT_ENTRY_CAPS` |
+| `GEWEIGERD lokaal — day-cap/DLL blokkade actief` | de reactieve D-40-gate |
+| een normale PMT-reply | de middleware stuurde wél; PMT plaatste niet |
+| **geen enkele rij** | de middleware zag het alert nooit — dan zit het ervóór |
 
-DE WAARDE — alleen de eerste term, want die heeft alleen qty nodig:
-  owner_dll = 100 × 4 × qty  ->  $400 / $800 / $1.200 / $1.600 / $2.000 bij qty 1 t/m 5
-Exact de ladder uit Ferry's fleet-doc, op zeven punten nagerekend.
+📌 Dump ook de **volledige** env-namen van het draaiende proces (niet gefilterd), want
+`MEX_HALTED_ACCOUNTS` is de sterkste kandidaat: die is persistent en overleeft een herstart,
+en dat is het enige wat een onderbreking van drie dagen moeiteloos verklaart.
 
-⛔ DE TWEEDE TERM NIET IN PINE. "nooit meer dan 1/3 van de ruimte" heeft de BALANS nodig en
-Pine kent die niet. Die komt in de middleware na fase 4. Bouw er geen benadering voor: een
-geschatte ruimte is erger dan geen ruimte, want hij ziet eruit als de echte.
+🔴 **Verifieer apart** of die `close` voor 4 contracten op een vlak account een **omgekeerde
+positie** heeft geopend — de payload draagt `reverse_order_close: True`.
 
-📌 acctDLL blijft in het script — D-96 heeft de firmawaarde nodig als WEERGAVE. Alleen
-dllHit gebruikt hem niet meer.
-📌 Zelfde discipline als bij D-107: laat zien dat het om de rem gaat en niet om
-handelslogica. Dat bewijs heeft D-86 straks nodig voor het OOS-klokbesluit.
+### 2. D-116 — de fall-through, en nu met cijfers
 
-DAARNA: D-85 loopt bij jullie samen met Middleware App (geheimen uit de chart-inputs).
-D-86 blijft wachten tot fase 2 rond is.
-```
+**Bevestigd en gekwantificeerd:** 688 pogingen op 02-10, **103 weggegooid = 15,0%**; over
+alleen tier B **20,0%**. Ferry draait nu `MEX_RENDER_ENABLED=false` als noodmaatregel, dus de
+kaarten staan uit.
 
----
+Drie dingen in één fix:
+1. Bij demping **doorvallen** naar `PostJsonAsync` in plaats van `return` (r. 438–451).
+2. De `catch` in `RenderAndPostAsync` heeft **geen** tekst-fallback terwijl beide andere takken
+   die wél hebben — zelfde klasse, andere tak.
+3. De rate-limit staat op `tier != 'C'`, dus **tier C gaat ongelimiteerd door** terwijl tier B
+   sneuvelt. De rem hoort vóór die afslag.
 
-## 🟩 Backtest Setup — spoor B afmaken
+🔗 Dit is niet alleen ruis: D-123 laat zien dat de blokkademelding *"⛔ Order NIET geplaatst"*
+vermoedelijk tussen die 103 zat. **Een weggegooide waarschuwing is duurder dan een
+weggegooide kaart.**
 
-```
-git pull origin claude/middleware-setup-guide-afhvtk
+### 3. D-121 + D-111B — de payload-helften
 
-D-104, D-100 en D-68 zijn dicht. De registry dekt alle acht firma's en D-96 faalt niet meer
-op een ontbrekende regel — dat was de blokkade voor fase 5.
+De widget-helften heb ik gebouwd (in jullie map, gemeld in `inbox.md`, review welkom). Wat bij
+jullie ligt:
 
-D-101 afmaken (de interpreter voor de Pine-deelverzameling die HARD weigert op het
-onbekende), daarna D-102: door de hele molen — walk-forward, Monte Carlo, stress,
-prop-firm-simulatie op het resultaat van de interpreter in plaats van op een
-herimplementatie.
+- `stack()` moet per stage ook `todayTrades/Winrate/Pf` en `weekTrades/Winrate/Pf` leveren.
+  Dan kunnen de twee `· all`-achtervoegsels uit de widget.
+- `passed_at` / `breached_at` in de payload. De afleidingsregel en de tien datums staan in
+  `DECISIONS.md`. Dan kunnen de venster-standen een échte venstertelling tonen.
 
-📌 Uit D-109/D-110, en dit raakt jullie simulatie direct: er zijn nu TWEE daglimieten en ze
-horen niet op één hoop. De FIRMAWAARDE staat in de registry en is wat de prop firm
-handhaaft — die hoort in de simulatie. Ferry's EIGEN rem (owner_caps, schema-config.md §3c)
-is een operationele keuze en hoort er NIET in. Simuleer je zijn rem mee, dan meet je zijn
-gedrag in plaats van de firmaregels, en dan is het cijfer niet meer vergelijkbaar tussen
-programma's. Dat is dezelfde scheiding als D-109.
-```
+### 4. Fase 2 — D-83/D-84 zijn nu van jullie
 
----
+D-120: de tab komt in `middleware/app/viewer.py`, tussen `Playbook` en `Live` (r. 702–716).
+Auth erft van `_api_authorized()`.
 
-## 🟪 Web — nog één item, en dan zijn jullie aan de beurt
+🔴 **Eén ontwerpeis vooraf:** de cockpit draait op `app.mex-traders.com`, de config-API op de
+.NET-receiver achter `mw.mex-traders.com`. **Proxy server-side** naar `localhost:5000` en voeg
+de Bearer daar toe — dan blijft CORS dicht en komt de token **nooit in de browser**. Niet
+`MEX_CONFIG_API_CORS_ORIGIN` openzetten; dit scherm stuurt orders.
 
-**D-82 is het laatste dat voor jullie staat** en het loopt nu bij Middleware App. Zodra de
-config-API er is beginnen D-83 en D-84.
-
-Lees `docs/schema-config.md` §2, §3, §5 — en nu ook **§3c**, want `owner_caps` komt in
-hetzelfde scherm te staan **naast** de firmaregels: *firmaregel $1.000 · jouw rem $400*.
-Dat naast elkaar tonen is de kern van wat Ferry in D-109 vroeg: hij wil kunnen zien wat de
-firma oplegt én wat hij zichzelf oplegt, zonder ze te verwarren.
-
-⚠️ En het punt dat bepaalt wat "af" betekent: **met dit scherm wordt de webapp onderdeel van
-het live executiepad.** Vandaag toont een fout daar een verkeerd getal; straks stuurt hij
-een order naar het verkeerde account.
+📌 **Volgorde: D-119 (de leeshelft) eerst.** Een scherm dat naar het live pad schrijft terwijl
+ons model van dat pad fout is, is gevaarlijker dan PowerShell — en deze week bleek dat model
+drie keer fout. D-119 is bovendien klein: `routed_*.jsonl` draagt `kind`, `account`,
+`transport` en `result` al.
 
 ---
 
-## 🟧 Analyses & Data — vanaf nu vast in de ronde
+## 🟨 Pine Dev — D-110 heropend, en het is niet jullie fout
 
-> **Waarom deze rol er eerst niet in stond:** de eigenaarstabel is op **mappen** gebouwd en
-> deze chat bezit er geen. Daardoor viel hij sinds de herijking uit elke ronde — terwijl hij
-> wél het fleet-startschema levert, dat de acceptatietest is voor D-96 en D-97. Besluit
-> Ferry 29-09: **rollen zonder map staan expliciet in de ronde**, ook als het antwoord
-> "niets deze ronde" is.
+🔴 **Ik neem mijn intrekking van 29-09 terug.** Ik schreef toen dat het `runningPnL`-bezwaar
+verviel omdat Pine en de broker dezelfde chart-qty zouden gebruiken. **Dat rustte op de
+aanname dat `MEX_ACCOUNT_QTY` leeg was — er staan 39 accounts in** (D-122).
 
-```
-git pull origin claude/middleware-setup-guide-afhvtk
+Gevolg: Pine berekent `runningPnL` én `ownerDll = 4 × SL × contractSize` op de **chart-qty**,
+terwijl de middleware voor accounts in die map een **andere** qty naar PMT stuurt. De eigen
+dagrem is dan gekalibreerd op een grootte die niet gehandeld wordt.
 
-Jullie zijn sinds de herijking van 27-09 overgeslagen in de rondes. Dat is mijn omissie en
-de oorzaak is structureel: de eigenaarstabel gaat over mappen en jullie bezitten er geen.
-Dat is nu rechtgezet — jullie staan vanaf deze ronde vast in de lijst.
+✅ **Maar de PMT-export verzacht het:** de qty is dáár niet uniform 1 — …013/…018/…022/…026/…034
+staan op 2, …274/…278 op 5, …277 op **35**. Die accounts zitten dus níét in de map en bij hen
+klopt Pine's rekensom wél.
 
-WAT ER IS VERANDERD
-Het project draait sinds 27-09 volgens docs/PLAN-2026-09-27-herijking.md: zeven fasen plus
-twee parallelsporen. Van de 33 open items zijn er 12 geparkeerd, 7 opgegaan in een fase en
-4 afgesloten; docs/ARCHIVE.md draagt de volledige tekst. Fase 0 en 1 zijn af, fase 2 loopt.
+➡️ **Deze ronde: niets aan de dertien scripts wijzigen.** Eerst moet vaststaan welke accounts
+daadwerkelijk overschreven worden; dat is D-122 en het ligt bij Ferry en Middleware App. Wat
+jullie wél kunnen: **D-86** zodra fase 2 staat, en **spoor C**.
 
-🔴 DIT RAAKT JULLIE DIRECT: jullie fleet-startschema van 28-09 is sinds die datum DE
-ACCEPTATIETEST voor D-96 (de vijf vooruitblikken) en D-97 (het schaaladvies).
+📌 Jullie D-110-oplevering zelf blijft overeind en is goed werk — `firmDllActive` dat letterlijk
+de twee voorwaarden draagt en de samenvoeging ná `acctDLL := pfDLL` was precies de goede
+redenering. Daar verandert niets aan.
 
-DOE NU — D-112, één review die ertoe doet:
-Lees docs/fleet-report-spec.md. Dat heb ik opgesteld door de formules uit jullie PDF te
-reconstrueren — kolommen en formules, ZONDER bedragen, want balansen horen niet in de repo.
-Drie formules heb ik tegen jullie eigen cijfers nagerekend en ze klopten: het
-consistency-percentage bleek PER PROGRAMMA te verschillen (legacy 30%, Intraday 4.0 50%) en
-klopte exact op PA018, PA026 en PA023. De rest is AFGELEID, niet geverifieerd.
-Toets §2 (stand per account), §3 (startschema), §4 (payout-poorten), §6 (schaal-ladder).
-Wat ik verkeerd heb begrepen wil ik nu weten en niet als D-96 al gebouwd is.
+---
 
-TWEE DINGEN DIE AL OPENSTAAN ZONDER ANTWOORD:
-1. Het A-voorvoegsel (inbox 28-09, besluit Ferry). Jullie doc verwijst naar "D-76/D-77"
-   terwijl dat op het bord de widget-fix en het event-schema zijn. Houd je nummers, zet er
-   alleen A- voor. Eén regel terug in docs/inbox.md als het gedaan is.
-2. De projectiebasis. Jullie $442.745 staat op "$187 netto per contract per handelsdag
-   (live 1-14 sep)". Ik heb de volledige fills-export 01-25 sep gekoppeld: de tweede helft
-   van de maand is NEGATIEF (-$4.414 over 69 account-dagen), en over het hele venster kom
-   ik op ongeveer een zevende van jullie basis. Jullie noemen zelf "realistisch midden
-   50-60%"; op deze meting is ook dat optimistisch. Graag jullie reactie — misschien zie ik
-   iets over het hoofd in hoe die basis bedoeld is.
+## 🟩 Backtest Setup — D-113 erbij, en spoor B loopt door
 
-NIET OPPAKKEN: de vlootrangorde, de eval-lens en de decorrelatiemeting zijn bewust
-GEPARKEERD tot het platform staat (Ferry: "dit gaan we opnieuw doen als dit allemaal
-staat"). Zie D-54, D-38 en D-39 in docs/ARCHIVE.md.
-```
+### D-113 (nieuw) — de engine remt op iets wat het script niet meer heeft
+
+Pine remt sinds D-110 op `min(4 × SL × qty, firm_dll)`; `backtest/engine.py` modelleert nog
+alleen `cfg.acct_dll`. **Dat is een pariteitsverschil op dagniveau.**
+
+De vorm is bekend en dat maakt het klein: Pine Dev noteerde dat `acct_dll = 4 × SL × qty` de
+eigen rem **exact** reproduceert. Wat mist is de `min` met de firmawaarde, plus dat de rem op
+`lossBasisEff` meet in plaats van op de ruwe running-P&L.
+
+📌 De ⅓-ruimteterm hoort er **niet** in — die vraagt de balans uit T3 en zit ook niet in Pine.
+
+### D-101 / D-102 — spoor B
+
+Increment 3b (statements) en 4 (evaluator) staan nog open. D-102 kan pas starten als de
+evaluator een draaibare backtest uit een `.pine` produceert.
+
+---
+
+## 🟪 Web — jullie zijn deze ronde vrij, en dat is een besluit
+
+D-83 en D-84 **gaan naar Middleware App** (D-120): de settings-tab komt in de bestaande
+cockpit, er komt geen nieuwe app-shell in `web/**`. Dat scheelt jullie het meeste werk uit mijn
+statusopname van 30-09.
+
+Wat blijft: `resultaten.astro` en `public-stats.json` volgen zodra het eval-format er is
+(D-74), en **D-34** (publieke claims) staat nog op review.
+
+⚠️ Herinnering die nog steeds geldt: **er is geen geldige vlootrangorde** en de OOS-klok staat
+op nul. Geen enkele publieke claim mag suggereren dat deze vloot out-of-sample bewezen is.
+
+---
+
+## 🟧 Analyses & Data — de fleet-vraag van deze week
+
+Jullie staan vast in de ronde (besluit Ferry 28-09) en gebruiken het voorvoegsel `A-`.
+
+**D-112 staat nog open:** klopt `docs/fleet-report-spec.md` met hoe jullie het fleet-startschema
+opstellen? Dat document is sinds 28-09 de acceptatietest voor D-96 en D-97, dus een afwijking
+daar wordt straks een afgekeurde fase.
+
+**Nieuw deze ronde, en het raakt jullie cijfers direct:** uit de PMT-export blijkt dat de
+gehandelde contractgrootte per account varieert (2, 5, en één op **35**) en dat er sinds 18-09
+een middleware-override van 39 accounts op qty 1 draait. 🔴 **Elke doorlooptijd- of
+payout-per-dag-berekening die een vaste qty aanneemt, klopt daarmee niet.** Geef aan welke van
+jullie cijfers dat raakt en wat jullie nodig hebben om het te corrigeren.

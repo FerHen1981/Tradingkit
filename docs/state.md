@@ -249,6 +249,16 @@ retrace); de exacte engine-funnel zegt 40,0% voor deze set tegen 38,3% voor de l
 Daarmee is aanbeveling (2) van A-88 — FVG 19–27 / confirm 4 / expiry 9 op de 50K-evals — door een Pine-export
 gedekt. Nog open: de MGC-export met TP 120 (aanbeveling 1) en, voor de 300K, een export met TP 138.
 
+**Aanvulling 5 okt, tweede export `e609f` (live-entries 4–12 / confirm 2 / expiry 9, Delta-filter UIT, TP 122 / SL 90,
+5 NQ, zelfde jaar).** Engine vs Pine: 5.808 vs 5.641 trades (+3%), 95% / 98% gepaard, winrate 43,2 vs 43,4, PF 1,00 vs
+1,02, maandaantallen gelijk → tweede bevestiging van de poort. Uit de exports zelf: P(TP ∧ MAE < 100t) = 43,2% (live-
+entries zonder delta) vs 42,9% (19–27 met delta) — op de loterij-meetlat gelijk. Exacte funnel op dít jaar (119 starts,
+foutmarge ≈ ±4,5 pt): live-entries CVD uit 39,5% · live-entries CVD aan 38,7% · 19–27 c4 CVD aan 40,3% → **op één jaar
+niet te onderscheiden**; het voordeel van 19–27 (3 jaar: 39,3 vs 35,5%, elk jaar 2–6 pt) is klein en komt uit de
+twee eerdere jaren. Wat wél overeind blijft op dit jaar: **300K 30 NQ · TP 138 · 19–27 = 23,5% tegen 16,0%** voor de
+live set op 35 NQ. Opvallend: zonder delta-filter nette de Pine +$149k op 5 ct over het jaar tegen +$23,6k met 19–27 —
+de delta-filter kost op NQ meer winst dan hij breaches spaart, maar voor een one-hit-eval telt alleen de eerste trade.
+
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 
 **Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE

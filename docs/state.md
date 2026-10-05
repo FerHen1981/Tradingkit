@@ -277,6 +277,12 @@ een dieper slecht kwartaal; met 150/50/300 is hij op alle assen behalve breach b
 engine over 3 jaar (A-88), met dezelfde kanttekening dat 2024/25 andersom uitviel. Per account (A-84): TP 120 +
 150/50/300 waar de ruimte ≥ ~$1.500 is; TP 85 alleen waar één SL het einde is. **Elke omzetting reset de OOS-klok.**
 Ferry levert geen NQ-export met TP 138: de 300K-eval is op de one-hit-set gefund (account 277 → PA).
+**Verse 300K PA (277) op de Pine-jaarstromen** (aangenomen: trailing 7.500, lock bij +7.600, payout #1 $3.500, 30%,
+8 dagen / 5 × ≥ $50 — Apex-300K-regels nog te bevestigen; guards per contract × qty): TP 120 + 150/50/300 → qty 3:
+hit60 71% / breach 14%, mediaan 45 d, slechtste dag −4.480; qty 4: 76% / 16%, 34 d, −5.973; qty 5: 79% / 15%, 27 d,
+−7.466 (= de hele trailing in één dag → alleen met DLL). TP 85 qty 3: 23–26% / 6%. **Voorstel:** TP 120, qty 3 met
+450/150/900 tot de lock, daarna qty 4 (600/200/1.200); geen DLL op qty ≤ 4, wel op 5. Zelfde script-lijn als de
+50K's (fase-scripts A-86), alleen qty en guards anders.
 
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 

@@ -259,6 +259,25 @@ twee eerdere jaren. Wat wél overeind blijft op dit jaar: **300K 30 NQ · TP 138
 live set op 35 NQ. Opvallend: zonder delta-filter nette de Pine +$149k op 5 ct over het jaar tegen +$23,6k met 19–27 —
 de delta-filter kost op NQ meer winst dan hij breaches spaart, maar voor een one-hit-eval telt alleen de eerste trade.
 
+**Aanvulling 5 okt — MGC-export TP 120 (`9dc3f`) sluit aanbeveling (1).** Ferry's export: TP 120 / SL 100, 8–23 c4 e12,
+Delta uit, day-trail **300/100/600** (de qty-2-schaal, niet 250/100/500), qty 1, Developer, 5 okt 2025 → 5 okt 2026, 3.196
+trades. Engine op dezelfde config: 3.062 vs 3.141 trades (tot 25/9), winrate 47,2 beide, exits gelijk, 90–92% gepaard →
+poort dicht. **Pine tegen Pine, zelfde jaar, per contract** (TP 85 = `c92d9` met 250/100/500):
+
+| | trades | win | net/ct | wd | worst dag | maxDD | vers 50K hit60 / br60 | hit90 / br90 | mediaan | gelockt $3k hit40 / br40 |
+|---|---:|---:|---:|---:|---:|---:|---|---|---:|---|
+| TP 85 (Pine 250/100/500) | 3.589 | 55,4 | 8.251 | 65% | −1.255 | 4.547 | 25 / 6 | 37 / 6 | 50 d | 69 / 5 |
+| TP 120 (Pine 300/100/600) | 3.196 | 47,2 | 10.279 | 61% | −1.493 | 8.243 | 47 / 16 | 63 / 16 | 41 d | 76 / 11 |
+| TP 120 + 250/100/500 (post-hoc) | | | | 63% | | | 45 / 16 | 70 / 16 | 48 d | 80 / 11 |
+| **TP 120 + 150/50/300 (post-hoc)** | | | | **73%** | | | **64 / 14** | **76 / 14** | 49 d | **82 / 7** |
+
+Kwartalen TP 120: 2025Q4 −4.431 (TP 85: −2.032), 2026Q1 +6.446, Q2 +2.001, Q3 +6.899. **Lezing:** TP 120 verdubbelt
+tot verdrievoudigt de kans op payout #1 en wint op gelockte accounts, tegen een hogere breach-kans (14–16% i.p.v. 6%) en
+een dieper slecht kwartaal; met 150/50/300 is hij op alle assen behalve breach beter dan de live set. Spoort met de
+engine over 3 jaar (A-88), met dezelfde kanttekening dat 2024/25 andersom uitviel. Per account (A-84): TP 120 +
+150/50/300 waar de ruimte ≥ ~$1.500 is; TP 85 alleen waar één SL het einde is. **Elke omzetting reset de OOS-klok.**
+Ferry levert geen NQ-export met TP 138: de 300K-eval is op de one-hit-set gefund (account 277 → PA).
+
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 
 **Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE

@@ -43,7 +43,11 @@ Voor het bord:
    exit-mix gelijk. Pine draaide de **native** delta, de engine de **proxy** — op dit script geen materieel
    verschil (bewijs voor D-66/SM-05). Engine ≈ 1,5 tick/trade pessimistischer op NQ. Graag beide poorten
    (TESORO-MGC, TORO-NQ) op het bord.
-8. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
+8. **Update 05-10 — MGC-export TP 120 (`9dc3f`) binnen:** engine 3.062 vs Pine 3.141 trades, winrate 47,2 beide,
+   90–92% gepaard → derde gesloten poort. Pine-jaar TP 120 vs TP 85 per contract: payout-#1-kans binnen 60 d 47% vs
+   25% (met 150/50/300: 64%), breach 16% vs 6%, winstdagen 61–73% vs 65%. Advies per account in A-88. Verder: de
+   300K-eval (277) is gefund op de bestaande one-hit-set; er komt geen NQ-export met TP 138.
+9. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
    day-exit over (die zit in `_account`), dus een Developer-fase met Trail + cap moet als `Apex PA` met
    trail 1e9 / DLL 1e9 gedraaid worden om Pine te spiegelen. Onze harnas-scripts (indicatoren één keer per
    markt, FVG-maskering per config, 4 workers, ~6 s per 3-jaarsrun) staan in de scratchpad en kunnen zo in

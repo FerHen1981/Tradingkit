@@ -235,6 +235,20 @@ El Tesoro op MGC met 37 contracten (39,5%). (5) Niet: ES/MES, MYM, MCL, Tesoro o
 trailing stop op de 300K. Gevraagd aan Ferry: Pine-jaarexports TP 120 (MGC) en El Toro FVG 19–27 (NQ),
 beide naast de huidige sets op hetzelfde venster.
 
+**Aanvulling 5 okt — pariteit El Toro dicht (export `6ae27`).** Ferry leverde de gevraagde export: TOR-NQ-HF,
+FVG 19–27, confirm 4, expiry 9, Delta-filter On (native `requestVolumeDelta`, LTF 1) streak 3, TP 122 / SL 90,
+5 NQ, Research, 5 okt 2025 → 5 okt 2026. Vergelijking met de engine op dezelfde config en hetzelfde venster
+(CVD-proxy): **1.931 vs 1.901 trades (+1,6%), 96% / 98% gepaarde instapmomenten, winrate 42,7 vs 43,2, PF
+0,98 vs 1,01, exits SL 1.090/TP 808 vs 1.063/816, maandelijkse aantallen gelijk** → poort dicht. Netto wijkt
+af ($−48,7k vs +$23,6k op 5 ct ≈ 1,5 tick per trade): het pessimistische fillmodel (stop-first + 1 tick) weegt
+op NQ zwaarder dan op MGC; rangordes blijven bruikbaar, dollars niet. Twee bijvangsten: (1) de Pine draaide
+de **native** delta en de engine de **OHLCV-proxy**, en toch 96% pairing — op dit script maakt de delta-bron
+geen materieel verschil (raakt D-66/SM-05); CVD uit zou 3.151 trades geven, dus de filter zelf doet wél iets.
+(2) Rechtstreeks uit de export: P(TP ∧ MAE < 100t) = **42,9%** op het jaar (bovengrens zonder tussentijdse
+retrace); de exacte engine-funnel zegt 40,0% voor deze set tegen 38,3% voor de live set op hetzelfde jaar.
+Daarmee is aanbeveling (2) van A-88 — FVG 19–27 / confirm 4 / expiry 9 op de 50K-evals — door een Pine-export
+gedekt. Nog open: de MGC-export met TP 120 (aanbeveling 1) en, voor de 300K, een export met TP 138.
+
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 
 **Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE

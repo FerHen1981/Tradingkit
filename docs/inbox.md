@@ -38,7 +38,12 @@ Voor het bord:
    (D-56) werkt dus beide kanten op; pariteit is op MGC gemeten en die data is leidend.
 6. **A-87 gecorrigeerd:** de trailing stop op de 300K geeft in de exacte funnel 16,4% tegen 15,9% — geen
    hefboom. De optimistische bovengrens van 34% was fout.
-7. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
+7. **Update 05-10 — El Toro-poort dicht.** Ferry's export `6ae27` (FVG 19–27, confirm 4, TP 122/SL 90, 5 NQ,
+   jaar) tegen de engine: 1.931 vs 1.901 trades, 96–98% gepaarde entries, winrate 42,7 vs 43,2, PF 0,98 vs 1,01,
+   exit-mix gelijk. Pine draaide de **native** delta, de engine de **proxy** — op dit script geen materieel
+   verschil (bewijs voor D-66/SM-05). Engine ≈ 1,5 tick/trade pessimistischer op NQ. Graag beide poorten
+   (TESORO-MGC, TORO-NQ) op het bord.
+8. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
    day-exit over (die zit in `_account`), dus een Developer-fase met Trail + cap moet als `Apex PA` met
    trail 1e9 / DLL 1e9 gedraaid worden om Pine te spiegelen. Onze harnas-scripts (indicatoren één keer per
    markt, FVG-maskering per config, 4 workers, ~6 s per 3-jaarsrun) staan in de scratchpad en kunnen zo in

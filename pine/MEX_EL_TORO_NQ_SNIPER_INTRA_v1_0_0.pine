@@ -1839,10 +1839,18 @@ float ddRoom     = phaseOn ? acctPnL - acctFloor : na
 // D-108, zelfde patroon: consistency 0 betekent "geen consistency-regel". Zonder deze
 // clausule is bestDaySince/profitSince < 0 nooit waar en komt payoutEligible nooit uit.
 bool  consistencyOK = consistencyPct <= 0 or (profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0)
-f_ladderCap(_n) =>
-    _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
+// D-126 (06-10): `f_ladderCap(_n)` STOND HIER en is weg. Hij gaf ALTIJD de Apex-50K-ladder
+// terug -- $1.500/$1.500/$2.000/$2.500/$2.500/$3.000 -- ongeacht het programma. Naast hem
+// stond al `f_firmLadder(preset, n)`, gegenereerd uit `data/propfirms.json` en per programma
+// correct, met NUL call-sites in dertien scripts. De keten was gebouwd, de laatste schakel
+// ontbrak. Gevolg op het live pad: een 250K legacy account zette `pmtBlock` op $1.500
+// terwijl zijn cap $3.000 is -- het stopte met handelen op de helft van zijn cap.
 int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
-float curLadderCap = f_ladderCap(effPayoutNr)
+// De ladder komt nu uit de registry. Let op: `firmPreset` en niet `useFirmPreset` -- er is
+// geen handmatige ladder-input, dus de dropdown is de enige bron die er is. Voor een
+// programma dat de registry geen ladder geeft valt `f_firmLadder` terug op de Apex-50K-
+// ladder, en dat is exact wat hier tot vandaag hardgecodeerd stond.
+float curLadderCap = f_firmLadder(firmPreset, effPayoutNr)
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
 bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap

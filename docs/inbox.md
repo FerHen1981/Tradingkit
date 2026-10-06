@@ -7260,3 +7260,104 @@ vergelijking tussen de twee op dagniveau scheef. Eén regel in `engine.py` sluit
 
 ➡️ Hierna: **D-85 met Middleware App**, met de ordeningsvraag uit mijn vorige bericht nog
 open (Pine bouwt de PMT-JSON mét token, dus D-85 kan niet vóór D-86/D-87).
+
+---
+
+## 06-10 · Pine Dev → Scrum Master + Ferry — D-126 + D-125 + D-124 af, alle dertien op v3.9.0
+
+Eén ronde, **één OOS-reset**, in de voorgeschreven volgorde. Drie commits plus de poort.
+
+### D-126 — de ladder komt uit de registry · `2ad06fb`
+
+`f_ladderCap(effPayoutNr)` → `f_firmLadder(firmPreset, effPayoutNr)`, `f_ladderCap` eruit.
+
+**Nagemeten vóór ik iets opleverde:** op de `firmPreset`-**default** van elk script geeft
+`f_firmLadder` dezelfde zes waarden als de oude hardgecodeerde ladder — **13/13 identiek**.
+Deze commit verandert dus niets op de charts zoals ze nu staan; hij repareert een chart die
+op `apex_250k_legacy_pa` ($3.000) of `blueguardian_50k_standard_pa` ($2.500) is gezet. Dat
+is precies de bug en niets meer.
+
+📌 **`firmPreset` en niet `useFirmPreset`** — er is geen handmatige ladder-input, dus de
+dropdown is de enige bron die bestaat. Voor een programma zonder ladder in de registry valt
+`f_firmLadder` terug op de Apex-50K-ladder, wat exact is wat er hardgecodeerd stond.
+
+### D-125 — de deadlock is weg · `119a4fc`
+
+```pine
+pmtBlock := isPA and useWaitForCap and payoutReady      // was: withdrawable >= curLadderCap
+```
+
+`payoutReady` draagt `payoutEligible` — en daarmee `consistencyOK`, `acctLocked`, de
+qualifying days en de minimumpayout — **plus** `withdrawable >= curLadderCap`. Het blok is
+geherordend, want `payoutReady` moest vóór `pmtBlock` komen te staan.
+
+⚠️ **Het gevolg dat je moet willen:** een account boven zijn cap dat nog niet
+payout-gerechtigd is handelt dóór en kan voorbij de laddertrede komen. Dat is geen
+breach-risico — de cap begrenst de **hoogte van een aanvraag**, niet het verlies — maar de
+"altijd op de volle trede"-discipline wijkt in die ene toestand voor de uitweg. Dat is de
+afweging, en ik maak hem expliciet omdat hij tegen de oorspronkelijke bedoeling van
+`useWaitForCap` in gaat.
+
+🔬 **Alleen de negen PA-scripts, en dat is gemeten.** De vier TORO's hebben
+`pmtBlock := evalTrack and evalPassed` — een andere poort, zonder deadlock: daar hoeft het
+account niets meer te doen, het wacht op omzetting. Ik heb dat per script nagekeken in
+plaats van de wijziging blind over dertien bestanden te trekken, en de reden staat nu in de
+TORO-bron zodat de volgende lezer niet denkt dat het vergeten is.
+
+### D-124 — `useWaitForCap` is een input · `91ec01b`
+
+Default `true`, dus geen gedragswijziging op de negen PA-charts. Op de vier TORO's gaat de
+default van `false` naar `true`; **per call-site nagemeten dat dat inert is** — `pmtBlock`
+hangt daar op `evalPassed`, en elke andere plek die `useWaitForCap` leest eist `isPA`, wat
+op fase "Eval" onwaar is. Zet iemand zo'n chart tóch op Funded, dan is `true` de veilige
+kant.
+
+### 🔑 De poort — en die vond meteen een tweede geval
+
+`tools/gen_pine_firms.py` faalt nu hard als een `f_firm*`-functie die hij genereert in een
+script **geen enkele call-site** heeft. Comments worden eerst gestript, zodat een uitleg
+nooit als gebruik meetelt.
+
+🔴 **Op zijn eerste run viel hij meteen om op `f_firmMinPayout`: ook nul call-sites, in
+13/13.** Het bord zei dat die wél gebruikt werd — dat klopte niet. En het is dezelfde poort:
+`minPayout` zit in `payoutEligible`. Nu gezet uit het preset, naast `acctDLL` en
+`consistencyPct`. Op elk programma dat deze vloot gebruikt is die waarde $500 (sommige
+andere staan op $250), dus ook dit verandert niets vandaag — het sluit de keten.
+
+De eindstand per functie, gemeten:
+
+| functie | call-sites vóór | nu |
+|---|---|---|
+| `f_firmRules` | 13/13 | 13/13 |
+| `f_firmDays` | 13/13 | 13/13 |
+| `f_firmLadder` | **0/13** | 13/13 |
+| `f_firmMinPayout` | **0/13** | 13/13 |
+| `f_contractSpec` | **0/13** | 0/13 — zie onder |
+
+📌 **`f_contractSpec` blijft open en ik heb hem bewust niet meegenomen.** Hij valt buiten de
+poort zoals gevraagd (geen `f_firm*`) en hij is referentiedata die het script niet nodig
+heeft: het leest `syminfo.mintick`/`syminfo.pointvalue` live van de chart, wat correcter is
+dan een gegenereerde tabel. Weghalen raakt de regiomarkers van de generator en dat hoort
+niet in een ronde die de payout-poort verbouwt. **Eigen item?**
+
+### Niet gedaan, met reden
+
+📌 D-124 vroeg "neem mee of `pmtBlock` ook een journaalregel verdient". **Mijn advies: ja,
+maar niet nu.** Eén kaart per dag op de eerste geblokkeerde entry is precies wat de drie
+dagen op …018 had voorkomen. Maar het is een **nieuw bericht op een route die vandaag al
+over budget is** — D-116 gooide op 02-10 103 berichten weg, en de waarschuwing die ertoe
+deed zat daar vermoedelijk bij. Een kaart toevoegen vóór D-116 dicht is de melding in
+dezelfde emmer gooien. Zodra D-116 staat lever ik hem.
+
+### Verificatie
+
+- `pine_lint.py` vóór en ná: **byte-identieke uitvoer**, alle 13 `ok`.
+- `gen_pine_firms.py` draait schoon en is **idempotent** (tweede run: geen diff).
+- De 26 preset-takken zijn na regeneratie **ongewijzigd**, geen enkel Apex-programma raakt.
+- `owner_dll_check.py` nog groen op 13/13.
+
+📌 **Eén correctie in `owner_dll_check.py` naar aanleiding van je qty-besluit.** De waarschuwing
+bij de drie TORO-intraday-evals zei dat de qty daar "de backtestgrootte is, niet wat er live
+gehandeld wordt". **Dat is sinds D-53/D-122 niet meer waar:** Pine's qty IS de gehandelde qty.
+Die $2.800 rem op een account met $2.000 trailing drawdown is dus **echte blootstelling**, geen
+meetartefact. Tekst aangepast; de bevinding wordt er zwaarder van, niet lichter.

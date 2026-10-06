@@ -274,8 +274,53 @@
 //   er geen firmalimiet (Apex legt er geen op), dus daar is de eigen rem ongedekt op
 //   $2.400 t/m $2.800 -- boven de $2.000 trailing drawdown. `dllHit` vuurde daar ook al
 //   niet, dus zijn vertrek verandert er niets. Het zit in de qty, niet in de formule.
+// v3.9.0 (06-10, D-126 + D-125 + D-124): de payout-poort, in één ronde.
+//   Drie items die alle drie dezelfde poort raken, dus één versie en één OOS-reset in
+//   plaats van drie. De volgorde was bindend: eerst de ladder goed, want zolang die fout
+//   is weet je niet wanneer de poort hóórt te sluiten.
+//
+//   D-126 — DE LADDER KOMT UIT DE REGISTRY. `f_firmLadder(preset, n)` stond hier al,
+//   gegenereerd uit `data/propfirms.json` en per programma correct, met NUL call-sites in
+//   dertien scripts. De poort remde in plaats daarvan op een handgeschreven `f_ladderCap`
+//   die ALTIJD de Apex-50K-ladder teruggaf. Een 250K legacy account stopte daardoor met
+//   handelen op $1.500 terwijl zijn cap $3.000 is. `f_ladderCap` is weg.
+//   Gemeten: op de `firmPreset`-default van elk script geeft `f_firmLadder` dezelfde zes
+//   waarden, dus dit verandert niets op de charts zoals ze nu staan -- het repareert een
+//   chart die op een 250K legacy of Blue Guardian programma is gezet.
+//
+//   D-125 — DE DEADLOCK IS WEG. `pmtBlock` hing op `withdrawable >= curLadderCap` alleen.
+//   In de toestand cap-bereikt EN consistency-niet-gehaald gold tegelijk: geen entries
+//   (`pmtBlock`) en geen payout (`payoutReady = false`). De uitweg was afgesloten, want de
+//   consistency-regel is `bestDaySince / profitSince < 30%` en `bestDaySince` staat vast --
+//   de enige knop is `profitSince` omhoog, en dat vraagt precies de trades die de blokkade
+//   verhinderde. `pmtBlock` hangt nu op `payoutReady`: de blokkade heeft alleen zin als de
+//   payout werkelijk aangevraagd KAN worden. Kan dat niet, dan beschermt hij niets en
+//   verbrandt hij bezette account-dagen -- de maat waar dit project op stuurt.
+//   ⚠️ Gevolg dat je moet willen: een account boven zijn cap dat nog niet payout-gerechtigd
+//   is handelt dóór en kan voorbij de laddertrede komen. Geen breach-risico (de cap
+//   begrenst de HOOGTE van een aanvraag, niet het verlies), maar de volle-trede-discipline
+//   wijkt in die ene toestand voor de uitweg. Op de TORO-scripts bestaat de deadlock niet:
+//   daar hangt de blokkade op `evalPassed`.
+//
+//   D-124 — `useWaitForCap` IS EEN INPUT, default `true`. Het was een harde constante die
+//   stuurt of een funded account nog handelt, zonder knop om het te zien of te zetten --
+//   achtste instantie van dat patroon. Default `true` is de hele voorwaarde: uit zetten
+//   laat een account dóórhandelen voorbij zijn cap.
+//
+//   🔑 EN DE POORT DIE DIT HAD VOORKOMEN. `tools/gen_pine_firms.py` faalt nu hard als een
+//   `f_firm*`-functie die hij genereert in een script geen enkele call-site heeft. Dat is
+//   geen nette-code-regel: een ongebruikte generated functie zet de registry-waarden
+//   correct in het bestand terwijl het script op iets anders remt, en precies dat bleef
+//   weken onzichtbaar. ⚠️ Op zijn eerste run vond die poort meteen een TWEEDE geval:
+//   `f_firmMinPayout` had ook nul call-sites, en `minPayout` zit in `payoutEligible`. Nu
+//   gezet uit het preset. Op elk programma dat deze vloot gebruikt is die waarde 500, dus
+//   ook dit verandert niets vandaag -- het sluit de keten.
+//   📌 Nog open, apart gemeld: `f_contractSpec` heeft eveneens nul call-sites. Die valt
+//   buiten de poort (geen `f_firm*`) en is referentiedata die het script niet nodig heeft,
+//   want het leest `syminfo.*` van de chart. Weghalen raakt de generatie-regiomarkers en
+//   hoort in een eigen ronde.
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON INTRA Q2"
-var string currentVersion = "v3.8.0"
+var string currentVersion = "v3.9.0"
 strategy("MΞX EL LEON · MYM CON INTRA Q2 · " + currentVersion, shorttitle="LEO-YM-CI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1100,6 +1145,13 @@ if useFirmPreset
     acctGoal := pfGoal
     acctDLL := pfDLL
     consistencyPct := pfCons
+    // D-126, tweede vondst: `f_firmMinPayout` werd ook gegenereerd en nergens aangeroepen
+    // -- de nieuwe call-site-poort in de generator vond hem op zijn eerste run. `minPayout`
+    // zit in `payoutEligible`, dus zonder deze regel meet de payout-poort tegen een
+    // handmatige $500 terwijl de registry het per programma weet (sommige staan op $250).
+    // Op elk preset dat deze vloot vandaag gebruikt is de waarde 500, dus dit verandert
+    // niets op de huidige charts -- het sluit alleen de keten, net als bij de ladder.
+    minPayout := f_firmMinPayout(firmPreset)
 
 // Dagtellers uit de registry. Een firma draait er TWEE en het zijn niet dezelfde getallen:
 // dagen MET fills en dagen die de winstdrempel haalden. apex_50k_legacy_pa vraagt 8 en 5,

@@ -158,9 +158,12 @@ def main() -> int:
     if over_dd:
         print()
         print(f"⚠️ Bij {len(over_dd)} van de {len(rows)} is de eigen rem GROTER dan de trailing")
-        print("   drawdown van het account: één dag op die limiet breekt het account. Dat is")
-        print("   geen fout in de formule maar in de qty -- de bevroren contractgrootte is de")
-        print("   backtestgrootte, niet wat er live gehandeld wordt (zie D-53).")
+        print("   drawdown van het account: één dag op die limiet breekt het account.")
+        print("   ⚠️ CORRECTIE 06-10 (D-53/D-122 dicht): dit is GEEN meetartefact meer. Ferry")
+        print("   beheert de qty in Pine en de middleware-override is weg, dus de qty hier IS")
+        print("   de gehandelde qty. Een rem van $2.800 op een account met $2.000 trailing")
+        print("   drawdown is dus echte blootstelling, niet een backtestgetal. Verlaag de qty")
+        print("   op die charts of zet een override.")
     for b in bad:
         print("FOUT:", b)
     return 1 if bad else 0

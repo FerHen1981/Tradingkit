@@ -38,6 +38,7 @@ from .routed_journal import parse_routed_lines_full, pair_events
 from .journal_sync import FRAMEWORK, _ASSET, _phase, _sym_root
 from .fills_pairing import session_date
 from .dashboard_state import command_state
+from . import fanout_status
 
 log = logging.getLogger("mex.viewer")
 
@@ -272,6 +273,17 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.dumps(data).encode()
             except Exception as exc:
                 log.warning("command state build failed: %r", exc)
+                body = json.dumps({"error": str(exc)}).encode()
+            return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/api/fanout":
+            # D-119 · Fan-out statusvenster. Read-only. Leest routed_*.jsonl
+            # (`ROUTED_DIR`) + runtime-snapshot (`SNAPSHOT_PATH`); schrijft niks.
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            try:
+                body = json.dumps(fanout_status.build()).encode()
+            except Exception as exc:
+                log.warning("fanout status build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
         if path == "/api/widget":

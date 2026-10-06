@@ -2671,6 +2671,12 @@ if evalTrack and evalStarted and not evalPassed and not evalFailed
             f_sendDiscord("💰✨ " + syminfo.ticker + " PA THRESHOLD", jrnlAcct + " | " + "Payout threshold reached! Gain $" + str.tostring(evalGain, "#") + " ≥ $" + str.tostring(evalPaThresh, "#") + " (balance $" + str.tostring(evalBal, "#") + "). 🤑")
 
 
+// D-125 (06-10) raakt dit script NIET, en dat is nagemeten in plaats van aangenomen.
+// De deadlock zat in `pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap`
+// op de negen PA-scripts: cap bereikt dus geen entries, consistency niet gehaald dus geen
+// payout, en consistency verbetert alleen door te handelen. Hier hangt de blokkade op
+// `evalPassed` -- de eval is gehaald en de handel stopt om die pass veilig te stellen. Daar
+// is geen uitweg nodig: het account hoeft niets meer te doen, het wacht op omzetting naar PA.
 pmtBlock := evalTrack and evalPassed
 pmtBlockReason := "EVAL PASSED — target reached, executions stopped"
 plotshape(showSignals and longSignal, "Long Signal", shape.triangleup, location.belowbar, color=color.new(color.green, 0), size=size.small)

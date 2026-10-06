@@ -1942,10 +1942,29 @@ int   effPayoutNr = (isPA and paBacktestModeEff) ? math.min(paPayoutsThisCycle +
 float curLadderCap = f_firmLadder(firmPreset, effPayoutNr)
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
-pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap
-pmtBlockReason := "PAYOUT CAP REACHED — request payout, then raise payout number"
 bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
 bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
+// === D-125 (06-10) — de blokkade hangt nu op `payoutReady`, niet op de cap alleen =====
+// HIER STOND: `pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap`.
+// Dat is een deadlock, en Ferry liep er op …018 in. In de toestand `withdrawable >= cap`
+// EN `not consistencyOK` gold tegelijk `pmtBlock = true` (geen entries meer) en
+// `payoutReady = false` (geen payout mogelijk). De uitweg was afgesloten, want de
+// consistency-regel is `bestDaySince / profitSince < 30%`: `bestDaySince` staat vast, dus
+// de enige knop is `profitSince` omhoog -- en dat vraagt precies de trades die de blokkade
+// verhinderde. Het account kon die toestand niet op eigen kracht verlaten en verbrandde
+// bezette account-dagen zonder opbrengst -- exact de maat waar dit project op stuurt.
+// DE REGEL NU: de blokkade heeft alleen zin als de payout werkelijk aangevraagd KAN
+// worden. `payoutReady` is precies die voorwaarde -- hij draagt `payoutEligible` (en
+// daarmee `consistencyOK`, `acctLocked`, de qualifying days en de minimumpayout) plus
+// `withdrawable >= curLadderCap`. Kan de payout niet, dan beschermt een blokkade niets en
+// is dóórhandelen de enige weg eruit.
+// ⚠️ Gevolg dat je moet willen: een account dat boven zijn cap staat maar nog niet
+// payout-gerechtigd is handelt dóór en kan voorbij de laddertrede komen. Dat is geen
+// breach-risico -- de cap begrenst de HOOGTE van een payout-aanvraag, niet het verlies --
+// maar het betekent dat de "altijd op de volle trede aanvragen"-discipline in die ene
+// toestand wijkt voor de uitweg. Dat is de afweging, bewust zo.
+pmtBlock := isPA and useWaitForCap and payoutReady
+pmtBlockReason := "PAYOUT CAP REACHED — payout is aanvraagbaar: vraag hem aan, dan payout-nummer omhoog"
 if phaseOn and not acctHalted
     if acctPnL <= acctFloor
         if isPA and paBacktestModeEff

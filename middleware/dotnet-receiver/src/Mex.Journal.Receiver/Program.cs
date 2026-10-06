@@ -432,28 +432,39 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         if (telegram.Length > 0 && telegram != url)
             _ = Task.Run(() => ForwardJsonAsync(http, telegram, body, dryRun));
 
-        // Tier A/B krijgt een kaart. Renderen duurt seconden, dus dat gebeurt in
-        // de achtergrond: TradingView krijgt direct antwoord en probeert niet
-        // opnieuw. Mislukt de render, dan gaat het originele bericht alsnog door.
-        if (renderEnabled && tier != 'C')
+        // D-116 · Rate-limit staat nu vóór élke tier-afslag — ook tier C.
+        // Reden: `ACCOUNT STARTED` en de routine-`SIGNAL BLOCKED` zijn tier C
+        // en gingen voorheen ongelimiteerd door, terwijl `FILL`/`DAY HALT`/
+        // `TRAIL` (tier B) op het karige budget strandden. Dat is omgekeerd aan
+        // wat we willen — de minst informatieve berichten hadden vrij baan.
+        // Tier A blijft binnen `PostRate.Allow` exempt, zoals altijd.
+        int held = 0;
+        bool allowed = PostRate.Allow(url, tier, out held);
+
+        // Tier A/B als kaart, tier C alleen als tekst. Alleen als zowel render
+        // aan staat als de rate-limit het toelaat, gaat de kaart naar de queue.
+        if (renderEnabled && tier != 'C' && allowed)
         {
-            // D-28/5 — rate-limit. Bij een burst kost elke kaart een Chromium-render plus
-            // een post op een webhook die 30/min toestaat. Tier A gaat altijd door.
-            int held;
-            if (!PostRate.Allow(url, tier, out held))
-            {
-                await AppendAsync(storePath, "discord", body, $"card rate-limited (tier {tier})");
-                return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), rateLimited = true });
-            }
             var note = held > 0 ? $" (+{held} gedempt)" : "";
             _ = Task.Run(() => CardRender.RenderAndPostAsync(http, url, body, title, storePath, dryRun));
             await AppendAsync(storePath, "discord", body, $"card queued (tier {tier}){note}");
             return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), card = "queued", suppressedBefore = held });
         }
 
-        var res = await ForwardJsonAsync(http, url, body, dryRun);
-        await AppendAsync(storePath, "discord", body, res);
-        return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), result = res });
+        // D-116 fix 1 · Een kaart mag sneuvelen, het bericht niet. Val door
+        // naar het platte bericht in plaats van `return`. Het auditspoor
+        // noteert in de resultaat-string **waarom** we hier zijn — dat wordt
+        // door `fanout_status.classify()` als "sent" geteld (prefix "sent" of
+        // "error" wint; "rate-limited" verderop is dan context, geen demping).
+        var reason =
+            !renderEnabled ? "render-disabled" :
+            tier == 'C' ? "tier-C" :
+            !allowed ? "card rate-limited" :
+            "unknown";
+        var textRes = await ForwardJsonAsync(http, url, body, dryRun);
+        var ctx = held > 0 ? $"{reason}, +{held} gedempt" : reason;
+        await AppendAsync(storePath, "discord", body, $"{textRes} · fallback via text ({ctx})");
+        return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), path = reason, result = textRes, suppressedBefore = held });
     }
 
     // ---------------------------------------------------- journal (CSV) ----
@@ -1209,7 +1220,22 @@ public static class CardRender
         }
         catch (Exception ex)
         {
-            result = $"card exception {ex.GetType().Name}: {ex.Message}";
+            // D-116 fix 2 · De catch had geen tekst-fallback — bij een
+            // render-exception ging het bericht stil verloren terwijl de
+            // twee andere takken hierboven (`!ok` en `result.StartsWith("error")`)
+            // allebei `PostJsonAsync` als vangnet gebruiken. Nu zelfde patroon:
+            // het bericht moet door, de kaart mag sneuvelen.
+            try
+            {
+                var fb = await PostJsonAsync(http, url, body, dryRun);
+                result = $"card exception {ex.GetType().Name}: {ex.Message} -> tekst-fallback: {fb}";
+            }
+            catch (Exception ex2)
+            {
+                // Zelfs de fallback faalde — dan hebben we niets te doen
+                // behalve de ketting zichtbaar in audit zetten.
+                result = $"card exception {ex.GetType().Name}: {ex.Message} -> fallback ook mislukt: {ex2.Message}";
+            }
         }
         finally
         {

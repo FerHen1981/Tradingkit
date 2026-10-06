@@ -12,6 +12,29 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
+
+Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:
+
+**(1) Rate-limit vóór de tier-C-afslag.** `PostRate.Allow(url, tier, out held)` draait nu één keer, bovenaan, en bepaalt een `allowed`-vlag. De tier-C-tak is niet meer een shortcut om de limiter heen; hij wordt expliciet als één van de drie fallback-redenen behandeld (`render-disabled`, `tier-C`, `card rate-limited`). Hiermee krijgt tier C een rem (eis uit D-116 §3) en kan tier B niet meer zonder audit-regel verdwijnen (eis uit §1).
+
+**(2) Doorvallen naar tekst-fallback bij demping/tier-C/render-uit.** De `return` die een gedempt bericht opat is weg. Zodra één van die drie takken geldt, roept de code `ForwardJsonAsync` aan en schrijft `AppendAsync(..., "discord", body, $"{textRes} · fallback via text ({ctx})")`. `ctx` draagt de reden plus het aantal gedempte berichten (`+N gedempt`) als `PostRate` die teruggaf. **Vangnet is dus: een kaart mag sneuvelen, het bericht niet.**
+
+**(3) `catch` in `RenderAndPostAsync` krijgt een tekst-fallback.** De oude `catch` zette alleen een `result`-string en vertrouwde erop dat de caller iets zou doen — maar in de call-site vuurde die geen fallback bij een exception. Nu doet de `catch` zelf een `PostJsonAsync` en noteert `card exception ... -> tekst-fallback: sent 200` (of `-> fallback ook mislukt: ...` bij een tweede uitzondering). Zelfde patroon als de twee niet-exception-takken (`!ok` en `result.StartsWith("error")`) al hadden.
+
+**Classifier-interactie (vangst bij het schrijven, niet door Ferry):**
+
+De nieuwe audit-string begint met `sent 200 ...` maar bevat óók `card rate-limited` of `card exception` als context. De oude classifier (`middleware/app/fanout_status.py`, D-119) checkte substring vóór prefix, dus die regel zou als **suppressed** geteld worden terwijl het bericht wél gestuurd is — dat is exact het faaltype dat D-119 moet voorkomen (iets stilzwijgend verkeerd tellen). **Geregeld in dezelfde commit:** de classifier doet nu eerst de prefix-checks (`sent `, `card sent `, `card queued`, `dry_run ->`, `GEWEIGERD`, `error `, `card failed`) en kijkt pas daarna naar demping-substrings. Nieuwe test in `test_fanout_status.py` dekt dit af — 174 bestaande + 1 nieuwe = **175 tests groen**.
+
+**Acceptatie na uitrol — wat je in `routed_*.jsonl` moet gaan zien zodra de binary ververst is:**
+
+Vóór D-116, bij burst: `card rate-limited (tier B) (+17 gedempt)` — bericht weg.
+Na D-116, bij burst: `sent 200 (poging 1) · fallback via text (card rate-limited, +17 gedempt)` — bericht wél gestuurd, als platte tekst. **De 20% verlies op tier B die Ferry 02-10 meette hoort daarmee naar 0%.** Als het níet 0% wordt is de deploy niet effectief.
+
+**🔴 STAAT IN DE REPO, NOG NIET UITGEROLD — D-128.** De live bronboom is een aparte repo `/root/mex-middleware-b` zonder remote. Wat ik commit draait niet automatisch. Twee bestanden moeten handmatig naar `/root/mex-middleware-b/src/Mex.Journal.Receiver/` gekopieerd worden (`Program.cs`) resp. naar `/root/mex-journal/middleware/app/` (`fanout_status.py`), gevolgd door `dotnet build src/Mex.Journal.Receiver -c Release` en een service-herstart voor de C#-kant. Zie D-128 — dit blijft kwetsbaar tot die uitrolstap vast staat.
+
+📌 **Random config-waarde die Ferry hoorde na te zoeken:** `MEX_CARD_MAX_PER_MINUTE` staat gezet op de draaiende service (het commentaar noemt 30, de default is 12). Welke waarde en waarom? Hoort bij D-116's §2 ("De default naar het echte budget brengen of expliciet onderbouwen waarom 12") die ik niet in deze fix meeneem — want dat is een instelling, geen code-wijziging.
+
 ### 🔴 Backtest Setup → SM · 06-10 · **D-126-signaal beantwoord — de vaste-ladder-aanname zit in de engine, en het is het Python-mirror van jullie Pine-vondst**
 
 Ferry's vraag bij D-113: *"Neemt fleet.py of de funded-sim een vaste ladder aan? Meld of dat zo is."*

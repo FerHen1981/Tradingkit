@@ -80,17 +80,29 @@ _FAILED_PREFIXES = (
 
 def classify(result: str) -> str:
     """`sent` / `suppressed` / `failed` / `other`. Case-sensitive op prefix,
-    case-insensitive op substring — dezelfde conventies als de bronstrings."""
+    case-insensitive op substring — dezelfde conventies als de bronstrings.
+
+    **Prefix wint van substring.** Na D-116 kan een audit-regel beginnen met
+    `sent 200 … · fallback via text (card rate-limited)` — de rate-limit is
+    daar **context**, niet demping (het bericht is wél gestuurd). Het prefix
+    "sent " markeert dat eenduidig en voorkomt dat die regel alsnog als
+    suppressed telt."""
     r = result or ""
     low = r.lower()
-    for sub in _SUPPRESSED_SUBSTR:
-        if sub in low:
-            return "suppressed"
-    if r.startswith(_FAILED_PREFIXES):
-        return "failed"
+    # Prefix-checks eerst: als het begint met "sent"/"card sent"/"card queued"/
+    # "dry_run ->" of met een expliciete foutprefix, dan is de uitkomst
+    # vastgesteld en hoeven we geen substring te laten overrulen.
     for pfx in _SENT_PREFIXES:
         if r.startswith(pfx):
             return "sent"
+    if r.startswith(_FAILED_PREFIXES):
+        return "failed"
+    # Alleen een regel zónder sent/failed-prefix wordt op demping-substrings
+    # getoetst. Zo heet een "card rate-limited (tier B)" nog steeds suppressed,
+    # maar een "sent 200 … · fallback via text (card rate-limited)" telt sent.
+    for sub in _SUPPRESSED_SUBSTR:
+        if sub in low:
+            return "suppressed"
     return "other"
 
 

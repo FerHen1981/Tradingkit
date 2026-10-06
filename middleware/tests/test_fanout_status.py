@@ -29,6 +29,24 @@ def test_classify_covers_the_known_result_strings():
     assert fs.classify("mystery message") == "other"
 
 
+def test_classify_d116_text_fallback_counts_as_sent_not_suppressed():
+    # D-116: na een gedempte of mislukte card valt de receiver door naar de
+    # tekst-post. De audit-regel begint dan met "sent 200 …" maar bevat ook
+    # "rate-limited" of "card exception" als context. Dat is géén demping: het
+    # bericht is wél gestuurd. Prefix wint van substring.
+    assert fs.classify(
+        "sent 200 (poging 1) · {\"error\":false} · fallback via text (card rate-limited, +17 gedempt)"
+    ) == "sent"
+    assert fs.classify(
+        "sent 200 (poging 1) · fallback via text (tier-C)"
+    ) == "sent"
+    assert fs.classify(
+        "card sent 200 (poging 1) -> tekst-fallback: sent 200"
+    ) == "sent"
+    # Een pure "card rate-limited (tier B)" zonder sent-prefix blijft suppressed.
+    assert fs.classify("card rate-limited (tier B)") == "suppressed"
+
+
 def test_transport_prefers_explicit_field_then_falls_back_on_kind():
     assert fs.transport_of({"transport": "pmt_rithmic", "kind": "pmt"}) == "pmt_rithmic"
     assert fs.transport_of({"kind": "pmt"}) == "pmt_unknown"       # pre-D-106 PMT-rij

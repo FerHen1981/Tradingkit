@@ -173,3 +173,62 @@ gehandelde contractgrootte per account varieert (2, 5, en één op **35**) en da
 een middleware-override van 39 accounts op qty 1 draait. 🔴 **Elke doorlooptijd- of
 payout-per-dag-berekening die een vaste qty aanneemt, klopt daarmee niet.** Geef aan welke van
 jullie cijfers dat raakt en wat jullie nodig hebben om het te corrigeren.
+
+---
+
+# ADDENDUM ronde 06-10 — nieuwe items, en twee die vóór alles gaan
+
+_Toegevoegd door de Scrum Master. Watermerk: `HEAD`, 06-10._
+
+## Wat er sinds 05-10 bij kwam
+
+| item | bij wie | wat |
+|---|---|---|
+| **D-127** 🔴 | Ferry | 018 staat in `Developer`-modus: **alle** accountbeschermingen uit op een live funded account |
+| **D-128** 🔴 | Ferry → SM | de live bronboom loopt achter op de repo; D-82 bestond niet op de VPS |
+| **D-126** 🔴 | Pine Dev | `f_firmLadder` wordt gegenereerd en nooit aangeroepen, 13/13 |
+| **D-125** 🔴 | Pine Dev | deadlock: `pmtBlock` eist geen `consistencyOK`, account kan er niet uit |
+| **D-124** | Pine Dev | `useWaitForCap` is een harde constante, geen input |
+| **D-123** ✅ | — | opgelost: 018 stond stil door `pmtBlock`, niet door een poort |
+| **D-82** ✅ | — | config-API draait (401), **fase 2 is bouwbaar** |
+
+## 🟨 Pine Dev — één ronde, drie items, één poort
+
+**D-124, D-125 en D-126 raken alle drie dezelfde payout-poort. Doe ze samen, in één commit-reeks, met één OOS-reset.** Losse rondes betekent drie keer de klok op nul.
+
+Volgorde die ik zou aanhouden:
+1. **D-126 eerst** — `f_ladderCap` → `f_firmLadder(firmPreset, effPayoutNr)`. Dat is een bugfix met de waarden al in de registry, en hij maakt de rest meetbaar: zolang de ladder fout is, weet je niet wanneer de poort hóórt te sluiten.
+2. **D-125** — `pmtBlock` moet ook `consistencyOK` eisen, of hangen op `payoutReady`.
+3. **D-124** — `useWaitForCap` naar een input, **default `true`**.
+
+🔑 **En bouw de poort die dit had voorkomen:** breid `gen_pine_firms.py` uit zodat **elke gegenereerde `f_firm*` minstens één call-site moet hebben**, anders faalt de generatie hard. `f_firmLadder` stond er maanden ongebruikt in en niets merkte het op. Zelfde vorm als `owner_dll_check.py`.
+
+⛔ Nog steeds **niets aan de qty** tot D-122/D-128 helder zijn.
+
+## 🟦 Middleware App — fase 2 is open, en D-116 is nu urgent
+
+**De config-API draait en staat dicht (401).** Begin met **D-119** (leeshelft), dan **D-83/D-84**.
+
+🔴 **En neem D-116 serieuzer dan vorige ronde:** D-123 liet zien dat de blokkademelding *"⛔ Order NIET geplaatst"* vermoedelijk tussen de 103 weggegooide berichten zat. Een weggegooide waarschuwing is duurder dan een weggegooide kaart. Ferry draait nu `MEX_RENDER_ENABLED=false` als noodmaatregel — die kan pas terug als de fall-through er is.
+
+📌 **D-128 raakt jullie direct:** wat jullie in de repo opleveren, bereikt de VPS niet automatisch. Zodra de meting binnen is komt er een uitrolstap; neem in jullie oplevering voorlopig expliciet op *"dit staat in de repo en is niet uitgerold"*.
+
+## 🟩 Backtest Setup — D-113 en spoor B
+
+Ongewijzigd: D-113 (engine remt op `acct_dll`, Pine op de `min`), plus increment 3b en 4.
+
+📌 **Nieuw signaal uit D-126 dat jullie aangaat:** de payout-ladder in de registry is per programma verschillend (250K legacy → `[3000,3000,3000]`). Als `fleet.py` of de funded-sim een vaste ladder aanneemt, klopt dat voor niet-Apex-50K niet. Meld of dat zo is.
+
+## 🟪 Web — vrij, en dat blijft zo
+
+D-83/D-84 zijn naar Middleware App (D-120). Resteert: `resultaten.astro` + `public-stats.json` zodra het eval-format er is, en **D-34** op review.
+
+## 🟧 Analyses & Data — D-112, plus de qty-vraag
+
+D-112 (review `fleet-report-spec.md`) staat nog open. En de vraag van 05-10 blijft: **welke van jullie cijfers nemen een vaste contractgrootte aan?** De PMT-export laat 1, 2, 5 en 35 zien.
+
+## 🟥 MCP trader-dev — vanaf nu in de ronde
+
+Deze rol staat in `docs/CHAT_INSTRUCTIE.md` maar had **nul items op het bord en nul regels in de inbox**. Dat is dezelfde fout als bij Analyses & Data: wie geen map bezit, valt uit de eigenaarstabel en dus uit de ronde.
+
+➡️ **Vanaf nu vast in de ronde, voorvoegsel `M-` voor een eigen besluitregister.** En de werkafspraak: **open vragen horen in `docs/inbox.md`**, niet alleen in de chat — daar bereiken ze niemand. Zet je openstaande vragen daar neer, dan pak ik ze in de volgende ronde op.

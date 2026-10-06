@@ -38,6 +38,7 @@ from .routed_journal import parse_routed_lines_full, pair_events
 from .journal_sync import FRAMEWORK, _ASSET, _phase, _sym_root
 from .fills_pairing import session_date
 from .dashboard_state import command_state
+from . import fanout_status
 
 log = logging.getLogger("mex.viewer")
 
@@ -230,6 +231,54 @@ def _api_authorized(path: str, headers) -> bool:
     return bool(tok) and hmac.compare_digest(tok, _API_TOKEN)
 
 
+# -- D-82/D-85 proxy -----------------------------------------------------------
+
+# D-83/D-84 · De settings-tab draait in de COCKPIT, de config-API in de
+# RECEIVER (`localhost:5000` op dezelfde VPS). We proxyen **server-side** zodat
+# het token nooit in de browser belandt — de cockpit-auth zit al op de
+# dashboard-sessie, en die is sterker dan een token in `localStorage`. CORS op
+# de receiver blijft daarmee **dicht**. Zie `docs/schema-config.md` §5 en
+# Ferry's "ontwerpeis, niet bijzaak" uit 06-10.
+_CFG_API_URL = os.environ.get("MEX_CONFIG_API_URL", "http://localhost:5000")
+# De token die de proxy injecteert; moet een geldige entry in de receiver's
+# `MEX_CONFIG_API_TOKEN(S)` zijn. Gescheiden env-naam zodat je op de VPS kunt
+# tunnelen zonder de receiver-token ook naar de viewer te hoeven zetten (al
+# mag dat ook — de keuze is operationeel).
+_CFG_API_TOKEN = os.environ.get("MEX_CONFIG_API_PROXY_TOKEN") \
+    or os.environ.get("MEX_CONFIG_API_TOKEN", "")
+
+
+def _proxy_config(method: str, path: str, body: bytes | None = None,
+                  content_type: str = "application/json") -> tuple[int, bytes, str]:
+    """Server-side proxy naar de config-API op de receiver. Return (status, body, ctype).
+    Faalt zacht: netwerkfout → 502 met uitleg; configureert geen token → 503."""
+    import urllib.request
+    import urllib.error
+    if not _CFG_API_TOKEN:
+        return 503, b'{"error":"config-API proxy niet geconfigureerd (MEX_CONFIG_API_PROXY_TOKEN of MEX_CONFIG_API_TOKEN niet gezet)"}', "application/json"
+    url = _CFG_API_URL.rstrip("/") + path
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("Authorization", f"Bearer {_CFG_API_TOKEN}")
+    if body is not None:
+        req.add_header("Content-Type", content_type)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            raw = resp.read()
+            ct = resp.headers.get("Content-Type", "application/json")
+            return resp.status, raw, ct
+    except urllib.error.HTTPError as e:
+        # HTTPError is zelf een response — we willen de body teruggeven zodat
+        # validatie-foutmeldingen van de receiver bij de UI aankomen.
+        return e.code, e.read() if hasattr(e, "read") else b"", "application/json"
+    except urllib.error.URLError as e:
+        log.warning("config-API proxy connection failed: %r", e)
+        payload = json.dumps({"error": f"upstream unreachable: {e.reason}"}).encode()
+        return 502, payload, "application/json"
+    except Exception as exc:
+        log.warning("config-API proxy error: %r", exc)
+        return 502, json.dumps({"error": str(exc)}).encode(), "application/json"
+
+
 # ---- HTTP ----------------------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -274,6 +323,30 @@ class Handler(BaseHTTPRequestHandler):
                 log.warning("command state build failed: %r", exc)
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        if path == "/api/fanout":
+            # D-119 · Fan-out statusvenster. Read-only. Leest routed_*.jsonl
+            # (`ROUTED_DIR`) + runtime-snapshot (`SNAPSHOT_PATH`); schrijft niks.
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            try:
+                body = json.dumps(fanout_status.build()).encode()
+            except Exception as exc:
+                log.warning("fanout status build failed: %r", exc)
+                body = json.dumps({"error": str(exc)}).encode()
+            return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
+        # D-83/D-84 · Config/secrets proxy. Alleen via de cockpit-sessie —
+        # de BEARER zit server-side en komt nooit in de browser.
+        if path.startswith("/api/cfg/"):
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            # Pak het pad op de receiver uit: /api/cfg/config → /api/config
+            upstream = "/api/" + path[len("/api/cfg/"):]
+            # querystring (zoals ?limit=N) mee doorgeven
+            qs = urlparse(self.path).query
+            if qs:
+                upstream += "?" + qs
+            status, raw, ctype = _proxy_config("GET", upstream)
+            return self._send(status, raw, ctype, {"Cache-Control": "no-store"})
         if path == "/api/widget":
             if not _api_authorized(self.path, self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
@@ -367,6 +440,28 @@ class Handler(BaseHTTPRequestHandler):
                               '<p class="err">Incorrect password</p>').encode(), "text/html; charset=utf-8")
         if path == "/api/upload-fills":
             return self._handle_upload()
+        # D-83/D-84 · POST-proxy (validate = de enige POST die het settings-tab vandaag doet)
+        if path.startswith("/api/cfg/"):
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            upstream = "/api/" + path[len("/api/cfg/"):]
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            body = self.rfile.read(length) if length > 0 else b""
+            status, raw, ctype = _proxy_config("POST", upstream, body)
+            return self._send(status, raw, ctype, {"Cache-Control": "no-store"})
+        return self._send(404, b"not found", "text/plain")
+
+    def do_PUT(self):
+        path = urlparse(self.path).path
+        # D-83/D-84 · PUT-proxy voor /api/config en /api/secrets/{name}
+        if path.startswith("/api/cfg/"):
+            if not _api_authorized(self.path, self.headers):
+                return self._send(401, b'{"error":"auth"}', "application/json")
+            upstream = "/api/" + path[len("/api/cfg/"):]
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            body = self.rfile.read(length) if length > 0 else b""
+            status, raw, ctype = _proxy_config("PUT", upstream, body)
+            return self._send(status, raw, ctype, {"Cache-Control": "no-store"})
         return self._send(404, b"not found", "text/plain")
 
     def _handle_upload(self):
@@ -712,6 +807,7 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
     <button class=tab role=tab aria-selected=false data-panel=heatmap><span class=lv>L6</span>Heatmap</button>
     <button class=tab role=tab aria-selected=false data-panel=payout><span class=lv>L5</span>Payout</button>
     <button class=tab role=tab aria-selected=false data-panel=playbook><span class=lv>L10</span>Playbook</button>
+    <button class=tab role=tab aria-selected=false data-panel=settings><span class=lv>⚙</span>Settings</button>
     <button class=tab role=tab aria-selected=false data-panel=live><span class=lv>●</span>Live</button>
   </nav>
   <section role=tabpanel id=fleet>
@@ -808,6 +904,60 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
       <th style="text-align:left" data-k=playbook.profit data-t=n>Where it stands</th>
       <th style="text-align:left" data-k=playbook.day_cap data-t=n>Set: size · DLL · day-cap</th><th style="text-align:left">Route to payout</th>
     </tr></thead><tbody></tbody></table></div>
+  </section>
+  <section role=tabpanel id=settings hidden>
+    <h2 class=sec>Settings</h2>
+    <p class=sec-note>Config + geheimen + fan-out status. Elke schrijfactie gaat door
+      <b>POST /api/cfg/config/validate</b> vóór opslaan, en landt in het auditspoor
+      (D-81). <span class=calc>Token zit server-side; CORS staat dicht; dit scherm
+      stuurt orders.</span></p>
+
+    <div class=grid style="grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+      <div>
+        <h3 style="margin:0 0 8px">Configuratie</h3>
+        <div id=cfgMeta class=sec-note style="margin-bottom:6px">—</div>
+        <textarea id=cfgEditor spellcheck=false
+          style="width:100%;min-height:360px;font-family:var(--mono);font-size:12.5px;
+                 background:var(--bg2);color:var(--ink);border:1px solid var(--line);
+                 border-radius:8px;padding:10px"></textarea>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id=cfgReload type=button>↻ Herladen</button>
+          <button id=cfgValidate type=button>Valideer</button>
+          <button id=cfgSave type=button style="background:var(--ok);color:#042;font-weight:600">Opslaan</button>
+          <span id=cfgStatus class=sec-note style="align-self:center"></span>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin:0 0 8px">Geheimen</h3>
+        <p class=sec-note style="margin:0 0 8px">Namen zijn zichtbaar, waarden nooit. Lege waarde = wissen.</p>
+        <div class=tablewrap style="margin-bottom:10px"><table id=secretsTable><thead><tr>
+          <th>Naam</th><th>Laatst gewijzigd</th><th></th>
+        </tr></thead><tbody></tbody></table></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input id=secretName placeholder="naam (bv. apex_pmt)"
+                 style="flex:1;min-width:140px;background:var(--bg2);color:var(--ink);
+                        border:1px solid var(--line);border-radius:6px;padding:6px 8px"/>
+          <input id=secretValue placeholder="waarde" type=password
+                 style="flex:1;min-width:140px;background:var(--bg2);color:var(--ink);
+                        border:1px solid var(--line);border-radius:6px;padding:6px 8px"/>
+          <button id=secretSave type=button>Opslaan</button>
+          <span id=secretStatus class=sec-note style="align-self:center"></span>
+        </div>
+
+        <h3 style="margin:22px 0 8px">Audit — laatste wijzigingen</h3>
+        <div class=tablewrap><table id=auditTable><thead><tr>
+          <th>Wanneer</th><th>Fase</th><th>Door</th><th>Van→Naar</th><th>Diff / reden</th>
+        </tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
+
+    <h3 style="margin:22px 0 8px">Fan-out status (D-119)</h3>
+    <div id=fanoutMeta class=sec-note style="margin-bottom:6px">—</div>
+    <div class=tablewrap><table id=fanoutTable><thead><tr>
+      <th>Kanaal</th><th class=num>Verstuurd</th><th class=num>Gedempt</th><th class=num>Mislukt</th><th>Laatste fout</th>
+    </tr></thead><tbody></tbody></table></div>
+
   </section>
   <section role=tabpanel id=live hidden>
     <h2 class=sec>Live · intraday</h2>
@@ -1231,6 +1381,157 @@ function tick(){const d=new Date();
 tick();setInterval(tick,1000);
 renderTf();renderStage();loadCommand();setInterval(loadCommand,60000);
 setInterval(()=>{if(!$("#live").hidden)loadLive()},15000);
+
+// D-83/D-84 · Settings-tab. Alles via /api/cfg/* (server-side proxy); token
+// zit nergens in deze pagina. Elke write-poging gaat door /validate eerst,
+// zodat de UI een duidelijke rode-regel geeft bij een ongeldig voorstel.
+(function(){
+  const $cfgEditor = $("#cfgEditor");
+  const $cfgMeta = $("#cfgMeta");
+  const $cfgStatus = $("#cfgStatus");
+  const $secretsTbl = $("#secretsTable tbody");
+  const $secretName = $("#secretName");
+  const $secretValue = $("#secretValue");
+  const $secretStatus = $("#secretStatus");
+  const $auditTbl = $("#auditTable tbody");
+  const $fanoutTbl = $("#fanoutTable tbody");
+  const $fanoutMeta = $("#fanoutMeta");
+
+  function setStatus(el, txt, color){
+    el.textContent = txt || "";
+    el.style.color = color || "var(--muted)";
+  }
+  function esc(s){ return (s||"").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+
+  async function loadConfig(){
+    setStatus($cfgStatus, "laden…");
+    try {
+      const r = await fetch("/api/cfg/config", {cache:"no-store"});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      $cfgMeta.textContent = `pad: ${j.path} · actieve versie: v${j.active_version} · ${j.active_updated_at||"—"}`;
+      $cfgEditor.value = JSON.stringify(j.file||{}, null, 2);
+      setStatus($cfgStatus, "geladen", "var(--ok)");
+    } catch (e) { setStatus($cfgStatus, "laden mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function validateConfig(){
+    setStatus($cfgStatus, "valideren…");
+    try {
+      const r = await fetch("/api/cfg/config/validate", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: $cfgEditor.value
+      });
+      const j = await r.json();
+      if (j.ok) setStatus($cfgStatus, `✓ valide — zou v${j.proposed_version} worden`, "var(--ok)");
+      else setStatus($cfgStatus, "✗ "+(j.error||"ongeldig"), "var(--crit)");
+    } catch (e) { setStatus($cfgStatus, "validate mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function saveConfig(){
+    setStatus($cfgStatus, "opslaan…");
+    try {
+      const r = await fetch("/api/cfg/config", {
+        method:"PUT", headers:{"Content-Type":"application/json"},
+        body: $cfgEditor.value
+      });
+      const j = await r.json();
+      if (r.ok) { setStatus($cfgStatus, `✓ opgeslagen als v${j.version} door ${j.updated_by}`, "var(--ok)"); loadAudit(); loadConfig(); }
+      else setStatus($cfgStatus, "✗ "+(j.error||"opslaan mislukt"), "var(--crit)");
+    } catch (e) { setStatus($cfgStatus, "opslaan mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function loadSecrets(){
+    try {
+      const r = await fetch("/api/cfg/secrets", {cache:"no-store"});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      $secretsTbl.innerHTML = (j.secrets||[]).map(s =>
+        `<tr><td><code>${esc(s.name)}</code></td><td class=sec-note>${esc(s.last_written_utc||"—")}</td>`+
+        `<td><button type=button data-del="${esc(s.name)}" style="background:transparent;color:var(--crit);border:1px solid var(--crit);border-radius:4px;padding:2px 8px;font-size:11px">wis</button></td></tr>`
+      ).join("") || `<tr><td colspan=3 class=sec-note>geen geheimen</td></tr>`;
+      // bind delete-knoppen
+      $secretsTbl.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => deleteSecret(b.getAttribute("data-del"))));
+    } catch (e) { setStatus($secretStatus, "laden mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function saveSecret(){
+    const name = $secretName.value.trim();
+    const value = $secretValue.value;
+    if (!name) { setStatus($secretStatus, "naam ontbreekt", "var(--crit)"); return; }
+    try {
+      const r = await fetch("/api/cfg/secrets/"+encodeURIComponent(name), {
+        method:"PUT", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({value})
+      });
+      const j = await r.json();
+      if (r.ok) { setStatus($secretStatus, `✓ ${value ? "opgeslagen" : "gewist"}`, "var(--ok)"); $secretName.value=""; $secretValue.value=""; loadSecrets(); }
+      else setStatus($secretStatus, "✗ "+(j.error||"mislukt"), "var(--crit)");
+    } catch (e) { setStatus($secretStatus, "mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function deleteSecret(name){
+    if (!confirm("Geheim '"+name+"' wissen?")) return;
+    try {
+      const r = await fetch("/api/cfg/secrets/"+encodeURIComponent(name), {method:"PUT", body:""});
+      if (r.ok) { setStatus($secretStatus, "✓ gewist", "var(--ok)"); loadSecrets(); }
+      else { const j = await r.json(); setStatus($secretStatus, "✗ "+(j.error||"mislukt"), "var(--crit)"); }
+    } catch (e) { setStatus($secretStatus, "mislukt: "+e.message, "var(--crit)"); }
+  }
+
+  async function loadAudit(){
+    try {
+      const r = await fetch("/api/cfg/config/audit?limit=20", {cache:"no-store"});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      $auditTbl.innerHTML = ((j.entries||[]).slice().reverse().map(e => {
+        const detail = e.phase === "rejected" ? esc(e.detail||"") :
+                       e.phase === "disappeared" ? "" :
+                       `<code style="font-size:11px">${esc(JSON.stringify(e.diff||{}))}</code>`;
+        return `<tr><td class=sec-note>${esc(e.ts||"")}</td>`+
+               `<td>${esc(e.phase||"")}</td>`+
+               `<td class=sec-note>${esc(e.updated_by||"")}</td>`+
+               `<td class=sec-note>${e.from!=null?"v"+e.from+"→v"+e.to:(e.kept!=null?"v"+e.kept:"")}</td>`+
+               `<td>${detail}</td></tr>`;
+      }).join("")) || `<tr><td colspan=5 class=sec-note>geen entries</td></tr>`;
+    } catch (e) { /* ongeldige regel is OK */ }
+  }
+
+  async function loadFanout(){
+    try {
+      const r = await fetch("/api/fanout", {cache:"no-store"});
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+      const rt = j.runtime || {};
+      $fanoutMeta.textContent =
+        `bron ${rt.src_lines||"?"} regels · md5 ${(rt.src_md5||"").slice(0,16)} · ` +
+        `binary ouder dan bron: ${rt.binary_older_than_src===null?"?":(rt.binary_older_than_src?"⚠️ JA":"nee")} · ` +
+        `scanned ${j.rows_scanned} rijen uit ${j.files_scanned} bestand(en)`;
+      const w = (j.windows && j.windows.last_24h) || {};
+      const tr = w.transports || {};
+      const keys = Object.keys(tr).sort();
+      $fanoutTbl.innerHTML = keys.length ? keys.map(k => {
+        const row = tr[k];
+        return `<tr><td><code>${esc(k)}</code></td>`+
+               `<td class=num>${row.sent}</td>`+
+               `<td class="num ${row.suppressed?"warn":""}">${row.suppressed}</td>`+
+               `<td class="num ${row.failed?"crit":""}">${row.failed}</td>`+
+               `<td class=sec-note>${esc(row.last_error||"")}</td></tr>`;
+      }).join("") : `<tr><td colspan=5 class=sec-note>geen activiteit in laatste 24u</td></tr>`;
+    } catch (e) { $fanoutMeta.textContent = "laden mislukt: "+e.message; }
+  }
+
+  $("#cfgReload").addEventListener("click", loadConfig);
+  $("#cfgValidate").addEventListener("click", validateConfig);
+  $("#cfgSave").addEventListener("click", saveConfig);
+  $("#secretSave").addEventListener("click", saveSecret);
+
+  // Laad bij eerste zichtbaarheid van de tab, en bij elke her-selectie
+  const settingsBtn = document.querySelector('.tab[data-panel="settings"]');
+  if (settingsBtn) settingsBtn.addEventListener("click", () => {
+    loadConfig(); loadSecrets(); loadAudit(); loadFanout();
+  });
+})();
 </script></html>"""
 
 

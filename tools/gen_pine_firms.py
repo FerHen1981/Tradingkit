@@ -273,6 +273,31 @@ def patch_strategies(progs):
             raise SystemExit(f"{name}: MEX Policy preset names a firm key that is not in the "
                              f"registry: {', '.join(orphans)} — the rules would fall back to "
                              f"defaults. Fix the f_pol table or data/propfirms.json.")
+
+        # D-126: generating a function is not the same as using it. `f_firmLadder` was
+        # generated correctly from the registry in all thirteen scripts and called in NONE
+        # of them, while a hand-written `f_ladderCap` returned the Apex-50K ladder for every
+        # program. A 250K legacy account therefore stopped trading at $1,500 instead of
+        # $3,000, and nothing noticed for weeks: the generator reported success, the values
+        # in the file were right, and the chain simply ended one link short. Every function
+        # this generator emits must be reachable, or the generation fails here.
+        emitted = sorted(set(re.findall(r"^(f_firm[A-Za-z]+)\(", "\n".join(body), re.M)))
+        src = "\n".join(ln for ln in lines if not ln.lstrip().startswith("//"))
+        dead = []
+        for fn in emitted:
+            # The definition itself is "<fn>(" at the start of a line; a call is any other
+            # occurrence. Comments are stripped above so an explanation never counts as use.
+            calls = len(re.findall(re.escape(fn) + r"\(", src)) - len(
+                re.findall(r"^" + re.escape(fn) + r"\(", src, re.M))
+            if calls < 1:
+                dead.append(fn)
+        if dead:
+            raise SystemExit(
+                f"{name}: {', '.join(dead)} wordt gegenereerd maar NERGENS aangeroepen. "
+                f"Dat is de D-126-fout: de registry-waarden staan dan correct in het bestand "
+                f"terwijl het script op iets anders remt. Sluit de keten of haal de functie "
+                f"uit de generator — een ongebruikte f_firm* is geen onschuldige dode code, "
+                f"het is een bron van waarheid die niemand leest.")
     return len(keep)
 
 

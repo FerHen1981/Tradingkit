@@ -281,8 +281,53 @@
 //   er geen firmalimiet (Apex legt er geen op), dus daar is de eigen rem ongedekt op
 //   $2.400 t/m $2.800 -- boven de $2.000 trailing drawdown. `dllHit` vuurde daar ook al
 //   niet, dus zijn vertrek verandert er niets. Het zit in de qty, niet in de formule.
+// v3.9.0 (06-10, D-126 + D-125 + D-124): de payout-poort, in één ronde.
+//   Drie items die alle drie dezelfde poort raken, dus één versie en één OOS-reset in
+//   plaats van drie. De volgorde was bindend: eerst de ladder goed, want zolang die fout
+//   is weet je niet wanneer de poort hóórt te sluiten.
+//
+//   D-126 — DE LADDER KOMT UIT DE REGISTRY. `f_firmLadder(preset, n)` stond hier al,
+//   gegenereerd uit `data/propfirms.json` en per programma correct, met NUL call-sites in
+//   dertien scripts. De poort remde in plaats daarvan op een handgeschreven `f_ladderCap`
+//   die ALTIJD de Apex-50K-ladder teruggaf. Een 250K legacy account stopte daardoor met
+//   handelen op $1.500 terwijl zijn cap $3.000 is. `f_ladderCap` is weg.
+//   Gemeten: op de `firmPreset`-default van elk script geeft `f_firmLadder` dezelfde zes
+//   waarden, dus dit verandert niets op de charts zoals ze nu staan -- het repareert een
+//   chart die op een 250K legacy of Blue Guardian programma is gezet.
+//
+//   D-125 — DE DEADLOCK IS WEG. `pmtBlock` hing op `withdrawable >= curLadderCap` alleen.
+//   In de toestand cap-bereikt EN consistency-niet-gehaald gold tegelijk: geen entries
+//   (`pmtBlock`) en geen payout (`payoutReady = false`). De uitweg was afgesloten, want de
+//   consistency-regel is `bestDaySince / profitSince < 30%` en `bestDaySince` staat vast --
+//   de enige knop is `profitSince` omhoog, en dat vraagt precies de trades die de blokkade
+//   verhinderde. `pmtBlock` hangt nu op `payoutReady`: de blokkade heeft alleen zin als de
+//   payout werkelijk aangevraagd KAN worden. Kan dat niet, dan beschermt hij niets en
+//   verbrandt hij bezette account-dagen -- de maat waar dit project op stuurt.
+//   ⚠️ Gevolg dat je moet willen: een account boven zijn cap dat nog niet payout-gerechtigd
+//   is handelt dóór en kan voorbij de laddertrede komen. Geen breach-risico (de cap
+//   begrenst de HOOGTE van een aanvraag, niet het verlies), maar de volle-trede-discipline
+//   wijkt in die ene toestand voor de uitweg. Op de TORO-scripts bestaat de deadlock niet:
+//   daar hangt de blokkade op `evalPassed`.
+//
+//   D-124 — `useWaitForCap` IS EEN INPUT, default `true`. Het was een harde constante die
+//   stuurt of een funded account nog handelt, zonder knop om het te zien of te zetten --
+//   achtste instantie van dat patroon. Default `true` is de hele voorwaarde: uit zetten
+//   laat een account dóórhandelen voorbij zijn cap.
+//
+//   🔑 EN DE POORT DIE DIT HAD VOORKOMEN. `tools/gen_pine_firms.py` faalt nu hard als een
+//   `f_firm*`-functie die hij genereert in een script geen enkele call-site heeft. Dat is
+//   geen nette-code-regel: een ongebruikte generated functie zet de registry-waarden
+//   correct in het bestand terwijl het script op iets anders remt, en precies dat bleef
+//   weken onzichtbaar. ⚠️ Op zijn eerste run vond die poort meteen een TWEEDE geval:
+//   `f_firmMinPayout` had ook nul call-sites, en `minPayout` zit in `payoutEligible`. Nu
+//   gezet uit het preset. Op elk programma dat deze vloot gebruikt is die waarde 500, dus
+//   ook dit verandert niets vandaag -- het sluit de keten.
+//   📌 Nog open, apart gemeld: `f_contractSpec` heeft eveneens nul call-sites. Die valt
+//   buiten de poort (geen `f_firm*`) en is referentiedata die het script niet nodig heeft,
+//   want het leest `syminfo.*` van de chart. Weghalen raakt de generatie-regiomarkers en
+//   hoort in een eigen ronde.
 var string SCRIPT_NAME = "MΞX EL TESORO · MGC CON EOD"
-var string currentVersion = "v3.8.0"
+var string currentVersion = "v3.9.0"
 strategy("MΞX EL TESORO · MGC CON EOD · " + currentVersion, shorttitle="TES-MGC-C", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -543,7 +588,15 @@ payoutBuffer  = input.float(500, "Extra buffer above safety net ($)", step=100, 
 
 // === v6.4.4: WAIT-FOR-CAP PAYOUT-DISCIPLINE ================================
 var string GROUP_WFC = "8 · ACCOUNT — Guard"
-bool useWaitForCap = true   // altijd op de volle laddertrede aanvragen
+// D-124 (06-10): dit was `bool useWaitForCap = true` (negen scripts) resp. `= false` (de
+// vier TORO's) -- een harde constante die stuurt of een funded account nog handelt, zonder
+// knop om het te zien of te zetten. Achtste instantie van dat patroon na D-68, D-75, D-108,
+// D-110, D-111, D-115 en D-123.
+// ⚠️ DEFAULT `true` IS DE HELE VOORWAARDE. Uit zetten laat een account dóórhandelen
+// voorbij zijn payout-cap, en dat is precies wat de ladder moet voorkomen. Het is een
+// noodknop, geen instelling om aan te draaien.
+useWaitForCap = input.bool(true, "Wait for the full ladder step before payout", group=GROUP_WFC,
+     tooltip="AAN (en dat hoort zo): de payout wordt pas aangevraagd op de volle laddertrede, en entries stoppen zodra die trede bereikt is EN de payout ook werkelijk aanvraagbaar is (D-125). UIT: er wordt eerder payout-gerechtigd gemeld en de cap-blokkade valt weg -- het account handelt dan door voorbij zijn cap. Alleen uitzetten als je weet waarom.")
 payoutNr      = input.int(1, "Next payout number (1-6)", minval=1, maxval=6, group=GROUP_WFC,
      tooltip="Which payout you are building toward (1-6). Sets the ladder cap. Increase after each approved payout.")
 accountPhase  = input.string("Funded", "Account phase", options=["Developer","Eval","Funded"], group=GROUP_PHASE,
@@ -1098,6 +1151,13 @@ if useFirmPreset
     acctGoal := pfGoal
     acctDLL := pfDLL
     consistencyPct := pfCons
+    // D-126, tweede vondst: `f_firmMinPayout` werd ook gegenereerd en nergens aangeroepen
+    // -- de nieuwe call-site-poort in de generator vond hem op zijn eerste run. `minPayout`
+    // zit in `payoutEligible`, dus zonder deze regel meet de payout-poort tegen een
+    // handmatige $500 terwijl de registry het per programma weet (sommige staan op $250).
+    // Op elk preset dat deze vloot vandaag gebruikt is de waarde 500, dus dit verandert
+    // niets op de huidige charts -- het sluit alleen de keten, net als bij de ladder.
+    minPayout := f_firmMinPayout(firmPreset)
 
 // Dagtellers uit de registry. Een firma draait er TWEE en het zijn niet dezelfde getallen:
 // dagen MET fills en dagen die de winstdrempel haalden. apex_50k_legacy_pa vraagt 8 en 5,
@@ -1940,16 +2000,43 @@ float ddRoom     = phaseOn ? acctPnL - acctFloor : na
 // D-108, zelfde patroon: consistency 0 betekent "geen consistency-regel". Zonder deze
 // clausule is bestDaySince/profitSince < 0 nooit waar en komt payoutEligible nooit uit.
 bool  consistencyOK = consistencyPct <= 0 or (profitSince > 0 and bestDaySince / profitSince < consistencyPct / 100.0)
-f_ladderCap(_n) =>
-    _n == 1 ? 1500.0 : _n == 2 ? 1500.0 : _n == 3 ? 2000.0 : _n == 4 ? 2500.0 : _n == 5 ? 2500.0 : 3000.0
+// D-126 (06-10): `f_ladderCap(_n)` STOND HIER en is weg. Hij gaf ALTIJD de Apex-50K-ladder
+// terug -- $1.500/$1.500/$2.000/$2.500/$2.500/$3.000 -- ongeacht het programma. Naast hem
+// stond al `f_firmLadder(preset, n)`, gegenereerd uit `data/propfirms.json` en per programma
+// correct, met NUL call-sites in dertien scripts. De keten was gebouwd, de laatste schakel
+// ontbrak. Gevolg op het live pad: een 250K legacy account zette `pmtBlock` op $1.500
+// terwijl zijn cap $3.000 is -- het stopte met handelen op de helft van zijn cap.
 int   effPayoutNr = (isPA and paBacktestModeEff) ? math.min(paPayoutsThisCycle + 1, 6) : payoutNr
-float curLadderCap = f_ladderCap(effPayoutNr)
+// De ladder komt nu uit de registry. Let op: `firmPreset` en niet `useFirmPreset` -- er is
+// geen handmatige ladder-input, dus de dropdown is de enige bron die er is. Voor een
+// programma dat de registry geen ladder geeft valt `f_firmLadder` terug op de Apex-50K-
+// ladder, en dat is exact wat hier tot vandaag hardgecodeerd stond.
+float curLadderCap = f_firmLadder(firmPreset, effPayoutNr)
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
-pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap
-pmtBlockReason := "PAYOUT CAP REACHED — request payout, then raise payout number"
 bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
 bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
+// === D-125 (06-10) — de blokkade hangt nu op `payoutReady`, niet op de cap alleen =====
+// HIER STOND: `pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap`.
+// Dat is een deadlock, en Ferry liep er op …018 in. In de toestand `withdrawable >= cap`
+// EN `not consistencyOK` gold tegelijk `pmtBlock = true` (geen entries meer) en
+// `payoutReady = false` (geen payout mogelijk). De uitweg was afgesloten, want de
+// consistency-regel is `bestDaySince / profitSince < 30%`: `bestDaySince` staat vast, dus
+// de enige knop is `profitSince` omhoog -- en dat vraagt precies de trades die de blokkade
+// verhinderde. Het account kon die toestand niet op eigen kracht verlaten en verbrandde
+// bezette account-dagen zonder opbrengst -- exact de maat waar dit project op stuurt.
+// DE REGEL NU: de blokkade heeft alleen zin als de payout werkelijk aangevraagd KAN
+// worden. `payoutReady` is precies die voorwaarde -- hij draagt `payoutEligible` (en
+// daarmee `consistencyOK`, `acctLocked`, de qualifying days en de minimumpayout) plus
+// `withdrawable >= curLadderCap`. Kan de payout niet, dan beschermt een blokkade niets en
+// is dóórhandelen de enige weg eruit.
+// ⚠️ Gevolg dat je moet willen: een account dat boven zijn cap staat maar nog niet
+// payout-gerechtigd is handelt dóór en kan voorbij de laddertrede komen. Dat is geen
+// breach-risico -- de cap begrenst de HOOGTE van een payout-aanvraag, niet het verlies --
+// maar het betekent dat de "altijd op de volle trede aanvragen"-discipline in die ene
+// toestand wijkt voor de uitweg. Dat is de afweging, bewust zo.
+pmtBlock := isPA and useWaitForCap and payoutReady
+pmtBlockReason := "PAYOUT CAP REACHED — payout is aanvraagbaar: vraag hem aan, dan payout-nummer omhoog"
 if phaseOn and not acctHalted
     if acctPnL <= acctFloor
         if isPA and paBacktestModeEff

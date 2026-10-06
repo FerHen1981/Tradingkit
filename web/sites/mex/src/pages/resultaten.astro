@@ -12,6 +12,18 @@ import { headlineTiles, statsSource, type PublicStats } from "../lib/stats";
 
 const s = stats as PublicStats;
 const tiles = headlineTiles(s);
+
+/**
+ * Niets te publiceren is een echte toestand, geen fout. Zolang de publicatietaak
+ * niet heeft gedraaid staat elk getal op null en is elke lijst leeg; dan toont de
+ * pagina dat ook zo. De vorige opzet vulde de leegte met illustratieve cijfers, en
+ * die cijfers bleken een ingetrokken conclusie te dragen (D-129). Een lege pagina
+ * kan niet verouderen tot een claim.
+ */
+const hasTiles = tiles.length > 0;
+const hasEquity = s.equity.length > 1;
+const hasMarkets = s.markets.length > 0;
+const hasAnything = hasTiles || hasEquity || hasMarkets;
 ---
 
 <Base
@@ -26,16 +38,19 @@ const tiles = headlineTiles(s);
   />
 
   <Section>
-    {s.sample && (
-      <Callout variant="warning" title="Voorbeelddata">
-        Deze pagina toont nog een placeholder-momentopname. De equity-reeks is
-        illustratief; de marktregels bevatten de werkelijke unit-cijfers uit het
-        handelsjournaal. Zodra de publicatietaak op de server draait, wordt dit
-        bestand automatisch vervangen en verdwijnt deze melding.
+    {!hasAnything && (
+      <Callout variant="warning" title="Nog geen cijfers gepubliceerd">
+        Wij publiceren op deze pagina niets wat wij niet kunnen onderbouwen, en op
+        dit moment is dat niets. De publicatietaak die de cijfers uit het
+        gereconcilieerde journaal haalt draait nog niet; tot die tijd staat hier
+        bewust geen enkel getal — ook geen voorbeeldgetal, omdat een voorbeeld op
+        een resultatenpagina na een week niet meer van een resultaat te
+        onderscheiden is. Hieronder staat wél precies wát wij gaan publiceren en in
+        welke eenheid.
       </Callout>
     )}
 
-    <StatStrip items={tiles} source={statsSource(s)} />
+    {hasTiles && <StatStrip items={tiles} source={statsSource(s)} />}
   </Section>
 
   <Section
@@ -43,13 +58,19 @@ const tiles = headlineTiles(s);
     title="Cumulatieve R over de looptijd"
     lead="Elke trade telt mee als veelvoud van het risico dat ervoor is aangegaan. Daardoor is de curve optelbaar over markten heen én volledig los van rekeningomvang — er hoeft geen saldo aan te pas te komen om het verloop te kunnen lezen."
   >
-    <EquityCurve
+    {hasEquity && <EquityCurve
       points={s.equity}
       title="Cumulatieve R"
       valueSuffix="R"
       baseline={0}
       caption="Som van de gerealiseerde R-multiples per periode, cumulatief vanaf de start. Samengesteld uit gereconcilieerde, gesloten transacties; kosten en commissies zijn verwerkt. Openstaande posities tellen niet mee."
-    />
+    />}
+    {!hasEquity && (
+      <p class="pending">
+        De curve toont de cumulatieve R-multiples per periode. Staat hier zodra de
+        publicatietaak draait.
+      </p>
+    )}
   </Section>
 
   <Section
@@ -58,10 +79,17 @@ const tiles = headlineTiles(s);
     lead="Netto resultaat staat per markt in de eigen eenheid van die markt. Die kolom wordt bewust niet opgeteld: een goud-tick en een S&P-tick zijn verschillende bedragen, dus een totaal eronder zou een rekenfout zijn met een officieel uiterlijk."
     raised
   >
-    <MarketTable
-      markets={s.markets}
-      caption="Status noemt het type rekening waarop de markt draait — funded of evaluatie. Dat is een operationele keuze, geen oordeel over de kwaliteit van het model. Slippage is het verschil tussen de bedoelde prijs en de werkelijke fill, gemiddeld per trade en uitgedrukt in ticks."
-    />
+    {hasMarkets ? (
+      <MarketTable
+        markets={s.markets}
+        caption="Status noemt het type rekening waarop de markt draait — funded of evaluatie. Dat is een operationele keuze, geen oordeel over de kwaliteit van het model. Slippage is het verschil tussen de bedoelde prijs en de werkelijke fill, gemiddeld per trade en uitgedrukt in ticks."
+      />
+    ) : (
+      <p class="pending">
+        Per markt: netto resultaat in ticks, aantal trades, win-rate en de
+        gemiddelde slippage. Staat hier zodra de publicatietaak draait.
+      </p>
+    )}
   </Section>
 
   <Section narrow>
@@ -74,3 +102,13 @@ const tiles = headlineTiles(s);
     </Callout>
   </Section>
 </Base>
+
+<style>
+  /* Een lege sectie moet leeg lijken, niet stuk. Zelfde toon als een
+     bijschrift: het is uitleg, geen resultaat. */
+  .pending {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    margin: 0;
+  }
+</style>

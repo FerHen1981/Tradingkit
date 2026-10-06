@@ -23,6 +23,9 @@ const { Content } = await render(home);
 const hero = home.data;
 
 const tiles = headlineTiles(stats);
+// Zelfde regel als op /resultaten: geen cijfers betekent geen cijfers, geen
+// voorbeeldcijfers. Zie D-129.
+const hasTiles = tiles.length > 0;
 ---
 
 <Base title={site.name} description={site.description}>
@@ -44,15 +47,15 @@ const tiles = headlineTiles(stats);
     title="Gemeten in units, niet in verhalen"
     lead={hero.statsIntro}
   >
-    {stats.sample && (
-      <Callout variant="warning" title="Voorbeelddata">
-        Deze cijfers zijn nog niet gekoppeld aan de live snapshot. Zodra de
-        publicatietaak op de server draait, worden ze automatisch vervangen door
-        de gereconcilieerde waarden.
+    {!hasTiles && (
+      <Callout variant="warning" title="Nog geen cijfers gepubliceerd">
+        De publicatietaak die de cijfers uit het gereconcilieerde journaal haalt
+        draait nog niet. Wij zetten hier geen voorbeeldgetallen zolang dat zo is —
+        op de resultatenpagina staat wat wij gaan publiceren en in welke eenheid.
       </Callout>
     )}
 
-    <StatStrip items={tiles} source={statsSource(stats)} />
+    {hasTiles && <StatStrip items={tiles} source={statsSource(stats)} />}
 
     <p class="more">
       <Button href="/resultaten" variant="secondary">

@@ -274,7 +274,24 @@ class Config:
     dd_model: str = "Intraday"           # "Intraday" | "EOD" | "Static"
     acct_trail_dd: float = 2000.0        # trailing DD ($) — or, for Static, the fixed max overall loss ($)
     acct_goal: float = 3000.0            # Eval/Challenge profit target ($)
-    acct_dll: float = 1000.0             # PA daily loss limit
+    acct_dll: float = 1000.0             # firm daily loss limit ($) — the registry value
+    # --- day loss brake (Pine v3.8.0 parity, D-113) --------------------------
+    # The live scripts no longer carry the old `dllHit` (a raw brake on the firm
+    # value). They brake on the STRICTEST of the owner-rem and the firm DLL,
+    # measured on `lossBasisEff`. These inputs mirror the Pine defaults 1:1:
+    #   ownerDllUSD = owner_dll_sl_usd * owner_dll_stops * max(contract_size, 1)
+    #   dailyLossLimitEff = min(ownerLimit, firmLimit)  (either side may be absent)
+    # NB: this is Ferry's EXECUTION brake inside the script, which the backtester
+    # must match for day-level parity. It is a DIFFERENT thing from the funded-sim
+    # daily-limit parameter, which uses the firm value only (D-109/D-110): there we
+    # measure firm rules for cross-program comparability, here we reproduce the
+    # script that runs live. The ⅓-room term is a middleware SIGNAL and lives in
+    # neither (D-110/D-82).
+    owner_dll_enabled: bool = True       # Pine `enableDailyLossLimit`
+    owner_dll_sl_usd: float = 100.0      # Pine `ownerDllSlUSD` (stop per contract $)
+    owner_dll_stops: float = 4.0         # Pine `ownerDllStops` (stops per day)
+    owner_dll_override: float = 0.0      # Pine `dailyLossLimit` (>0 overrides the formula)
+    include_open_in_loss: bool = True    # Pine `includeOpenInLoss`
     consistency_pct: float = 50.0
     min_payout: float = 500.0
     min_qual_day_usd: float = 50.0

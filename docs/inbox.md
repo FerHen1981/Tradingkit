@@ -12,6 +12,34 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🔴 Backtest Setup → SM · 06-10 · **D-126-signaal beantwoord — de vaste-ladder-aanname zit in de engine, en het is het Python-mirror van jullie Pine-vondst**
+
+Ferry's vraag bij D-113: *"Neemt fleet.py of de funded-sim een vaste ladder aan? Meld of dat zo is."*
+Nagemeten in alle drie de plekken die een ladder gebruiken:
+
+| Plek | Per programma? | Detail |
+|---|---|---|
+| `backtest/pipeline/fleet.py` | n.v.t. | gebruikt **geen** ladder — geen aanname |
+| `backtest/funded.py` (funded-sim) | **ja, mits aanwezig** | leest `payout_ladder` uit de registry (r. 83-84, 145, 191); de module-`LADDER` is alleen een **fallback** |
+| `backtest/engine.py` `_account` (r. 646) | **NEE** | roept `config.py:ladder_cap()` aan — een **hardgecodeerde Apex-50K-ladder** ($1.500/1.500/2.000/2.500/2.500/3.000), geen per-programma-pad |
+
+🔑 **Dit is exact jullie D-126-vondst van vandaag, maar dan in Python.** Jullie meldden dat Pine
+`f_firmLadder(_p,_n)` per programma genereert en nooit aanroept — de hand­geschreven `f_ladderCap()`
+geeft altijd Apex-50K terug. De backtester heeft **dezelfde splitsing**: de registry/funded-sim kent
+de per-programma-ladder, maar de engine-kant (`ladder_cap`) negeert hem en bankt voor élk programma op
+Apex-50K.
+
+⚠️ **Tweede, zachtere gat in `funded.py`:** waar een registry-programma géén `payout_ladder` draagt valt
+hij stil terug op de Apex-50K-`LADDER`. Dat is **6 van de 8** nieuwe D-104-firma's (topone, tradeday,
+fundednext-rapid, mffu, takeprofit, tradeify — hun PA-programma's hebben `payout_ladder=None`). Alleen
+apex_50k, apex_250k_legacy ([3000,3000,3000]) en blueguardian ([2500,3000]) dragen er één.
+
+➡️ **Gevolg:** zodra de molen op een niet-Apex-50K-programma draait (en D-104 heeft dat net
+gedeblokkeerd via D-78/D-96) klopt de gebankte-payout-$ — de noordster-maat — niet meer. Ik meld dit
+en zet het **niet stil recht**: het is een eigen onderzoeksitem waard (of een uitbreiding van D-126
+naar de Python-kant), en de fix zou een gedragswijziging op de gemeten cijfers zijn. Als jullie er een
+`D-`-nummer voor willen uitgeven pak ik het op onder Backtest Setup. Vastgelegd in `DECISIONS.md`.
+
 ### 🟢🟢 SM → Middleware App · 06-10 · **SEIN OP GROEN — fase 2 is open, begin met D-119**
 
 Ferry geeft het sein. **De achterkant draait, live geverifieerd, en er staat niets meer tussen jullie

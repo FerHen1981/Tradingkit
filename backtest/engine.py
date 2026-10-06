@@ -604,7 +604,26 @@ class Engine:
             give = cfg.day_trail_usd
         day_trail_hit = dex_trail and armed and running <= self.risk_day_peak - give
         day_cap_hit = dex_cap and self.risk_day_peak >= cfg.day_cap_usd
-        dll_hit = (cfg.is_pa or (cfg.is_eval and cfg.dd_model == "EOD")) and running <= -cfg.acct_dll
+        # D-113: day loss brake, Pine v3.8.0 parity (`lossHit`). The old engine brake
+        # modelled Pine's DELETED `dllHit` (running <= -acct_dll on the raw firm value);
+        # the live scripts brake on the STRICTEST of the owner-rem and the firm DLL,
+        # measured on `lossBasisEff` instead of raw running-P&L. Mirrors the Pine block
+        # verbatim (ownerLimitUSD / firmLimitUSD / dailyLossLimitEff / lossBasisEff).
+        # The ⅓-room term is a middleware signal and belongs in neither (D-110/D-82).
+        firm_dll_active = cfg.acct_dll > 0 and (cfg.is_pa or (cfg.is_eval and cfg.dd_model == "EOD"))
+        owner_dll = (cfg.owner_dll_override if cfg.owner_dll_override > 0
+                     else cfg.owner_dll_sl_usd * cfg.owner_dll_stops * max(cfg.contract_size, 1.0))
+        owner_limit = owner_dll if cfg.owner_dll_enabled else None
+        firm_limit = cfg.acct_dll if firm_dll_active else None
+        if owner_limit is None:
+            daily_loss_limit = firm_limit
+        elif firm_limit is None:
+            daily_loss_limit = owner_limit
+        else:
+            daily_loss_limit = min(owner_limit, firm_limit)
+        loss_basis = min(today_real, running) if cfg.include_open_in_loss else today_real
+        loss_basis_eff = min(loss_basis, running) if firm_dll_active else loss_basis
+        dll_hit = daily_loss_limit is not None and loss_basis_eff <= -daily_loss_limit
         if not self.day_halted and (day_trail_hit or day_cap_hit or dll_hit):
             self.day_halted = True
             self.halt_reason = ("Day-cap" if day_cap_hit else "Day-trail" if day_trail_hit
@@ -681,7 +700,11 @@ class Engine:
 
         if self.acct_halted:
             return
-        # daily loss limit -> whole account fails (FTMO)
+        # daily loss limit -> whole account fails (FTMO). This is FTMO's FIRM rule
+        # (a breach fails the account), a different mechanism from the Apex day-halt.
+        # NB (D-113): the Pine owner-rem day-brake (`lossHit`, which only halts the
+        # day) is modelled in `_account`, not here — FTMO is outside the frozen fleet
+        # and `firm_dll_active` is false for it in Pine, so no parity gap on the fleet.
         if cfg.acct_dll and running <= -cfg.acct_dll:
             self.acct_halted = True
             self.acct_halt_reason = "FAILED (daily loss)"

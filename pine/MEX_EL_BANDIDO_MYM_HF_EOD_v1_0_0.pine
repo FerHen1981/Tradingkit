@@ -538,7 +538,15 @@ payoutBuffer  = input.float(500, "Extra buffer above safety net ($)", step=100, 
 
 // === v6.4.4: WAIT-FOR-CAP PAYOUT-DISCIPLINE ================================
 var string GROUP_WFC = "8 · ACCOUNT — Guard"
-bool useWaitForCap = true   // altijd op de volle laddertrede aanvragen
+// D-124 (06-10): dit was `bool useWaitForCap = true` (negen scripts) resp. `= false` (de
+// vier TORO's) -- een harde constante die stuurt of een funded account nog handelt, zonder
+// knop om het te zien of te zetten. Achtste instantie van dat patroon na D-68, D-75, D-108,
+// D-110, D-111, D-115 en D-123.
+// ⚠️ DEFAULT `true` IS DE HELE VOORWAARDE. Uit zetten laat een account dóórhandelen
+// voorbij zijn payout-cap, en dat is precies wat de ladder moet voorkomen. Het is een
+// noodknop, geen instelling om aan te draaien.
+useWaitForCap = input.bool(true, "Wait for the full ladder step before payout", group=GROUP_WFC,
+     tooltip="AAN (en dat hoort zo): de payout wordt pas aangevraagd op de volle laddertrede, en entries stoppen zodra die trede bereikt is EN de payout ook werkelijk aanvraagbaar is (D-125). UIT: er wordt eerder payout-gerechtigd gemeld en de cap-blokkade valt weg -- het account handelt dan door voorbij zijn cap. Alleen uitzetten als je weet waarom.")
 payoutNr      = input.int(1, "Next payout number (1-6)", minval=1, maxval=6, group=GROUP_WFC,
      tooltip="Which payout you are building toward (1-6). Sets the ladder cap. Increase after each approved payout.")
 accountPhase  = input.string("Funded", "Account phase", options=["Developer","Eval","Funded"], group=GROUP_PHASE,

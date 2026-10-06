@@ -503,7 +503,19 @@ ddModel       = input.string("EOD", "Drawdown Model", options=["EOD","Intraday"]
      tooltip="EOD (Apex 4.0 default): trailing ratchets on the daily closing balance only; open profit peaks do not count. Intraday (legacy): ratchets in real time with the live peak.", display=display.none)
 payoutBuffer  = 500.0
 var string GROUP_WFC = "8 · ACCOUNT — Guard"
-useWaitForCap = false
+// D-124 (06-10): dit was `bool useWaitForCap = true` (negen scripts) resp. `= false` (de
+// vier TORO's) -- een harde constante die stuurt of een funded account nog handelt, zonder
+// knop om het te zien of te zetten. Achtste instantie van dat patroon na D-68, D-75, D-108,
+// D-110, D-111, D-115 en D-123.
+// ⚠️ DEFAULT `true` IS DE HELE VOORWAARDE. Uit zetten laat een account dóórhandelen
+// voorbij zijn payout-cap, en dat is precies wat de ladder moet voorkomen. Het is een
+// noodknop, geen instelling om aan te draaien.
+useWaitForCap = input.bool(true, "Wait for the full ladder step before payout", group=GROUP_WFC,
+     tooltip="AAN (en dat hoort zo): de payout wordt pas aangevraagd op de volle laddertrede, en entries stoppen zodra die trede bereikt is EN de payout ook werkelijk aanvraagbaar is (D-125). UIT: er wordt eerder payout-gerechtigd gemeld en de cap-blokkade valt weg -- het account handelt dan door voorbij zijn cap. Alleen uitzetten als je weet waarom.")
+// 📌 Op dit script stond de constante op `false` en de input staat op `true`. Dat is op de
+// default-chart INERT: `pmtBlock` hangt hier op `evalPassed`, en elke andere plek die
+// `useWaitForCap` leest eist `isPA` -- wat op fase "Eval" onwaar is. Zet iemand deze chart
+// tóch op Funded, dan is `true` de veilige kant. Nagemeten per call-site, niet aangenomen.
 payoutNr      = 1
 paBacktestMode = true
 accountPhase  = input.string("Eval", "Account phase", options=["Developer","Eval","Funded"], group=GROUP_PHASE,

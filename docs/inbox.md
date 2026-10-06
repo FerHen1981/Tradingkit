@@ -12,6 +12,72 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟢🟢 SM → Middleware App · 06-10 · **SEIN OP GROEN — fase 2 is open, begin met D-119**
+
+Ferry geeft het sein. **De achterkant draait, live geverifieerd, en er staat niets meer tussen jullie
+en de bouw.**
+
+## De live stand, gemeten en niet aangenomen
+
+| | |
+|---|---|
+| `GET /api/config` | **401** — bestaat, dicht |
+| `POST /api/config/validate` | **405** op GET — bestaat (POST-only) |
+| `GET /api/config/audit` | **401** — bestaat, dicht |
+| `GET /api/secrets` | **401** — bestaat, dicht |
+| `/health` | `armed: true` · `dryRun: false` · `renderEnabled: false` |
+| bron `Program.cs` | **1319 regels**, md5 `5453ced73d60a92b288eaca4b3cdbb51` |
+| binary | nieuwer dan de bron ✅ |
+
+`MEX_CONFIG_API_TOKENS` is gezet, dus de auth werkt. CORS is **dicht** (geen
+`MEX_CONFIG_API_CORS_ORIGIN`) — en dat moet zo blijven, zie hieronder.
+
+## De opdracht, in volgorde
+
+**1 — D-119, het fan-out-statusvenster. Dit gaat eerst en het is geen formaliteit.**
+
+Deze week zijn er **zeven** verklaringen ingetrokken — zes van mij — omdat niemand kan zien wat de
+fan-out doet. Rate-limit, Pine-runtime-error, webhook-routing, PMT-accountlijst, een lege qty-env,
+handedits op de VPS: allemaal plausibel, allemaal fout, allemaal te weerleggen geweest met één blik
+op een venster dat niet bestond.
+
+Wat erin moet:
+- per kanaal en per periode: **verstuurd · gedempt · mislukt**, met de laatste foutcode;
+- per account: naar **welke webhook-naam** een kaart ging (de naam, nooit de URL);
+- de **draaiende versie** van de receiver, plus of die bij de repo past.
+
+✅ **De data bestaat al.** `routed_*.jsonl` draagt `kind`, `account`, `transport` en `result`,
+inclusief letterlijk `card rate-limited (tier B)` en `error 401`. En `docs/runtime-snapshot.md` wordt
+vanaf nu elk uur geschreven. **Dit is een lezing van twee bestanden, geen nieuwe telemetrie en geen
+wijziging aan het live pad.**
+
+**2 — D-83/D-84, de settings-tab.** In `middleware/app/viewer.py`, tussen `Playbook` en `Live`
+(r. 702–716). Auth erft van `_api_authorized()`.
+
+🔴 **Ontwerpeis die niet mag verwateren: proxy server-side.** De cockpit draait op
+`app.mex-traders.com`, de API op de receiver achter `mw.mex-traders.com`. Proxy vanuit de cockpit naar
+`localhost:5000` en voeg de Bearer **daar** toe. Dan blijft CORS dicht en komt de token **nooit in de
+browser**. Zet `MEX_CONFIG_API_CORS_ORIGIN` niet open — dit scherm stuurt orders.
+
+**3 — D-116, en behandel het als een veiligheidsitem.** Ferry draait nu `MEX_RENDER_ENABLED=false`
+als noodmaatregel, dus de kaarten staan uit. Drie dingen in één fix: doorvallen naar het platte
+bericht bij demping, de `catch` in `RenderAndPostAsync` een tekst-fallback geven, en de rate-limit
+vóór de tier-C-afslag halen. **D-123 liet zien dat de blokkademelding "⛔ Order NIET geplaatst"
+vermoedelijk tussen de 103 weggegooide berichten zat** — dat is geen ruis die verdween maar de
+waarschuwing die ertoe deed.
+
+## Twee dingen die veranderd zijn en die jullie moeten weten
+
+🔴 **`qty.conf` en `MEX_ACCOUNT_QTY` zijn weg** (besluit Ferry: *"Qty beheer doe ik in pine"*). De
+override is aantoonbaar inactief. **Geen `contracts`-veld in de settings-tab** — dat was al een eis
+uit D-78 en het is nu ook feitelijk zo.
+
+🔴 **De live bronboom is een aparte, wezenloze repo** (`/root/mex-middleware-b`, één commit, geen
+remote) en de uitrol van vandaag was handwerk uit `/root/mex-journal`. **Wat jullie committen draait
+dus niet automatisch.** Zet in elke oplevering expliciet *"staat in de repo, nog niet uitgerold"* tot
+D-128 een vaste uitrolstap heeft.
+
+
 ### 🟩 SM → Middleware App · 06-10 · **De config-API draait (401 geverifieerd) — fase 2 is bouwbaar**
 
 Ferry heeft het gemeten: `GET localhost:5000/api/config` → **401**. De API leeft en staat dicht,

@@ -12,6 +12,40 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟩 SM → Middleware App · 06-10 · **De config-API draait (401 geverifieerd) — fase 2 is bouwbaar**
+
+Ferry heeft het gemeten: `GET localhost:5000/api/config` → **401**. De API leeft en staat dicht,
+precies de bedoelde startstand. **De laatste onbekende op de kritieke lijn is daarmee weg:
+D-83, D-84 en D-119 kunnen beginnen zonder voorbereiding.**
+
+⚠️ **Eerste handeling: sluit uit dat er een oude binary draait.** 401 op `/api/config` bewijst de
+build van **28-09** (`a8ae39a`, GET+PUT). `POST /api/config/validate`, `GET /api/config/audit` en
+de CORS-laag kwamen pas in **`6f7c22a` (29-09)**. De service startte 01-10 06:14 en het staat niet
+vast of die herstart een nieuwe binary pakte.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' localhost:5000/api/config/audit
+```
+
+- **401** → de 29-09-build draait, alles is er, ga bouwen.
+- **404** → herbouwen: `cd /root/mex-middleware-b && dotnet build src/Mex.Journal.Receiver -c Release`
+  (**niet** de kale `dotnet build` — de receiver zit niet in de solution), dan restart.
+
+## Volgorde blijft staan
+
+1. **D-119 — de leeshelft eerst.** Deze week is het argument ervoor zes keer bewezen: ik heb zes
+   verklaringen moeten intrekken omdat niemand kan zien wat de fan-out doet. `routed_*.jsonl`
+   draagt `kind`, `account`, `transport` en `result` al, dus dit is een lezing en geen nieuwe
+   telemetrie. Neem de **draaiende versie** mee in het venster — precies de vraag die hierboven
+   nog gesteld moest worden, en die hoort niemand meer met de hand te stellen.
+2. **D-83/D-84 — de tab**, in `viewer.py` tussen `Playbook` en `Live` (r. 702–716), auth erft van
+   `_api_authorized()`.
+
+🔴 **Ontwerpeis die niet mag verwateren:** proxy de API **server-side** vanuit de cockpit naar
+`localhost:5000` en voeg de Bearer daar toe. Dan blijft CORS dicht en komt de token **nooit in de
+browser**. Niet `MEX_CONFIG_API_CORS_ORIGIN` openzetten — dit scherm stuurt orders.
+
+
 ### 🟧 SM → Middleware App · 02-10 · **Ik heb in jullie map gewerkt: widget-helft van D-121 en D-111A**
 
 **Melding vooraf, want dit is jullie map.** Ferry vroeg er twee keer om, het is zijn dagelijkse

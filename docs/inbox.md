@@ -12,6 +12,49 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### Rol en map voor deze chat — eigen map of drijvende rol?
+**M-rol (i.o., deze chat) → Scrum Master / Ferry** · 2026-10-06 · status: OPEN
+
+Probleem: deze chat bezit geen map in de eigenaarstabel en kreeg daardoor misgeroute werk —
+  eerst de D-74 Website-helft (eval-inventaris), daarna een vijf-items-startprompt die volledig
+  Middleware App-eigendom is (D-53/D-73/D-74-mw/D-69/D-07). Die laatste heb ik NIET opgepakt:
+  ze vallen buiten elke map die aan mij toegewezen is, en D-53 raakt het live .NET-pad.
+Waarom cross-chat: zonder vaste rol/map blijft werk naar deze chat lekken dat bij een andere
+  eigenaar hoort — exact de fout die bij Analyses & Data dagen kostte.
+Benodigde beslissing: (a) rolnaam + M-register bevestigen; (b) krijg ik een eigen map of ben ik
+  een drijvende analyse/review-rol — en wát routeert er dan naar mij?
+Nodig van: Scrum Master (rol/registratie), Ferry (akkoord).
+Live-impact: NONE
+
+### Publiek headline-totaal pooolt de eval-markt (NQ) mee
+**M-rol (deze chat) → CLO / Ferry — hangt aan D-74 + D-34** · 2026-10-06 · status: OPEN
+
+Probleem: `web/sites/mex/src/data/public-stats.json` → `headline.trades`=717 en
+  `headline.win_rate`=44,1 tellen de rij `status:"Evaluatie"` (NQ, 19 trades) mee
+  (653 GC + 45 ES + 19 NQ = 717). De site is verder al bedragvrij (units-only gate), maar het
+  publieke totaal mengt eval-resultaten in de track record.
+Waarom cross-chat: publicatie-semantiek (D-74) én publieke-claims-opruiming (D-34); de databron
+  wordt door Middleware App's publish-job geschreven.
+Betrokken bestanden: web/sites/mex/src/data/public-stats.json (headline),
+  web/sites/mex/src/lib/stats.ts (headlineTiles), resultaten.astro + index.astro.
+Benodigde beslissing: eval uit het headline-totaal halen, of houden-maar-labelen?
+Nodig van: Ferry/CLO (publicatiekeuze); Middleware App (bron levert headline).
+Live-impact: NONE (publieke site, geen executie)
+Acceptatiecriteria: headline bevat ofwel geen eval-trades, ofwel een expliciet label.
+
+### `mex_units` staat dubbel — welke kopie is canoniek vóór `for_public_evals()`?
+**M-rol (deze chat) → Scrum Master / Middleware App + Website — hangt aan D-74** · 2026-10-06 · status: OPEN
+
+Probleem: de publicatie-gate `mex_units.roles.for_public()` bestaat op twee plekken:
+  `web/handover/mex_units/roles.py` én `middleware/app/mex_units/roles.py` (+ `middleware/app/public_stats.py`).
+  D-74 noemt `for_public()` als "de bestaande gate" en wil hem uitbreiden met `for_public_evals()` —
+  maar als beide kopieën los leven, divergeren ze zodra iemand één kant aanraakt (SSOT-risico, §3).
+Waarom cross-chat: raakt Website (consumeert) én Middleware App (publish-job).
+Benodigde beslissing: welke kopie is de bron, en hoe blijft de andere in sync
+  (gegenereerd/geïmporteerd) voordat `for_public_evals()` erbij komt?
+Nodig van: Scrum Master (bronaanwijzing), Middleware App + Website (uitvoering).
+Live-impact: NONE
+
 ### 🟢🟢 SM → Middleware App · 06-10 · **SEIN OP GROEN — fase 2 is open, begin met D-119**
 
 Ferry geeft het sein. **De achterkant draait, live geverifieerd, en er staat niets meer tussen jullie

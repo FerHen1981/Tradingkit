@@ -21,6 +21,15 @@ BUILD ORDER (incremental — smallest step that reaches the goal first, D-101):
                   ignoring only provably visual-only output (plot/label/table/color).
   5. harness    — feed the result through the existing walk-forward / MC / stress / funded mill.
 
+DAILY-LIMIT RULE FOR THE FUNDED SIM (D-109/D-110, and it settles the D-68 question):
+when the evaluator's prop-firm overlay applies a daily loss limit it uses the FIRM value
+from `data/propfirms.json` (`targets_limits.max_daily_loss`) — that is a fact about the
+firm and keeps the number comparable between programs. Ferry's own brake (`owner_caps`,
+the `min(sl*mult*qty, room*frac)` formula) is an operational choice, NOT a firm rule, so
+it stays OUT of the simulation; modelling it would measure his behaviour instead of the
+firm's. (This is why D-68 correctly reads acct_dll from the registry: that IS the firm
+value; the $1000 on Apex EOD is the firm-DLL, per D-109.)
+
 Nothing in this package may import from middleware/** or web/** (plan §spoor B).
 """
 from __future__ import annotations
@@ -28,7 +37,9 @@ from __future__ import annotations
 from .lexer import Tok, TokType, PineLexError, tokenize
 from .capabilities import (UnsupportedPineError, check_supported, namespaced_calls,
                            SUPPORTED_TA, SUPPORTED_NAMESPACES)
+from .parser import parse_expression, PineParseError
 
 __all__ = ["Tok", "TokType", "PineLexError", "tokenize",
            "UnsupportedPineError", "check_supported", "namespaced_calls",
-           "SUPPORTED_TA", "SUPPORTED_NAMESPACES"]
+           "SUPPORTED_TA", "SUPPORTED_NAMESPACES",
+           "parse_expression", "PineParseError"]

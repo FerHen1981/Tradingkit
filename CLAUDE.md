@@ -183,6 +183,13 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   het krijgt een notitie dat het ingetrokken is. Zo bleef het GC+ES-bewijs bruikbaar als
   historie toen de conclusie eronder wegviel (23-08).
   Buiten je eigen map: niet muteren, maar melden in `docs/inbox.md`.
+- 🔴 **Niet elke rol bezit een map, en dat is hoe er één uit beeld raakte.** De
+  **Analyses & Data**-chat heeft geen `xxx/**` maar levert wel het **fleet-startschema**,
+  dat sinds 28-09 de acceptatietest is voor D-96 en D-97. Omdat de eigenaarstabel op
+  mappen is gebouwd, viel die rol uit elke startprompt-ronde — een maand lang leverde hij
+  aan het plan zonder het plan te kennen. **Rollen zonder map staan daarom vanaf 29-09
+  expliciet in de ronde**, ook als het antwoord "niets deze ronde" is. Hun besluitregister
+  draagt het voorvoegsel `A-`.
 - **`middleware/app/main.py`, `router.py` en `brokers/` draaien NIET live.** Het live
   executiepad is `mex-receiver` (.NET). Verifieer met `systemctl cat` vóór je aanneemt
   dat een wijziging de executie raakt.

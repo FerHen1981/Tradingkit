@@ -203,8 +203,73 @@
 //   .pine achterliep op de registry: mffu_50k_eval en takeprofittrader_50k_eval krijgen
 //   consistency 50% (stond op 0 = geen regel) en min. handelsdagen 2 resp. 3 (stond op 1).
 //   GEEN ENKEL APEX-PROGRAMMA VERANDERT -- alle negen staan er bit-voor-bit gelijk in.
+// v3.6.0 (29-09, D-110 stap 1): Ferry's EIGEN dagrem staat aan, de firm-rem blijft.
+//   Besluit Ferry (D-109): de firm-DLL is informatie, geen rem -- een account handelt tot
+//   de target of tot ZIJN limiet, en de firma stopt het daarna vanzelf. Die eigen limiet
+//   bestond hier wel maar stond op `false`, in twaalf scripts zelfs als harde constante:
+//   de machinerie werkte, niets voedde haar. Hij staat nu AAN met de vastgelegde formule
+//   stop-per-contract x stops-per-dag x qty (100 x 4 x qty), als drie zichtbare inputs
+//   plus een override; 0 in de override betekent "gebruik de formule".
+//   ⚠️ DIT IS STAP 1 VAN TWEE, en de volgorde is de hele opdracht. `dllHit` op `acctDLL`
+//   blijft in deze versie staan. Twee remmen naast elkaar is veilig -- de strengste wint.
+//   Zou je de firm-rem nu al weghalen terwijl de eigen rem nog niet de strengste is, dan
+//   loopt het account tot de firmalimiet, en die BREACHT een eval in plaats van hem te
+//   pauzeren. `pine/tools/owner_dll_check.py` is de poort: die leest de defaults uit de
+//   bron en zegt per script of stap 2 daar al mag. Vandaag: op elf van de dertien niet,
+//   want op de bevroren contractgrootte is 4 x SL x qty groter dan de firmalimiet.
+//   ⛔ De tweede term van de formule ("nooit meer dan 1/3 van de ruimte") staat er BEWUST
+//   niet in: die heeft balans en liquidatieniveau nodig, de balans komt uit T3, en een
+//   benadering in Pine zou een tweede stille saldobron zijn. Die term hoort na fase 4 in
+//   de middleware.
+//   NEVENEFFECT: `dailyLossLimitEff` verloor zijn `* dailyScaleMult`. Dat is geen
+//   gedragswijziging -- `dailyScaleMode` is in alle dertien de constante "Fixed USD", dus
+//   die factor was altijd 1.0. De qty zit nu in de formule zelf, en zo kan hij er niet
+//   per ongeluk twee keer in komen.
+//   ZICHTBAAR: de CONFIG-kaart toont niet langer de rauwe input maar de effectieve
+//   limiet met de formule erachter, bv. DLL=2400(100x4x6).
+// v3.7.0 (29-09, D-110 stap 1b): de firmalimiet doet mee IN de eigen rem.
+//   Ferry keurde de derde term goed, dus de formule is nu
+//       owner_dll = min( SL x stops x qty , firm_dll , ruimte x fractie )
+//   Termen 1 en 2 staan in dit script. Term 3 komt er BEWUST niet in: die heeft de
+//   balans nodig, de balans komt uit T3, en een benadering hier zou een tweede stille
+//   saldobron zijn. Verbatim Ferry: "de controle in het script, de middleware mag de
+//   signalering doen."
+//   WAAROM DIT ERTOE DOET: met firm_dll in de eigen rem halteert die per definitie OP of
+//   VOOR de firmalimiet. `dllHit` kan daardoor nooit eerder vuren en is strikt overbodig
+//   geworden -- dat is wat stap 2 opent. De voorwaarden van `dllHit` (`acctDLL > 0` en
+//   PA-of-EOD-eval) zijn letterlijk overgenomen in `firmDllActive`, zodat de dekking
+//   gelijk is en niet ongeveer gelijk. Staat de eigen rem uit, dan blijft de firmalimiet
+//   over -- ook dat is precies wat `dllHit` vandaag doet.
+//   TWEE DINGEN DIE HIERDOOR STRENGER WORDEN, en dat is bedoeld:
+//   (1) waar de formule losser was dan de firma (qty 3 en hoger) remt het script nu op
+//       $1.000 in plaats van op $1.200 t/m $3.200;
+//   (2) de rem meet op `lossBasisEff` en niet op `runningPnL`. Met `includeOpenInLoss`
+//       AAN is dat min(gerealiseerd, lopend), dus een dag met -$1.000 gerealiseerd en
+//       open winst erboven stopt nu wel en stopte eerder niet.
+//   `lossBasisEff` neemt bovendien expliciet de min met `runningPnL` zodra de firmaterm
+//   meedoet. Met de huidige defaults verandert die min niets; zonder hem zou stap 2
+//   dekking verliezen op een chart waar `includeOpenInLoss` uit staat.
+//   DE KLOK: die staat sinds v3.6.0 al op nul; deze versie zet hem niet opnieuw.
+// v3.8.0 (29-09, D-110 stap 2): `dllHit` is weg. Eén dagrem over.
+//   Hij remde op de firmawaarde en stond los van de eigen rem. Sinds v3.7.0 zit diezelfde
+//   firmawaarde IN de eigen rem, met exact zijn twee voorwaarden in `firmDllActive`, dus
+//   `lossHit` haltte per definitie al op of vóór het punt waarop hij zou vuren. Niet
+//   "ongeveer overbodig" maar strikt overbodig -- en dat is de enige reden dat hij nu weg
+//   mag. `pine/tools/owner_dll_check.py` toetste dat per script tegen de bron en stond op
+//   alle dertien groen vóórdat deze regel verdween; hij bewaakt nu ook dat `dllHit` niet
+//   terugkomt.
+//   WAT ER NIET VERANDERT: `acctDLL` blijft staan. D-96 heeft de firmawaarde nodig als
+//   weergave ("ruimte tot de DLL") en de eigen rem leest hem. Ook de tooltip bij die input
+//   blijft, zodat op de chart zichtbaar blijft wat de firma oplegt naast wat jij oplegt.
+//   ZICHTBAAR: een dag die op de firmawaarde stopt heet voortaan "Daily Loss" in plaats
+//   van "PA Daily Loss Limit" -- dat was de naam van de rem die weg is. De DLL-annotatie
+//   op de chart luistert nog steeds mee (op "Daily Loss" en "Risk-gate DLL").
+//   ⚠️ RESTRISICO, en dat is ouder dan deze wijziging: op de drie TORO-intraday-evals geldt
+//   er geen firmalimiet (Apex legt er geen op), dus daar is de eigen rem ongedekt op
+//   $2.400 t/m $2.800 -- boven de $2.000 trailing drawdown. `dllHit` vuurde daar ook al
+//   niet, dus zijn vertrek verandert er niets. Het zit in de qty, niet in de formule.
 var string SCRIPT_NAME = "MΞX ΞL TORO · ES FAST INTRA"
-var string currentVersion = "v3.5.0"
+var string currentVersion = "v3.8.0"
 strategy("MΞX ΞL TORO · ES FAST INTRA · " + currentVersion, shorttitle="TOR-ES-FI", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -416,8 +481,6 @@ float trailUpdateStep = 2.0
 
 
 // === DAILY RISK / EQUITY =====================================================
-enableDailyLossLimit = false
-dailyLossLimit       = 700.0
 includeOpenInLoss    = true
 enableDailyTarget    = false
 dailyProfitTarget    = 350.0
@@ -451,6 +514,35 @@ acctDLL       = 1000.0
 consistencyPct= 50.0
 minPayout     = 500.0
 minQualDayUSD = 50.0
+// === D-110 stap 1 — Ferry's EIGEN dagrem, met de formule uit D-109/D-110 =====
+// Besluit Ferry 29-09: de firm-DLL is informatie, geen rem -- een account handelt tot de
+// target of tot MIJN limiet. Die eigen limiet stond tot nu toe als constante `false` (in
+// twaalf scripts) of als input met default `false` (MATADOR): de machinerie eronder
+// (lossHit -> dayHalted) werkte, maar niets voedde haar. Hij staat nu AAN, met de in
+// DECISIONS.md vastgelegde formule:
+//     owner_dll = stop-per-contract x stops-per-dag x qty          (100 x 4 x qty)
+//   -> $400 / $800 / $1.200 / $1.600 / $2.000 bij qty 1 t/m 5.
+// ⛔ De TWEEDE term van D-110 ("nooit meer dan 1/3 van de ruimte") staat hier BEWUST NIET.
+//    Die heeft de balans en het liquidatieniveau nodig; de balans komt uit T3 en niet uit
+//    Pine. Hem hier benaderen zou een tweede, stille saldobron maken -- precies wat D-110
+//    verbiedt. Die term hoort in de middleware, na fase 4.
+// ⚠️ VOLGORDE, en dat is de hele opdracht: dit is STAP 1. De firm-rem (`dllHit` op
+//    `acctDLL`) blijft in deze commit staan. Twee remmen naast elkaar is veilig -- de
+//    strengste wint. `dllHit` verdwijnt pas in stap 2, en pas nadat deze rem aantoonbaar
+//    de bindende is. Andersom zou het account zonder enige Pine-rem tot de firmalimiet
+//    lopen, en die BREACHT een eval in plaats van hem te pauzeren.
+enableDailyLossLimit = input.bool(true, "Owner DLL - enable", group=GROUP_PHASE,
+     tooltip="Ferry's eigen dagverlieslimiet (D-109/D-110). AAN = de dag stopt op de eigen limiet hieronder. Dit is NIET de firmalimiet: die staat bij 'PA Daily Loss Limit' en is sinds D-109 alleen nog weergave.")
+ownerDllSlUSD = input.float(100, "Owner DLL - stop per contract ($)", minval=0, step=25, group=GROUP_PHASE,
+     tooltip="Eerste factor van de formule. $100 is een eigenschap van de STOP, niet van de accountgrootte -- daarom is hij uniform over de vloot (D-110, geverifieerd tegen zeven punten uit het fleet-doc).", display=display.none)
+ownerDllStops = input.float(4, "Owner DLL - stops per dag", minval=0, step=1, group=GROUP_PHASE,
+     tooltip="Tweede factor: hoeveel volle stops een dag mag kosten voor hij dichtgaat. Vier is de vastgelegde waarde.", display=display.none)
+dailyLossLimit = input.float(0, "Owner DLL - override ($, 0 = formule)", minval=0, step=50, group=GROUP_PHASE,
+     tooltip="Laat op 0 om de formule te gebruiken. Een waarde > 0 overschrijft hem voor dit ene script; de formule wordt dan genegeerd.", display=display.none)
+float ownerDllUSD       = ownerDllSlUSD * ownerDllStops * math.max(contractSize, 1.0)
+// De samenvoeging met de firmalimiet staat NIET hier maar verderop, direct na het
+// firm-preset: `acctDLL` krijgt zijn waarde pas daar (`acctDLL := pfDLL`), dus hier
+// zou hij nog de rauwe inputdefault dragen. Zoek op `firmDllActive`.
 acctPnlOffset = input.float(0, "Live sync: current account PnL vs start ($)", group=GROUP_PHASE,
      tooltip="For live use: enter the account's actual PnL so floor/goal are correct. Backtest: 0.", display=display.none)
 acctHwmOffset = input.float(0, "Live sync: current HWM vs start ($)", group=GROUP_PHASE, tooltip="For live use with EOD trailing: the account high-water mark so the floor calculates correctly. Backtest: 0.", display=display.none)
@@ -1004,6 +1096,24 @@ var bool   posRecovOn = false
 var string exitReasonNext = ""
 var string pmtBlockReason = ""
 bool isPA   = phaseEff == "Funded"
+
+// === D-110 stap 1b — de derde term: de firmalimiet doet mee in de EIGEN rem ====
+// Besluit Ferry 29-09: owner_dll = min(SL x stops x qty, firm_dll, ruimte x fractie).
+// De eerste twee termen staan hier. De derde blijft een middleware-SIGNAAL en komt hier
+// bewust NIET in: die heeft de balans nodig en de balans komt uit T3, niet uit Pine.
+// Verbatim Ferry: "de controle in het script, de middleware mag de signalering doen."
+//
+// 🎯 DIT IS WAT STAP 2 OPENT. Door de firmalimiet in de eigen rem op te nemen halteert
+// die per definitie OP of VOOR de firmalimiet, dus `dllHit` kan nooit eerder vuren en is
+// strikt overbodig. De voorwaarden van `dllHit` -- `acctDLL > 0` en (PA of EOD-eval) --
+// zijn hieronder letterlijk overgenomen, zodat de dekking GELIJK is en niet ongeveer
+// gelijk. Staat de eigen rem uit, dan blijft de firmalimiet over: ook dat is precies wat
+// `dllHit` vandaag doet.
+bool  firmDllActive = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD"))
+float ownerLimitUSD = enableDailyLossLimit ? (dailyLossLimit > 0 ? dailyLossLimit : ownerDllUSD) : na
+float firmLimitUSD  = firmDllActive ? acctDLL : na
+float dailyLossLimitEff = na(ownerLimitUSD) ? firmLimitUSD : na(firmLimitUSD) ? ownerLimitUSD : math.min(ownerLimitUSD, firmLimitUSD)
+bool  dailyLossOn       = not na(dailyLossLimitEff)
 useDDGuard = (isPA and guardPA) or (isEval and guardEval)
 bool phaseOn = isEval or isPA
 var bool  acctHalted = false
@@ -1655,16 +1765,27 @@ riskDayPeak := math.max(riskDayPeak, runningPnL)
 todayDD = riskDayPeak - runningPnL
 lossBasis = includeOpenInLoss ? math.min(todayRealizedPnL, runningPnL) : todayRealizedPnL
 targetHit   = enableDailyTarget and todayRealizedPnL >= dailyProfitTarget
-lossHit     = enableDailyLossLimit and lossBasis <= -dailyLossLimit
+// D-110: de basis is de strengste van de twee. Met `includeOpenInLoss` AAN -- de default
+// in alle dertien -- is `lossBasis` al <= `runningPnL` en verandert deze min niets.
+// Staat hij UIT, dan houdt hij de gelijkwaardigheid met `dllHit` overeind, want die
+// rekent op `runningPnL`. Zonder deze regel zou stap 2 dekking verliezen.
+float lossBasisEff = firmDllActive ? math.min(lossBasis, runningPnL) : lossBasis
+lossHit     = dailyLossOn and lossBasisEff <= -dailyLossLimitEff
 drawdownHit = enableDailyDrawdown and todayDD >= dailyDrawdownLimit
 lockArmed   = enableEquityLock and riskDayPeak >= equityLockThreshold
 lockHit     = lockArmed and runningPnL <= riskDayPeak * equityLockPerc / 100.0
-// D-108: sinds D-68 schrijft de registry een eerlijke 0 waar een programma GEEN dagverlies-
-// limiet kent (alle Apex-evals, MFFU, TakeProfit, TradeDay, DayTraders, Tradeify). Pine las
-// die 0 als "limiet van nul" in plaats van "geen limiet": runningPnL <= -0 is waar zodra de
-// dag een cent onder nul staat, dus de dag werd meteen stilgelegd. Nul betekent hier GEEN
-// limiet -- dat is de registry-afspraak, niet mijn interpretatie.
-dllHit      = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+// D-110 stap 2 (29-09): `dllHit` STOND HIER en is weg. Hij remde op de firmawaarde:
+//     dllHit = acctDLL > 0 and (isPA or (isEval and ddModel == "EOD")) and runningPnL <= -acctDLL
+// Sinds stap 1b zit diezelfde firmawaarde IN de eigen rem (`firmDllActive` draagt exact
+// deze twee voorwaarden, `dailyLossLimitEff` is er de min mee). Daardoor halteert `lossHit`
+// per definitie op of vóór het punt waarop `dllHit` zou vuren, en was hij niet "ongeveer
+// overbodig" maar strikt overbodig. `pine/tools/owner_dll_check.py` toetst dat per script
+// tegen de bron en stond op alle dertien groen voordat deze regel verdween.
+// ⚠️ `acctDLL` zelf BLIJFT: D-96 heeft de firmawaarde nodig als weergave ("ruimte tot de
+// DLL"), en de eigen rem leest hem. Alleen de tweede, losse halt is weg.
+// 📌 De D-108-notitie die hier stond -- nul in de registry betekent GEEN limiet, niet een
+// limiet van nul -- geldt onverminderd. Hij leeft nu in `firmDllActive` (`acctDLL > 0`) en
+// in `consistencyOK` (`consistencyPct <= 0`).
 // --- risk-gate: sessie-state op GEREALISEERDE P&L ---------------------------
 var float rgBaseNet    = na
 var float rgPeak       = 0.0
@@ -1697,9 +1818,9 @@ bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Tr
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
 dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dayTrailUSD
 dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSD)
-if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dllHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
+if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
     dayHalted := true
-    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : lockHit ? "Equity Lock" : "PA Daily Loss Limit"
+    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : "Equity Lock"
 
 // === ACCOUNT ENGINE (trailing floor / eval goal / payout) ====================
 float acctPnL      = acctPnlOffset + strategy.netprofit - paResetPnLPrev + strategy.openprofit
@@ -1986,7 +2107,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (enableDailyLossLimit ? str.tostring(dailyLossLimit, "#") : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz + ";validFrom=" + str.format_time(validFrom, "yyyy-MM-dd HH:mm", activeTz) + ";validUntil=" + str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + ";graceH=24"
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (dailyLossOn ? str.tostring(dailyLossLimitEff, "#") + "(" + str.tostring(ownerDllSlUSD, "#") + "x" + str.tostring(ownerDllStops, "#") + "x" + str.tostring(contractSize, "#.#") + (firmDllActive ? "|firm" + str.tostring(acctDLL, "#") : "") + ")" : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz + ";validFrom=" + str.format_time(validFrom, "yyyy-MM-dd HH:mm", activeTz) + ";validUntil=" + str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + ";graceH=24"
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent
@@ -2591,7 +2712,7 @@ f_evtLabel(string _txt, color _col) =>
     f_capDrawings()
 bool _haltEdge = dayHalted and not dayHalted[1]
 if inDrawWin and barstate.isconfirmed
-    if lblDll and _haltEdge and (haltReason == "PA Daily Loss Limit" or haltReason == "Risk-gate DLL" or haltReason == "Daily Loss")
+    if lblDll and _haltEdge and (haltReason == "Risk-gate DLL" or haltReason == "Daily Loss")
         f_evtLabel("⛔ DLL · " + haltReason + " $" + str.tostring(runningPnL, "#"), color.new(vNEG, 20))
     if lblDayCap and _haltEdge and (haltReason == "Day-cap" or haltReason == "Day-trail" or haltReason == "Daily Target")
         f_evtLabel("🎯 Day cap · " + haltReason + " $" + str.tostring(riskDayPeak, "#"), color.new(vPOS, 20))

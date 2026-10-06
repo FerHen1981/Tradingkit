@@ -158,11 +158,25 @@ zijn"* en vervolgens: *"ja leg maar als formule vast."*
 ### De formule
 
 ```
-owner_dll(account) = min( sl_per_contract × dll_sl_multiple × qty ,
-                          ruimte × max_fraction_of_room )
+owner_dll(account) = min( sl_per_contract × dll_sl_multiple × qty ,   ← Pine
+                          firm_dll ,                                   ← Pine
+                          ruimte × max_fraction_of_room )              ← middleware-signaal
 
 ruimte = balans − liq_niveau        (liq_niveau uit de registry-regels)
 ```
+
+**De tweede term is toegevoegd op 29-09 (besluit Ferry) en hij is er om één reden:** zonder
+hem is de eigen rem vanaf **qty 3** losser dan de firmalimiet. Gemeten op de qty uit het
+fleet-doc: PA013 (qty 3) → $1.200 en PA018 (qty 4) → $1.600, allebei boven de $1.000 van
+Apex — daar remde de eigen rem dus nooit. Op de bevroren qty 6 en 8 loopt het op tot $2.400
+en $3.200, **groter dan de $2.000 trailing drawdown**, en dan remt hij pas nadat het account
+al gebroken is.
+
+✅ **Gevolg dat een geblokkeerd item deblokkeert:** met `firm_dll` ín de eigen rem halteert
+die per definitie op of vóór de firmalimiet. Daarmee is `dllHit` **strikt overbodig** — hij
+kan nooit eerder vuren dan de eigen rem. **Stap 2 van D-110 (de firm-rem uit `dllHit`
+halen) wordt daarmee een veilige opruiming in plaats van een risico**, en de poort
+`owner_dll_check.py` die stap 2 op elf van de dertien scripts tegenhield, gaat open.
 
 **Geverifieerd tegen zeven onafhankelijke punten uit Ferry's fleet-doc van 28-09**, met
 `sl_per_contract = 100` en `dll_sl_multiple = 4`:

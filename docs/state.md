@@ -284,6 +284,23 @@ hit60 71% / breach 14%, mediaan 45 d, slechtste dag −4.480; qty 4: 76% / 16%, 
 450/150/900 tot de lock, daarna qty 4 (600/200/1.200); geen DLL op qty ≤ 4, wel op 5. Zelfde script-lijn als de
 50K's (fase-scripts A-86), alleen qty en guards anders.
 
+**Aanvulling 7 okt — 250K-eval (vraag Ferry).** Exacte funnel, 3 jaar NQ, 377 starts, trailing 6.500 / goal 15.000,
+max 27 contracten, one-hit (TP × qty × $5 − commissie ≥ 15.000):
+
+| entries | qty · TP | floor | pass 3 j | per jaar 23/24 · 24/25 · 25/26 |
+|---|---|---:|---:|---|
+| live (4–12 · c2 · e9 · CVD 3) | 27 · 122 | 48t | 17,8% | 11,0 · 24,4 · 18,3 |
+| live | 25 · 122 | 52t | 19,6% | — |
+| **FVG 19–27 · c4 · e9 · CVD 3** | 27 · 122 | 48t | 25,2% | 26,3 · 23,5 · 25,8 |
+| FVG 19–27 | 25 · 122 | 52t | 25,7% | 27,1 · 23,5 · 26,7 |
+| **FVG 19–27** | **22 · 138** | 59t | **27,1%** | **25,4 · 27,7 · 27,5** |
+| FVG 19–27 | 20 · 152 | 65t | 27,3% | — (marge $138) |
+
+SL 45 i.p.v. 90 kost 1–2 punt (sluit trades die binnen de floor zouden overleven) → SL 90 laten staan, de floor
+regeert. **Advies 250K: El Toro, FVG 19–27 / confirm 4 / expiry 9 / CVD 3, 22 NQ, TP 138, SL 90, phase Apex Eval,
+trailing 6.500, goal 15.000** → ~1 op 3,7 tegen ~1 op 5,6 op de live set. Zelfde mechanisme als de 300K (A-88):
+grotere gaps en een iets ruimere floor.
+
 ## A-87 — 300K-eval op El Toro HF: één TP blijft de beste route, de trailing stop is de enige hefboom (4 okt 2026)
 
 **Data.** 75 unieke live NQ-trades uit de vier alerts-logs (2 sep–2 okt, dedupe over accounts, MFE/MAE

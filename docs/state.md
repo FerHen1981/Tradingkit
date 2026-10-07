@@ -177,6 +177,35 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
 
+## A-89 — Vroeg stoppen is goed; de winst zit in strakker trailen ná 04:00 ET (7 okt 2026)
+
+**Vraag Ferry 7/10:** accounts stoppen al vóór 04:00 ET op +135/ct — optimaal, of valt er later op de dag nog iets te
+halen, of in de cap-instellingen? **Sessieprofiel per contract** (laatste jaar; engine TP 120 raw / Pine TP 85 met
+guards): Globex 18–02 ET draagt +$27 / +$24 per dag, London 02–07 −$13 / +$5, US-pre −$0 / −$1, RTH +$5 / +$9. **Staat de
+dag om 04:00 op ≥ +100, dan is de rest van de dag gemiddeld −$84 tot −$97** (55–58% kans op teruggave, 26–42% kans op
+meer dan −150 teruggave). Staat hij tussen 0 en 100: rest +$37 / +$113. Staat hij negatief: rest +$19 / +$81. Dus:
+een vroege plus vasthouden is goed, een vroege min laten doorlopen ook (A-83). Uurcijfers (6:00 en 12–13 ET negatief)
+zijn geen beleid — uurniveau is OOS-ruis (CLAUDE.md); sessies wel.
+
+**Beleidsvarianten op de doel-meetlat** (post-hoc op trade-closes, qty 1, vers 50K hit60/br60 — 3 jaar · laatste jaar):
+
+| beleid | TP 85: 3 j | TP 85: jaar | TP 120: 3 j | TP 120: jaar |
+|---|---|---|---|---|
+| 250/100/500 (live) | 8,5 / 13,9 | 18 / 24 | 17,6 / 10,7 | 53 / 15 |
+| 150/50/300 | 4,5 / 10,4 | 8 / 13 | 16,5 / 8,0 | 50 / 7 |
+| **250/100/500, ná 04:00 giveback 50** | 7,7 / **8,0** | 20 / **6** | 17,9 / 9,9 | 53 / 13 |
+| 250/100/500, stop 04:00 als ≥ +100 | 7,7 / 8,0 | **24 / 6** | 19,2 / 13,3 | **61 / 6** |
+| 250/100/500, stop 07:00 als ≥ +100 | 7,5 / 12,8 | 23 / 21 | 18,9 / 8,0 | 58 / 8 |
+
+**Lezing.** (1) De guards die de dag vroeg sluiten doen precies het goede; "later nog iets bijdragen" is op een
+plus-dag negatief verwacht. (2) De verbetering zit niet in een andere cap maar in **tijdafhankelijk trailen**: na
+04:00 ET de giveback naar 50 (of de dag sluiten zodra hij ≥ +100 staat) halveert de breach-kans op het jaar bij gelijke
+of hogere hit-kans; over drie jaar is het effect kleiner maar in dezelfde richting. (3) Dit bestaat niet als Pine-input
+(één giveback per dag) en niet in Tradovate; het is een Pine Dev-verzoek (giveback-2 vanaf tijdstip) of een
+middleware-regel (D-02-gate: na 04:00 ET geen nieuwe entries zodra dag-P&L ≥ +100 × qty). Gemeld in inbox 07-10.
+Waarom de accounts vandaag exact op +135 stopten is zonder alerts-log niet te zeggen (op 250/100/500 is +135 niet
+gearmed); log gevraagd.
+
 ## A-88 — Onderzoeksronde El Tesoro & El Toro op elf 1-minuutdatasets (4 okt 2026)
 
 **Opzet.** Python-engine uit `backtest/` (pessimistisch fillmodel) op MGC, GC, NQ, MNQ, ES, MES, MYM,

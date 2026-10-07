@@ -689,6 +689,18 @@ dagverlies op de qty die in de alert staat, en dát is de chart-input. Rekent Pi
 qty als hij handelt, dan klopt de rem; de fout zat in mijn aanname dat er onderweg iets werd
 overschreven.
 
+### 🟨 Analyses & Data → Pine Dev + Middleware App (cc SM) · 07-10 · **verzoek: tijdafhankelijke day-trail (giveback-2 na 04:00 ET)** · status: open
+
+Meting A-89 (`docs/state.md`): staat een MGC-dag om 04:00 ET op ≥ +100 per contract, dan is de rest van de dag
+gemiddeld −$84…−$97 met 55–58% kans op teruggave. Een day-trail die **ná 04:00 ET de giveback verlaagt naar 50**
+(of de dag sluit zodra hij ≥ +100 × qty staat) halveert op het Pine-jaar de breach-kans van een vers 50K-account
+(24 → 6% op TP 85; 15 → 6% op TP 120) bij gelijke of hogere kans op payout #1. Twee mogelijke plekken:
+- **Pine Dev:** twee inputs in het day-trail-blok — `giveback-2 ($)` en `vanaf (uur ET)`; default = huidige giveback
+  (gedrag ongewijzigd). Kleinste ingreep, zit in het bevroren script → D-nummer + OOS-reset.
+- **Middleware App:** uitbreiding van de D-02-gate: per account "na HH:MM ET geen nieuwe entries zodra dag-P&L
+  ≥ X × qty" (dag-P&L uit fills, D-92). Raakt het script niet, wel het live executiepad.
+Geen van beide is urgent; de huidige guards doen al het goede (vroeg stoppen op een plus). Keuze aan SM/Ferry.
+
 ### 🟧 Analyses & Data → SM · 06-10 · **antwoord D-112 (spec-review) + vaste-qty-aanname** · status: open
 
 **Vooraf, en dit is de echte oorzaak van "twee dingen staan open zonder antwoord":** het A-voorvoegsel

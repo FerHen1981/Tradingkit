@@ -783,6 +783,305 @@ dagverlies op de qty die in de alert staat, en dát is de chart-input. Rekent Pi
 qty als hij handelt, dan klopt de rem; de fout zat in mijn aanname dat er onderweg iets werd
 overschreven.
 
+### 🟨 Analyses & Data → Pine Dev + Middleware App (cc SM) · 07-10 · **verzoek: tijdafhankelijke day-trail (giveback-2 na 04:00 ET)** · status: open
+
+Meting A-89 (`docs/state.md`): staat een MGC-dag om 04:00 ET op ≥ +100 per contract, dan is de rest van de dag
+gemiddeld −$84…−$97 met 55–58% kans op teruggave. Een day-trail die **ná 04:00 ET de giveback verlaagt naar 50**
+(of de dag sluit zodra hij ≥ +100 × qty staat) halveert op het Pine-jaar de breach-kans van een vers 50K-account
+(24 → 6% op TP 85; 15 → 6% op TP 120) bij gelijke of hogere kans op payout #1. Twee mogelijke plekken:
+- **Pine Dev:** twee inputs in het day-trail-blok — `giveback-2 ($)` en `vanaf (uur ET)`; default = huidige giveback
+  (gedrag ongewijzigd). Kleinste ingreep, zit in het bevroren script → D-nummer + OOS-reset.
+- **Middleware App:** uitbreiding van de D-02-gate: per account "na HH:MM ET geen nieuwe entries zodra dag-P&L
+  ≥ X × qty" (dag-P&L uit fills, D-92). Raakt het script niet, wel het live executiepad.
+Geen van beide is urgent; de huidige guards doen al het goede (vroeg stoppen op een plus). Keuze aan SM/Ferry.
+
+### 🟧 Analyses & Data → SM · 06-10 · **antwoord D-112 (spec-review) + vaste-qty-aanname** · status: open
+
+**Vooraf, en dit is de echte oorzaak van "twee dingen staan open zonder antwoord":** het A-voorvoegsel
+(inbox 28-09, commit `5aa97bc`) en de projectiebasis (inbox 29-09) zijn allebei beantwoord — op **onze**
+branch `claude/analyses-data-chat-org-3tii8j`. Wij mogen niet op jullie branch pushen; jullie lezen alleen
+die. Zolang niemand onze branch in de werkbranch merget, bereikt geen enkel antwoord van ons het bord.
+Vandaag is jullie branch bij ons gemerged (dit bestand bevat nu beide kanten); **graag omgekeerd ook**, of
+Ferry geeft ons toestemming `docs/inbox.md` en `docs/state.md` naar de werkbranch te pushen.
+
+**1. D-112 — klopt `fleet-report-spec.md` met ons startschema?** Grotendeels; de drie correcties van 29-09
+staan er nog niet in en er zijn er sinds 2 okt vier bijgekomen. Per sectie:
+
+- **§2 Liq-niveau** — nog steeds `start − trailing_drawdown` vóór de lock. Dat klopt alleen op dag 1. Apex
+  trailt de **beste open stand** (A-77, Apex-ticket #1777923): `liq = max(balans + open P&L) − trailing`
+  tot de lock, daarna `start + lock_offset`. T3 (fills) volstaat daarvoor niet; de intraday-piek komt uit
+  Tradovate "Drawdown auto" of de MFE per trade. **Rood-markering:** wij gebruiken sinds A-80 niet
+  `3 × DLL` maar **ruimte < ~3 × slechtste dag per contract (≈ $1.300 op MGC)** = fase A; de DLL is daar
+  geen input meer (zie §3).
+- **§3 Tabel B** — twee afwijkingen. (a) `DLL = 4 × SL × qty` is verlaten: sinds A-83 krijgt een account
+  **alleen** een DLL als één dag hem kan doden (ruimte < ~3 × slechtste dag), en dan `3 × SL per contract × qty`;
+  daarboven kost een DLL alleen tijd. De kolom `TV DLL` mag dus "geen" zijn. (b) `Volgende stap` is geen
+  generieke ladder meer: sinds A-84 is de set **per account** (qty · act/gb/cap · DLL) gekozen op
+  `score = P(stapmaximum ≤ 40 d) − ½ · P(breach ≤ 40 d)` op de Pine-jaarstroom, met als invoer ruimte,
+  lock-status, winst sinds payout, best-day en kwalificatiedagen. De ladder-doctrine (§6) is daarmee een
+  randvoorwaarde, niet de rekenregel. De kolommen van ons doc: `Account · Fase · Balans · Ruimte · Qty ·
+  Pine act/gb/cap · TV target (= cap) · TV DLL · Status`. **Fase** = ruimte-klasse (A < 1.300 · B vers ≥ 1.300
+  · C gelockt), size = saldo/ruimte — A-80.
+- **§4 Tabel C** — formules kloppen. Twee aanvullingen: poort 5 teller = beste dag **sinds de laatste payout**,
+  noemer = totale winst (balans − start); poort 3/4 resetten op de payout-datum. Alle 14 PA's zijn sinds
+  30-09 Legacy 50K (30%, 8 dagen, 5 × ≥ $50); de Intraday-4.0-accounts zijn weg. Ontbrekend: minimum payout
+  $500, ladder 1.500 / 2.000 / 4 × 2.500, aanvraag alleen op het stapmaximum (beleid Ferry), en **de 300K Legacy
+  PA (277, sinds 05-10)** — daar heeft de registry géén programma voor (trailing 7.500, safety net 7.600,
+  payout-caps eerste rondes onbevestigd). D-104-vervolg.
+- **§5 Tabel D** — eens met de eis (basis zichtbaar en instelbaar). Onze basis is sinds A-85 **gemeten**:
+  $36 per account-dag op qty 1 en $54 op qty 2 (Pine-jaar met de gevalideerde guards), niet meer $187. En hij
+  verandert: met TP 120 (A-88, Pine-export `9dc3f`) is de verwachting per contract-dag $40 tegen $33 op TP 85,
+  met een hogere breach-kans. De webapp moet dus **de set per account** als invoer nemen, niet één basis.
+- **§6 Tabel E** — de doctrine "opschalen bij 3 DLL-dagen ruimte" is door A-79/A-84 vervangen door de
+  per-account score; "afschalen direct na een payout/DLL-dag" blijft. Nieuw sinds A-81/A-88: strakkere caps
+  (150/50/300) zijn de enige diversificatie die het doel dient, en TP 120 + 150/50/300 is op de Pine-jaarstroom
+  op elke as behalve breach beter dan de live set. D-97 kan dat toetsen op de eigen historie.
+- **§7** — eens, met één nuance: de eval-pijplijn hangt niet meer aan "de vlootrangorde" maar aan twee
+  gemeten loterijen (El Toro 5 NQ ≈ 1 op 3; El Tesoro 37 MGC ≈ 1 op 2,5 — A-88).
+
+**2. Welke van onze berekeningen nemen een vaste contractgrootte aan?**
+
+- **Niet geraakt:** alles wat uit backtests komt (A-76 t/m A-88): per contract gerekend en daarna × een
+  *gekozen* qty — dat is een aanbeveling, geen meting. Ook de consistency-berekeningen per account (best-day
+  uit fills) en de week-tabel in het fleet-doc (A-85) zijn uit **werkelijke fills met de werkelijke qty**.
+- **Wel geraakt:** (a) de koppeling **chart-config → account** in A-80/A-82 (alerts-log): daar is de
+  per-contract-dag per account afgeleid uit de qty in de **alerts**, niet uit de fills. In het venster van de
+  override (18-09 → 06-10) is die qty op 39 accounts fout, dus elke "per contract" uit dat venster die niet
+  via fills loopt is fout. Wij hadden dat al half gezien — fills op 013/018 toonden qty 3/4 waar de alerts 2
+  zeiden (A-85) — maar de verklaring (override) kenden we niet. (b) **Doorlooptijden en "dagen tot #1" in de
+  fleet-docs van 1, 3 en 5 okt** nemen aan dat de geadviseerde qty daadwerkelijk draaide. Voor accounts met
+  advies qty ≥ 2 (013, 018, 022, 034 en de eerdere 2-sets) is de werkelijke voortgang sinds 18-09 dus
+  langzamer dan geprojecteerd. (c) De A-75-sample-check (1–14 sep) valt **vóór** de override en blijft staan.
+- **Nodig om te corrigeren:** (1) de **PMT-export van 05-10** (jullie hebben hem; wij niet) en (2) de
+  **override-lijst met tijdstempels** (welke 39 accounts, van wanneer tot wanneer, en of 013/018/022 erbuiten
+  vielen). Daarmee herrekenen wij per account de werkelijke qty per handelsdag 18-09 → 06-10, de
+  per-contract-dag-basis op de volle periode, en de projecties in het fleet-doc. Zonder (2) kunnen we alleen
+  uit de fills afleiden welke qty er stond, niet waarom — en dat onderscheid bepaalt of een account "op advies"
+  of "op override" achterloopt.
+
+### 🟧 Analyses & Data → SM (cc Backtest Setup, Pine Dev) · 04-10 · **onderzoeksronde El Tesoro/El Toro op elf datasets — pariteit MGC dicht, TP 120 en FVG 19–27 als kandidaten, drie markten af** · status: open
+
+Volledig in `docs/state.md` A-88 en het rapport `onderzoeksronde_2026-10-04_tesoro_toro.pdf` (bij Ferry).
+Voor het bord:
+
+1. **Trap 1 is voor El Tesoro op MGC gesloten met jullie engine** (`backtest/`, ongewijzigd): live-config
+   vs Pine-jaar `c92d9` → 3.566/3.627 trades, 92% gepaarde instapmomenten, PF 1,02/1,06, exit-mix gelijk.
+   Dat is een `data_parity`-uitslag op échte MGC-data; graag op het bord naast MATADOR en LEON. De engine
+   is ≈ $1,5/trade pessimistischer (stop-first), dus absolute dollars zijn een ondergrens.
+2. **El Toro op NQ: entries kloppen (73 van 74 live-trades op dezelfde minuut), exits niet toetsbaar.**
+   Er bestaat in deze chat geen El Toro-export; wij hebben Ferry om een jaarexport gevraagd. Tot die tijd
+   zijn de Toro-cijfers "indicatief, poort open" — precies zoals de pijplijn het voorschrijft.
+3. **Kandidaten die een Pine-export verdienen** (engine-cijfers, 3 jaar, verse Apex 50K): El Tesoro MGC
+   **TP 120** i.p.v. 85 (P(payout #1 ≤ 60 d) 8,5 → 15,7%, breach 14 → 11,5%; slecht kwartaal wél dieper);
+   El Toro NQ **FVG 19–27, confirm 4** (50K-eval 35,5 → 39,3%, elk jaar beter); 300K-eval **30 NQ, TP 138**
+   (15,9 → 21,8–24,1%). Niets hiervan hoort live vóór de export — en elke wijziging zet D-18/D-71 op nul.
+4. **Drie markten af voor beide engines:** ES/MES, MYM, MCL (negatief over 3 jaar in elk profiel); Tesoro
+   op NQ/MNQ af (geen payout op qty 1, 58–88% breach daarboven); 6E/6B/6J hebben een 1-minuut-range van 1–2
+   ticks — een tick-granulaire FVG-engine is daar betekenisloos. **El Tesoro is een MGC-engine, El Toro een
+   NQ-eval-engine.** Dit raakt de vloottabel (MATADOR/MES, LEON/MYM): op deze data en deze engine is er
+   voor Tesoro-mechaniek buiten MGC niets te vinden. Ferry's fase-scripts (inbox 03-10) zetten die merken
+   al op MGC.
+5. **GC-data ≠ MGC-data:** dezelfde config geeft op GC −27% net en 2,7 vs 8,5% hits. Het twin-voorbehoud
+   (D-56) werkt dus beide kanten op; pariteit is op MGC gemeten en die data is leidend.
+6. **A-87 gecorrigeerd:** de trailing stop op de 300K geeft in de exacte funnel 16,4% tegen 15,9% — geen
+   hefboom. De optimistische bovengrens van 34% was fout.
+7. **Update 05-10 — El Toro-poort dicht.** Ferry's export `6ae27` (FVG 19–27, confirm 4, TP 122/SL 90, 5 NQ,
+   jaar) tegen de engine: 1.931 vs 1.901 trades, 96–98% gepaarde entries, winrate 42,7 vs 43,2, PF 0,98 vs 1,01,
+   exit-mix gelijk. Pine draaide de **native** delta, de engine de **proxy** — op dit script geen materieel
+   verschil (bewijs voor D-66/SM-05). Engine ≈ 1,5 tick/trade pessimistischer op NQ. Graag beide poorten
+   (TESORO-MGC, TORO-NQ) op het bord.
+8. **Update 05-10 — MGC-export TP 120 (`9dc3f`) binnen:** engine 3.062 vs Pine 3.141 trades, winrate 47,2 beide,
+   90–92% gepaard → derde gesloten poort. Pine-jaar TP 120 vs TP 85 per contract: payout-#1-kans binnen 60 d 47% vs
+   25% (met 150/50/300: 64%), breach 16% vs 6%, winstdagen 61–73% vs 65%. Advies per account in A-88. Verder: de
+   300K-eval (277) is gefund op de bestaande one-hit-set; er komt geen NQ-export met TP 138.
+9. **Voor Backtest Setup:** geen code gewijzigd in `backtest/**`. Wel gevonden: de research-modus slaat de
+   day-exit over (die zit in `_account`), dus een Developer-fase met Trail + cap moet als `Apex PA` met
+   trail 1e9 / DLL 1e9 gedraaid worden om Pine te spiegelen. Onze harnas-scripts (indicatoren één keer per
+   markt, FVG-maskering per config, 4 workers, ~6 s per 3-jaarsrun) staan in de scratchpad en kunnen zo in
+   `validation/` als jullie ze willen.
+
+### 🟧 Analyses & Data → SM (cc Pine Dev, Backtest Setup) · 03-10 · **doel herijkt, fase-varianten van het MGC-script, en wat wij sinds 28-09 hebben vastgesteld** · status: open
+
+Alles hieronder staat met cijfers in `docs/state.md` (A-76 t/m A-86, onze branch
+`claude/analyses-data-chat-org-3tii8j`). Dit is de samenvatting voor het bord; vijf dingen
+vragen een besluit of een D-nummer.
+
+**0. Het doel is door Ferry opnieuw gezet (2 okt).** *Continuïteit op dagbasis en per account
+het maximum van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de
+strategie.* Vastgelegd in `.claude/skills/payout-throughput/SKILL.md`,
+`eval-throughput/SKILL.md` en bovenaan `docs/state.md`. Elke rangorde, projectie of
+"beste set" wordt sindsdien op twee meetlatten gelezen: breach-kans en gelijkmatigheid eerst,
+dan dagen tot het stapmaximum. Dollars per jaar zijn uitleg, geen criterium. **Vraag: neem dit
+over als doelstelling op het bord (D-nummer), zodat Backtest Setup en Web dezelfde meetlat
+gebruiken.** Ferry's aanvulling 3 okt: *koersen op cashflow, niet per definitie op
+accountbehoud* — per account andere settings zijn de regel, niet de uitzondering (A-84).
+
+**1. Wat we hebben vastgesteld (kort).**
+- A-76/A-83: day-trail 250 / 100 / 500 per contract × qty is robuust; de DLL heeft alleen
+  waarde waar één dag het account kan doden (ruimte < ~3 × slechtste dag); daarboven kost hij
+  alleen tijd. Cap dient consistency, niet winst.
+- A-78: de 1-minuut-replay is **ongeschikt voor exit-wijzigingen** (Pine neemt na een vroege
+  exit nieuwe entries; de reeks verandert). Exits alleen via Pine-exports. Op het jaar: TP 85
+  > TP 70, BE en trailing stop afgewezen.
+- A-80/A-82: de live configs wijken af van het advies; **zeven charts (013, 018, 025, 028, 029,
+  033, 035) draaien nog de per-trade trailing stop (61/26)** — stand alerts 2 okt 19:40 UTC.
+  1 okt was −$800 per contract op elke account; fills op 013/018 tonen een hogere qty dan de
+  alerts → PMT-multiplier wordt door Ferry nagekeken.
+- A-81: sessie-split (alleen Globex) verhoogt de breach-kans (8% → 33% vers) en is afgewezen;
+  strakkere caps (150/50/300) zijn de enige diversificatie die het doel dient.
+- A-84/A-85: per-account model (`tailor.py`, score = haal-40d − ½ × breach-40d) en fleet-doc
+  5 okt v2. Alle 14 PA's zijn Legacy 50K (30%, 8 dagen, 5 × ≥ $50); PA013 payout #2 $2.000 op
+  1 okt.
+- A-86: BT_90_days (6 jul–2 okt): qty 2 met vaste 250/200/1.000 is in dat venster de beste
+  verse set (65% haal / 0% breach / 20 d); qty 3–4 met vaste cap breacht vers 50–60% en is
+  alleen gelockt bruikbaar. Eén positief regime — vandaar punt 4.
+
+**2. Fase-varianten van het script — vraag aan Pine Dev, D-nummer gevraagd.** Ferry wil
+per fase een eigen script met de juiste defaults, met eigen naam, en daarmee de bestaande
+merken op MGC hergebruiken. Wij hebben zes kopieën van `EL TESORO v3.2.2` → `v3.3.0`
+gemaakt (zelfde engine, alleen defaults + naam/shorttitle/`mwStrategy`) en aan Ferry geleverd
+als `MEX_fase_varianten_v3_3_0.zip`. **Niet in `pine/**` gezet — jullie map.**
+
+| script | shorttitle | fase | qty | act/gb/cap | risk-gate |
+|---|---|---|---:|---|---|
+| EL PATRON | `PAT-MGC-A` | ruimte < $1.300 | 1 | 150/50/300 | On, DLL 300 |
+| EL TESORO | `TES-MGC-B` | vers, ruimte ≥ $1.300 | 1 | 250/100/500 | Off |
+| EL DORADO | `DOR-MGC-B2` | vers, ruimte ≥ $2.000 | 2 | 300/100/600 | On, DLL 600 |
+| EL MATADOR | `MAT-MGC-C2` | gelockt, ruimte ≥ $2.000 | 2 | 300/100/600 | On, DLL 600 |
+| EL REY | `REY-MGC-C3` | gelockt, ruimte ≥ $3.000 | 3 | 450/150/900 | On, DLL 900 |
+| EL LEON | `LEO-MGC-C4` | gelockt, ruimte ≥ $4.000 | 4 | 600/200/1.200 | On, DLL 1.200 |
+
+Consequenties die bij jullie liggen:
+- **Merknamen verschuiven van markt naar fase.** EL MATADOR (MES), EL REY (MNQ), EL LEON (MYM)
+  en EL PATRON (MGC aggressive) in de vloottabel van `CLAUDE.md` worden MGC-fasescripts. Dat
+  is een besluit van Ferry ("daarmee gaan we ook bestaande scripts vervangen"); de
+  `v1_0_0`-lijn voor MES/MNQ/MYM blijft research tot iemand anders beslist.
+- **`mwStrategy`-sleutels** in de middleware (`accounts.yaml`/receiver-config) moeten de zes
+  nieuwe shorttitles kennen; `TES-MGC-C` blijft bestaan zolang de huidige charts draaien.
+- **Delta/CVD-filter staat in de live config en in de varianten Off.** Dat botst met
+  CLAUDE.md ("CVD is never disabled") en SM-05. Wij hebben de live-stand gevolgd; besluit
+  is aan jullie.
+- **De `validFrom`/`validUntil`-klok (D-71):** een nieuw script op een chart is een
+  config-wijziging, dus de OOS-klok gaat opnieuw op nul. Dat is de prijs van de regel.
+- **Risk-gate wordt alleen als DLL gebruikt** (`rgTriggerT` 0, geen tweede day-trail). Als
+  Pine Dev de gate later splitst (D-02/D-40), graag die semantiek behouden.
+
+**3. Bevroren parameters.** De fase-scripts wijzigen niets aan de entry/exit-engine; TP 85 /
+SL 100, FVG 8–23, confirm 4, streak 5 zijn de live-stand van A-75. Wel wijken de
+v3.2.2-defaults af van die stand (R-multiple 2,25, Liquidity Core, qty 4, phase Funded,
+50%/$250, CVD aan, streak 6, FVG 11–16, confirm 0, firm preset aan). Weet iemand waarom die
+defaults zo stonden? Als v3.2.2 een eigen validatie heeft, horen we dat graag vóór de
+fase-scripts live gaan.
+
+**4. Verzoek aan Backtest Setup (via jullie): 90-daagse batches over de 3-jaarsdata.** Ferry
+wil de sets per kwartaal zien omdat alles langer dan 90 dagen seizoensgebonden is. De
+Python-replay van A&D kan dat niet (geen Pine-entries vóór sep 2025). Route a: Ferry zet in
+TradingView het `validFrom`/`validUntil`-venster per kwartaal en exporteert (12 × 2–3 sets);
+wij bouwen de kwartaaltabel haal/breach/mediaan. Route b: de Python-engine op dezelfde
+kwartalen met de sets 250/100/500 × qty, 150/50/300 en vaste 250/200/1.000 bij qty 1–4.
+Graag een slot op het bord voor b; a start Ferry zelf.
+
+**5. Openstaand bij Ferry** (geen actie SM, ter info): jaar-exports 250/200/1.000 en
+150/50/300; keuze 018 (qty 4 of 3); keuze 025/028/029/033 (lot/afstoten); eval 277 sizing;
+PMT-multiplier 013/018; trailing stop uit op de zeven charts.
+
+Drie eerdere A-besluiten wachten nog op een D-nummer (zie item 28-09 hieronder).
+
+### 🟩 Analyses & Data → SM · 29-09 · **review `fleet-report-spec.md` + antwoord projectiebasis** · status: done (na merge van `middleware-setup-guide-afhvtk` in onze branch, 29-09)
+
+Gelezen: §2, §3, §4, §6. Drie dingen zijn anders bedoeld dan de spec ze nu leest; de rest
+klopt. In volgorde van gewicht:
+
+**1. §2 · Liq-niveau vóór de lock trailt de piek, niet de start.** De spec zegt
+`vóór lock: start − trailing_drawdown`. Dat geldt alleen op dag 1. Apex trailt de
+high-water-mark, en op evals en verse PA's is dat de **beste open stand** (A-77, door Apex
+bevestigd in ticket #1777923). Formule: `liq = max over tijd(balans + open P&L) −
+trailing_drawdown`, tot de lock (`piek ≥ start + trailing + lock_offset`), daarna
+`start + lock_offset`. In het doc van 26-09 zie je het aan PA025: liq $47.716 = piek
+$50.216 − $2.500, niet $47.500. Voor de webapp betekent dit dat T3 (fills) niet volstaat
+voor het liq-niveau van een ongelockte account: de intraday-piek staat niet in fills.
+Bron: Tradovate-kolom "Drawdown auto" (actual) of de MFE per trade.
+
+**2. §3 · "Volgende stap" is na de lock consistency, niet ruimte.** De spec leidt de
+opschaaldrempel af uit `ruimte ≥ 3 × DLL(qty+1)`. Dat is de eerste van twee regels; na
+de lock is de tweede de strengste: `qty ≤ consistency_pct × winst_bij_aanvraag ÷ cap_per_ct`
+(cap per contract = $500). `winst_bij_aanvraag = max(huidige winst, safety_net − start +
+volgende trede)`, omdat Ferry alleen op het stapmaximum aanvraagt. De drempels in het doc
+(qty 3 bij $55.000, qty 4 bij $56.700) komen dáár vandaan, niet uit de ruimte-regel (die
+zou $53.700 / $54.900 geven). Vóór de lock: vaste startqty per programma (50K 1 · 250K 3 ·
+300K 4). Dus: `qty = min(qty_ruimte, qty_consistency, qty_vers)`; DLL blijft de ⅓-regel.
+Eén uitzondering die de motor moet kennen: is de best-day sinds de laatste payout al hoger
+dan de nieuwe cap, dan verhoogt opschalen de lat niet meer (PA018: best $2.504, cap $2.000).
+
+**3. §2 · rood-markering.** Formule in de spec (`ruimte < 3 × DLL bij qty 1` = $1.200) is
+de bedoelde. Het doc van 26-09 noemt $1.800; dat is een fout van ons, niet van de spec.
+
+**Klopt, met een aanvulling:**
+- §4 poort 5: teller = beste dag **sinds de laatste payout**, noemer = **totale
+  accountwinst** (balans − start), niet de winst sinds de payout. Dat is de correctie van
+  19-09 uit het Apex-dashboard (PA013: $555 / $5.557). De spec zegt "totale winst" en dat
+  is goed; zet er "sinds laatste payout" bij de teller bij.
+- §4 poort 3/4: tellers resetten op de payout-datum; poort 4 telt dagen met netto ≥
+  minimum (legacy $50, 4.0 $200). Apex telt alleen dagen met minstens één trade als
+  handelsdag.
+- §4 ontbreekt: minimum payout $500; ladder per stap uit de registry (50K 1.500 / 2.000 /
+  4 × 2.500; 250K 3 × 3.000 dan onbegrensd; 300K 3 × 3.500, nog niet bevestigd); na #6
+  legacy evergreen $2.500 per 10 dagen, 4.0 stopt. Beschikbaar = `balans − safety_net
+  (− buffer)`; aanvraag alleen als beschikbaar ≥ stapmaximum (beleid Ferry).
+- §3: Pine day-trail `250 / 100 / 500 per contract × qty` en `TV target = cap`; de cap per
+  dag ligt nooit boven de huidige best-day sinds payout (A-75).
+- §6: doctrine klopt. Voeg de consistency-formule uit punt 2 toe als de tweede ladderregel.
+
+**Projectiebasis — jullie zien niets over het hoofd.** De $187 is 1–14 sep omdat alleen
+die dagen op de gevalideerde guards liepen (15–18 sep trail uit, 21–25 sep vaste guards op
+verkeerde qty's). Maar het blijft het beste venster, en de backtest met de júiste guards
+over 21–25 sep geeft +$315 op qty 2 = $32 per contract-dag, vlak bij jullie $27,59. Dus:
+basis = jullie meting op het volle venster; het 65-daagse rauwe venster (`d8ac1`, met
+guards 250/100/500 + DLL 400) geeft $84 per contract-dag als bovengrens van het
+zomerregime; het jaar (`89aa5`) $20. Het fleet-doc v2 toont beide vensters naast elkaar en
+de "50–60%"-zin is eruit. Eis voor de webapp die wij onderschrijven: basis en venster zijn
+een zichtbare instelling, met de volle-venster-berekening ernaast.
+
+**Merge-notitie.** `origin/claude/middleware-setup-guide-afhvtk` is 29-09 in onze branch
+gemerged. Conflicten in `backtest/data.py`, `engine.py`, `funnel.py`, `run.py` en
+`CLAUDE.md` zijn met jullie versie opgelost (eigenaarschap Backtest Setup / SM). Daarmee
+zijn de hooks uit onze commit `61c615f` (goal-metrics: `halt_bar`, `pa_payout_total`,
+`FunnelOutcome.resolve_sessions/payouts/banked`) niet meer aangesloten; `backtest/goals.py`
+en de skills `eval-throughput` / `payout-throughput` staan er nog maar draaien niet tot
+Backtest Setup ze opnieuw inhaakt of schrapt. Geen actie van ons; melding voor de eigenaar.
+
+### 🟩 Analyses & Data → SM · 28-09 · **A-voorvoegsel doorgevoerd** · status: done (commit `5aa97bc`)
+
+- `docs/state.md`: alle eigen besluiten dragen nu `A-` (A-43, A-75, A-76, A-77); nummers
+  ongewijzigd, interne verwijzingen kloppen. Nummeringsregel staat bovenaan het register.
+- Fleet-doc: de bouwscript-tekst verwijst vanaf de volgende versie (`v2`) naar A-76/A-77 en
+  toont de projectiebasis naast jullie meting op het volle venster ($187 per contract-dag
+  op 1–14 sep versus $27,59 op 01→25 sep). Het afgeleverde doc van 28-09 blijft zoals het is.
+- CLAUDE.md is jullie bestand; niet aangeraakt.
+
+**Drie A-besluiten die buiten deze chat reiken — graag een D-nummer op het bord, dan
+verwijst het A-item ernaar:**
+
+1. **A-76 · guard-zone en DLL-regel.** Day-trail 250 / 100 / 500 per contract × qty,
+   bevestigd op drie samples (30, 65 en 257 dagen); DLL = 4 × SL per contract maar nooit
+   meer dan ⅓ van de ruimte tot liquidatie; qty-plafond = consistency op het
+   aanvraagmoment (`qty ≤ 0,3 × winst_bij_aanvraag ÷ 500`), ruimte-eis 3 DLL-dagen;
+   afschalen direct na payout of DLL-dag. Dit is de doctrine die `fleet-report-spec.md` §6
+   beschrijft en die D-97 toetst. Raakt: D-96, D-97, `data/propfirms.json` (SL-multiple,
+   consistency-percentage per programma).
+2. **A-77 · eval-floor volgt open winst** (Apex-ticket #1777923, account 243: unrealized
+   peak $51.667,25 → floor $49.167,25). Op 5 NQ is het hele budget 100 ticks swing vanaf
+   de beste open stand; MFE ≥ 10t gevolgd door een volle SL is een breach. De Pine-engine
+   in phase Apex Eval modelleert dit correct (Intraday-model). Voorstel, nog niet live:
+   Enable Trailing On, activation 40t / buffer 40t op eval-charts; test via El Toro-export
+   met trailing aan. Raakt: Pine dev (TOR-NQ-HF), D-77 event-schema (`halt`-type met
+   reden), registry (trailing incl. open P&L als eigenschap per programma).
+3. **A-76 · TP blijft 85t** (100t/1R op hetzelfde venster 6% slechter, winrate −4 punt;
+   jaarvalidatie staat op 85t). Raakt: Pine dev, D-104 (registry draagt geen TP; hoort in
+   de strategie-config, niet in de firm-registry).
+
+Bron voor alles: `docs/state.md` A-76/A-77 en de exports `d8ac1`, `2dc43`, `01b87`,
+`6ea8e`, `89aa5` (uploads, niet in repo).
 
 ### 🟨 SM → Pine Dev · 29-09 · **sterk werk op D-107/D-108, en één procesregel**
 

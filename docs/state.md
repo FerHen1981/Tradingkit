@@ -207,6 +207,15 @@ op TP 120 mag het direct na de lock (16 → 14% breach, hit +4 pt). (4) Na een p
 direct afschalen (doctrine blijft). (5) De ruimte-klasse A (< 1.300, één SL-reeks van het einde) blijft qty 1 met DLL;
 de DLL helpt op TP 85 (breach 35 → 21% in D vs G) en schaadt op TP 120 — consistent met A-83: alleen waar één dag kan doden.
 
+**Aanvulling 7/10 — "hoog starten, terugschalen onder ruimte X" (vraag Ferry):** grid startqty 2/3 × drempel X ∈
+{1.000…2.400} × met/zonder DLL 3×SL, zelfde sim. TP 85: start 2 zonder DLL → breach 35–51% (tegen 5,7%) bij mediaan
+24–29 d i.p.v. 49; met DLL: X = 1.000 → hit60 42,6 / breach 32,0; X = 1.800 → 29,5 / 21,3; X = 2.400 → 26,2 / 13,1. Start 3:
+≥ 28% breach in elke variant. TP 120: start 2, X = 2.200 → 58,5 / 25,2 (tegen 48,0 / 16,3); de DLL schaadt overal. **Waarom
+$2.500 niet "fors" is op qty 2:** de slechtste dag per contract op het jaar is −1.255 (TP 85) / −1.493 (TP 120), de
+slechtste tweedaagse reeks −1.9k / −2.4k — op qty 2 is dat de hele ruimte in één of twee dagen, en een dag-granulaire
+terugschaalregel is dan al te laat. Conclusie ongewijzigd: vers 50K = qty 1; de snelste nog verdedigbare variant is qty 2
+alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3× de breach-kans.
+
 **Stand 7 okt op de ruimte-regel (A, live TP 85):** 018 (gelockt, 4.762) → qty 3 · 013 (gelockt, 2.559) en 022 (gelockt,
 2.485) → 1, qty 2 pas bij 53.100 · 034/035 (vers, 2.395) → 1 · 026/027/030/031/032 (vers, 1.565–1.765) → 1 · 028/029/033
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);

@@ -64,7 +64,7 @@ naar de Python-kant), en de fix zou een gedragswijziging op de gemeten cijfers z
 `D-`-nummer voor willen uitgeven pak ik het op onder Backtest Setup. Vastgelegd in `DECISIONS.md`.
 
 ### Rol en map voor deze chat — eigen map of drijvende rol?
-**M-rol (i.o., deze chat) → Scrum Master / Ferry** · 2026-10-06 · status: OPEN
+**M-rol (i.o., deze chat) → Scrum Master / Ferry** · 2026-10-06 · status: **VERWERKT 07-10 → D-136** (drijvende rol, register `M-`, geen eigen map)
 
 Probleem: deze chat bezit geen map in de eigenaarstabel en kreeg daardoor misgeroute werk —
   eerst de D-74 Website-helft (eval-inventaris), daarna een vijf-items-startprompt die volledig
@@ -78,7 +78,7 @@ Nodig van: Scrum Master (rol/registratie), Ferry (akkoord).
 Live-impact: NONE
 
 ### Publiek headline-totaal pooolt de eval-markt (NQ) mee
-**M-rol (deze chat) → CLO / Ferry — hangt aan D-74 + D-34** · 2026-10-06 · status: OPEN
+**M-rol (deze chat) → CLO / Ferry — hangt aan D-74 + D-34** · 2026-10-06 · status: **VERWERKT 07-10 → D-131** (besluit Ferry: aantallen mogen evals meenemen, bedragen nooit; `headline.trades` mag blijven, de poort moet om)
 
 Probleem: `web/sites/mex/src/data/public-stats.json` → `headline.trades`=717 en
   `headline.win_rate`=44,1 tellen de rij `status:"Evaluatie"` (NQ, 19 trades) mee
@@ -94,7 +94,7 @@ Live-impact: NONE (publieke site, geen executie)
 Acceptatiecriteria: headline bevat ofwel geen eval-trades, ofwel een expliciet label.
 
 ### `mex_units` staat dubbel — welke kopie is canoniek vóór `for_public_evals()`?
-**M-rol (deze chat) → Scrum Master / Middleware App + Website — hangt aan D-74** · 2026-10-06 · status: OPEN
+**M-rol (deze chat) → Scrum Master / Middleware App + Website — hangt aan D-74** · 2026-10-06 · status: **VERWERKT 07-10 → D-132** (op het bord bij Middleware App)
 
 Probleem: de publicatie-gate `mex_units.roles.for_public()` bestaat op twee plekken:
   `web/handover/mex_units/roles.py` én `middleware/app/mex_units/roles.py` (+ `middleware/app/public_stats.py`).
@@ -7412,3 +7412,128 @@ bij de drie TORO-intraday-evals zei dat de qty daar "de backtestgrootte is, niet
 gehandeld wordt". **Dat is sinds D-53/D-122 niet meer waar:** Pine's qty IS de gehandelde qty.
 Die $2.800 rem op een account met $2.000 trailing drawdown is dus **echte blootstelling**, geen
 meetartefact. Tekst aangepast; de bevinding wordt er zwaarder van, niet lichter.
+
+---
+
+## 07-10 · Scrum Master → alle rollen — de ronde na Ferry's besluiten, en één blokkade erbij
+
+Drie reviews af (**D-119**, **D-129**, **D-83/D-84**), twee besluiten van Ferry vastgelegd
+(**D-58** akkoord — en bij nameting al gedaan; **D-131** eval-regel), één nieuwe blokkade
+gevonden in de review zelf (**D-135**), en de rol zonder map is nu een besluit (**D-136**).
+
+### 🔴 Eerst de regel die Ferry gaf, want hij raakt vier items
+
+> *"ik wil ze niet zien al gerealiseerde winst alleen een telling in aantallen"* — 07-10.
+
+**Een AANTAL mag eval-accounts meenemen. Een BEDRAG nooit, en nooit opgeteld bij
+gerealiseerde winst.** Dat is één regel en hij geldt overal waar iets samenvat of
+publiceert: widget, cockpit, publieke site, rapport, prop-firm-stuk.
+
+Gevolgen, concreet:
+- **D-131** — `headline.trades` = 717 (653 + 45 + 19 NQ-eval) **mag blijven staan**: dat is
+  een telling. De meldingsgrond vervalt. ⚠️ Maar de poort moet de **andere** kant op dan het
+  bord zei: `assert_no_eval_metrics()` hoort te vallen over **bedragen en statussen**, en
+  aantallen expliciet door te laten.
+- **D-121** — de widget-bouw valt hiermee goed uit: aantallen tellen (`12a 4p 1b`), elk
+  bedrag funded-only. Dat was een gok vooruit op dit besluit.
+- **D-129** — zie hieronder: de regel-3 die nog moet, is precies deze.
+- **D-74 / D-34** — zelfde regel, geen aparte afweging meer nodig.
+
+### 🔴 D-135 · Middleware App — dit gaat voor, en het is drie regels
+
+De settings-tab is **gebouwd en goed gebouwd**, maar hij mag niet open. Gemeten in
+`viewer.py`: boven de proxy-tak staat *"Alleen via de cockpit-sessie — de BEARER zit
+server-side"* (r. 337–338), en de drie takken eronder (r. 340 GET · 445 POST · 458 PUT)
+hangen aan `_api_authorized()` — die laat **óf** de cookie-sessie **óf** de read-only
+`VIEWER_API_TOKEN` door (r. 222–231, *"the latter for the iPhone widget"*).
+
+Dus `PUT /api/cfg/config` en `PUT /api/cfg/secrets/{name}` staan open voor de widget-token.
+**En de proxy maakt het erger, niet beter:** hij injecteert server-side de sterke Bearer,
+dus de receiver ziet een volledig geautoriseerd verzoek en kan het verschil niet meer zien.
+De 401 van D-82 wordt via de cockpit omgelopen.
+
+Die token is **ontworpen om zwak te zijn**: hij reist in de querystring van elke
+widget-verversing en staat als letterlijke waarde in `middleware/scriptable/MEX_Today.js`
+r. 23 — een bestand dat in de repo zit.
+
+De fix, en meer is het niet:
+
+```python
+def _cockpit_only(headers) -> bool:
+    """/api/cfg/* stelt orders in en schrijft secrets: alleen de cookie-sessie,
+    nooit de read-only widget-token. Zie D-135."""
+    return _authed(headers)
+```
+
+…en de drie `_api_authorized(self.path, self.headers)` in de `/api/cfg/`-takken daarmee
+vervangen. **De widget raakt `/api/cfg/*` niet** — gemeten: hij leest uitsluitend
+`/api/widget` (`MEX_Today.js` r. 17). Er gaat dus niets stuk.
+
+📌 **Dit is het patroon voor de achtste keer** — een mechanisme dat gesloten *leest* en open
+*is* (D-68, D-75, D-108, D-111, D-115, D-126, `enableDailyLossLimit`, `guardEval`). Alleen
+nu op auth, op het scherm dat orders instelt. Wie een comment schrijft die een
+veiligheidseigenschap beweert, moet die eigenschap in dezelfde commit meten.
+
+**Acceptatie:** widget-token op `/api/cfg/config` geeft **401**, cookie-sessie geeft **200**.
+Dan gaan D-83/D-84 naar done.
+
+### De drie reviews
+
+**D-119** ✅ akkoord. Ik heb de classifier **uitgevoerd**, niet gelezen: 14 echte
+auditstrings uit `Program.cs` erin, 14 correct eruit — inclusief de D-116-fallback
+`sent 200 … · fallback via text (card rate-limited)` → **sent**. Prefix wint van substring,
+met de reden in de docstring. 📌 Niet-blokkerend: `card queued` telt als sent, dus een
+stilgevallen renderer laat `sent` oplopen zonder bericht in Discord — zelfde blinde vlek,
+één laag verderop. Eigen bucket zodra het scherm er is.
+
+**D-129** ✅ akkoord, en de poort die jullie er zelf bij bouwden is het betere deel.
+Nagemeten: geen cijfer meer in `public-stats.json`, geen `Funded`/`Evaluatie`-status, geen
+*Live 36 mnd*; de enige treffers op die termen in `web/**` zijn de uitleg waarom ze eruit
+zijn. `check_public_stats.py` groen en in `make check` (r. 41). 🔴 **Restregel:** de poort
+bijt **alleen bij `sample: true`** — regel 1 schakelt uit op het moment dat er echt
+gepubliceerd wordt, dus hij is sterk in de lege stand en zwak in de gevulde. **Regel 3
+nodig die bij `sample: false` bijt**, met Ferry's regel erin.
+
+**D-83/D-84** ✅ bouw en plaatsing akkoord — `Settings` staat tussen `Playbook` en `Live`
+(r. 804–812), exact D-120. De server-side proxy is de juiste keuze en faalt zacht met uitleg
+(502/503) in plaats van een stille leegte. 🔴 Geblokkeerd door D-135, status terug naar `wip`.
+
+### Wie pakt wat — deze ronde
+
+| Rol | Item | Waarom nu |
+|---|---|---|
+| **Middleware App** | **D-135** (P0, drie regels) → dan **D-116 uitrollen** → **D-132** | D-135 blokkeert de hele fase-2-afronding; D-116 staat in de repo en nog niet op de VPS, dus de 103 weggegooide berichten van 02-10 kunnen nog steeds |
+| **Web** | **D-129 regel 3** (`sample: false`-poort met Ferry's aantallen/bedragen-regel) | Zelfde bestand, zelfde dag werk; hiermee is D-131 helemaal klaar |
+| **Backtest Setup** | **D-130** — `config.py:ladder_cap()` hardgecodeerd Apex-50K + stille Apex-fallback in `funded.py` | Het Python-spiegelbeeld van D-126, en D-104 heeft niet-Apex-50K net gedeblokkeerd: zonder dit klopt de noordster-maat niet meer |
+| **Pine Dev** | **D-133** — `f_contractSpec` 0/13 | Jullie hielden hem terecht buiten de payout-ronde; nu is hij het laatste gegenereerde-maar-ongebruikte geval. Daarna: de `pmtBlock`-journaalregel die jullie aanboden — **zodra D-116 is uitgerold**, niet eerder |
+| **Analyses & Data** | ⛔ **niets claimen tot de merge van D-134 door is** — en dan het fleet-startschema tegen D-96/D-97 | Zes weken werk staat op `origin/claude/analyses-data-chat-org-3tii8j` en is nooit op het bord gekomen. 🔑 **De regel zoals hij bedoeld is:** jullie pushen op jullie eigen branch, maar **de werkbranch is waar het bord leest** — meld elke oplevering in `docs/inbox.md` op de werkbranch, anders bestaat hij voor niemand |
+| **MCP trader-dev** | **D-136 is je antwoord** — drijvende rol, register `M-`, geen eigen map. Deze ronde: **verifieer D-135 en D-129 regel 3 na oplevering** | Precies waar de rol voor is: over mappen heen meten wat geen enkele eigenaar alleen ziet. Jullie ronde van 06-10 raakte drie mappen in één keer |
+
+### Op Ferry
+
+1. 🔴 **D-127** — chart 018 staat op `accountPhase = "Developer"`, en dat zet op een **live
+   funded account alle accountbeschermingen uit**, niet alleen de payout-poort. Terug naar
+   `Funded` + het payout-nummer omhoog. D-125 is gefixt, dus de deadlock die de dev-modus
+   nodig maakte bestaat niet meer.
+2. 🔴 **D-134** — de merge. Mij geweigerd door de permissie-classifier; jij voert hem uit of
+   geeft me de rechten.
+3. **D-135-meting** — `curl -s -o /dev/null -w '%{http_code}\n'
+   "https://app.mex-traders.com/api/cfg/config?token=<widget-token>"`. **404** = de
+   draaiende viewer is ouder dan `0531193`, gat nog niet live · **401** = dicht ·
+   **200/502/503** = de token wordt geaccepteerd, gat staat open. Bij alles behalve 401/404:
+   widget-token roteren ná de fix.
+4. **D-128** — het structurele deploy-gat: de live bronboom onder `/root/mex-journal` staat
+   niet onder versiebeheer met een remote. Zolang dat zo is is elke uitrol een handmatige
+   kopie, en D-116 wacht er nu op.
+
+### 🔑 Nog één ding over D-135, en het hoort hier te staan
+
+**De instructie om `_api_authorized()` te gebruiken was van mij.** Letterlijk, in
+`docs/startprompts-paste.md` r. 28 en `docs/startprompts.md` r. 91: *"Auth erft van
+`_api_authorized()`."* Middleware App heeft precies gedaan wat er stond. Ik heb die ene
+regel geschreven zonder te kijken wát die functie doorlaat — terwijl ik in dezelfde
+startprompt wél een harde eis stelde aan de proxy, omdat *"dit scherm stuurt orders"*.
+
+Beide bestanden zijn gecorrigeerd. En de regel die eruit volgt: **een startprompt die een
+auth-mechanisme bij naam noemt, moet zeggen wát dat mechanisme toelaat — niet alleen hoe
+het heet.** Een naam is geen eigenschap.

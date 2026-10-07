@@ -25,7 +25,9 @@ Claim in deze volgorde, één item per keer, status wip + owner + losse commit:
    draagt kind/account/transport/result al, en docs/runtime-snapshot.md wordt nu
    elk uur geschreven. Geen nieuwe telemetrie, geen wijziging aan het live pad.
 2. D-83/D-84 — de settings-tab in middleware/app/viewer.py, tussen Playbook en
-   Live (r. 702-716). Auth erft van _api_authorized(). HARDE EIS: proxy
+   Live (r. 702-716). HARDE AUTH-EIS (D-135): /api/cfg/* mag ALLEEN achter _authed() -- de
+   cookie-sessie. NIET achter _api_authorized(): die laat ook de read-only
+   widget-token door en dit scherm schrijft secrets. HARDE EIS: proxy
    server-side naar localhost:5000 en voeg de Bearer daar toe — CORS blijft
    dicht, de token komt nooit in de browser. Dit scherm stuurt orders.
 3. D-116 — behandel als veiligheidsitem. Drie dingen in één fix: doorvallen naar

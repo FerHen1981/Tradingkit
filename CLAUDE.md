@@ -205,8 +205,11 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
 - **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
   `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
-  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. **Kijk daar
-  eerst** voor je iemand vraagt iets op de VPS na te kijken. Is de tabel oud, dan draait de
-  timer niet — en dat is zelf ook informatie.
+  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. 🔴 **Maar dat bestand staat er sinds 07-10 nog steeds niet, op geen enkele branch (D-137):**
+  de timer draait inmiddels wel, maar de commit-poort in het script is `git diff --quiet` op een
+  **niet-getrackt** bestand en die kan per constructie nooit opengaan. Tot D-137 gefixt is bestaat
+  de snapshot **alleen op de VPS** — zichtbaar in het fan-out-venster van de cockpit, niet in de
+  repo. Vraag hem daar op, of vraag Ferry. De oude heuristiek *"is de tabel oud, dan draait de
+  timer niet"* geldt pas weer als het bestand daadwerkelijk aankomt.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

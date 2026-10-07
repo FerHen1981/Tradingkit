@@ -221,6 +221,26 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-91 — PA018: de cap kan de consistency niet versnellen, de qty wel (7 okt 2026)
+
+Apex-dashboard 7/10: balans 54.862, consistency 51,5% = best-day **$2.504** ÷ winst 4.862; drempel = 2.504 / 0,30 =
+**$8.348 winst (58.348)**. Dag 24 stond op 57.837 (32%), daarna −3.800 in 14 dagen waaronder −2.772 op 1 okt (qty 4). De cap
+verlaagt de teller niet; hij voorkomt alleen een nieuwe hogere best-day — en elke cap ≤ $2.400 totaal/dag doet dat
+(0 lat-verhogingen in alle varianten). De snelheid zit in de qty. Sim op de Pine-jaarstromen vanaf de stand van 018
+(gelockt, ruimte 4.762, winst 4.862, best 2.504), kans drempel binnen 20 / 40 / 60 d en breach:
+
+| set (totaal/dag) | TP 85 (live) | TP 120 |
+|---|---|---|
+| qty 2 · 300/100/600 | 22 / 44 / 59 · breach 4% · mediaan 25 d | 42 / 79 / 84 · 12% · 21 d |
+| **qty 3 · 750/300/1.500** | **41 / 62 / 78 · 5–7% · 19 d** | 64 / 80 / 80 · 18% · 12 d |
+| qty 3 · 450/150/900 | 43 / 65 / 78 · 9–13% · 19 d | **65 / 82 / 84 · 14% · 13 d** |
+| qty 4 · 600/200/1.200 | 58 / 75 / 79 · 18–21% · 11 d | 76 / 83 / 84 · 13% · 9 d |
+| qty 4 · 1.000/400/2.400 | 55 / 73 / 80 · 16–17% · 11 d | 70 / 74 / 74 · 26% · 8 d |
+
+**Advies 018:** qty 3; op TP 85 met 750/300/1.500 (cap mag tot 2.400, maakt niets uit), op TP 120 met 450/150/900. Qty 4
+halveert de tijd maar verdrievoudigt de breach-kans op TP 85 — en dat was precies de dag van 1 okt. Eén dag boven $2.504
+verhoogt de lat opnieuw; de cap moet daar dus onder blijven.
+
 ## A-89 — Vroeg stoppen is goed; de winst zit in strakker trailen ná 04:00 ET (7 okt 2026)
 
 **Vraag Ferry 7/10:** accounts stoppen al vóór 04:00 ET op +135/ct — optimaal, of valt er later op de dag nog iets te

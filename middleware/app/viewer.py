@@ -231,6 +231,20 @@ def _api_authorized(path: str, headers) -> bool:
     return bool(tok) and hmac.compare_digest(tok, _API_TOKEN)
 
 
+def _cockpit_only(headers) -> bool:
+    """D-135 · Alleen de ingelogde eigenaar (cookie-sessie) — NOOIT de read-only
+    widget-token.
+
+    `_api_authorized()` laat ook `VIEWER_API_TOKEN` door, en die token is met opzet
+    zwak: hij reist in de querystring van elke widget-verversing en staat in het
+    Scriptable-script op de telefoon. `/api/cfg/*` schrijft config en secrets op een
+    service die met `dryRun:false` draait, dus die twee mogen niet dezelfde poort
+    delen. De proxy voegt server-side de sterke Bearer toe, waardoor de receiver het
+    verschil niet meer kan zien — de poort moet hier dicht, niet daar.
+    """
+    return _authed(headers)
+
+
 # -- D-82/D-85 proxy -----------------------------------------------------------
 
 # D-83/D-84 · De settings-tab draait in de COCKPIT, de config-API in de
@@ -335,9 +349,12 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.dumps({"error": str(exc)}).encode()
             return self._send(200, body, "application/json", {"Cache-Control": "no-store"})
         # D-83/D-84 · Config/secrets proxy. Alleen via de cockpit-sessie —
-        # de BEARER zit server-side en komt nooit in de browser.
+        # de BEARER zit server-side en komt nooit in de browser. Die belofte stond
+        # hier vanaf dag één maar werd pas waargemaakt in D-135: dit stond achter
+        # `_api_authorized()`, die ook de widget-token doorlaat.
         if path.startswith("/api/cfg/"):
-            if not _api_authorized(self.path, self.headers):
+            # D-135 · cookie-sessie only, niet de read-only widget-token.
+            if not _cockpit_only(self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
             # Pak het pad op de receiver uit: /api/cfg/config → /api/config
             upstream = "/api/" + path[len("/api/cfg/"):]
@@ -442,7 +459,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_upload()
         # D-83/D-84 · POST-proxy (validate = de enige POST die het settings-tab vandaag doet)
         if path.startswith("/api/cfg/"):
-            if not _api_authorized(self.path, self.headers):
+            # D-135 · cookie-sessie only, niet de read-only widget-token.
+            if not _cockpit_only(self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
             upstream = "/api/" + path[len("/api/cfg/"):]
             length = int(self.headers.get("Content-Length", 0) or 0)
@@ -455,7 +473,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         # D-83/D-84 · PUT-proxy voor /api/config en /api/secrets/{name}
         if path.startswith("/api/cfg/"):
-            if not _api_authorized(self.path, self.headers):
+            # D-135 · cookie-sessie only, niet de read-only widget-token.
+            if not _cockpit_only(self.headers):
                 return self._send(401, b'{"error":"auth"}', "application/json")
             upstream = "/api/" + path[len("/api/cfg/"):]
             length = int(self.headers.get("Content-Length", 0) or 0)

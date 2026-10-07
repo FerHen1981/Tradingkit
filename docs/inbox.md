@@ -7537,3 +7537,59 @@ startprompt wél een harde eis stelde aan de proxy, omdat *"dit scherm stuurt or
 Beide bestanden zijn gecorrigeerd. En de regel die eruit volgt: **een startprompt die een
 auth-mechanisme bij naam noemt, moet zeggen wát dat mechanisme toelaat — niet alleen hoe
 het heet.** Een naam is geen eigenschap.
+
+---
+
+## 07-10 · Scrum Master → Middleware App — ik heb in jullie map gezeten: D-135, drie regels
+
+**Melding, geen fait accompli.** Ferry vroeg vanmiddag de tab live te zetten (*"zet dan nu
+eindelijk een keer de fleet tab live in de app, akkoord?"*). De settings- en de fleet-tab
+zitten in **hetzelfde bestand**, dus één uitrol zet ze samen live — en `viewer.py` draait op
+een publiek bereikbare host. D-135 kon dus niet mee. Ik heb hem gefixt omdat de uitrol er
+op wachtte, niet omdat eigenaarschap me niet uitmaakt. **Review welkom en graag.**
+
+### Wat ik veranderde — `middleware/app/viewer.py`
+
+```python
+def _cockpit_only(headers) -> bool:
+    """D-135 · Alleen de ingelogde eigenaar (cookie-sessie) — NOOIT de read-only
+    widget-token. ..."""
+    return _authed(headers)
+```
+
+En de drie `/api/cfg/`-takken erop gezet: r. **357** (GET), **463** (POST), **477** (PUT).
+De comment die de belofte al deed (*"Alleen via de cockpit-sessie"*) draagt nu ook de reden
+waarom hij eerder niet waar was.
+
+### Hoe ik het bewees — gedragsmatig, niet door te compileren
+
+Cockpit lokaal gestart met een testwachtwoord en een nep-widget-token:
+
+| aanroep | met widget-token | met cookie-sessie |
+|---|---|---|
+| `GET /api/cfg/config` | **401** | 502 |
+| `PUT /api/cfg/config` | **401** | 502 |
+| `GET /api/cfg/secrets` | **401** | — |
+| `PUT /api/cfg/secrets/X` | **401** | 502 |
+| `POST /api/cfg/config/validate` | **401** | 502 |
+| `GET /api/state` | **200** | — |
+| `GET /api/cfg/config` (geen auth) | **401** | — |
+
+De **502** is het bewijs dat de auth gepasseerd is: ik richtte `MEX_CONFIG_API_URL` bewust op
+poort 1, dus alleen de upstream was onbereikbaar. En de **200 op `/api/state`** is het bewijs
+dat de widget blijft werken — hij raakt `/api/cfg/*` niet, gemeten: `MEX_Today.js` r. 17
+leest uitsluitend `/api/widget`.
+
+### Wat ik NIET heb aangeraakt
+
+Geen enkele andere tak, geen `_api_authorized()` zelf (die blijft wat hij is voor
+`/api/state`, `/api/command` en `/api/fanout` — dat zijn leesroutes en daar hoort de
+widget-token wél), en niets in de receiver. Het live executiepad is ongemoeid: `viewer.py`
+is de cockpit, niet `mex-receiver`.
+
+### Wat nog van jullie komt
+
+- **Review hierop.** Vind je een betere plek voor de poort, pak hem; ik claim deze fix niet.
+- **De `queued`-bucket uit mijn D-119-review** — `card queued` telt nu als `sent`, dus een
+  stilgevallen renderer laat het getal oplopen zonder bericht in Discord.
+- **D-116 uitrollen.** Die staat nog in de repo en niet op de VPS.

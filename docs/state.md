@@ -177,6 +177,41 @@ diversificatie (tweede instrument) staat geparkeerd (bord, D-54/38/39).
 **Gevraagd aan Ferry:** Pine-exports op het jaar, qty 1, TP 85, trail uit: 150/50/300 en
 200/75/400; daarna besluit over een gemengde vloot (bijv. gelockte accounts 150/50/300 × qty).
 
+## A-90 — Schalen op drawdown-ruimte, niet op saldo: wat de ruimte wél en niet kan (7 okt 2026)
+
+**Vraag Ferry 7/10:** de fase/qty-logica hangt aan het saldo; moet dat niet aan de ruimte tot de auto-liq hangen, en kan er
+een stap tussen vers ($2.500) en de lock ($52.600)? **Mechanisch:** vóór de lock trailt de floor de piek, dus de ruimte is
+op elke nieuwe piek precies $2.500 en daartussen minder — hij groeit nooit. Een "tussenstap op ruimte" bestaat vóór de lock
+dus alleen in de vorm *"groter sizen zodra je (bijna) op de piek staat"*; ná de lock is de ruimte = saldo − 50.100 en groeit
+hij wél, en daar is het schaalmodel al ruimte-gebaseerd (A-84: 2 bij ≥ 3.000, 3 bij ≥ 4.500).
+
+**Simulatie** (Pine-jaarstromen, verse 50K, rolling starts, qty per dag gekozen uit ruimte/lock/winst; vers 50K
+hit60/br60 · hit90/br90 · mediaan dagen #1 · P(lock ≤ 90 d) / mediaan dagen tot lock):
+
+| regel | TP 85 (live) | TP 120 |
+|---|---|---|
+| A · 1 tot lock; na lock 2 bij ≥ 3k, 3 bij ≥ 4,5k (huidig) | 24,6 / 5,7 · 37,7 / 5,7 · 49 d · 58% / 41 d | 48,0 / 16,3 · 65,9 / 16,3 · 40 d · 79% / 29 d |
+| C · 2 altijd (referentie) | 30,3 / **64,8** · 19 d | 42,3 / 57,7 · 15 d |
+| D · vers 2 bij ruimte ≥ 2.000 | 27,9 / 35,2 · 26 d · 48% / 16 d | 55,3 / 24,4 · 33 d · 75% / 20 d |
+| E · vers 2 alleen bij ruimte ≥ 2.400 (op de piek) | 26,2 / 13,1 · 41 d · 60% / 34 d | 52,8 / 18,7 · 37 d · 76% / 24 d |
+| F · vers 2 zodra winst ≥ 1.500 én ruimte ≥ 2.000 (laatste stuk naar de lock) | 27,0 / 9,8 · 39,3 / 13,1 · 47 d · 55% / 38 d | 54,5 / 18,7 · 67,5 / 18,7 · 36 d · 80% / 27 d |
+| H · na lock al 2 bij ≥ 2.600, 3 bij ≥ 4k | 27,0 / **25,4** · 47 d | 52,0 / **13,8** · 42 d · 80% / 29 d |
+
+**Lezing.** (1) Ferry's intuïtie klopt: de ruimte is de maat, niet het saldo — en het model van A-84 rekent al zo; alleen
+het fase-etiket (A < 1.300 · B · C gelockt) is een ruimte-klasse, geen saldo-klasse. (2) **Vóór de lock is er geen veilige
+tussenstap.** Elke vorm van qty 2 vóór de lock verdubbelt minstens de breach-kans (6 → 10–35%) voor 1–10 dagen winst op de
+mediaan; de minst slechte is F (qty 2 pas in het laatste stuk, winst ≥ 1.500 én op/bij de piek): +1,6 pt hit, +4–7 pt
+breach. Onder "continuïteit eerst" niet aan te raden; wie de snelheid wil, neemt F en accepteert het. (3) **Ná de lock
+hangt de juiste instapdrempel voor qty 2 af van de TP:** op TP 85 is 2.600 te vroeg (breach 6 → 25%), 3.000 is de grens;
+op TP 120 mag het direct na de lock (16 → 14% breach, hit +4 pt). (4) Na een payout zakt de ruimte met het bedrag →
+direct afschalen (doctrine blijft). (5) De ruimte-klasse A (< 1.300, één SL-reeks van het einde) blijft qty 1 met DLL;
+de DLL helpt op TP 85 (breach 35 → 21% in D vs G) en schaadt op TP 120 — consistent met A-83: alleen waar één dag kan doden.
+
+**Stand 7 okt op de ruimte-regel (A, live TP 85):** 018 (gelockt, 4.762) → qty 3 · 013 (gelockt, 2.559) en 022 (gelockt,
+2.485) → 1, qty 2 pas bij 53.100 · 034/035 (vers, 2.395) → 1 · 026/027/030/031/032 (vers, 1.565–1.765) → 1 · 028/029/033
+(799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
+279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
+
 ## A-89 — Vroeg stoppen is goed; de winst zit in strakker trailen ná 04:00 ET (7 okt 2026)
 
 **Vraag Ferry 7/10:** accounts stoppen al vóór 04:00 ET op +135/ct — optimaal, of valt er later op de dag nog iets te

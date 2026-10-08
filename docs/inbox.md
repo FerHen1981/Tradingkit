@@ -75,6 +75,47 @@ publicatietaak draait nog niet (`mex-public-stats.timer` INACTIVE, 06-10). Het b
 dag dat er echt gepubliceerd wordt — en dan op het verkeerde moment.
 
 ---
+### M-verificatie (vooraf): de payout-cap staat op VIER plekken en `propfirms.json` is niet echt bijgewerkt
+**M-rol (MCP trader-dev) → Scrum Master + Pine Dev + Backtest Setup + Middleware App — hangt aan D-148/D-130/D-142** · 2026-10-08 · status: OPEN
+
+Probleem: opdracht was "verifieer ná oplevering of Pine én Python dezelfde cap doen". Vóór
+  oplevering al gemeten, want de premisse klopt niet op twee punten.
+  (1) De oude ladder `[1500,1500,2000,2500,2500,3000]` + fantoom-cap `3000` (trap ≥6) staat op
+  VIER plekken, niet twee:
+    - Pine `f_ladderCap`-array — 13 actieve scripts (bv. BANDIDO r.884, LEON r.883).
+    - `backtest/config.py` `LADDER_CAPS` + `ladder_cap()` (r.336-340) — `engine.py` leest dít
+      (r.24/646), géén eigen kopie ✅.
+    - `middleware/app/payout_rules.py` `APEX_LADDER_50K` (r.33) + `ladder_caps()`.
+    - `data/propfirms.json` `payout_ladder`.
+  D-148 noemt alleen Pine + config.py; **`payout_rules.py` (middleware) wordt niet genoemd.**
+  (2) `propfirms.json` is NIET gecorrigeerd op het gestructureerde veld — alleen de prose-notes:
+    - `apex_50k_eod_pa`      `payout_ladder = [1500,1500,2000,2500,2500,3000]`  ← oud
+    - `apex_50k_intraday_pa` `payout_ladder = [1500,1500,2000,2500,2500,3000]`  ← oud
+    - `apex_50k_legacy_pa`   `payout_ladder = null`  (alleen `notes` is 08-10 gecorrigeerd)
+  `payout_rules.py` doet `caps = prog.get("payout_ladder") or ladder_caps(size)`, dus voor
+  ALLE drie de Apex-PA's levert de middleware vandaag de OUDE cap (array of hardcoded fallback).
+  Nergens staat een machine-leesbare vorm van de nieuwe regel (vast $2.000 voor payout 1-5,
+  GEEN cap vanaf payout 6); een 6-element-lijst kan "geen cap vanaf 6" niet uitdrukken.
+
+Waarom cross-chat: Pine Dev (release 2), Backtest Setup (config.py / D-130) en Middleware App
+  (payout_rules.py) fixen elk hun eigen kopie. Zonder één afgesproken datavorm "doen ze NIET
+  hetzelfde" — precies wat geverifieerd moet worden — en de bron die ze zouden moeten volgen
+  draagt zelf nog de oude ladder.
+
+Betrokken bestanden: `pine/*_v1_0_0.pine` (f_ladderCap-array), `backtest/config.py` (LADDER_CAPS),
+  `middleware/app/payout_rules.py` (APEX_LADDER_50K), `data/propfirms.json`
+  (payout_ladder voor apex_50k_eod_pa / intraday_pa / legacy_pa).
+
+Benodigde beslissing (vóór de drie releases): (a) wordt `propfirms.json` de enige bron voor de
+  cap, en in welke vorm (bv. vaste cap per grootte + `uncapped_from_rung: 6`)? (b) lezen Pine en
+  config.py daar dan uit, of blijven ze hardcoded maar getoetst tegen de bron?
+Nodig van: Scrum Master (datavorm + bronaanwijzing), daarna Pine Dev + Backtest Setup +
+  Middleware App (uitvoering).
+
+Live-impact: NONE (dit is een meting; de fix zelf raakt wél live payout-gedrag — D-148 "LIVE GELD").
+Acceptatiecriteria (voor mijn ná-oplevering-verificatie): voor een 50k-PA geven alle vier plekken
+  identiek: payout 1-5 cap = $2.000, payout ≥6 = geen cap; en payout_rules.py/engine lezen dat uit
+  `propfirms.json`, niet uit een hardcoded lijst.
 
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 

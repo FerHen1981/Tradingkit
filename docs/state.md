@@ -247,23 +247,42 @@ Vers 50K, kans #1 ≤ 60 d / breach ≤ 60 d · gelockt: trede ≤ 40 d / breach
 | Asia alleen · geen | **9,0 / 0,7** | **22,3 / 0,0** | 42,5/0 · 64,5/0 | 13,0 / 0,0 | 32,2 / 0,0 |
 | Asia + London + Globex 18 · geen | 8,7 / 15,3 | 21,5 / 22,3 | 55,9/3,3 · 72,7/5,0 | 8,1 / 7,8 | 23,1 / 5,8 |
 
-**Lezing.** (1) **Op de breach-kant zijn venster en stop substituten:** Asia-alleen haalt zonder stop al 0–0,7% breach,
-en de stops brengen *All sessions* naar hetzelfde punt. Beide snijden dezelfde dagen weg — de verliesreeksen in het
-US-blok. (2) **Op de hit-kant verschillen ze per accounttoestand.** Vers: Asia-alleen (9,0/0,7 · 22,3/0) en Asia+London
-met 5-verliezen-+-3-winsten (7,8/0 · 21,5/0) zijn de beste twee, gelijk aan *All + 5 verliezen* op hit maar zonder de
-restbreach. Gelockt: *All sessions + 5 verl. + 3 winst* wint ruim (66,7/0 · 93,4/0); de Asia-vensters doen te weinig
-trades per dag (2,8 tegen 10) om een trede in 40 dagen te halen (42–54). Dus **vers smal, gelockt breed** — niet één
-venster voor de vloot. (3) **Stapelen op het smalle venster kost hit:** 3-winsten-stop op Asia-alleen zakt van 9,0 naar
-7,4 en op het jaar van 22,3 naar 19,0; alleen de 5-verliezen-stop is daar neutraal. (4) **TP 120 wint niets bij de
-vensters:** *All + 3 winst óf 1e verlies na +150* blijft de beste set (20,3/7,2 · 62,0/5,8); Asia-alleen haalt 0% breach
-maar de helft van de hit. (5) **Liquidity Core is in alle 16 combinaties de slechtste:** nooit een trede ≤ 60 d op vers,
-9–50% breach, de enige set met negatief netto op het jaar. Dat bevestigt D-152 kwalitatief. (6) Uur 18 (Globex-open)
-toevoegen aan Asia+London kost alleen: breach 14,5 → 15,3, slechtste dag −1.093 → −1.213, geen hit erbij.
+**Eerste lezing van de gepoolde tabel** was "vers smal (Asia), gelockt breed (All + stops)". **Die lezing is
+ingetrokken** door de jaarvouwen hieronder (D-155-toets, dezelfde runs in drie jaren; vers hit60/br60 · gelockt
+hit40/br40 · netto/contract; bron `res/sessions_stops_yearly.csv`, 288 rijen):
 
-**Aanbeveling (onder de gebruikelijke voorbehouden — engine, geen Pine; 48 combinaties getest, dus selectie-ruis; alle
-cijfers binnen het validatievenster):** op TP 85 voor verse accounts **Asia + London met de 5-verliezen-stop**, of Asia-
-alleen als de stops er nog niet zijn; voor gelockte accounts **All sessions + 5 verl. + 3 winst** (A-92/A-94 ongewijzigd).
-Welke vensters het script als `Market regime` kent, bepaalt of dit een input is of een Pine-wijziging — dat weet Pine Dev.
+| set | j1 23/24 | j2 24/25 | j3 25/26 |
+|---|---|---|---|
+| TP 85 · All · geen (live) | 0/0 · 18,9/0 · −59 | 6,6/0 · 73,0/0 · +9.869 | 18,2/24,0 · 59,5/5,8 · +1.594 |
+| TP 85 · All · +5 verliezen | 0/0 · 16,4/0 · −143 | 6,6/0 · 73,0/0 · +9.654 | **20,7/5,8 · 75,2/4,1 · +5.548** |
+| TP 85 · All · +5 verl. + 3 winst | 0/0 · 18,9/0 · −162 | 0,8/0 · 68,9/0 · +8.061 | 5,8/0 · **93,4/0** · +10.039 |
+| TP 85 · Asia + London · +5 verl. + 3 winst | 0/0 · 21,4/0 · −250 | **0/0 · 60,2/0** · +5.150 | 21,5/0 · 73,6/0 · +7.858 |
+| TP 85 · Asia alleen · geen | 0/0 · 21,5/0 · +915 | **0/0 · 16,3/0** · +544 | 22,3/0 · 64,5/0 · +7.282 |
+| TP 85 · Liquidity Core · geen | 0/0 · 12,6/0 · −1.543 | 0/0 · 53,7/0 · +6.236 | 0/43,8 · 44,6/9,9 · −2.948 |
+| TP 120 · All · geen | 0/0 · 25,4/0 · +919 | 0/0 · 69,7/0 · +5.525 | 52,9/14,9 · 80,2/6,6 · +11.288 |
+| TP 120 · All · 3 winst óf 1e verlies na +150 | 0/0 · 13,1/0 · −810 | 0/0 · 66,4/0 · +4.578 | 62,0/5,8 · 87,6/0 · +15.064 |
+| TP 120 · Asia alleen · geen | 0/0 · 3,1/0 · +302 | 0/0 · 32,7/0 · +1.373 | 32,2/0 · 77,7/0 · +10.763 |
+
+**Lezing.** (1) **Het venstervoordeel bestaat alleen in jaar 3.** In jaar 1 en 2 fundeert geen enkel Asia-venster een
+vers account, en gelockt halen ze in jaar 2 16–60% tegen 73% voor All sessions. De gepoolde "vers smal"-conclusie is het
+parabolische goudjaar — precies D-155. **Geen vensterknop promoveren.** (2) **De dagstops zijn wél robuust:** *All +
+5 verliezen* is in geen enkel jaar slechter dan live op geen van beide meetlatten (jaar 2 identiek; jaar 3 breach
+24,0 → 5,8 bij hogere hit, netto +1.594 → +5.548); *All + 5 verl. + 3 winst* is voor gelockte accounts in jaar 2 en 3 het
+beste (68,9/0 · 93,4/0), jaar 1 gelijk. TP 120: "3 winst óf 1e verlies na +150" wint in jaar 3 (87,6/0 gelockt) met een
+kleine prijs in jaar 1–2. Het Pine-verzoek (D-154) blijft dus zoals het staat, op All sessions. (3) **Op de breach-kant
+zijn venster en stop substituten** (Asia-alleen staat zonder stop op 0; de stops brengen All naar hetzelfde punt), maar
+alleen de stop houdt de hit-kant in elk jaar vast. (4) **Jaar 1 is voor élke set dood:** geen verse payout in 60 dagen,
+gelockt 8–25%. De verse-accounteconomie van El Tesoro rust op jaar 2–3 — hoort bij elke projectie gezegd. (5) Liquidity
+Core: slechtste gepoold en in jaar 3 (enige set met negatief netto), middenmoot in jaar 2, in jaar 1 op TP 120 de enige
+positieve set. Geen reden hem te verkiezen; wel een reden D-152 niet als "LC is kapot" te lezen. (6) Uur 18 erbij op
+Asia+London kost alleen (breach +0,8 pt, slechtste dag −1.093 → −1.213).
+
+**Aanbeveling (engine, geen Pine; 48 combinaties, selectie-ruis; alles binnen het validatievenster):** vensters
+ongewijzigd (All sessions); de stops uit A-92/A-94 als enige hefboom. **Pine Dev heeft D-154 inmiddels gebouwd**
+(werkbranch `712f591`, dertien scripts, groep Day-exit: `Max verliezen op rij per dag`, `Max winsten op rij per dag`,
+`Eerste verlies boven +X sluit de dag ($)`, `Giveback-2 ($)` + `vanaf (uur ET)`, alle default uit). De acceptatietest uit
+de toelichting (jaarexport met 5 verliezen tegen zonder, TP 85 / 250/100/500 / qty 1) kan nu gedraaid worden; wij leggen
+de engine-run ernaast zodra de export er is. Nieuwe scriptversie = OOS-klok opnieuw op nul (D-18/D-71).
 
 **Let op, tegenspraak met D-152 in absolute cijfers:** onze 3-jaarsrun van *All sessions* op de export-config (c92d9, FVG
 8–23, confirm 4, qty 1, guards 250/100/500) is **netto +$11.404 per contract bij 56,8% winstdagen** (pessimistische

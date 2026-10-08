@@ -99,6 +99,14 @@ def tf_minutes(label: str) -> int:
     return TIMEFRAMES[key]
 
 
+# The pre-D-148 Apex-50K payout ladder. Kept as a DOCUMENTED default for Apex
+# programs whose exact payout shape is an open registry gap (D-144: the normal
+# PAs' structure is unconfirmed). It is Apex's own ladder, so using it for an Apex
+# sub-plan is a labeled assumption, not the cross-firm fabrication D-130 removed —
+# the hard refusal still fires for a rule set that carries no shape at all.
+DEFAULT_PAYOUT_LADDER = (1_500.0, 1_500.0, 2_000.0, 2_500.0, 2_500.0, 3_000.0)
+
+
 @dataclass(frozen=True)
 class Config:
     name: str
@@ -297,6 +305,22 @@ class Config:
     min_qual_day_usd: float = 50.0
     payout_buffer: float = 500.0
     use_wait_for_cap: bool = True
+    # Payout cap shape (D-130/D-148). The engine used to call a hardcoded Apex-50K
+    # `ladder_cap()` with no per-program path; now the cap is carried on the config
+    # and populated from data/propfirms.json for fleet configs (pipeline.fleet).
+    # Two shapes, because the registry carries both:
+    #   - `payout_ladder`: an increasing per-payout cap list (the pre-D-148 Apex
+    #     shape a few programs still carry in the registry).
+    #   - `payout_cap` + `payout_cap_uncapped_from`: a FIXED per-payout cap that
+    #     LAPSES — Apex legacy after the D-148 correction is $2,000, UNCAPPED from the
+    #     6th payout (`payout_cap_uncapped_from=6`). 0 never lapses. The field name
+    #     matches the registry key the Pine generator reads (no name drift).
+    # The default below is the pre-D-148 Apex-50K ladder, kept ONLY as the fallback
+    # for standalone research presets; registry-sourced configs override it, and the
+    # fleet metric itself is re-measured under D-148, not here.
+    payout_ladder: tuple = DEFAULT_PAYOUT_LADDER
+    payout_cap: float = 0.0
+    payout_cap_uncapped_from: int = 0
     # MAE guard (Apex Legacy 30% rule), PA only
     use_mae_guard: bool = False
     mae_base_pct: float = 30.0
@@ -331,13 +355,35 @@ class Config:
     def with_(self, **kw) -> "Config":
         return replace(self, **kw)
 
+    def payout_cap_for(self, n: int):
+        """Dollar cap for this account's n-th payout (1-based), or None if uncapped."""
+        return resolve_payout_cap(n, ladder=self.payout_ladder, cap=self.payout_cap,
+                                  uncapped_from=self.payout_cap_uncapped_from)
 
-# Ladder caps per payout number (1..6) for the Apex 50k plan.
-LADDER_CAPS = {1: 1500.0, 2: 1500.0, 3: 2000.0, 4: 2500.0, 5: 2500.0, 6: 3000.0}
 
+def resolve_payout_cap(n: int, *, ladder=(), cap: float = 0.0, uncapped_from: int = 0):
+    """The payout cap ($) for the n-th payout (1-based), or None when the payout is
+    UNCAPPED. Single source of the cap logic, shared by the engine overlay and the
+    funded sim (D-130/D-148).
 
-def ladder_cap(n: int) -> float:
-    return LADDER_CAPS.get(min(max(n, 1), 6), 3000.0)
+    - `ladder` (list): increasing per-payout caps; `ladder[min(n-1, len-1)]`.
+    - `cap` + `uncapped_from`: a fixed cap that LAPSES — no cap from payout
+      `uncapped_from` onward (Apex legacy after D-148: $2,000, uncapped from the 6th,
+      so `uncapped_from=6`). `uncapped_from=0` means the fixed cap never lapses.
+      The field name matches the registry key the Pine generator reads, so Pine and
+      Python resolve the same shape (no D-126/D-130-style name drift).
+
+    Raises ValueError when neither shape is supplied — that is exactly the silent
+    Apex-50K fallback D-130 removed, which produced a plausible but wrong number."""
+    if ladder:
+        return float(ladder[min(max(n, 1) - 1, len(ladder) - 1)])
+    if cap and cap > 0:
+        if uncapped_from and n >= uncapped_from:
+            return None
+        return float(cap)
+    raise ValueError(
+        f"no payout cap shape for payout #{n}: neither a payout_ladder nor a "
+        f"payout_cap was supplied (refusing the old silent Apex-50K fallback, D-130)")
 
 
 # ---------------------------------------------------------------------------

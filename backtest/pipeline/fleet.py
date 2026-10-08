@@ -13,7 +13,7 @@ quantity and the day-exit block.
 """
 from __future__ import annotations
 
-from ..config import Config, contract
+from ..config import Config, DEFAULT_PAYOUT_LADDER, contract
 
 # name -> (symbol, qty, fvg_min, fvg_max, cvd_n, stop, R, expiry, day_exit, act, give, cap,
 #          regime, firm_program, sunday)
@@ -50,6 +50,7 @@ def engine_config(name: str) -> Config:
     (sym, qty, gmin, gmax, cvdn, stop, r, expiry, dex, act, give, cap,
      regime, program, sunday) = _SPEC[name]
     acct_trail_dd, acct_dll, consistency_pct = _acct_rules(program, name)
+    payout_ladder, payout_cap, payout_cap_uncapped_from = _payout_cap_fields(program, name)
     return Config(
         name=name,
         contract=contract(sym),
@@ -84,6 +85,9 @@ def engine_config(name: str) -> Config:
         # every DLL exit into a full stop-out. Uniform across all nine.
         acct_trail_dd=acct_trail_dd, acct_dll=acct_dll, consistency_pct=consistency_pct,
         min_payout=500.0, payout_buffer=500.0,
+        # payout cap shape from the registry, not the hardcoded ladder (D-130)
+        payout_ladder=payout_ladder, payout_cap=payout_cap,
+        payout_cap_uncapped_from=payout_cap_uncapped_from,
         use_wait_for_cap=True, use_mae_guard=False,
         # account model — the scripts run with "Use firm preset" ON, so the
         # drawdown model comes from the firm program, NOT from the loose input
@@ -146,6 +150,33 @@ def _acct_rules(program: str, name: str) -> tuple[float, float, float]:
             f"registry — a funded mirror needs every account rule, and there is no "
             f"safe fallback for a payout calculation")
     return float(p.drawdown), float(p.max_daily_loss), float(p.consistency_pct)
+
+
+def _payout_cap_fields(program: str, name: str) -> tuple[tuple, float, int]:
+    """(payout_ladder, payout_cap, payout_cap_until) for a fleet engine, read from
+    the registry funded block — the per-program path D-130 added to replace the
+    hardcoded Apex-50K `ladder_cap()`. Where the registry carries a shape it is
+    used verbatim; the whole fleet is Apex, so a program whose payout shape is an
+    open registry gap (D-144: the normal PAs are nulled pending Ferry) falls back
+    to Apex's own documented ladder (DEFAULT_PAYOUT_LADDER) rather than the engine
+    silently guessing one — a labeled Apex-for-Apex default, not the cross-firm
+    fabrication D-130 removed (that refusal lives in the funded sim's per-firm path).
+    A program that is not in the registry at all is still a hard error."""
+    from ..firms import raw_programs
+    fu = None
+    for prog in raw_programs():
+        if prog.get("key") == program:
+            fu = prog.get("funded") or {}
+            break
+    if fu is None:
+        raise ValueError(
+            f"{name}: firm program {program!r} is not in data/propfirms.json")
+    ladder, cap = fu.get("payout_ladder"), fu.get("payout_cap")
+    if ladder:
+        return tuple(float(x) for x in ladder), 0.0, 0
+    if cap:
+        return (), float(cap), int(fu.get("payout_cap_uncapped_from") or 0)
+    return DEFAULT_PAYOUT_LADDER, 0.0, 0
 
 
 def trades_sunday(name: str) -> bool:

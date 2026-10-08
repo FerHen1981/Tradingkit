@@ -213,15 +213,11 @@
         "first_payout_wait_days": null,
         "min_payout": 500,
         "payout_cap": null,
-        "payout_ladder": [
-          1500,
-          1500,
-          2000,
-          2500,
-          2500,
-          3000
-        ],
-        "in_eval_profit_share": null
+        "payout_ladder": null,
+        "in_eval_profit_share": null,
+        "payout_terms_verified": false,
+        "payout_terms_note": "Huidige (niet-legacy) PA: payout-voorwaarden NIET owner-confirmed. Apex' legacy-pagina dekt ze niet. Derdepartij-bronnen melden dat de huidige PA na zes payouts SLUIT, waar legacy vanaf zes juist ongelimiteerd wordt — dat verschil is te groot om te raden. Code mag hier GEEN cap substitueren: onbekend moet luid zijn, niet ingevuld.",
+        "payout_cap_uncapped_from": null
       },
       "execution": {
         "platforms": [
@@ -237,7 +233,7 @@
       "meta": {
         "source": "LifeOS Account Types (owner-confirmed); Apex rulebook",
         "as_of": "2026-08",
-        "verified": true,
+        "verified": false,
         "notes": "6-step payout ladder, 50% consistency, 5 min trading days, min payout $500."
       },
       "converts_to": null
@@ -312,7 +308,9 @@
         "payout_cap_note": "Maximum per payout geldt voor de EERSTE VIJF payouts; vanaf de zesde is er GEEN maximum, mits de minimum vereiste balans na de payout in het account blijft.",
         "min_required_balance": 52600,
         "payout_requirements": "8 handelsdagen sinds de vorige aanvraag, waarvan 5 met >= $50 winst",
-        "safety_net": "drawdown + $100, alleen voor de eerste DRIE payouts"
+        "safety_net": "drawdown + $100, alleen voor de eerste DRIE payouts",
+        "payout_terms_verified": true,
+        "payout_cap_uncapped_from": 6
       },
       "execution": {
         "platforms": [
@@ -395,15 +393,11 @@
         "first_payout_wait_days": null,
         "min_payout": 500,
         "payout_cap": null,
-        "payout_ladder": [
-          1500,
-          1500,
-          2000,
-          2500,
-          2500,
-          3000
-        ],
-        "in_eval_profit_share": null
+        "payout_ladder": null,
+        "in_eval_profit_share": null,
+        "payout_terms_verified": false,
+        "payout_terms_note": "Huidige (niet-legacy) PA: payout-voorwaarden NIET owner-confirmed. Apex' legacy-pagina dekt ze niet. Derdepartij-bronnen melden dat de huidige PA na zes payouts SLUIT, waar legacy vanaf zes juist ongelimiteerd wordt — dat verschil is te groot om te raden. Code mag hier GEEN cap substitueren: onbekend moet luid zijn, niet ingevuld.",
+        "payout_cap_uncapped_from": null
       },
       "execution": {
         "platforms": [
@@ -419,7 +413,7 @@
       "meta": {
         "source": "LifeOS Account Types (owner-confirmed); Apex rulebook",
         "as_of": "2026-08",
-        "verified": true,
+        "verified": false,
         "notes": "Intraday-trailing PA: 50% consistency, 5 min days."
       },
       "converts_to": null
@@ -713,7 +707,9 @@
         "payout_cap_note": "Maximum per payout geldt voor de EERSTE VIJF payouts; vanaf de zesde is er GEEN maximum, mits de minimum vereiste balans na de payout in het account blijft.",
         "min_required_balance": 256600,
         "payout_requirements": "8 handelsdagen sinds de vorige aanvraag, waarvan 5 met >= $50 winst",
-        "safety_net": "drawdown + $100, alleen voor de eerste DRIE payouts"
+        "safety_net": "drawdown + $100, alleen voor de eerste DRIE payouts",
+        "payout_terms_verified": true,
+        "payout_cap_uncapped_from": 6
       },
       "execution": {
         "platforms": [

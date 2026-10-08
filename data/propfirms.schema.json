@@ -366,6 +366,7 @@
                 "biweekly",
                 "monthly",
                 "ladder",
+                "every_8_trading_days",
                 null
               ]
             },
@@ -386,6 +387,13 @@
                 "number",
                 "null"
               ]
+            },
+            "payout_cap_uncapped_from": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "The payout number from which payout_cap no longer applies — no maximum from this payout onward (Apex legacy: 6). null/absent = the cap never lapses. Read by both the Pine generator (f_firmLadder) and config.resolve_payout_cap (D-130/D-148), one field name for both so Pine and Python resolve the same shape."
             },
             "payout_ladder": {
               "type": [
@@ -410,6 +418,48 @@
                 "null"
               ],
               "description": "How many approved payouts the safety net applies to. Apex legacy: the first three; from the fourth the minimum balance no longer holds. null = for the life of the account."
+            },
+            "payout_cap_note": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Human-readable note on the cap rule (the machine form is payout_cap + payout_cap_uncapped_from)."
+            },
+            "min_required_balance": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Minimum balance that must remain in the account after a payout (Apex legacy 50k: 52600)."
+            },
+            "payout_requirements": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Human-readable payout eligibility requirements."
+            },
+            "safety_net": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Human-readable safety-net rule (the machine form is safety_net_payouts)."
+            },
+            "payout_terms_verified": {
+              "type": [
+                "boolean",
+                "null"
+              ],
+              "description": "True when the payout terms were owner-confirmed from the firm's own page (D-148)."
+            },
+            "payout_terms_note": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Human-readable note on the payout terms' provenance or open questions."
             }
           }
         },

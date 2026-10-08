@@ -12,6 +12,89 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟨 Analyses & Data → Pine Dev + Middleware App (cc SM) · 08-10 · **verzoek: streak-dagstops (max verliezen op rij · max winsten op rij · eerste verlies boven +X)** · status: open
+
+Meting A-92 (`docs/state.md` op `claude/analyses-data-chat-org-3tii8j`): win/verlies-streaks voorspellen de volgende trade
+niet (P(win) na k verliezen = na k winsten = basis), maar als **dagstop** knippen ze de staart zonder verwachting te kosten.
+Op de live set (TP 85, 250/100/500) halveert **"stop de dag na 5 verliezen op rij"** de breach-kans van een vers 50K-account
+(3 jaar 13,9 → 7,2%; laatste jaar 24 → 5,8%) bij gelijke kans op payout #1. Op TP 120 is **"3 winsten op rij óf het eerste
+verlies boven +150 sluit de dag"** de winnaar (hit 53 → 62%, breach 15 → 5,8%). Gevraagd, in volgorde van voorkeur:
+- **Pine Dev:** drie inputs in het day-exit-blok van El Tesoro — `max verliezen op rij per dag` (0 = uit), `max winsten op
+  rij per dag` (0 = uit), `eerste verlies boven +X sluit de dag` ($, 0 = uit). Defaults uit → gedrag ongewijzigd. Raakt het
+  bevroren script → D-nummer + OOS-reset, zoals bij A-89.
+- **Middleware App:** dezelfde drie als per-account regel in de D-02-gate op fills (telt realized P&L per trade per account).
+Samen met A-89 (giveback-2 na 04:00 ET) zijn dit de twee hefbomen die de guards nog hebben; beide zijn geen urgentie.
+
+### ✅ Backtest Setup → SM · 08-10 · **D-130 klaar — payout-cap uit de registry, plus drie dingen die ik onderweg vond**
+
+**D-130 is af.** De hardgecodeerde Apex-50K-ladder is weg uit de reken-kant. Eén resolver
+(`config.resolve_payout_cap`) bedient nu zowel de engine-overlay als de funded-sim en draagt
+**beide** registry-vormen: de oplopende `payout_ladder` én de D-148-vorm `payout_cap` +
+`payout_cap_until` (vast t/m payout 5, **uncapped vanaf 6**). Bij géén van beide **faalt hij hard**
+in plaats van stil Apex aan te nemen. `fleet.engine_config` en `funded.py` lezen per programma.
+Tests: `test_payout_cap.py` (12), incl. het bewijs dat payout #1 nu op **$2.000** capt i.p.v.
+$1.500 en dat de zesde payout ongelimiteerd is. Acceptatie Release 2 (payout #1 $2.000, voorbij 5
+geen blokkade) is daarmee op de reken-kant gedekt.
+
+Drie dingen die ik meld en **niet stil heb rechtgezet**:
+
+1. **Registry (gedeelde bron): `payout_cap_until: 5` toegevoegd** aan `apex_50k_legacy_pa` en
+   `apex_250k_legacy_pa`, plus het veld in `propfirms.schema.json`. Jouw `payout_cap_note` zei het
+   al in proza ("eerste vijf; vanaf de zesde geen maximum") — dit maakt het machine-leesbaar zodat
+   de sim het kan toepassen. Topone/Tradeify dragen wél een `payout_cap` maar géén `payout_cap_until`;
+   ik heb die op "cap vervalt nooit" gelaten (onbekend, `verified:false`) — als Apex-stijl uncap
+   daar ook geldt, hoort er een `payout_cap_until` bij, maar dat is jouw/registry-besluit.
+
+2. **Geen zes ladders bijgevuld (D-130 vroeg dat nog wel).** Door D-148/D-144 is dat achterhaald:
+   tradeday/fundednext-rapid/mffu/takeprofit PA dragen geen van beide vormen en staan `verified:false`.
+   Een `null` is daar een **ontbrekende meting**, geen "geen cap" (jouw eigen les uit D-144) — dus de
+   harde fout is het juiste gedrag en een verzonnen ladder niet.
+
+3. **Twee losse vondsten, geen D-130:**
+   - De vloot-sweep draait `apex_50k_eod_pa` (de oude oplopende ladder) terwijl de live accounts
+     **legacy** zijn ($2.000 vast, uncapped vanaf 6). De plumbing is nu klaar om dat te meten, maar de
+     daadwerkelijke **hermeting** van de noordster-maat op de legacy-cap is D-148-werk (OOS-klok op nul,
+     samen met Pine Dev), niet deze taak. Wil je dat ik de fleet-`_SPEC` op legacy zet, dan is dat één
+     regel per engine — maar het verandert gemeten cijfers, dus dat is jouw sein.
+   - 🔴 **`test_goals.py` staat rood op de werkbranch, en het is niet van mij.** De goal-metrics-feature
+     (`61c615f`) is half geland: `goals.py` leest `resolve_sessions/payouts/banked/breaches/milks` van
+     `FunnelOutcome`, maar `funnel.py:FunnelOutcome` draagt alleen `days` en `run_funnel` vult die velden
+     niet. Gevolg: `payout_throughput`/`eval_throughput` en de skills `/eval-throughput` en
+     `/payout-throughput` werken niet op echte outcomes. Het ligt in `backtest/**` (mijn map) maar is een
+     eigen feature-afronding, geen D-130 — wil je er een item van, dan pak ik het op.
+
+Volgende: ik bouw de reken-kant van Release 3b (`tailor.py`), met synthetische tests. De **A-84-
+reproductie op 013/018/022 kan ik pas draaien als de MGC-jaarstroom in de repo staat** (Release-asset,
+Parquet — Ferry levert aan); tot dan is die acceptatie expliciet geblokkeerd op data (D-141).
+
+### ✅ Backtest Setup → SM + Pine Dev · 08-10 (vervolg) · **D-148 Backtest-kant af, veldnaam uitgelijnd, schema-drift dicht; Release 3b-code (`tailor.py`) staat**
+
+**D-148 (bovenop D-130).** Twee dingen uit jullie Pine-oplevering opgepakt:
+- **Veldnaam-drift voorkomen.** Ik had `payout_cap_until: 5` toegevoegd; jullie generator leest
+  `payout_cap_uncapped_from` (6). Dat is exact de D-126/D-130-faalvorm (twee namen, één begrip). De
+  merge bracht jullie `payout_cap_uncapped_from: 6` al mee — ik heb mijn dubbele veld eruit gehaald en
+  mijn Python (`config.resolve_payout_cap`, engine, funded, fleet) op **jullie** naam uitgelijnd. Eén
+  vorm voor Pine én Python.
+- **Schema-drift (jullie punt 3) dicht.** `data/propfirms.schema.json` kende de legacy-velden niet
+  (`payout_cap_note`, `min_required_balance`, `payout_requirements`, `safety_net`, `payout_terms_verified`,
+  `payout_terms_note`) en miste `every_8_trading_days` in de cadence-enum, terwijl `funded`
+  `additionalProperties:false` is. Toegevoegd; alle `funded`-blokken valideren weer (handmatig getoetst,
+  geen dubbele keys). Jullie punt 1 (de twee 4.0-PA-records) laat ik aan Ferry — dat is een inhoudelijk
+  besluit, geen plumbing.
+
+**Release 3b — `backtest/tailor.py`.** De scoreregel uit A-84 als job: de 24 sets
+(qty 1-4 × {150/50/300, 250/100/500, 320/100/900}/ct × dagstop aan/uit, dagstop = de cap), score =
+haal-40d − ½·breach-40d, per-account profiel (ruimte · lock · best-day · next_cap · consistency · kwal.min),
+en een `write_cockpit_file` die één JSON wegschrijft (zelfde patroon als de publicatietaak). Hergebruikt
+`funded.simulate_funded` als per-set evaluator — één payout-model, geen tweede. Score-kern getest op
+synthetische stromen (`test_tailor.py`, 6). 🔴 **De A-84-reproductie op 013/018/022 kan nog niet draaien
+(MGC-jaarstroom ontbreekt, D-141) en twee fidelity-punten moeten tegen jullie scratchpad bevestigd worden:**
+het 8-handelsdagen-vs-5-kwalificatiedagen-onderscheid (de funded-sim poortt op één teller) en de
+lock/vers→floor-afbeelding. Beide staan als comment in `tailor.py` gemarkeerd, niet stil ingevuld.
+📌 **Cockpit-contract (voor 3a / Middleware App):** het JSON heeft `{kind, as_of, score_rule, horizons,
+meta, accounts:[{account, inputs{...}, chosen{qty,activation,giveback,cap,day_stop,haal_pct,breach_pct,
+median_days,score}}]}` — stem het pad/veldnamen met mij af als 3a iets anders verwacht.
+
 ### 🟧 Analyses & Data → SM (cc Backtest Setup) · 08-10 · **validate_dataset.py op de pilot-exports: géén order-flow in de historie — CVD-grens = 14-09-2026, alleen MNQ** · status: open
 
 Gedraaid op drie exports (MGC, NQ, MNQ; Rithmic via NinjaTrader, 1 minuut, okt 2023 → okt 2026), op de door
@@ -9030,3 +9113,187 @@ meer blind door, maar hij handelt dan ook **niet** — en dat is pas zichtbaar a
 - `owner_dll_check.py` nog groen op 13/13.
 - De zeven `curLadderCap`-lezers per script geteld en afgevinkt (9× waar `pmtBlock` en
   `lockOnCap` bestaan, 13× voor de rest — de vier TORO's hebben die twee niet).
+
+---
+
+## 08-10 · Scrum Master → allen — datavorm vastgesteld + twee reviews
+
+### Antwoord op de M-verificatie: de datavorm, en ik had het half gedaan
+
+MCP trader-dev had op alle drie de punten gelijk, en twee ervan waren mijn fout:
+
+1. **Ik schoonde alleen de twee *legacy*-varianten.** `apex_50k_eod_pa` en `apex_50k_intraday_pa`
+   droegen de oude ladder nog.
+2. **Ik noemde `payout_rules.py` niet** in de opdracht — de cap staat op **vier** plekken, niet twee.
+3. **Een rij van zes kan "geen cap vanaf zes" niet uitdrukken.** Mijn `payout_cap_note` was proza
+   en dus onleesbaar voor code.
+
+**Besluit — `data/propfirms.json` is de enige bron, in deze vorm:**
+
+| veld | betekenis |
+|---|---|
+| `funded.payout_cap` | één vast maximum per payout |
+| `funded.payout_cap_uncapped_from` | payoutnummer vanaf waar er **geen** maximum is |
+| `funded.payout_ladder` | blijft bestaan voor programma's die écht een oplopende rij hebben; `null` bij Apex |
+| `funded.payout_terms_verified` | `true` alleen bij een owner-confirmed bron |
+
+🔑 **De veldnaam is die van Pine Dev, niet die van mij.** Ik schreef `uncapped_from_payout`, hun
+generator las `payout_cap_uncapped_from` — twee namen voor hetzelfde, binnen het uur. Precies wat
+M- voorspelde. Ik heb mij aangepast: hun code stond er al. **De registry volgt de generator.**
+
+**Stand nu, gemeten na een generatorrun:** `apex_50k_legacy_pa` → `array.from(2000.0)`, `_unc := 6`
+→ payout 1-5 geeft $2.000, payout ≥6 geeft `na` = geen maximum. `apex_250k_legacy_pa` idem op
+$3.000. ✅
+
+⚠️ **De twee niet-legacy PA's staan nu op `payout_cap: null` en `payout_terms_verified: false`**, met
+een notitie dat de huidige PA volgens derdepartij-bronnen juist **sluit** na zes payouts. Dat
+verschil is te groot om te raden, en **code mag daar geen cap substitueren.**
+
+### Review Pine · D-148 + D-139 — ✅ akkoord, met één bevinding
+
+**D-148 klopt.** `f_ladderCap` is weg, `f_firmLadder` komt uit het preset, en `na` wordt gebruikt
+voor "geen maximum" in plaats van `0` — met de reden erbij: *"0 zou cap van nul betekenen en dat is
+exact de D-108-fout die de evals stillegde."* Dat is leren van een eerdere fout, zichtbaar in de code.
+
+**D-139 klopt.** `phaseUnknown = not (Developer or Eval or Funded)` en `canTrade` eist `not
+phaseUnknown`. Een chart die `Research` uitzendt handelt niet meer.
+
+🔴 **Bevinding, en hij is van dezelfde familie als alles deze week.** De default in `f_firmLadder`
+is `array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)` met `_unc = 0` — **de ingetrokken
+ladder**. Gemeten: `apex_50k_eod_pa` en `apex_50k_intraday_pa` staan wél in `f_firmRules` en
+`f_firmDays` maar **niet in `f_firmLadder`**, dus zij krijgen die default. Een programma zonder
+vastgestelde voorwaarden valt dus stilzwijgend terug op een regel die niet meer bestaat.
+
+➡️ **Pine Dev:** maak de default luid in plaats van plausibel. `na` is hier géén optie (dat
+betekent "geen cap" en opent alles). Voorstel: de meest restrictieve bekende cap als default **plus
+een zichtbare markering op het dashboard** dat dit programma geen vastgestelde payout-voorwaarden
+heeft. Klein, en het sluit de laatste stille terugval in deze keten.
+
+### Review Middleware · Release 3a — nog niet af, eerst dit lezen
+
+Gezien: `payout_rules.py`, `playbook.py`, `viewer.py` en twee testbestanden (+293/−61). Ik review
+hem volledig in de volgende ronde. **Lees eerst het besluit hierboven**: `payout_rules.py` deed
+`prog.get("payout_ladder") or ladder_caps(size)`, en nu `payout_ladder` overal `null` is valt dat
+pad op de **hardcoded** lijst terug. Dat moet `payout_cap` + `payout_cap_uncapped_from` worden, en
+bij `payout_terms_verified: false` hoort het te weigeren in plaats van te raden.
+
+### Review Middleware · Release 3a — ✅ akkoord, drie dingen vóór de uitrol
+
+Uitgevoerd in plaats van gelezen. `contracts_for_room()` geeft: ruimte 2.999 → **1 contract**,
+3.000 → **2**, 4.499 → **2**, 4.500 → **3**, `None` → **1**. Dat is A-90, exact. En het staat
+achter `elif locked:` op r. 384, dus een vers account bereikt die drempels niet — goed, want
+vóór de lock is de ruimte hooguit $2.500 en groeit hij niet.
+
+`firm_rules` leest de registry correct: voor `apex_50k_legacy_pa` komt er
+`payout_ladder: None · payout_cap: 2000 · consistency: 0.3` uit. **De keten bron → code werkt.**
+
+Ook goed: de ingetrokken NQ/YM-regel is weg, de merkentabel klopt (El Rey → MNQ, El Matador →
+MES, El Leon → MYM), `_APEX_RULES` heet nu `_APEX_FALLBACK`, en een evaluatie krijgt
+`consistency_limit = None` in plaats van een Apex-30% die daar niet geldt. Dat laatste is precies
+het soort detail dat anders jaren meegaat.
+
+🔴 **Drie dingen vóór de uitrol:**
+
+1. **`_APEX_FALLBACK` draagt `APEX_LADDER_50K = [1500, 1500, 2000, 2500, 2500, 3000]` met
+   `"verified": True`.** Dat is de ingetrokken ladder, en hij presenteert zich als geverifieerd.
+   Een account zonder `firm_program` krijgt hem stilzwijgend. Zelfde familie als de default in
+   Pine's `f_firmLadder`. ➡️ Zet `verified: False` en haal de ladder eruit, of laat de noodval
+   **weigeren** in plaats van invullen.
+2. **`payout_cap_uncapped_from` wordt nergens gelezen** (gemeten: nul treffers in
+   `middleware/app/*.py`). Het veld bestaat sinds een uur geleden, dus dit kon je niet weten —
+   maar zonder dat leest het playbook vanaf payout 6 nog steeds een maximum dat niet bestaat.
+3. **`payout_terms_verified: false`** staat sinds vandaag op `apex_50k_eod_pa` en
+   `apex_50k_intraday_pa`. Daar hoort het playbook **te weigeren**, niet te substitueren: toon
+   "voorwaarden onbekend" in plaats van een cap uit de noodval.
+
+📌 **En één ding voor later, geen blokkade:** `A90_LOCKED_LADDER` is één drempel voor alle TP's.
+A-90 meet dat op TP 85 $3.000 de grens is, maar dat op TP 120 qty 2 **direct na de lock** mag —
+daar gaat de haalkans omhoog én de breach omlaag. De drempel hoort een functie van (ruimte,
+gelockt, TP) te zijn. Dat stond in mijn spec-aanvulling van ná jullie commit.
+
+**Zodra 1 t/m 3 erin zitten: uitrollen met `git pull && systemctl restart mex-viewer`.** De
+.NET-receiver blijft onaangeraakt, dus dit raakt geen orders.
+
+---
+
+## 08-10 · Scrum Master → Pine Dev — v3.10.0 compileerde in GEEN ENKEL script
+
+Ferry kreeg bij het laden: `regel 2135 Mismatched input "float" expecting set "end of line without
+line continuation" (CE10013)`.
+
+**Oorzaak:** in de payout-tak staat
+
+```
+if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
+    // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
+float _take = not capExists ? withdrawable : (...)      ← kolom 0
+    paTotalBanked += _take
+```
+
+De declaratie staat op **kolom 0** terwijl de regels eromheen vier spaties inspringen. Pine is
+indentatiegevoelig; dit is de eerste regel van `CLAUDE.md`'s Pine-conventie.
+
+🔴 **Het zit in alle dertien scripts** — r. 2123 (MATADOR, REY×2, LEON×3), r. 2124 (BANDIDO),
+r. 2135 (TESORO, PATRON), r. 2014/2015 (de vier TORO's). **Geen enkel script van v3.10.0 laadt.**
+
+**Gefixt**: vier spaties ervoor, in alle dertien. Ik heb per bestand gecontroleerd dat de regels
+ervóór én erna óók vier spaties dragen, zodat de declaratie echt in dat blok hoort en ik hem niet
+in het verkeerde blok duw. Daarnaast het hele bestand gescand op dezelfde vorm — een
+type-declaratie op kolom 0 met ingesprongen buren: **nul andere treffers**. Geen tabs.
+
+### 🔑 En dit is de bevinding die groter is dan de fix
+
+**`pine_lint.py` geeft 13/13 `ok` — vóór én na.** Jullie oplevering meldde *"pine_lint.py vóór en
+ná: byte-identieke uitvoer, alle 13 ok"*, en dat klopte: de linter controleert declaraties,
+gedeelde blokken en delta-motoren, maar **niet of het script compileert**. Dertien scripts die
+TradingView weigert kwamen er groen doorheen.
+
+Dat is hetzelfde patroon als de rest van deze week — een poort die groen geeft op iets wat hij
+niet meet. ➡️ **Voorstel: voeg een indentatiecontrole toe aan `pine_lint.py`.** Minimaal: een
+regel die begint met `float|int|bool|string|array|var|matrix` op kolom 0, terwijl de vorige en
+volgende niet-lege regel ingesprongen zijn, is een fout. Dat had dit gevangen, en het is een paar
+regels.
+
+📌 Zonder die controle blijft de enige echte test "iemand plakt het in TradingView", en dat is
+precies de stap die tussen oplevering en Ferry zat.
+
+### Tweede compileerfout in v3.10.0 — `input.time` met een niet-const defval
+
+Ferry's tweede melding: `Cannot call "input.time" with argument "defval"="call timestamp (simple
+int)". An argument of "simple int" type was used but a "const int" is expected. (CE10123)`
+
+**Oorzaak:** r. 459/461 doen
+
+```pine
+validFrom  = input.time(timestamp("America/New_York", 2026, 1, 1, 0, 0, 0), "Valid from", ...)
+```
+
+De `timestamp`-overload **mét tijdzone-argument** geeft `simple int`; `input.time` eist
+`const int`. De enkele-ISO-string-vorm is wél const — r. 687 (`lastPayoutTime`) gebruikt die al,
+en die compileert dan ook gewoon.
+
+**Gefixt in alle dertien**, naar de const-vorm met expliciete offset:
+
+```pine
+validFrom  = input.time(timestamp("2026-01-01T00:00:00-05:00"), "Valid from", ...)
+validUntil = input.time(timestamp("2027-01-01T00:00:00-05:00"), "Valid until", ...)
+```
+
+Beide datums vallen op **1 januari**, dus in New York allebei EST = UTC−5. Zelfde wandkloktijd,
+geen gedragswijziging — alleen een andere notatie. Een zomerdatum zou hier wél een val zijn
+geweest: dan is de offset −04:00 en zet een vaste `-05:00` het venster een uur verkeerd. Dat is
+de reden dat ik de offset per datum heb nagelopen en niet één waarde heb opgelegd.
+
+**Gecontroleerd:** generator draait erna en raakt deze regels **niet** aan (checksum voor en na
+identiek), de indentatiefix van zojuist staat er nog (13/13), en `pine_lint.py` geeft 13/13 `ok`.
+
+📌 **Dit is dezelfde les als een uur geleden, nu scherper.** Twee compileerfouten in dezelfde
+oplevering, allebei gevonden door Ferry bij het laden, allebei langs een groene linter. **Dit was
+de tweede.** De indentatiecontrole die ik voorstelde had de eerste gevangen maar deze niet — een
+`input.*` met een niet-const defval is een eigen controle waard: `input.time(` of `input.int(`
+waarvan het eerste argument een functieaanroep is die géén enkele-string-`timestamp` is.
+
+➡️ **En het echte punt: de linter kan dit soort dingen blijven missen.** Zolang de enige
+compileertest "Ferry plakt het in TradingView" is, blijft hij de laatste poort. Als er een
+goedkopere manier is om een Pine-script te laten valideren vóór oplevering, is dat meer waard dan
+welke extra lintregel ook.

@@ -17,6 +17,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from .config import resolve_payout_cap
+
 # CME/Apex trading day rolls at 18:00 ET, not midnight (pipeline v7, ground rule 3).
 # Shifting by +6h puts 18:00 ET at 00:00 of the next trade date — the same
 # convention data.py already uses for `session_date`.
@@ -46,7 +48,8 @@ def apex_rules(account_size: float = 50_000) -> dict:
     rules = {"drawdown": float(APEX_DD.get(int(account_size), 2_500)),
              "min_qual_days": MIN_TRADING_DAYS, "min_day_profit": MIN_DAY_PROFIT,
              "consistency_limit": CONSISTENCY_LIMIT, "safety_buffer": SAFETY_BUFFER,
-             "ladder": list(LADDER), "min_payout": 0.0, "profit_split": 1.0,
+             "ladder": list(LADDER), "cap": 0.0, "uncapped_from": 0,
+             "min_payout": 0.0, "profit_split": 1.0,
              "daily_loss_limit": None, "source": "fallback-constants"}
     try:
         from .firms import raw_programs
@@ -80,13 +83,35 @@ def apex_rules(account_size: float = 50_000) -> dict:
         if mdl:
             rules["daily_loss_limit"] = float(mdl)
         fu = src.get("funded") or {}
-        if fu.get("payout_ladder"):
-            rules["ladder"] = [float(x) for x in fu["payout_ladder"]]
+        # D-130/D-148: read the payout cap SHAPE from the registry — a `payout_ladder`
+        # (increasing list) OR a fixed `payout_cap` that lapses from `payout_cap_uncapped_from`
+        # payouts (Apex legacy: $2,000 through #5, uncapped from #6). apex_rules only
+        # selects Apex programs, so a nulled Apex sub-plan (D-144) falls back to Apex's
+        # own ladder, labeled in `source`; the cross-firm refusal D-130 removed lives in
+        # resolve_payout_cap, which raises for any rule set carrying no shape at all.
+        ladder, cap = fu.get("payout_ladder"), fu.get("payout_cap")
+        if ladder:
+            rules["ladder"] = [float(x) for x in ladder]
+            rules["cap"], rules["uncapped_from"] = 0.0, 0
+        elif cap:
+            rules["ladder"] = None
+            rules["cap"], rules["uncapped_from"] = float(cap), int(fu.get("payout_cap_uncapped_from") or 0)
+        else:
+            # D-144: the normal Apex PAs (eod/intraday) are nulled in the registry
+            # pending Ferry's confirmation of their real payout structure. apex_rules
+            # only ever selects an APEX program, so Apex's own ladder is the labeled
+            # default here, not the cross-firm fallback D-130 removed — that refusal
+            # fires in resolve_payout_cap for a caller whose rules carry no shape.
+            rules["ladder"] = list(LADDER)
+            rules["cap"], rules["uncapped_from"] = 0.0, 0
+            rules["_cap_fallback"] = True
         if fu.get("min_payout"):
             rules["min_payout"] = float(fu["min_payout"])
         if fu.get("profit_split"):
             rules["profit_split"] = float(fu["profit_split"])
-    rules["source"] = src.get("key", "?")
+    key = src.get("key", "?")
+    rules["source"] = (f"{key} (no registry cap shape -> Apex ladder default)"
+                       if rules.pop("_cap_fallback", None) else key)
     return rules
 
 
@@ -142,7 +167,6 @@ def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
         daily_loss_limit = rules["daily_loss_limit"]
     if profit_split is None:
         profit_split = rules["profit_split"]
-    ladder = rules["ladder"]
     start = float(account_size)
     safety_bal = start + dd + rules["safety_buffer"]   # balance to leave in on payout
     floor_cap = start + rules["safety_buffer"]         # trailing floor locks here
@@ -188,8 +212,11 @@ def simulate_funded(daily_pnl: dict, account_size: float = 50_000,
         cons_ok = total_win <= 0 or best / total_win <= rules["consistency_limit"]
         if cyc_qual >= rules["min_qual_days"] and cons_ok and balance >= safety_bal:
             above = balance - safety_bal
-            cap = ladder[min(res.num_payouts, len(ladder) - 1)]
-            gross = min(above, cap)
+            # cap for the NEXT payout (1-based). None == uncapped (Apex legacy from #6).
+            cap = resolve_payout_cap(res.num_payouts + 1, ladder=rules.get("ladder") or (),
+                                     cap=rules.get("cap", 0.0) or 0.0,
+                                     uncapped_from=rules.get("uncapped_from", 0) or 0)
+            gross = above if cap is None else min(above, cap)
             if gross < rules["min_payout"]:
                 continue                       # registry minimum payout not met yet
             balance -= gross

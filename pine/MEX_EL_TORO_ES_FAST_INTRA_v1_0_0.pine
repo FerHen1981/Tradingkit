@@ -434,9 +434,9 @@ string activeTz = input_tz
 // LET OP: de datumkiezer van TradingView interpreteert in de EXCHANGE-tijdzone van de chart,
 // niet in ET. De defaults hieronder staan expliciet in America/New_York, en het dashboard
 // toont de grenzen terug in je referentietijdzone -- zo zie je wat er ECHT staat.
-validFrom  = input.time(timestamp("America/New_York", 2026, 1, 1, 0, 0, 0), "Valid from", group=GROUP_TZ,
+validFrom  = input.time(timestamp("2026-01-01T00:00:00-05:00"), "Valid from", group=GROUP_TZ,
      tooltip="Vóór dit moment neemt het script geen enkele entry. Indicatoren warmen wel op over de volle historie, dus de signalen veranderen niet -- je backtest begint hier alleen te handelen. Zelfde grens voor backtest, forward-test en live.")
-validUntil = input.time(timestamp("America/New_York", 2027, 1, 1, 0, 0, 0), "Valid until", group=GROUP_TZ,
+validUntil = input.time(timestamp("2027-01-01T00:00:00-05:00"), "Valid until", group=GROUP_TZ,
      tooltip="Ná dit moment: geen entries meer, hard. Openstaande posities mogen nog 24 uur netjes sluiten; daarna wordt er eenmalig platgemaakt. Je krijgt één Discord-melding op de grens. Zet dit op de datum waarop dit account of deze configuratie afloopt.")
 // Het gedrag op de grens ligt vast in item 31 en is bewust GEEN knop: één regel, overal gelijk.
 int  EXIT_GRACE_MS = 24 * 60 * 60 * 1000
@@ -888,10 +888,6 @@ f_firmLadder(string _p, int _n) =>
     if _p == "apex_250k_legacy_pa"
         _l := array.from(3000.0)
         _unc := 6
-    else if _p == "apex_50k_eod_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
-    else if _p == "apex_50k_intraday_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_legacy_pa"
         _l := array.from(2000.0)
         _unc := 6
@@ -2016,7 +2012,7 @@ if not payoutReady
 
 if isPA and paBacktestMode and payoutReady and barstate.isconfirmed
     // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
-float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
+    float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
     paTotalBanked += _take
     paPayoutsThisCycle += 1
     paResetPnLPrev := paResetPnLPrev + _take

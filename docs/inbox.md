@@ -12,6 +12,42 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (cc Backtest Setup) · 08-10 · **validate_dataset.py op de pilot-exports: géén order-flow in de historie — CVD-grens = 14-09-2026, alleen MNQ** · status: open
+
+Gedraaid op drie exports (MGC, NQ, MNQ; Rithmic via NinjaTrader, 1 minuut, okt 2023 → okt 2026), op de door
+`backtest/lab/normalize.py` genormaliseerde bestanden. Uitkomst **REJECT voor alle drie**:
+
+| export | bars | bars met niet-nul Delta | eerste niet-nul Delta | laatste |
+|---|---:|---:|---|---|
+| MGC | 1.053.095 | 0 | — | — |
+| NQ | 1.056.147 | 0 | — | — |
+| MNQ | 1.058.467 | 6.892 (0,65%) | **14-09-2026 04:36 ET** | 21-09-2026 |
+
+De `Delta`-, `Buy (Ask) volume`- en `Sell (Bid) volume`-kolommen staan in de export maar zijn leeg/0 tot 14-09-2026;
+alleen MNQ draagt één week echte order-flow. **De echte CVD-grens is dus 14 september 2026** en het onderzoeksvenster
+onder de strikte poort is één week. Dat is geen onderzoeksvenster.
+
+**Wat dat voor A-88 betekent — en waarom de ronde niet ongeldig is.** Alle runs liepen op de canonieke OHLCV-proxy
+(pipeline v7, grondregel 4; `cvd_source="proxy"`), niet op native delta. Twee feiten uit de Pine-exports van 05-10:
+(1) El Tesoro draait live met Delta-filter **uit** (export `c92d9`/`9dc3f`), dus de MGC-cijfers hangen niet aan CVD;
+(2) El Toro draait live op `requestVolumeDelta` (native), en de engine met proxy paart **96–98% van de entries** met die
+export (`6ae27`: 1.931 vs 1.901 trades, winrate 42,7 vs 43,2). Op dit script is proxy ≈ native. De poort van
+`validate_dataset.py` ("CVD is never disabled" = echte Delta vereist) botst met grondregel 4 (proxy is canoniek) —
+**besluit gevraagd welke van de twee geldt**; tot die tijd staat bij elk A-88-cijfer "proxy, native niet beschikbaar".
+
+**Drie defecten in `tools/validate_dataset.py` (Backtest Setup):** (a) de ruwe export heeft een UTF-8 BOM op de
+header → "no DateTime column found" (normalizer vangt dat op, de validator niet); (b) zonder BOM crasht hij op
+decimale komma's/`<NA>` (`float() argument … 'NAType'`); (c) de datumrange wordt maand-eerst gelezen: hij meldt
+2023-01-10 → 2026-12-08 waar het 2023-10-05 → 2026-10-02 is. Niet door ons gerepareerd (jullie map).
+
+**Verzoek aan Ferry/Backtest Setup:** een NinjaTrader-export mét order-flow over de hele historie (Rithmic levert
+historische tick-data; de huidige export is een bar-export waarin de delta pas sinds 14-09 wordt bijgehouden), of de
+proxy formeel als onderzoeksbasis bevestigen. Zonder één van beide kan trap 1 voor El Toro alleen "proxy-pariteit" zijn.
+
+**Opleveringen sinds 07-10 (op onze branch, PR #3 bevat A-80 t/m A-90):** A-91 (PA018: cap versnelt de consistency
+niet, qty 3 wel) en de aanvullingen op A-88 (pariteit El Toro dicht op twee exports; TP 120-export; 250K-eval:
+22 NQ · TP 138 · FVG 19–27 = 27% tegen 18%). Werkafspraak begrepen: elke oplevering voortaan hier gemeld.
+
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 
 Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:

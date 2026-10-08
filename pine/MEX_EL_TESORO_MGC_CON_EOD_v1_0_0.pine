@@ -1210,6 +1210,21 @@ float firmLimitUSD  = firmDllActive ? acctDLL : na
 float dailyLossLimitEff = na(ownerLimitUSD) ? firmLimitUSD : na(firmLimitUSD) ? ownerLimitUSD : math.min(ownerLimitUSD, firmLimitUSD)
 bool  dailyLossOn       = not na(dailyLossLimitEff)
 useDDGuard = (isPA and guardPA) or (isEval and guardEval)
+// === D-139 (08-10) — een ONBEKENDE fase sluit alles, in plaats van alles te openen ====
+// A-82 mat het uit het alerts-log: eval 274 nam vier stops voor -$9.762 op een account dat
+// na de eerste al dood was, en 268-274 waren zeven evals in twee dagen. De oorzaak zit
+// hierboven: `phaseOn = isEval or isPA`. "Research" is geen van beide, dus `phaseOn` werd
+// onwaar en élke accountpoort viel weg -- trailing, goal, breach-halt, alles. De onveilige
+// stand was de default en de veilige de uitzondering.
+// WAAROM EEN CHART DIE WAARDE NOG UITZENDT: `accountPhase` kent in v1_0_0 drie opties en
+// "Research" staat er niet meer bij. TradingView bewaart een opgeslagen inputwaarde die
+// niet meer in de optielijst voorkomt, en blijft die gebruiken tot iemand het
+// instellingenvenster opent en opnieuw kiest. De chart ziet er dan bijgewerkt uit, staat op
+// de nieuwe versie, en draait tóch zonder poorten.
+// DE REGEL NU: wat niet een van de drie bekende fases is, is onbekend -- en onbekend
+// handelt niet. `canTrade` krijgt `not phaseUnknown`, dus er komen GEEN nieuwe entries.
+// Sluiten blijft wel mogelijk: een openstaande positie moet er altijd uit kunnen.
+bool phaseUnknown = not (phaseEff == "Developer" or phaseEff == "Eval" or phaseEff == "Funded")
 bool phaseOn = isEval or isPA
 var bool  acctHalted = false
 var string acctHaltReason = ""
@@ -2120,7 +2135,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = not acctStartArmed
-canTrade = inValidWindow and timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
+canTrade = inValidWindow and timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and not phaseUnknown
 
 
 // ============================================================================
@@ -3171,3 +3186,18 @@ if showDashboard and barstate.islast
     table.cell(dash, 1, rTrd + 2, not inTrade ? "—" : (posRiskOff ? "armed" : "—") + " / " + (posTrailOn ? (posRecovOn ? "recovery" : "armed") : "—"), text_color=inTrade and (posRiskOff or posTrailOn) ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
     table.cell(dash, 0, rTrd + 3, "Open PnL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
     table.cell(dash, 1, rTrd + 3, inTrade ? (strategy.openprofit >= 0 ? "+$" : "-$") + str.tostring(math.abs(strategy.openprofit), "#.##") : "—", text_color=inTrade ? f_valCol(strategy.openprofit) : txtColor, text_size=txtSize, text_halign=text.align_right)
+
+// === D-139 — de waarschuwing bij een onbekende account-fase =====================
+// Deze hangt bewust NIET in de teken-laag hierboven. Die zit achter `inDrawWin` EN achter
+// een maximum aantal drawings (`f_capDrawings`), en een veiligheidsmelding die kan wegvallen
+// omdat het tekenbudget vol is of omdat het tekenvenster elders staat, is geen
+// veiligheidsmelding. Eén label, op de laatste bar, altijd zichtbaar zolang de fase
+// onbekend is -- en hij verdwijnt zodra Ferry de fase opnieuw kiest.
+var label phaseWarnLbl = na
+if barstate.islast
+    label.delete(phaseWarnLbl)
+    if phaseUnknown
+        phaseWarnLbl := label.new(bar_index, high,
+             "⛔ ONBEKENDE ACCOUNT-FASE: \"" + phaseEff + "\"\nGEEN ENTRIES — open het instellingenvenster en kies Account phase opnieuw",
+             style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white,
+             size=size.normal, textalign=text.align_left)

@@ -221,6 +221,29 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-96 — Stand 8 okt op de ruimte-regel + toelichting voor Pine Dev (8 okt 2026)
+
+Tradovate 8/10 (dist to auto liq = ruimte). Regel: A-84/A-90/A-95 — vers qty 1; ruimte < 1.300 → + DLL 300/ct (TP 85);
+gelockt: qty 2 bij ≥ 3.000, 3 bij ≥ 4.500 (op TP 85); guards 250/100/500 per contract × qty, trailing stop uit. Streak-
+stops en giveback-2 bestaan nog niet (verzoek bij Pine Dev); zodra ze er zijn: 5 verl. op elke chart, 3 winsten op
+gelockte accounts met kleine ruimte, en dan qty 2 al bij ≥ 3.000 met 0–4% breach.
+
+| account | status | ruimte | nu (TP 85) | bij TP 120 (A-88) | opmerking |
+|---|---|---:|---|---|---|
+| 013 | gelockt, winst 2.939 | 2.839 | qty 1 · 250/100/500 | qty 1 · 150/50/300 | qty 2 bij 53.100 (ruimte 3.000); #3 $2.500 bij 55.100 |
+| 018 | gelockt, winst 4.051 | 3.951 | **qty 2 · 500/200/1.000** (was 3) | qty 2 · 300/100/600 | −811 vandaag op qty 3; ruimte < 4.500 → terug naar 2 (A-90); drempel consistency 58.348 (A-91) |
+| 022 | gelockt, winst 2.865 | 2.765 | qty 1 · 250/100/500 | qty 1 · 150/50/300 | qty 2 bij 53.100 |
+| 026 | vers, piek 51.646 | 2.049 | qty 1 · 250/100/500 | qty 1 · 150/50/300 | lock bij 52.600 (+1.405) |
+| 027 · 030 · 031 · 032 | vers | 1.706–1.811 | qty 1 · 250/100/500 | qty 1 · 150/50/300 | geen DLL |
+| 028 · 029 · 033 | vers, fase A | 939 · 1.107 · 1.213 | qty 1 · 250/100/500 · **DLL 300** | qty 1 · 150/50/300, geen DLL | één SL-reeks van het einde |
+| 034 · 035 | vers | 2.389 | qty 1 · 250/100/500 | qty 1 · 150/50/300 | |
+| 036 (300K PA) | vers, trailing 7.500 | 6.993 | **qty 3 · 750/300/1.500** | qty 3 · 450/150/900 | lock bij 307.600; qty 4 na de lock; geen DLL (A-88) |
+| 276 · 278 · 280 · 282 | eval gepasst | — | bij activering: vers PA, qty 1 · 250/100/500 | | |
+| 275 | 50K eval | 2.500 | El Toro 5 NQ · TP 122 (A-75) | | optioneel FVG 19–27 / confirm 4 |
+
+**Toelichting voor Pine Dev** (waarom, welke vier inputs, semantiek, cijfers, acceptatietest, voorbehouden):
+`toelichting_pine_dev_dagstops.md` bij Ferry en integraal in `docs/inbox.md` op de werkbranch (08-10).
+
 ## A-95 — Boven een ruimte-niveau ruimer handelen? Meer contracten ja, ruimere ranges nee (8 okt 2026)
 
 **Vraag Ferry 8/10:** mogen we boven bepaalde ruimte-niveaus met grotere/ruimere ranges handelen? **Grid:** gelockt, ruimte

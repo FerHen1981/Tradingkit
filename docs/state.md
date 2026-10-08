@@ -241,6 +241,14 @@ gelockte accounts met kleine ruimte, en dan qty 2 al bij ≥ 3.000 met 0–4% br
 | 276 · 278 · 280 · 282 | eval gepasst | — | bij activering: vers PA, qty 1 · 250/100/500 | | |
 | 275 | 50K eval | 2.500 | El Toro 5 NQ · TP 122 (A-75) | | optioneel FVG 19–27 / confirm 4 |
 
+**Snelheidsvariant voor verse accounts (vraag Ferry 8/10: "hier en daar een accountje verliezen is niet heel erg").**
+Uit de A-90-grid, vers 50K, 3 jaar · laatste jaar, hit60/br60: qty 1 (ref) 8,5/13,9 · 18/24. **Start qty 2, DLL 3×SL,
+terug naar 1 onder ruimte 1.000: 42,6/32,0 · (jaar n.v.t. gemeten op 3 j)**; onder 1.800 + DLL: 29,5/21,3; onder 2.400:
+26,2/13,1. Per 100 verse starts in 60 dagen: qty 1 → 8–9 payouts #1 en 14 dode accounts; start 2 + DLL, terug onder 1.000
+→ 43 payouts en 32 dode. Tegen een eval-reset van ~$150 en een payout van $1.500 is dat een duidelijke ruil als de
+breach-kans bewust geaccepteerd wordt. Op TP 120 zonder DLL: start 2, terug onder 2.200 → 58,5/25,2 tegen 48/16.
+Keuze Ferry; het doel-document (continuïteit eerst) blijft, dit is de expliciete uitzondering voor verse accounts.
+
 **Toelichting voor Pine Dev** (waarom, welke vier inputs, semantiek, cijfers, acceptatietest, voorbehouden):
 `toelichting_pine_dev_dagstops.md` bij Ferry en integraal in `docs/inbox.md` op de werkbranch (08-10).
 

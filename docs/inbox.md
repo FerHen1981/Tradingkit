@@ -12,6 +12,48 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### ✅ Backtest Setup → SM · 08-10 · **D-130 klaar — payout-cap uit de registry, plus drie dingen die ik onderweg vond**
+
+**D-130 is af.** De hardgecodeerde Apex-50K-ladder is weg uit de reken-kant. Eén resolver
+(`config.resolve_payout_cap`) bedient nu zowel de engine-overlay als de funded-sim en draagt
+**beide** registry-vormen: de oplopende `payout_ladder` én de D-148-vorm `payout_cap` +
+`payout_cap_until` (vast t/m payout 5, **uncapped vanaf 6**). Bij géén van beide **faalt hij hard**
+in plaats van stil Apex aan te nemen. `fleet.engine_config` en `funded.py` lezen per programma.
+Tests: `test_payout_cap.py` (12), incl. het bewijs dat payout #1 nu op **$2.000** capt i.p.v.
+$1.500 en dat de zesde payout ongelimiteerd is. Acceptatie Release 2 (payout #1 $2.000, voorbij 5
+geen blokkade) is daarmee op de reken-kant gedekt.
+
+Drie dingen die ik meld en **niet stil heb rechtgezet**:
+
+1. **Registry (gedeelde bron): `payout_cap_until: 5` toegevoegd** aan `apex_50k_legacy_pa` en
+   `apex_250k_legacy_pa`, plus het veld in `propfirms.schema.json`. Jouw `payout_cap_note` zei het
+   al in proza ("eerste vijf; vanaf de zesde geen maximum") — dit maakt het machine-leesbaar zodat
+   de sim het kan toepassen. Topone/Tradeify dragen wél een `payout_cap` maar géén `payout_cap_until`;
+   ik heb die op "cap vervalt nooit" gelaten (onbekend, `verified:false`) — als Apex-stijl uncap
+   daar ook geldt, hoort er een `payout_cap_until` bij, maar dat is jouw/registry-besluit.
+
+2. **Geen zes ladders bijgevuld (D-130 vroeg dat nog wel).** Door D-148/D-144 is dat achterhaald:
+   tradeday/fundednext-rapid/mffu/takeprofit PA dragen geen van beide vormen en staan `verified:false`.
+   Een `null` is daar een **ontbrekende meting**, geen "geen cap" (jouw eigen les uit D-144) — dus de
+   harde fout is het juiste gedrag en een verzonnen ladder niet.
+
+3. **Twee losse vondsten, geen D-130:**
+   - De vloot-sweep draait `apex_50k_eod_pa` (de oude oplopende ladder) terwijl de live accounts
+     **legacy** zijn ($2.000 vast, uncapped vanaf 6). De plumbing is nu klaar om dat te meten, maar de
+     daadwerkelijke **hermeting** van de noordster-maat op de legacy-cap is D-148-werk (OOS-klok op nul,
+     samen met Pine Dev), niet deze taak. Wil je dat ik de fleet-`_SPEC` op legacy zet, dan is dat één
+     regel per engine — maar het verandert gemeten cijfers, dus dat is jouw sein.
+   - 🔴 **`test_goals.py` staat rood op de werkbranch, en het is niet van mij.** De goal-metrics-feature
+     (`61c615f`) is half geland: `goals.py` leest `resolve_sessions/payouts/banked/breaches/milks` van
+     `FunnelOutcome`, maar `funnel.py:FunnelOutcome` draagt alleen `days` en `run_funnel` vult die velden
+     niet. Gevolg: `payout_throughput`/`eval_throughput` en de skills `/eval-throughput` en
+     `/payout-throughput` werken niet op echte outcomes. Het ligt in `backtest/**` (mijn map) maar is een
+     eigen feature-afronding, geen D-130 — wil je er een item van, dan pak ik het op.
+
+Volgende: ik bouw de reken-kant van Release 3b (`tailor.py`), met synthetische tests. De **A-84-
+reproductie op 013/018/022 kan ik pas draaien als de MGC-jaarstroom in de repo staat** (Release-asset,
+Parquet — Ferry levert aan); tot dan is die acceptatie expliciet geblokkeerd op data (D-141).
+
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 
 Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:

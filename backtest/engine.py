@@ -21,7 +21,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from .config import Config, ladder_cap
+from .config import Config
 
 
 @dataclass
@@ -643,12 +643,13 @@ class Engine:
         consistency_ok = cfg.consistency_pct <= 0 or (                      # <= 0 = no such rule
             self.profit_since > 0 and (self.best_day_since / self.profit_since) < cfg.consistency_pct / 100.0)
         eff_nr = min(self.pa_payouts_this_cycle + 1, 6)
-        cap = ladder_cap(eff_nr)
+        cap = cfg.payout_cap_for(eff_nr)       # None == uncapped (Apex legacy from payout 6)
         withdrawable = acct_realized - (cfg.acct_trail_dd + 100)
         payout_eligible = (cfg.is_pa and acct_locked
                            and acct_realized >= cfg.acct_trail_dd + 100 + cfg.payout_buffer + cfg.min_payout
                            and self.qual_days >= 5 and consistency_ok)
-        full_cap_ready = payout_eligible and withdrawable >= cap
+        # With no cap there is nothing to wait for — eligibility alone makes it ready.
+        full_cap_ready = payout_eligible and (cap is None or withdrawable >= cap)
         payout_ready = full_cap_ready if cfg.use_wait_for_cap else payout_eligible
 
         if not self.acct_halted:
@@ -671,7 +672,10 @@ class Engine:
 
         # bank a payout (PA backtest)
         if cfg.is_pa and payout_ready:
-            take = cap if cfg.use_wait_for_cap else min(withdrawable, cap)
+            if cap is None:
+                take = withdrawable            # uncapped: take the full amount above safety
+            else:
+                take = cap if cfg.use_wait_for_cap else min(withdrawable, cap)
             self.pa_total_banked += take
             self.pa_payouts_this_cycle += 1
             self.pa_reset_pnl_prev += take

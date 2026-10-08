@@ -50,6 +50,7 @@ def engine_config(name: str) -> Config:
     (sym, qty, gmin, gmax, cvdn, stop, r, expiry, dex, act, give, cap,
      regime, program, sunday) = _SPEC[name]
     acct_trail_dd, acct_dll, consistency_pct = _acct_rules(program, name)
+    payout_ladder, payout_cap, payout_cap_until = _payout_cap_fields(program, name)
     return Config(
         name=name,
         contract=contract(sym),
@@ -84,6 +85,8 @@ def engine_config(name: str) -> Config:
         # every DLL exit into a full stop-out. Uniform across all nine.
         acct_trail_dd=acct_trail_dd, acct_dll=acct_dll, consistency_pct=consistency_pct,
         min_payout=500.0, payout_buffer=500.0,
+        # payout cap shape from the registry, not the hardcoded ladder (D-130)
+        payout_ladder=payout_ladder, payout_cap=payout_cap, payout_cap_until=payout_cap_until,
         use_wait_for_cap=True, use_mae_guard=False,
         # account model — the scripts run with "Use firm preset" ON, so the
         # drawdown model comes from the firm program, NOT from the loose input
@@ -146,6 +149,31 @@ def _acct_rules(program: str, name: str) -> tuple[float, float, float]:
             f"registry — a funded mirror needs every account rule, and there is no "
             f"safe fallback for a payout calculation")
     return float(p.drawdown), float(p.max_daily_loss), float(p.consistency_pct)
+
+
+def _payout_cap_fields(program: str, name: str) -> tuple[tuple, float, int]:
+    """(payout_ladder, payout_cap, payout_cap_until) for a fleet engine, read from
+    the registry funded block — the per-program path D-130 added to replace the
+    hardcoded Apex-50K `ladder_cap()`. Hard-fails when the program carries NEITHER
+    a `payout_ladder` NOR a `payout_cap`: that is the silent Apex fallback D-130
+    removed, which produced a plausible but wrong number for 4 of the 8 D-104 firms."""
+    from ..firms import raw_programs
+    fu = None
+    for prog in raw_programs():
+        if prog.get("key") == program:
+            fu = prog.get("funded") or {}
+            break
+    if fu is None:
+        raise ValueError(
+            f"{name}: firm program {program!r} is not in data/propfirms.json")
+    ladder, cap = fu.get("payout_ladder"), fu.get("payout_cap")
+    if ladder:
+        return tuple(float(x) for x in ladder), 0.0, 0
+    if cap:
+        return (), float(cap), int(fu.get("payout_cap_until") or 0)
+    raise ValueError(
+        f"{name}: program {program!r} has neither payout_ladder nor payout_cap in "
+        f"data/propfirms.json — refusing the old silent Apex-50K ladder (D-130)")
 
 
 def trades_sunday(name: str) -> bool:

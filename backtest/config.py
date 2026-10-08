@@ -297,6 +297,21 @@ class Config:
     min_qual_day_usd: float = 50.0
     payout_buffer: float = 500.0
     use_wait_for_cap: bool = True
+    # Payout cap shape (D-130/D-148). The engine used to call a hardcoded Apex-50K
+    # `ladder_cap()` with no per-program path; now the cap is carried on the config
+    # and populated from data/propfirms.json for fleet configs (pipeline.fleet).
+    # Two shapes, because the registry carries both:
+    #   - `payout_ladder`: an increasing per-payout cap list (the pre-D-148 Apex
+    #     shape a few programs still carry in the registry).
+    #   - `payout_cap` + `payout_cap_until`: a FIXED per-payout cap that LAPSES —
+    #     Apex legacy after the D-148 correction is $2,000 through payout 5, then
+    #     UNCAPPED from the 6th (`payout_cap_until=5`). `until=0` never lapses.
+    # The default below is the pre-D-148 Apex-50K ladder, kept ONLY as the fallback
+    # for standalone research presets; registry-sourced configs override it, and the
+    # fleet metric itself is re-measured under D-148, not here.
+    payout_ladder: tuple = (1_500.0, 1_500.0, 2_000.0, 2_500.0, 2_500.0, 3_000.0)
+    payout_cap: float = 0.0
+    payout_cap_until: int = 0
     # MAE guard (Apex Legacy 30% rule), PA only
     use_mae_guard: bool = False
     mae_base_pct: float = 30.0
@@ -331,13 +346,33 @@ class Config:
     def with_(self, **kw) -> "Config":
         return replace(self, **kw)
 
+    def payout_cap_for(self, n: int):
+        """Dollar cap for this account's n-th payout (1-based), or None if uncapped."""
+        return resolve_payout_cap(n, ladder=self.payout_ladder, cap=self.payout_cap,
+                                  cap_until=self.payout_cap_until)
 
-# Ladder caps per payout number (1..6) for the Apex 50k plan.
-LADDER_CAPS = {1: 1500.0, 2: 1500.0, 3: 2000.0, 4: 2500.0, 5: 2500.0, 6: 3000.0}
 
+def resolve_payout_cap(n: int, *, ladder=(), cap: float = 0.0, cap_until: int = 0):
+    """The payout cap ($) for the n-th payout (1-based), or None when the payout is
+    UNCAPPED. Single source of the cap logic, shared by the engine overlay and the
+    funded sim (D-130/D-148).
 
-def ladder_cap(n: int) -> float:
-    return LADDER_CAPS.get(min(max(n, 1), 6), 3000.0)
+    - `ladder` (list): increasing per-payout caps; `ladder[min(n-1, len-1)]`.
+    - `cap` + `cap_until`: a fixed cap on payouts 1..cap_until, then UNCAPPED
+      (Apex legacy after D-148: $2,000 through payout 5, no cap from the 6th).
+      `cap_until=0` means the fixed cap never lapses.
+
+    Raises ValueError when neither shape is supplied — that is exactly the silent
+    Apex-50K fallback D-130 removed, which produced a plausible but wrong number."""
+    if ladder:
+        return float(ladder[min(max(n, 1) - 1, len(ladder) - 1)])
+    if cap and cap > 0:
+        if cap_until and n > cap_until:
+            return None
+        return float(cap)
+    raise ValueError(
+        f"no payout cap shape for payout #{n}: neither a payout_ladder nor a "
+        f"payout_cap was supplied (refusing the old silent Apex-50K fallback, D-130)")
 
 
 # ---------------------------------------------------------------------------

@@ -387,6 +387,13 @@
                 "null"
               ]
             },
+            "payout_cap_until": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "description": "Fixed payout_cap applies to payouts 1..N inclusive, then UNCAPPED (Apex legacy: 5, i.e. no maximum from the sixth payout). null/absent = the cap never lapses. Read by config.resolve_payout_cap (D-130/D-148)."
+            },
             "payout_ladder": {
               "type": [
                 "array",

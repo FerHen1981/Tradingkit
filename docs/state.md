@@ -3,7 +3,7 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-10-04 (Analyses & Data chat)_
+_Last updated: 2026-10-08 (Analyses & Data chat)_
 
 > **Het doel (besluit Ferry 2 okt 2026):** continuïteit op dagbasis, en per account het maximum
 > van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de strategie. Elke
@@ -220,6 +220,78 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 2.485) → 1, qty 2 pas bij 53.100 · 034/035 (vers, 2.395) → 1 · 026/027/030/031/032 (vers, 1.565–1.765) → 1 · 028/029/033
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
+
+## A-97 — Sessievensters × dagstops samen gemeten op de doelmeetlat; trap-1-audit van de pijplijn geleverd (8 okt 2026)
+
+**Vraag SM 8/10 (D-152):** zijn venstersets en dagstops substituten of stapelen ze? Meetlat: kans op de volgende trede
+binnen 40–60 dagen tegen breach-kans. **Opzet:** zes vensters als echte `enabled_hours` in de engine (12 runs, MGC 3 jaar,
+export-config c92d9: FVG 8–23 · confirm 4 · expiry 12 · delta uit · SL 100 · TP 85 en 120, qty 1); daarop vier dagstop-
+regels post-hoc op de tradevolgorde per dag, bovenop 250/100/500. Vensters (ET): Asia = 19–01 · London = 02–04 · US = 07–11 ·
+Globex = 18; *Liquidity Core* = Globex+London+US (de bevroren config), *All* = alles behalve 17. Rolling starts, vers 50K
+(trailing 2.500) en gelockt met ruimte 3.000 (volgende trede $1.500 ≤ 40 d). Bron: `res/sessions_stops.csv` (96 rijen).
+
+Vers 50K, kans #1 ≤ 60 d / breach ≤ 60 d · gelockt: trede ≤ 40 d / breach:
+
+| venster · stop | TP 85 · 3 jaar | TP 85 · laatste jaar | TP 85 gelockt (3 j / jaar) | TP 120 · 3 jaar | TP 120 · jaar |
+|---|---|---|---|---|---|
+| All · geen (live) | 8,5 / 13,9 | 18,2 / 24,0 | 57,6/1,9 · 59,5/5,8 | 17,6 / 10,7 | 52,9 / 14,9 |
+| All · +5 verliezen | 9,1 / 7,2 | 20,7 / 5,8 | 61,9/1,3 · 75,2/4,1 | 16,5 / 9,3 | 52,9 / 13,2 |
+| All · +5 verl. + 3 winst | 2,1 / 0,0 | 5,8 / 0,0 | **66,7/0 · 93,4/0** | 15,5 / 7,7 | 47,9 / 8,3 |
+| All · 3 winst óf 1e verlies na +150 | 0 / 0 | 0 / 0 | 53,9/0 · 90,9/0 | **20,3 / 7,2** | **62,0 / 5,8** |
+| Liquidity Core (bevroren) · beste van vier | 0 / 9,2 | 0 / 28,9 | 46,4/3,2 · 53,7/7,4 | 8,4 / 17,8 | 25,6 / 47,1 |
+| LC + Asia · geen | 6,4 / 8,0 | 16,5 / 5,8 | 57,1/2,4 · 75,2/5,0 | 18,5 / 8,6 | 57,0 / 9,1 |
+| LC + Asia · +5 verl. + 3 winst | 1,1 / 0,0 (90 d: 27,3/0) | 3,3 / 0 (90 d: 64,5/0) | 62,5/0 · 92,6/0 | 14,7 / 7,5 | 43,8 / 8,3 |
+| Asia + London · geen | 9,0 / 14,5 | 24,8 / 23,1 | 51,8/2,1 · 64,5/2,5 | 12,0 / 12,7 | 36,4 / 21,5 |
+| Asia + London · +5 verliezen | 9,0 / 12,0 | 24,8 / 19,8 | 52,7/0,3 · 64,5/0,8 | 10,8 / 4,2 | 27,3 / 4,1 |
+| Asia + London · +5 verl. + 3 winst | **7,8 / 0,0** | **21,5 / 0,0** | 53,6/0 · 73,6/0 | 9,0 / 5,4 | 24,0 / 4,1 |
+| Asia alleen · geen | **9,0 / 0,7** | **22,3 / 0,0** | 42,5/0 · 64,5/0 | 13,0 / 0,0 | 32,2 / 0,0 |
+| Asia + London + Globex 18 · geen | 8,7 / 15,3 | 21,5 / 22,3 | 55,9/3,3 · 72,7/5,0 | 8,1 / 7,8 | 23,1 / 5,8 |
+
+**Lezing.** (1) **Op de breach-kant zijn venster en stop substituten:** Asia-alleen haalt zonder stop al 0–0,7% breach,
+en de stops brengen *All sessions* naar hetzelfde punt. Beide snijden dezelfde dagen weg — de verliesreeksen in het
+US-blok. (2) **Op de hit-kant verschillen ze per accounttoestand.** Vers: Asia-alleen (9,0/0,7 · 22,3/0) en Asia+London
+met 5-verliezen-+-3-winsten (7,8/0 · 21,5/0) zijn de beste twee, gelijk aan *All + 5 verliezen* op hit maar zonder de
+restbreach. Gelockt: *All sessions + 5 verl. + 3 winst* wint ruim (66,7/0 · 93,4/0); de Asia-vensters doen te weinig
+trades per dag (2,8 tegen 10) om een trede in 40 dagen te halen (42–54). Dus **vers smal, gelockt breed** — niet één
+venster voor de vloot. (3) **Stapelen op het smalle venster kost hit:** 3-winsten-stop op Asia-alleen zakt van 9,0 naar
+7,4 en op het jaar van 22,3 naar 19,0; alleen de 5-verliezen-stop is daar neutraal. (4) **TP 120 wint niets bij de
+vensters:** *All + 3 winst óf 1e verlies na +150* blijft de beste set (20,3/7,2 · 62,0/5,8); Asia-alleen haalt 0% breach
+maar de helft van de hit. (5) **Liquidity Core is in alle 16 combinaties de slechtste:** nooit een trede ≤ 60 d op vers,
+9–50% breach, de enige set met negatief netto op het jaar. Dat bevestigt D-152 kwalitatief. (6) Uur 18 (Globex-open)
+toevoegen aan Asia+London kost alleen: breach 14,5 → 15,3, slechtste dag −1.093 → −1.213, geen hit erbij.
+
+**Aanbeveling (onder de gebruikelijke voorbehouden — engine, geen Pine; 48 combinaties getest, dus selectie-ruis; alle
+cijfers binnen het validatievenster):** op TP 85 voor verse accounts **Asia + London met de 5-verliezen-stop**, of Asia-
+alleen als de stops er nog niet zijn; voor gelockte accounts **All sessions + 5 verl. + 3 winst** (A-92/A-94 ongewijzigd).
+Welke vensters het script als `Market regime` kent, bepaalt of dit een input is of een Pine-wijziging — dat weet Pine Dev.
+
+**Let op, tegenspraak met D-152 in absolute cijfers:** onze 3-jaarsrun van *All sessions* op de export-config (c92d9, FVG
+8–23, confirm 4, qty 1, guards 250/100/500) is **netto +$11.404 per contract bij 56,8% winstdagen** (pessimistische
+vulling), waar D-152 −$27.377 / PF 0,96 noemt voor "de live config". D-149 beschrijft een live chart met FVG 4–11 zonder
+confirm-venster en qty 3. Als D-152 díe set heeft gemeten, zijn het twee verschillende charts en kloppen beide cijfers; dan
+is het verschil tussen de twee charts (FVG-band en confirm) de grootste hefboom van allemaal, groter dan venster of stop.
+Niet vast te stellen vanuit deze chat — vraag aan de SM welke config D-152 draaide.
+
+**Trap-1-audit van de pijplijn (gevraagd door de SM om de pariteitspoort om te zetten).** `stage1 --dataset MGC_3y
+--engine EL_TESORO_MGC_CON_EOD --export TES-MGC-C_c92d9.xlsx --as-tested` op dezelfde drie jaar (export-venster
+2025-09-29 → 2026-09-30, 98,6% dekking): **POORT NIET GEHAALD** — 2.117 trades tegen 3.628 in Pine, 1.568 gepaard, WR 45,8
+tegen 55,5. Oorzaak staat in de audit zelf: `--as-tested` neemt 16 afwijkende velden over (qty, SL, FVG 8–23, TP-modus,
+guards, delta uit, trailing 2.500, consistency 30 …) maar **vier velden niet**, omdat `_PROP_MAP` in
+`backtest/pipeline/parity.py` ze niet kent: `Market regime` (export *All sessions*, engine draait op het bevroren
+*Liquidity Core* → 1.515 Pine-trades "geen FVG van die richting in het venster", alle buiten uur 02–04/07–11/18),
+`Take Profit (units, Fixed mode)` (export 85, engine sluit op $120,96 = de Config-default van 122 ticks zodra de
+TP-modus wél op *Fixed* gezet wordt), `Confirmation window (bars)` (export 4, engine op de default) en `Account Phase` (ontbreekt in de sheet; engine
+draait *Apex PA* met DLL 900 → 47 exits "PA Daily Loss Limit" die Pine als Developer nooit doet). De handmatige engine-run
+met exact die vier velden goed gezet (zelfde engine-code, A-88) paart 92% en staat op 3.566 tegen 3.627. **Dus: de engine
+is in pariteit, de pijplijn-vertaling van export naar config niet.** Gevraagd aan Backtest Setup: de vier labels toevoegen
+aan `_PROP_MAP`/`_ENUM` (plus het ontbrekende `Account Phase` als sheet-omissie melden aan Pine Dev) en de run herhalen; het
+artefact (`EL_TESORO_MGC_CON_EOD_trap1_pariteit_20261008.json`) en de tekstuitvoer staan bij Ferry en de SM. Tot die
+herrun blijft de poort op het bord terecht open — dat is de regel, en ik heb hem nu zelf in de hand gehad.
+
+**D-153 (validator):** raakt onze metingen niet. Alle elf datasets liepen via `backtest/lab/normalize.py` → `data.load`
+(offset-kolom aangehecht, volume uit `Volume(from bar)`), niet via `tools/validate_dataset.py`; gecontroleerd: uur 17 ET
+is in alle 37 maanden het enige lege uur, dus de DST-conversie is goed. De validator is alleen op de pilot-export gedraaid
+(inbox 08-10) en gaf daar precies de gemelde defecten.
 
 ## A-96 — Stand 8 okt op de ruimte-regel + toelichting voor Pine Dev (8 okt 2026)
 

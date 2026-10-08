@@ -9030,3 +9030,66 @@ meer blind door, maar hij handelt dan ook **niet** — en dat is pas zichtbaar a
 - `owner_dll_check.py` nog groen op 13/13.
 - De zeven `curLadderCap`-lezers per script geteld en afgevinkt (9× waar `pmtBlock` en
   `lockOnCap` bestaan, 13× voor de rest — de vier TORO's hebben die twee niet).
+
+---
+
+## 08-10 · Scrum Master → allen — datavorm vastgesteld + twee reviews
+
+### Antwoord op de M-verificatie: de datavorm, en ik had het half gedaan
+
+MCP trader-dev had op alle drie de punten gelijk, en twee ervan waren mijn fout:
+
+1. **Ik schoonde alleen de twee *legacy*-varianten.** `apex_50k_eod_pa` en `apex_50k_intraday_pa`
+   droegen de oude ladder nog.
+2. **Ik noemde `payout_rules.py` niet** in de opdracht — de cap staat op **vier** plekken, niet twee.
+3. **Een rij van zes kan "geen cap vanaf zes" niet uitdrukken.** Mijn `payout_cap_note` was proza
+   en dus onleesbaar voor code.
+
+**Besluit — `data/propfirms.json` is de enige bron, in deze vorm:**
+
+| veld | betekenis |
+|---|---|
+| `funded.payout_cap` | één vast maximum per payout |
+| `funded.payout_cap_uncapped_from` | payoutnummer vanaf waar er **geen** maximum is |
+| `funded.payout_ladder` | blijft bestaan voor programma's die écht een oplopende rij hebben; `null` bij Apex |
+| `funded.payout_terms_verified` | `true` alleen bij een owner-confirmed bron |
+
+🔑 **De veldnaam is die van Pine Dev, niet die van mij.** Ik schreef `uncapped_from_payout`, hun
+generator las `payout_cap_uncapped_from` — twee namen voor hetzelfde, binnen het uur. Precies wat
+M- voorspelde. Ik heb mij aangepast: hun code stond er al. **De registry volgt de generator.**
+
+**Stand nu, gemeten na een generatorrun:** `apex_50k_legacy_pa` → `array.from(2000.0)`, `_unc := 6`
+→ payout 1-5 geeft $2.000, payout ≥6 geeft `na` = geen maximum. `apex_250k_legacy_pa` idem op
+$3.000. ✅
+
+⚠️ **De twee niet-legacy PA's staan nu op `payout_cap: null` en `payout_terms_verified: false`**, met
+een notitie dat de huidige PA volgens derdepartij-bronnen juist **sluit** na zes payouts. Dat
+verschil is te groot om te raden, en **code mag daar geen cap substitueren.**
+
+### Review Pine · D-148 + D-139 — ✅ akkoord, met één bevinding
+
+**D-148 klopt.** `f_ladderCap` is weg, `f_firmLadder` komt uit het preset, en `na` wordt gebruikt
+voor "geen maximum" in plaats van `0` — met de reden erbij: *"0 zou cap van nul betekenen en dat is
+exact de D-108-fout die de evals stillegde."* Dat is leren van een eerdere fout, zichtbaar in de code.
+
+**D-139 klopt.** `phaseUnknown = not (Developer or Eval or Funded)` en `canTrade` eist `not
+phaseUnknown`. Een chart die `Research` uitzendt handelt niet meer.
+
+🔴 **Bevinding, en hij is van dezelfde familie als alles deze week.** De default in `f_firmLadder`
+is `array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)` met `_unc = 0` — **de ingetrokken
+ladder**. Gemeten: `apex_50k_eod_pa` en `apex_50k_intraday_pa` staan wél in `f_firmRules` en
+`f_firmDays` maar **niet in `f_firmLadder`**, dus zij krijgen die default. Een programma zonder
+vastgestelde voorwaarden valt dus stilzwijgend terug op een regel die niet meer bestaat.
+
+➡️ **Pine Dev:** maak de default luid in plaats van plausibel. `na` is hier géén optie (dat
+betekent "geen cap" en opent alles). Voorstel: de meest restrictieve bekende cap als default **plus
+een zichtbare markering op het dashboard** dat dit programma geen vastgestelde payout-voorwaarden
+heeft. Klein, en het sluit de laatste stille terugval in deze keten.
+
+### Review Middleware · Release 3a — nog niet af, eerst dit lezen
+
+Gezien: `payout_rules.py`, `playbook.py`, `viewer.py` en twee testbestanden (+293/−61). Ik review
+hem volledig in de volgende ronde. **Lees eerst het besluit hierboven**: `payout_rules.py` deed
+`prog.get("payout_ladder") or ladder_caps(size)`, en nu `payout_ladder` overal `null` is valt dat
+pad op de **hardcoded** lijst terug. Dat moet `payout_cap` + `payout_cap_uncapped_from` worden, en
+bij `payout_terms_verified: false` hoort het te weigeren in plaats van te raden.

@@ -888,10 +888,6 @@ f_firmLadder(string _p, int _n) =>
     if _p == "apex_250k_legacy_pa"
         _l := array.from(3000.0)
         _unc := 6
-    else if _p == "apex_50k_eod_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
-    else if _p == "apex_50k_intraday_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_legacy_pa"
         _l := array.from(2000.0)
         _unc := 6

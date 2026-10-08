@@ -8833,3 +8833,111 @@ komt te laat.
 ➡️ **Voor de bouw:** de opschaaldrempel is een functie van **(ruimte, gelockt?, TP)**, niet van de
 ruimte alleen. Eén drempel voor beide TP's is meetbaar fout. En vóór de lock blijft het 1 contract
 tenzij Ferry expliciet voor snelheid kiest — dat is zijn afweging, niet die van het model.
+## 08-10 · Pine Dev → Scrum Master + Backtest Setup + Ferry — D-148 en D-139 af, v3.10.0
+
+Twee commits plus de versiebump. **Eén OOS-reset**, akkoord Ferry.
+
+### D-148 — vast maximum, en geen maximum vanaf payout 6 · `3b681ca`
+
+📌 **Eerst een correctie op de opdracht:** `f_ladderCap()` bestaat niet meer — die is bij
+**D-126** (06-10) verwijderd. De live weg is sinds toen `f_firmLadder(firmPreset, n)`,
+gegenereerd uit de registry. Dat maakt deze fix kleiner dan hij klonk: de waarden hoefden
+niet in dertien scripts, alleen in de generator.
+
+`f_firmLadder` draagt nu **beide** registry-vormen plus de uitzondering:
+
+| registry-veld | betekenis |
+|---|---|
+| `funded.payout_cap` | één vast maximum (de nieuwe Apex-vorm) |
+| `funded.payout_ladder` | maximum per payoutnummer (de oude vorm, nog in gebruik) |
+| `funded.payout_cap_uncapped_from` | payoutnummer vanaf waar er **geen** maximum is |
+
+⛔ **Geen maximum komt terug als `na`, bewust niet als 0.** Nul zou "maximum van nul"
+betekenen en dat is exact de D-108-fout die elke eval stillegde — daar ben ik niet opnieuw
+in gelopen.
+
+🔑 **En dat dwong het echte werk af: er zijn zeven lezers van `curLadderCap` en "geen
+maximum" betekent op elke plek iets anders.** Bij `fullCapReady` is de volle-trede-eis dan
+**vervuld**, bij `pmtBlock` is er **niets om op te stoppen**, in de PA-simulatie is de hele
+opneembare stand de payout, en `lockOnCap` heeft niets om vast te zetten. Drie teksten
+tonen nu `GEEN MAX (payout 6+)`. Eén vergeten plek zou een stille `NaN` zijn geweest, dus
+de patch heeft een assert die eist dat er **geen onbeschermde lezer** overblijft.
+
+**Nagerekend, per preset × payoutnummer:**
+
+| preset | P1 | P2 | P3 | P4 | P5 | P6 | P7 |
+|---|---|---|---|---|---|---|---|
+| `apex_50k_legacy_pa` | **$2.000** | $2.000 | $2.000 | $2.000 | $2.000 | **geen** | **geen** |
+| `apex_250k_legacy_pa` | $3.000 | $3.000 | $3.000 | $3.000 | $3.000 | **geen** | **geen** |
+| `apex_50k_eod_pa` | $1.500 | $1.500 | $2.000 | $2.500 | $2.500 | $3.000 | $3.000 |
+
+✅ **Beide acceptatiecriteria halen het — op een legacy-preset.** Payout #1 op $2.000 in
+plaats van $1.500, en voorbij vijf payouts geen `pmtBlock`.
+
+### 🔴 Maar op de charts zoals ze nu staan verandert er niets, en dat moet je weten
+
+`apex_50k_eod_pa` en `apex_50k_intraday_pa` dragen in de registry **nog de oude rij** en
+géén `payout_cap`. **En `apex_50k_eod_pa` is de `firmPreset`-default op zeven van de negen
+PA-scripts.** Dus op een chart die niet expliciet op legacy staat:
+
+- blokkeert payout #1 nog steeds op $1.500 — de $500 per account per cyclus blijft staan;
+- bestaat er voorbij payout 5 nog steeds een plafond van $3.000.
+
+➡️ **Dat is dezelfde `firmPreset`-default waar ik bij D-108 en D-104 al op wees.** Toen was
+het een consistency die 50 las waar 30 hoort; nu hangt er geld aan. **Eén keuze in het
+instellingenvenster lost het op** — geen code. Mijn advies blijft `apex_50k_legacy_pa` op de
+legacy-accounts; besluit is Ferry's, want het is een config-wijziging in live scripts.
+
+### 📌 Voor Backtest Setup — drie dingen in `data/propfirms.json`
+
+1. 🔴 **`apex_50k_eod_pa` en `apex_50k_intraday_pa` staan nog op de oude ladder.** Als de
+   Apex-pagina ook voor de 4.0-PA geldt, horen die naar `payout_cap` + `payout_cap_uncapped_from`.
+   Geldt hij alléén voor legacy, zet dat dan in `meta.notes`, want nu lijkt het een omissie.
+2. ⚠️ **`payout_cap_uncapped_from` bestaat nog niet als veld.** De generator leidt de 6 af uit
+   `payout_cap_note` en **zegt dat op elke run** (`LET OP …`), zodat het geen stille aanname
+   wordt. Zet het veld erin en die waarschuwing verdwijnt. Ik kon het bestand hier zelf niet
+   schrijven — mijn poging werd geweigerd als *modify shared resources*, dus het ligt bij jullie.
+3. ⚠️ **De registry valideert niet meer tegen zijn eigen schema.** `funded` heeft
+   `additionalProperties: false`, maar de twee legacy-records dragen vier velden die het schema
+   niet kent (`payout_cap_note`, `min_required_balance`, `payout_requirements`, `safety_net`) en
+   `payout_cadence: "every_8_trading_days"` staat niet in de enum. `verified: true` dekt de
+   inhoud, niet de vorm.
+
+📌 En passant: `topone_50k_elite_pa` ($2.500) en `tradeify_50k_growth_pa` ($3.000) krijgen nu
+hun **eigen** maximum uit `payout_cap`, waar ze eerst op de Apex-fallback vielen. Niet Ferry's
+programma's, maar het is wel een gedragswijziging op die twee presets.
+
+### D-139 — onbekende fase sluit alles · `112b08c`
+
+```pine
+bool phaseUnknown = not (phaseEff == "Developer" or phaseEff == "Eval" or phaseEff == "Funded")
+canTrade = … and not phaseUnknown
+```
+
+**Geen nieuwe entries bij een onbekende fase. Sluiten blijft wél mogelijk** — een poort die
+ook de exit dichtzet maakt het erger dan het was, en dat is precies het verschil met de
+toestand die A-82 mat.
+
+Het bewaargedrag dat je gevraagd had te bevestigen: **ja, zo werkt het.** `input.string`
+bewaart de opgeslagen waarde ook als die niet meer in `options` staat, en TradingView blijft
+die gebruiken tot iemand het instellingenvenster opent en opnieuw kiest. De chart ziet er
+bijgewerkt uit, staat op de nieuwe versie, en draait tóch zonder poorten. Dat staat nu in de
+bron zodat de volgende lezer het niet opnieuw hoeft uit te zoeken.
+
+🔧 **De waarschuwing hangt bewust NIET in de teken-laag.** Die zit achter `inDrawWin` én
+achter een maximum aantal drawings (`f_capDrawings`). Een veiligheidsmelding die kan
+wegvallen omdat het tekenbudget vol is of omdat het tekenvenster elders staat, is geen
+veiligheidsmelding. Het is één eigen label op de laatste bar dat verdwijnt zodra de fase
+weer geldig is.
+
+➡️ **Ferry's actie blijft staan** en code vervangt die niet: open van elke eval-chart het
+instellingenvenster en kies `Account phase` expliciet. Vanaf v3.10.0 handelt zo'n chart niet
+meer blind door, maar hij handelt dan ook **niet** — en dat is pas zichtbaar als je kijkt.
+
+### Verificatie
+
+- `pine_lint.py` vóór en ná: **byte-identieke uitvoer**, alle 13 `ok`.
+- Generator **idempotent**: tweede run laat alle 14 bestanden byte-identiek (md5).
+- `owner_dll_check.py` nog groen op 13/13.
+- De zeven `curLadderCap`-lezers per script geteld en afgevinkt (9× waar `pmtBlock` en
+  `lockOnCap` bestaan, 13× voor de rest — de vier TORO's hebben die twee niet).

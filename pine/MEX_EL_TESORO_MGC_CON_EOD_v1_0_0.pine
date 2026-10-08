@@ -326,8 +326,47 @@
 //   buiten de poort (geen `f_firm*`) en is referentiedata die het script niet nodig heeft,
 //   want het leest `syminfo.*` van de chart. Weghalen raakt de generatie-regiomarkers en
 //   hoort in een eigen ronde.
+// v3.10.0 (08-10, D-148 + D-139): het payout-maximum klopt met Apex, en een onbekende
+// account-fase sluit alles.
+//   D-148 — GEEN OPLOPENDE LADDER. Apex' eigen pagina zegt: het maximum per payout is
+//   VAST per accountgrootte ($25k $1.500 · $50k $2.000 · $100k $2.500 · $150k $2.750 ·
+//   $250k $3.000 · $300k $3.500) en het VERVALT vanaf de zesde payout, mits de minimum
+//   vereiste balans in het account blijft. Wij hadden [1500,1500,2000,2500,2500,3000].
+//   Dat kostte twee keer geld: op payout #1 blokkeerde het script op $1.500 terwijl Apex
+//   $2.000 toestaat, en voorbij de vijfde payout kende het script nog een plafond van
+//   $3.000 dat in werkelijkheid niet bestaat -- precies de fase waar account 018 in zit.
+//   `f_firmLadder` draagt nu beide vormen uit de registry (een vast maximum of een rij per
+//   payoutnummer) plus het payoutnummer vanaf waar er GEEN maximum is. Geen maximum komt
+//   terug als `na`, bewust niet als 0: nul zou "maximum van nul" betekenen en dat is exact
+//   de D-108-fout die elke eval stillegde.
+//   ⛔ Daardoor moet ELKE lezer van `curLadderCap` zeggen wat "geen maximum" daar betekent,
+//   en dat is per plek anders: voor `fullCapReady` is de volle-trede-eis dan VERVULD, voor
+//   `pmtBlock` is er niets om op te stoppen, voor de PA-simulatie is de hele opneembare
+//   stand de payout, en `lockOnCap` heeft niets om vast te zetten. `capExists` en `capStr`
+//   maken dat expliciet; een vergeten plek zou een stille NaN zijn geweest.
+//   Nagerekend: apex_50k_legacy_pa P1-P5 $2.000 en P6+ geen maximum; apex_250k_legacy_pa
+//   P1-P5 $3.000 en P6+ geen maximum.
+//   ⚠️ apex_50k_eod_pa en apex_50k_intraday_pa dragen in de registry nog de oude rij en
+//   geen vast maximum, dus daar verandert niets -- en dat is de `firmPreset`-default op
+//   zeven van de negen PA-scripts. Een legacy-account hoort op `apex_50k_legacy_pa` te
+//   staan; dat is een keuze in het instellingenvenster, geen code.
+//
+//   D-139 — ONBEKENDE FASE = ALLES DICHT. `phaseOn = isEval or isPA`, en "Research" is geen
+//   van beide: dan viel élke accountpoort weg -- trailing, goal, breach-halt. A-82 mat de
+//   rekening: eval 274 nam vier stops voor -$9.762 op een account dat na de eerste al dood
+//   was, en 268-274 waren zeven evals in twee dagen. `canTrade` eist nu `not phaseUnknown`,
+//   dus geen nieuwe entries. SLUITEN BLIJFT WEL MOGELIJK -- een poort die ook de exit
+//   dichtzet maakt het erger dan het was.
+//   WAAROM EEN CHART DIE WAARDE NOG UITZENDT: `accountPhase` kent hier drie opties en
+//   "Research" staat er niet meer bij. TradingView bewaart een opgeslagen inputwaarde die
+//   niet meer in de optielijst voorkomt en blijft die gebruiken tot iemand het
+//   instellingenvenster opent en opnieuw kiest. De chart ziet er dan bijgewerkt uit, staat
+//   op deze versie, en draait tóch zonder poorten. Daarom staat er nu ook een rood label op
+//   de laatste bar, buiten de teken-laag: die zit achter een tekenbudget, en een
+//   veiligheidsmelding die kan wegvallen omdat dat budget vol is, is er geen.
+//   DE OOS-KLOK GAAT OP NUL -- akkoord Ferry 08-10, en dat is hier de prijs waard.
 var string SCRIPT_NAME = "MΞX EL TESORO · MGC CON EOD"
-var string currentVersion = "v3.9.0"
+var string currentVersion = "v3.10.0"
 strategy("MΞX EL TESORO · MGC CON EOD · " + currentVersion, shorttitle="TES-MGC-C", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

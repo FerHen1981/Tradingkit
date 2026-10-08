@@ -222,6 +222,13 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   nummer hooguit achteraan tussen haakjes voor wie het wil naslaan. Een zin als *"D-146 blokkeert
   D-127"* is voor de schrijver geschreven, niet voor de lezer. Geldt voor chat, de Approval Queue
   en LifeOS-taken; **tussen chats onderling blijven nummers juist wél de kortste weg.**
+- 🔴 **Geen aannames over Ferry's dag, tempo of beschikbaarheid** (besluit Ferry 08-10: *"stop
+  maar met bepalen of ik verder ga of niet of welke tijd van de dag het is"*). Schrijf geen
+  *"als je vanavond nog iets doet"*, *"morgen staat er dan"* of *"doe dit met een vlakke
+  positie"* tenzij hij er zelf naar vraagt of er een gemeten reden is. Hij bepaalt wanneer hij
+  werkt. **Lever de lijst, niet de planning.** Vraagt hij wat er van hem nodig is, dan is het
+  antwoord een korte opsomming van concrete handelingen — geen context, geen volgorde-advies,
+  geen vooruitblik.
 - **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
   `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
   zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. 🔴 **Maar dat bestand staat er sinds 07-10 nog steeds niet, op geen enkele branch (D-137):**

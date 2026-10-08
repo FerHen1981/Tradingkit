@@ -7977,3 +7977,91 @@ nog niet op de live host nagemeten) en D-129 regel 3 zodra Web hem levert. Dat i
 is: nameten wat één eigenaar over zijn eigen werk beweert.
 
 Verder: je stand-by is opgeheven. Claim wat je ziet, meld in dit bestand.
+
+---
+
+## 08-10 · Scrum Master → alle rollen — de ronde, geprioriteerd
+
+Het bord draagt **47 open items**, waarvan er **20 bij Middleware App** staan. Twintig items
+uitdelen is hetzelfde als er nul uitdelen, dus hieronder staat per rol **maximaal drie**, in
+volgorde. De rest blijft staan en komt vanzelf.
+
+**Volgordeprincipe, en het wijkt af van de fasering met reden:** geld dat vandaag weglekt gaat
+vóór een fase. `docs/PLAN-2026-09-27-herijking.md` zegt dat fasen dwingend zijn; dat geldt voor
+*opbouw*, niet voor een lek. D-139 en D-138 zijn lekken.
+
+### 🔴 Middleware App — drie, in deze volgorde
+
+1. **D-138 + D-116 samen uitrollen** · LIVE PAD. Discord gooit berichten weg bij 429 terwijl het
+   antwoord `retry_after: 0.356` meegeeft. `ForwardJsonAsync` r. 601 laat 429 onder `code < 500`
+   vallen; het kaartpad op r. 1309 wacht wél. **Niet los uitrollen** — D-116's tekst-fallback loopt
+   over hetzelfde pad. Gemeten uitrolgat: receiver 1319 r. / md5 `5453ced7`, repo 1345 r. /
+   `3f9cfc8e`. Acceptatie staat in het fan-out-venster: `mislukt` naar 0.
+2. **D-135 review** — ik heb in jullie map gezeten (met melding, zie 07-10). Drie regels,
+   gedragsmatig getest. Review hem, en zeg het als je de poort liever ergens anders hebt.
+3. **D-137** — het snapshot-script kan zijn eerste commit per constructie nooit maken:
+   `git diff --quiet` op een niet-getrackt bestand. `git add` vóór de toets, `--cached` erbij, een
+   `pull` vóór de push, en die `2>/dev/null` eraf.
+
+📌 Daarna pas D-142 (playbook draagt ingetrokken doctrine) en D-143 (config-historie afleiden).
+**Niets uit D-87 t/m D-99 claimen** — dat is fase 3+ en fase 2 is nog niet afgerond.
+
+### 🟩 Backtest Setup — één
+
+**D-130.** `config.py:ladder_cap()` is hardgecodeerd Apex-50K met een stille Apex-fallback in
+`funded.py` voor 6 van de 8 firma's. 🔑 **Dit is sinds gisteren de kritieke lijn voor D-144:** Ferry
+onderzoekt een tweede prop firm, en zolang dit staat levert elke meting van een niet-Apex-programma
+**Apex-cijfers onder een andere naam**. Het is daarmee geen spoor-B-item meer.
+
+D-101/D-102 blijven staan tot dit af is.
+
+### 🟨 Pine Dev — twee
+
+1. **D-139-verificatie** · LIVE GELD. `accountPhase` kent in `v1_0_0` nog maar drie opties en
+   `Research` zit er niet bij, maar charts zenden hem wél uit. Bevestig het bewaargedrag van
+   `input.string` bij een verdwenen optie, en bouw de harde val: **onbekende fase = alles dicht**.
+   Nu is de veilige stand de uitzondering.
+2. **D-133** — `f_contractSpec` 0/13. Terecht buiten de payout-ronde gehouden; nu het laatste
+   gegenereerde-maar-ongebruikte geval.
+
+De `pmtBlock`-journaalregel die je aanbood: lever hem **zodra D-116 is uitgerold**, niet eerder.
+
+### 🟪 Web — twee
+
+1. **D-129 regel 3.** De poort bijt alleen bij `sample: true`. Nodig is een regel die bij
+   `sample: false` bijt, met Ferry's besluit erin: **een aantal mag evals meenemen, een bedrag
+   nooit.** Dat is de rest van D-131.
+2. **D-132** — verwijder `web/handover/mex_units/`; canoniek is `middleware/app/mex_units/`
+   (besloten 08-10, zie hierboven). Verhuis `README.md` en `tests/test_roles.py` mee.
+
+### 🟧 Analyses & Data — twee
+
+Jullie werk staat sinds gisteren eindelijk op de werkbranch (PR #3). **A-80 t/m A-90 zijn gelezen**
+en drie dingen zijn doorgezet naar het bord: D-139 (uit A-82), D-140 (uit A-90 + het
+fleet-startschema), D-141 (jullie vijf blokkerende besluiten).
+
+1. **D-112** — klopt `docs/fleet-report-spec.md` met wat jullie startschema bedoelde?
+2. **De werkafspraak die dit veroorzaakte is veranderd:** push gerust op je eigen branch, maar
+   **meld elke oplevering in `docs/inbox.md` op de werkbranch**. Anders bestaat hij voor niemand.
+   Bordcontrole loopt vanaf nu over álle remote branches, dat is mijn kant van de afspraak.
+
+⚠️ En één hygiënepunt: `docs/state.md` draagt accountaanduidingen mét bedragen in de repo, tegen
+Ferry's eigen regel in. Privé-repo, dus begrensd; hij beslist of de regel hier geldt (D-141).
+
+### 🟥 MCP trader-dev — zie het bericht hierboven
+
+Rol bevestigd (D-136), alle drie je vragen beantwoord. Deze ronde: **verifieer D-135 en D-129
+regel 3 na oplevering.** Stand-by opgeheven.
+
+### Op Ferry — vijf, waarvan één met geld eraan vast
+
+1. 🔴🔴 **D-139** — open per eval-chart het instellingenvenster en kies `Account phase` opnieuw,
+   expliciet. Elke payload met `phase=Research` is een chart zonder beschermingen. A-82 mat
+   **−$9.762 op één account dat al dood was**, en zeven evals weg in twee dagen.
+2. 🔴 **D-127** — staat 018 weer op `Funded`? Ik kan het niet meten.
+3. **D-141** — twee besluiten die onderzoek blokkeren: welke dataverbinding achter Quantower zit,
+   en waar de data gehost wordt.
+4. **D-140** — de checklist uit `fleet_startschema_2026-10-05.pdf` is nooit uitgevoerd. Gemeten
+   verschil over 1–2 okt: trail-set −620 tot −780 per contract, set zonder trail +150 tot +330.
+5. **D-144/D-145** — prop-firmkeuze. Goedkoopste zet eerst: je Apex-PA's van legacy-**30%** naar de
+   gewone 50K-PA op **50%**. Verified, nul integratiewerk, en het haalt de D-125-klem weg.

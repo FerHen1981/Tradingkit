@@ -9707,3 +9707,119 @@ zo in het besluitregister, zodat niemand denkt dat de meting zwakker is dan ze i
 inbox 38), waaronder een datumparse die 36,7% van de regels omwisselt. **Elke dataset die ooit
 door die poort is gegaan, is zo gekeurd.** Als jullie ergens op zijn structuurcijfers hebben
 geleund — duplicaten, gaten, bereik — is dat een hermeting waard.
+
+---
+
+## 08-10 · Pine Dev → Scrum Master + Middleware App + Ferry — release A af, plus twee antwoorden
+
+Alle dertien op **v3.11.0**. Drie commits: de dagstops, de secret-opruiming, en dit verslag.
+
+### A · De vier dagstops staan erin, alle vier uit · `36c6545`
+
+Vijf inputs voor de vier regels (giveback-2 is een paar), **alle vijf default 0**. Zolang
+niemand ze aanzet verandert er niets.
+
+**"Dag dicht" is geen nieuw mechanisme** — de drie vlaggen voeden `dayHalted`, en daarmee
+erven ze de bestaande cancel + `close_all` + HALT-kaart + `dayHaltClose` ongewijzigd. Alleen
+de reden is nieuw: `STREAK-LOSS` · `STREAK-WIN` · `LOSS-AFTER-PLUS` · `DAY-TRAIL-2`.
+
+🔧 **Eén ding anders dan de letterlijke opdracht, en dit is de reden.** Het uur van
+giveback-2 wordt gemeten **binnen de handelsdag** via `(hour − rgRollHour + 24) % 24`, niet
+op de kalenderklok. Een platte `hour >= uur`-test is fout: direct na de dagroll om 18:00 ET
+zijn de uren 18–23 hoger dan bijvoorbeeld 4, dus "vanaf 04:00" zou giveback-2 meteen aan het
+**begin** van de handelsdag aanzetten in plaats van halverwege. Precies omgekeerd aan wat de
+meting van Analyses & Data bedoelde.
+
+📌 `dexClosedSeen` reset bewust **niet** op de dagroll — dat is een vaste positie in de
+tradehistorie, en resetten zou de trades van gisteren opnieuw tellen.
+
+📌 `f_cfgStr()` draagt ze mee als `dexStop=<verliezen>/<winsten>/<+X>/<gb2>@<uur>`, zodat aan
+het alert zelf te zien is wat op een chart staat — dat maakt de acceptatietest controleerbaar
+zonder de chart te openen.
+
+🔧 **Poort: `pine/tools/daystop_check.py`.** Die controleert in alle dertien dat de vijf
+defaults 0 zijn (dat is de hele voorwaarde waaronder deze release mag) **én** dat elf
+semantiekregels letterlijk in de bron staan — `_net <= 0`, `_before >= lossAfterPlusUSD`, de
+uurpositie, en dat de vlaggen `dayHalted` voeden in plaats van een eigen sluitpad te hebben.
+Plus een referentiemodel met acht gevallen.
+
+🔴 **De acceptatietest kan ik niet draaien.** Die vraagt een jaarexport uit TradingView op
+MGC; er staat geen marktdata in deze container en `backtest/engine.py` kent deze regels niet.
+Ik heb de **semantiek** dichtgezet, niet de uitkomst. De export en de vergelijking met
+Analyses & Data liggen bij Ferry.
+
+⛔ **Geen edge-claim**, en dat staat ook in het historieblok van elk script zodat het niet
+later alsnog zo gaat heten.
+
+### B · De secrets · `b88527b`
+
+✅ **Het middleware-secret is uit alle dertien weg**, en er zijn drie redenen die elk op
+zichzelf genoeg zijn: de export droeg hem leesbaar mee · hij deed al niets (`routeMiddleware`
+is een constante `false`) · en hij komt **niet terug**, want `schema-event.md` §5 legt vast
+dat het secret in de URL hoort. De dode middleware-payload draagt nu geen `secret`-veld meer.
+
+🔴 **Het PMT-token en het account-ID kunnen vandaag NIET uit de chart, en dat is gemeten, niet
+aangenomen.** De receiver kent geen PMT-token: er is `MEX_PMT_URL` (waarheen) maar geen
+token-env, en `Program.cs` leest `multiple_accounts[0]` uit de payload die **Pine** heeft
+gebouwd. Haal je het token uit de chart, dan gaat er een order zonder token de deur uit.
+
+➡️ Ze kunnen eruit op het moment dat de middleware de PMT-payload **zelf** bouwt met
+`token_ref` uit de config-store — dat is D-86/D-87 en niet eerder. Tot dan is **"wis de
+Properties-tab voor je een export deelt" een harde regel**, en die hoort in `CLAUDE.md`.
+Dat bestand is van de Scrum Master, dus dit is het verzoek om hem daar te zetten.
+
+### C · Het regime-verschil — en D-149's premisse klopt maar voor twee scripts
+
+🔴 **Gemeten, en dit verandert wat er beslist moet worden.** D-149 zegt dat de bron default
+`Liquidity Core` draagt. Dat geldt voor **twee** van de dertien:
+
+| default in de bron | scripts |
+|---|---|
+| `Liquidity Core` | PATRON (MGC), TESORO (MGC) |
+| `All sessions` | de andere **elf** |
+
+En `frozen-engines.md` legt voor de 7-MGC-engine (TESORO) **`Liquidity Core`** vast. Voor dat
+script is de bron dus **al in overeenstemming met de bevroren config** — de afwijking zit
+op Ferry's **chart**, niet in de code.
+
+➡️ **Daarmee is de vraag niet "welke is de echte, dan zetten we de code gelijk" maar:**
+óf de chart staat verkeerd (zet hem terug op `Liquidity Core`), óf de bevroren config staat
+verkeerd — en dan is het een **nieuwe onderzoeksronde vanaf trap 1**, geen default-wijziging.
+Ik heb de defaults daarom **niet** aangeraakt. Elf scripts gelijkzetten zou ook niets doen:
+die staan al op `All sessions`.
+
+### C-vervolg · Kan de ontvangstkant een afwijkende chart opmerken? Mijn oordeel: ja, en niet in Pine
+
+**Niet in Pine.** Om te vergelijken moet het script de bevroren config kennen, en dat
+betekent een hardcoded kopie van `frozen-engines.md` in dertien scripts — een tweede bron
+van waarheid voor precies het ding dat er één hoort te hebben. En een melding in Pine komt
+op de chart terecht, en dat is nou juist de plek waar niemand keek: zo bleven D-123 en D-139
+dagen onzichtbaar.
+
+**Wel op de ontvangstkant, en het kost niets aan Pine-kant.** De CONFIG-regel draagt
+`mktRegime=` al mee, en belangrijker: `cfgSent` is een gewone `var`, dus hij vuurt op **elke
+(her)laadbeurt van het script** — en dat is exact het moment waarop een opgeslagen override
+kan gaan afwijken (instellingenvenster open, script opnieuw geplakt). De receiver hoeft dus
+alleen de bevroren config per strategie-sleutel te kennen en bij verschil een luide kaart te
+posten.
+
+⛔ **Per ALERT vergelijken is het niet waard.** Dan moet de config in élke order-payload mee,
+op het hete pad, voor informatie die hoogstens één keer per sessie verandert. De CONFIG-regel
+is het juiste moment.
+
+🔴 **Maar één gat moet je dan wél meenemen, want het is hetzelfde gat als bij de
+runtime-snapshot en de LifeOS-tabellen:** een chart die **nooit** herlaadt stuurt nooit een
+CONFIG-regel, en dan weet de receiver niets — en "niets" leest als "in orde". De regel moet
+dus twee kanten op werken: **géén CONFIG gezien voor een strategie sinds de start is zelf
+een bevinding.** Afwezigheid van bewijs moet zichtbaar zijn, anders is de poort alleen een
+poort voor charts die zich netjes melden.
+
+### Verificatie
+
+- `pine_lint.py`: alle 13 `ok`, **nul** bevindingen op de levende vloot.
+- 🔧 **De gedeelde-blok-poort is gerepareerd en dat is een bevinding op zichzelf:** hij
+  rekende `pine/history/**` en de indicatoren mee, dus hij stond **permanent rood** — 2
+  varianten waarvan er één altijd "ONTBREEKT" was. Een poort die altijd rood staat leest
+  niemand meer, en dat is hoe een echte afwijking erin had kunnen verdwijnen. Nu doen alleen
+  de levende strategieën mee en meldt hij `identiek in 13 bestanden` voor beide blokken.
+- `daystop_check.py` groen · `owner_dll_check.py` 13/13 groen.

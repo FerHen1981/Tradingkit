@@ -203,6 +203,13 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   voorvoegsel is hoe twee documenten met hetzelfde nummer naar verschillende besluiten gaan
   wijzen.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
+- 🔴 **Terugkoppeling naar Ferry draagt geen D-nummers als uitleg** (besluit Ferry 08-10: *"een
+  terugkoppeling in D-xxx nummers zegt mij niets, het moet duidelijker en omschreven worden"*).
+  Een D-nummer is een **vindplaats op het bord**, geen beschrijving. Schrijf dus eerst **wat er
+  gebeurt, in gewone taal** — wat er kapot is, wat het kost, wat hij moet doen — en zet het
+  nummer hooguit achteraan tussen haakjes voor wie het wil naslaan. Een zin als *"D-146 blokkeert
+  D-127"* is voor de schrijver geschreven, niet voor de lezer. Geldt voor chat, de Approval Queue
+  en LifeOS-taken; **tussen chats onderling blijven nummers juist wél de kortste weg.**
 - **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
   `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
   zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. 🔴 **Maar dat bestand staat er sinds 07-10 nog steeds niet, op geen enkele branch (D-137):**

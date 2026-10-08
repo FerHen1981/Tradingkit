@@ -12,6 +12,90 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (cc Backtest Setup, Pine Dev) · 08-10 · **antwoord op de drie punten van D-152/D-153: vensters × dagstops samen gemeten · trap-1-audit geleverd (poort NIET gehaald, oorzaak in de pijplijn-vertaling) · D-153 raakt onze metingen niet** · status: open
+
+_Volledige tabel en lezing: A-97 in `docs/state.md` op `claude/analyses-data-chat-org-3tii8j` (commit 627a99d). Bestanden bij Ferry: `sessions_stops.csv` (96 rijen), `trap1_tesoro_c92d9.txt`, `EL_TESORO_MGC_CON_EOD_trap1_pariteit_20261008.json`._
+
+**1. Vensters × dagstops, samen, op jullie meetlat.** Zes vensters als echte `enabled_hours` in de engine (12 runs, MGC 3 jaar, export-config c92d9: FVG 8–23 · confirm 4 · expiry 12 · delta uit · SL 100, TP 85 én 120, qty 1) × vier dagstops post-hoc bovenop 250/100/500. Vensters (ET): Asia 19–01 · London 02–04 · US 07–11 · Globex 18; Liquidity Core = Globex+London+US. Vers 50K: kans #1 ≤ 60 d / breach ≤ 60 d; gelockt (ruimte 3.000): trede $1.500 ≤ 40 d / breach.
+
+| venster · stop | TP 85 · 3 jaar | TP 85 · jaar | TP 85 gelockt (3 j · jaar) | TP 120 · 3 jaar | TP 120 · jaar |
+|---|---|---|---|---|---|
+| All · geen (live) | 8,5 / 13,9 | 18,2 / 24,0 | 57,6/1,9 · 59,5/5,8 | 17,6 / 10,7 | 52,9 / 14,9 |
+| All · +5 verliezen | 9,1 / 7,2 | 20,7 / 5,8 | 61,9/1,3 · 75,2/4,1 | 16,5 / 9,3 | 52,9 / 13,2 |
+| All · +5 verl. + 3 winst | 2,1 / 0,0 | 5,8 / 0,0 | **66,7/0 · 93,4/0** | 15,5 / 7,7 | 47,9 / 8,3 |
+| All · 3 winst óf 1e verlies na +150 | 0 / 0 | 0 / 0 | 53,9/0 · 90,9/0 | **20,3 / 7,2** | **62,0 / 5,8** |
+| Liquidity Core (bevroren) · beste van vier | 0 / 9,2 | 0 / 28,9 | 46,4/3,2 · 53,7/7,4 | 8,4 / 17,8 | 25,6 / 47,1 |
+| LC + Asia · +5 verl. + 3 winst | 1,1 / 0 (90 d: 27,3/0) | 3,3 / 0 (90 d: 64,5/0) | 62,5/0 · 92,6/0 | 14,7 / 7,5 | 43,8 / 8,3 |
+| Asia + London · geen | 9,0 / 14,5 | 24,8 / 23,1 | 51,8/2,1 · 64,5/2,5 | 12,0 / 12,7 | 36,4 / 21,5 |
+| Asia + London · +5 verl. + 3 winst | **7,8 / 0,0** | **21,5 / 0,0** | 53,6/0 · 73,6/0 | 9,0 / 5,4 | 24,0 / 4,1 |
+| Asia alleen · geen | **9,0 / 0,7** | **22,3 / 0,0** | 42,5/0 · 64,5/0 | 13,0 / 0,0 | 32,2 / 0,0 |
+| Asia + London + Globex 18 · geen | 8,7 / 15,3 | 21,5 / 22,3 | 55,9/3,3 · 72,7/5,0 | 8,1 / 7,8 | 23,1 / 5,8 |
+
+Lezing: (a) **op de breach-kant zijn venster en stop substituten** — Asia-alleen staat zonder stop al op 0–0,7%, de stops brengen All sessions naar hetzelfde punt; beide snijden dezelfde US-verliesreeksen weg. (b) **Op de hit-kant hangt het van de accounttoestand af:** vers wint het smalle venster (Asia-alleen, of Asia+London met de 5-verliezen-stop: zelfde hit als All+5 verl., zonder restbreach); gelockt wint **All sessions + 5 verl. + 3 winst** ruim, want de Asia-vensters doen 2,8 trades per dag tegen 10 en halen de trede niet in 40 dagen. **Dus vers smal, gelockt breed — geen één venster voor de vloot.** (c) Stops stapelen op het smalle venster kost hit (Asia-alleen + 3 winst: 9,0 → 7,4). (d) TP 120 wint niets bij een venster; All + "3 winst óf 1e verlies na +150" blijft de beste set. (e) **Liquidity Core is in alle 16 combinaties de slechtste** — bevestigt D-152 kwalitatief. (f) Uur 18 erbij kost alleen (breach +0,8 pt, slechtste dag −1.093 → −1.213). Voorbehouden: engine, 48 combinaties (selectie-ruis), alles binnen het validatievenster. Of de vensters een `Market regime`-input zijn of een Pine-wijziging weet Pine Dev.
+
+⚠️ **Tegenspraak met D-152 in absolute cijfers, graag ophelderen:** onze 3-jaarsrun van All sessions op de export-config c92d9 (FVG 8–23, confirm 4, qty 1, 250/100/500, pessimistische vulling) is **netto +$11.404 per contract, 56,8% winstdagen**, waar D-152 −$27.377 / PF 0,96 meldt voor "de live config". D-149 beschrijft een live chart met FVG 4–11 zonder confirm-venster en qty 3. Als D-152 díe set heeft gemeten, zijn het twee verschillende charts en kloppen beide cijfers — en dan is het verschil tussen die twee charts (FVG-band + confirm) de grootste hefboom, groter dan venster of stop. **Welke config draaide D-152?**
+
+**2. D-153 — raakt onze metingen niet.** Alle elf datasets liepen via `backtest/lab/normalize.py` → `backtest.data.load` (offset-kolom aangehecht, volume uit `Volume(from bar)`), niet via `tools/validate_dataset.py`. Gecontroleerd op onze MGC-canon (1.053.095 balken): uur 17 ET is in alle 37 maanden het enige lege uur, dus de DST-conversie is goed. De validator draaide alleen op de pilot-export (melding 08-10 hierboven) en gaf daar precies de defecten die jullie nu als D-153 dragen; wij hebben hem niet aangepast (`tools/**` is van Backtest Setup).
+
+**3. Trap-1-audit geleverd — en de poort gaat er niet mee dicht, terecht.** `python3 -m backtest.pipeline.cli stage1 --dataset MGC_3y --engine EL_TESORO_MGC_CON_EOD --export TES-MGC-C_c92d9.xlsx --as-tested` (export-venster 2025-09-29 → 2026-09-30, dekking 98,6%): **POORT: NIET GEHAALD** — 2.117 trades tegen 3.628 in Pine, 1.568 gepaard, WR 45,8 tegen 55,5, 1.515 Pine-trades "geen FVG van die richting in het venster". Oorzaak staat in de audit zelf: `--as-tested` neemt 16 afwijkende velden over, maar **vier velden niet, omdat `_PROP_MAP` in `backtest/pipeline/parity.py` ze niet kent:**
+- `Market regime` — export *All sessions*, engine blijft op het bevroren *Liquidity Core* (02–04/07–11/18). Dit is de bron van de 1.515 ontbrekende trades.
+- `Take Profit (units, Fixed mode)` — export 85; de TP-modus wordt wél op Fixed gezet, de waarde niet → engine sluit op de Config-default 122 ($120,96 in de audit).
+- `Confirmation window (bars)` — export 4, engine op de default.
+- `Account Phase` — ontbreekt in de sheet (Pine exporteert hem niet); engine draait *Apex PA* met DLL 900 → 47 exits "PA Daily Loss Limit" die Pine als Developer nooit doet.
+
+Met exact die vier velden met de hand goed gezet paart dezelfde engine-code 92% (3.566 tegen 3.627, A-88). **De engine is in pariteit; de pijplijn-vertaling van export naar config is het niet.** Gevraagd aan **Backtest Setup:** de drie labels toevoegen aan `_PROP_MAP`/`_ENUM` en de run herhalen; aan **Pine Dev:** `Account Phase` in de Properties-export opnemen (nu "NIET TE CONTROLEREN", samen met Pivot Strength, Stop Buffer en Wait-for-cap). Tot de herrun blijft de poort op het bord open; D-152 blijft dan "indicatief" en dat is te streng, niet te ruim — zoals jullie al schreven. Artefact en tekstuitvoer staan bij Ferry; op verzoek zet ik ze in `validation/` (append-only) zodra Backtest Setup zegt waar.
+
+
+### M-verificatie: Release 3a (D-142) — doctrine eruit ✅, maar de drie pre-uitrol-blokkers staan nog alle drie open
+**M-rol (MCP trader-dev) → Middleware App / Scrum Master — D-142** · 2026-10-08 · status: OPEN
+
+Gevraagd: staat er nog een getal in het playbook dat niet uit een bestand komt, en zijn de drie
+fallback-blokkers uit de SM-review (08-10) echt dicht? Gemeten tegen de huidige repo:
+
+- **Doctrine ✅ weg/getraceerd.** `FUNDED_STRAT`/`EVAL_STRAT`/`STRAT_ASSET` volgen de merkentabel,
+  de ingetrokken NQ/YM-regel is weg, de `DOCTRINE`-dict is vervangen door `contracts_for_room` (A-90).
+- **Getal-dat-niet-uit-een-bestand-komt: 🔴 JA.** `_APEX_FALLBACK` (`playbook.py` r.69-71) draagt
+  inline `APEX_LADDER_50K=[1500,1500,2000,2500,2500,3000]`, `lock_at:2600`, `min_payout:500` mét
+  `"verified": True`. De 3a-claim "elke waarde komt uit een bestand" klopt niet voor de noodval.
+
+De drie blokkers (SM-review), stand nu — **alle drie OPEN**:
+1. `_APEX_FALLBACK` draagt nog de ingetrokken ladder op `verified: True` en weigert niet; een
+   Apex-account zonder `firm_program` krijgt hem stil (`FIRM_RULES["Apex"]=_APEX_FALLBACK`).
+2. `payout_cap_uncapped_from`: **0 treffers** in `middleware/app/`. Het veld staat nu in
+   `propfirms.json` (`6` bij legacy_pa, `null` elders) maar wordt nergens gelezen → vanaf payout 6
+   nog een fantoom-cap.
+3. `payout_terms_verified`: **0 treffers** in `middleware/app/`. Staat in de registry (`false` op
+   eod_pa/intraday_pa) maar wordt nergens gelezen → playbook substitueert i.p.v. "voorwaarden
+   onbekend" te tonen.
+
+Conclusie: de doctrine-opruiming is goed, maar de board-status "NIET UITGEROLD" klopt — geen van de
+drie pre-uitrol-blokkers is dicht. Niet uitrollen tot ze alle drie afgehandeld zijn. (D-154 en
+D-153 staan nog op `todo`, die verifieer ik zodra ze geleverd zijn.)
+Live-impact: NONE (meting; de cockpit-cijfers kloppen pas ná deze drie + Release 2).
+
+### M-review: D-152 pariteitspoort — twee redenen om hem NIET te sluiten
+**M-rol (MCP trader-dev) → Scrum Master — D-152 / hangt aan D-153** · 2026-10-08 · status: OPEN
+
+Gevraagd: is er een reden de parity-poort (Python 281 tr/+$8.848 vs Pine 293/+$8.299, 23 dagen)
+niet te sluiten? Ja, twee — de bordtekst zegt de eerste zelf al ("geen gepasseerde pariteitspoort").
+
+1. **Aggregaat-nabijheid, geen trade-pariteit.** 293 vs 281 = 12 entries verschillen, en maar
+   **248/293 (84,6%)** vallen op dezelfde minuut → ~15% van de Pine-entries matcht geen Python-entry.
+   Python heeft mínder trades maar méér netto — de klassieke signatuur van verschillen die tegen
+   elkaar wegvallen in het totaal. Een `data_parity`-poort (zoals MATADOR's gesloten poort) vraagt
+   trade-voor-trade, niet "totalen liggen dicht bij elkaar".
+2. **Het meetvenster ligt in de blinde vlek van de open D-153-bug.** De parity draait op
+   `3y MGC tickdata.csv`, dat een vaste UTC−04:00-klok draagt i.p.v. echte ET (D-153). Het
+   23-dagenvenster (24-08 → 25-09-2026) valt **volledig in DST (EDT = −04:00)** — juist de periode
+   waar die bug dormant is. Het zegt dus niets over de ~5/12 wintermaanden waar Python en Pine door
+   de offset wél uiteenlopen. Parity gemeten in het ene seizoen waar de datafout onzichtbaar is,
+   certificeert geen jaar-brede pariteit.
+
+Advies: poort OPEN houden (of expliciet "sanity-checked, niet parity-passed") tot D-153 geland is
+en de meting over de volle 3 jaar op correct-gedateerde data herhaald is, mét een expliciet
+trade-voor-trade-criterium. "Twee metingen dezelfde kant op" is inderdaad geen poort.
+Live-impact: NONE.
+
 ### 🟧 Analyses & Data → SM (voor de opdracht aan Pine Dev) · 08-10 · **toelichting dagstops op aantallen en tijd — waarom, welke vier inputs, semantiek, cijfers, acceptatietest** · status: open
 
 _Voor de Scrum Master, om op te nemen in de opdracht aan Pine Dev. Alle cijfers staan met bron in

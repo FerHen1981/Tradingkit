@@ -74,8 +74,13 @@ Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
   **Claim nergens dat deze vloot out-of-sample bewezen is** — niet op de site, niet in een
   rapport, niet tegenover een prop firm. Ook de sweep-cijfers van 25-08 vallen volledig
   binnen het validatievenster.
-- Fine-grained day×hour cherry-picking blijft OOS-ruis (weerlegd). Regimes mogen alleen
-  economisch vooraf gedefinieerd.
+- Fine-grained day×hour cherry-picking blijft OOS-ruis. Regimes mogen alleen economisch
+  vooraf gedefinieerd. 🔴 **Sinds 08-10 is dat niet langer een aanname maar gemeten** (D-155,
+  echte 3-jaars MGC-data, twee folds, uren gekozen op de eerste jaren en getest op het
+  laatste): de gekozen urenset **overlapt tussen twee folds in slechts 5 van de 11 uren**,
+  één van de twee folds is out-of-sample **negatief**, en de vooraf economisch gedefinieerde
+  vensters verslaan elke uurselectie in **beide** folds terwijl ze in-sample juist slecht
+  oogden. Wie dit opnieuw wil proberen: lees eerst D-155, het is al gedaan.
 - Bevroren parameters per engine: `.claude/skills/strategy-validation-pipeline/references/frozen-engines.md`.
   **Die zijn bevroren** — wijzigen is een nieuwe onderzoeksronde vanaf trap 1, geen tweak.
 

@@ -845,17 +845,24 @@ f_firmMinPayout(string _p) =>
     _mp
 f_firmLadder(string _p, int _n) =>
     float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    int _unc = 0
     if _p == "apex_250k_legacy_pa"
-        _l := array.from(3000.0, 3000.0, 3000.0)
+        _l := array.from(3000.0)
+        _unc := 6
     else if _p == "apex_50k_eod_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_intraday_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_legacy_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+        _l := array.from(2000.0)
+        _unc := 6
     else if _p == "blueguardian_50k_standard_pa"
         _l := array.from(2500.0, 3000.0)
-    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
+    else if _p == "topone_50k_elite_pa"
+        _l := array.from(2500.0)
+    else if _p == "tradeify_50k_growth_pa"
+        _l := array.from(3000.0)
+    (_unc > 0 and _n >= _unc) ? na : array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
 f_firmDays(string _p) =>
     int _md = 0
     int _pd = 0
@@ -1916,9 +1923,16 @@ int   effPayoutNr = (isPA and paBacktestMode) ? math.min(paPayoutsThisCycle + 1,
 // programma dat de registry geen ladder geeft valt `f_firmLadder` terug op de Apex-50K-
 // ladder, en dat is exact wat hier tot vandaag hardgecodeerd stond.
 float curLadderCap = f_firmLadder(firmPreset, effPayoutNr)
+// D-148: `na` betekent GEEN maximum -- Apex laat het maximum per payout vervallen vanaf
+// de zesde. Bewust `na` en niet 0: nul zou "cap van nul" betekenen en dat is precies de
+// D-108-fout die elke eval stillegde. Elke lezer van `curLadderCap` hieronder moet dus
+// expliciet zeggen wat "geen maximum" daar betekent; vergeten = stil een NaN.
+bool   capExists = not na(curLadderCap)
+string capStr    = capExists ? "$" + str.tostring(curLadderCap, "#") : "GEEN MAX (payout 6+)"
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
-bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
+// Geen maximum betekent dat de volle-trede-eis vervuld IS, niet dat hij nooit kan.
+bool  fullCapReady = payoutEligible and (not capExists or withdrawable >= curLadderCap)
 bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
 if phaseOn and not acctHalted
     if acctPnL <= acctFloor
@@ -1942,12 +1956,13 @@ var bool payoutAlerted = false
 if payoutReady and not payoutAlerted
     payoutAlerted := true
     if plainAlertsOK
-        alert(f_msgHead() + " | 💰 PAYOUT " + str.tostring(effPayoutNr) + " READY" + (useWaitForCap ? " (VOLLE CAP $" + str.tostring(curLadderCap, "#") + ")" : "") + " | withdrawable $" + str.tostring(withdrawable, "#"), alert.freq_once_per_bar)
+        alert(f_msgHead() + " | 💰 PAYOUT " + str.tostring(effPayoutNr) + " READY" + (useWaitForCap ? " (VOLLE CAP " + capStr + ")" : "") + " | withdrawable $" + str.tostring(withdrawable, "#"), alert.freq_once_per_bar)
 if not payoutReady
     payoutAlerted := false
 
 if isPA and paBacktestMode and payoutReady and barstate.isconfirmed
-    float _take = useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap)
+    // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
+float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
     paTotalBanked += _take
     paPayoutsThisCycle += 1
     paResetPnLPrev := paResetPnLPrev + _take
@@ -2200,7 +2215,7 @@ if sendCfgOnStart and barstate.isrealtime and not cfgSent
 var bool payoutDiscordSent = false
 if payoutReady and not payoutDiscordSent
     payoutDiscordSent := true
-    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP $" + str.tostring(curLadderCap, "#") + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
+    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP " + capStr + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
 if not payoutReady
     payoutDiscordSent := false
 
@@ -2795,7 +2810,7 @@ if inDrawWin and barstate.isconfirmed
     if lblDayCap and _haltEdge and (haltReason == "Day-cap" or haltReason == "Day-trail" or haltReason == "Daily Target")
         f_evtLabel("🎯 Day cap · " + haltReason + " $" + str.tostring(riskDayPeak, "#"), color.new(vPOS, 20))
     if lblPayout and payoutReady and not payoutReady[1]
-        f_evtLabel("💰 Payout P" + str.tostring(effPayoutNr) + " ready · $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#"), color.new(color.olive, 20))
+        f_evtLabel("💰 Payout P" + str.tostring(effPayoutNr) + " ready · $" + str.tostring(withdrawable, "#") + "/" + capStr, color.new(color.olive, 20))
     if lblBreach and acctHalted and not acctHalted[1]
         f_evtLabel("🏁 Account breached · " + acctHaltReason, color.new(color.maroon, 10))
     if lblTrail and rgTrailArmed and not rgTrailArmed[1]

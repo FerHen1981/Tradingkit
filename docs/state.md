@@ -221,6 +221,34 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-93 — Regime-filter: de verliezende entries hebben geen leesbare handtekening (8 okt 2026)
+
+**Vraag Ferry 8/10:** is er een rode draad in de entries die structureel tegenwerken — volume, volatiliteit, iets anders?
+**Meting:** 7.729 trades (TP 85 raw, 3 jaar) gekoppeld aan de toestand op het instapmoment, per kwintiel/deciel de
+verwachting per trade én het teken per onderzoeksjaar (okt–sep 2023/24/25). Basis: winrate 55,1%, +$1,2/trade.
+
+| kenmerk op instap | spreiding $/trade over de buckets | stabiel over 3 jaar? |
+|---|---|---|
+| ATR-percentiel (vol t.o.v. 5 sessies) | −2,4 (laag) … +3,6 | nee (laag: +9 / +3 / −4) |
+| volume t.o.v. 4-uurs mediaan | −1,7 … +4,0, geen monotoon verband | nee |
+| bereik laatste 30 min | −2,7 … +8,5, buurbuckets wisselen van teken | nee |
+| afstand tot VWAP (in ATR) | −1,1 … +3,0 | nee |
+| EMA-stack (20/50/200) · met/tegen trend | down −0,9 · up +2,9 · met/tegen ±1 | zwak (0/3/−3 vs 1/10/0) |
+| richting long/short · weekdag | long +1,9 / short +0,4 · wo/vr negatief | nee (tekens wisselen per jaar) |
+| **dagbereik op instap, absoluut** (top-kwintiel > ~980 ticks) | **−5,6**, win 51,6% | **ja: −27 / −2 / −6** |
+| dagbereik **relatief** t.o.v. gemiddelde dagrange 20 sessies (rel) | top-decielen −0,5 … −0,7 | nee (+11 / +2 / −4) |
+
+**Lezing.** (1) Volume, volatiliteit, VWAP-afstand, trendstand en weekdag scheiden winnaars niet van verliezers op een
+manier die drie jaar standhoudt; de edge van deze FVG-mean-reversion is vlak over regimes. (2) Het enige stabiele
+patroon — "de dag heeft al ver bewogen" — verdwijnt zodra je het normaliseert op de volatiliteit van dat moment: het
+absolute effect is grotendeels het volatiliteitsregime van 2025/26 zelf. (3) Als **filter** op de doel-meetlat: entries
+overslaan bij rel > 1,0 verlaagt de breach (3 j 13,9 → 10,2; jaar 24 → 13,7) maar ook de hit-kans (8,5 → 5,0; 18 → 15);
+rel > 0,8 geeft 0% breach tegen hit 3,4 — dat is hetzelfde effect als "na een vroege plus de rest van de dag overslaan"
+(A-89) maar dan grover. **Conclusie: de structurele verliezers zitten niet in een vóór-de-entry-regime maar in het
+dagpad** — na een vroege plus (A-89) en in lange verliesreeksen (A-92). Dagstops vangen dat scherper dan een
+regimefilter, en een regimefilter zou het bevroren script raken. Geen vervolg aanbevolen; engine-regimelabels
+(MA-stack × ADX × ATR) gaven op deze stroom geen uitkomst (leeg) en zijn niet verder onderzocht.
+
 ## A-92 — Streaks: geen voorspellende waarde, wél een betere dag-stop dan een dollarbedrag (8 okt 2026)
 
 **Vraag Ferry 8/10:** chronologisch dagverloop, win/verlies-streaks, en daarmee scherpere caps en eventueel sessies.

@@ -243,4 +243,12 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   repo. Vraag hem daar op, of vraag Ferry. De oude heuristiek *"is de tabel oud, dan draait de
   timer niet"* geldt pas weer als het bestand daadwerkelijk aankomt.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
+- 🔴 **Een TradingView-strategie-export is net zo gevoelig als `.env`: WIS DE `Properties`-TAB
+  VÓÓR JE HEM DEELT OF UPLOADT.** De export schrijft **elke** `input.string`-waarde in platte
+  tekst weg, ook die met `display=display.none` (vastgesteld 08-10 op een echte export: het
+  PMT-token en het account-ID stonden er leesbaar in; het middleware-secret is sindsdien uit
+  alle dertien scripts verwijderd). **Het PMT-token en het account-ID kunnen er NIET uit**
+  zolang `mex-receiver` geen token-env kent en `multiple_accounts[0]` uit de Pine-payload
+  leest — weghalen laat een order zónder token vertrekken. Dit is dus een permanente
+  handmatige regel tot de middleware die payload zelf bouwt uit de config-store.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

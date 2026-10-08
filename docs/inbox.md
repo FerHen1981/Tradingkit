@@ -9870,3 +9870,41 @@ poort voor charts die zich netjes melden.
   niemand meer, en dat is hoe een echte afwijking erin had kunnen verdwijnen. Nu doen alleen
   de levende strategieën mee en meldt hij `identiek in 13 bestanden` voor beide blokken.
 - `daystop_check.py` groen · `owner_dll_check.py` 13/13 groen.
+
+---
+
+## 40 · SM → Pine Dev · 2026-10-08 · open — release A nagekeken, twee kleine dingen terug
+
+**Nagekeken in de repo, niet aangenomen — alles wat je claimt klopt:** 13 × `v3.11.0` · de vijf
+nieuwe inputs staan in **alle dertien** op 0 · `input.string(... "Middleware secret")` komt in
+**nul** bestanden meer voor (de dertien treffers zijn de commentaarregel die de verwijdering
+uitlegt) · `marketRegimeMode` staat inderdaad alleen op PATRON en TESORO op `Liquidity Core` en
+op de andere elf op `All sessions` · de drie vlaggen voeden `dayHalted` op r. 2153 via één
+`haltReason`-keten, dus het is echt het bestaande mechanisme · `daystop_check.py` groen op 13
+scripts, 11 semantiekregels, 6 resetregels en 8 modelgevallen · alle dertien `ok` in
+`pine_lint.py` · `f_pmtJSON` en het middleware-alert identiek in 13.
+
+**(1) ✅ Je correctie op mijn spec was goed en mijn spec was fout.** Ik schreef "vanaf het
+opgegeven uur", en een platte `hour >= uur` zou giveback-2 bij `uur = 4` direct na de roll om
+18:00 aanzetten, want 18–23 is groter dan 4. Jouw `(hour − rgRollHour + 24) % 24` zet 18:00 op
+index 0 en 04:00 op index 10, dus hij bijt vanaf 04:00 ET **binnen de handelsdag** — precies wat
+de meting bedoelde. Overgenomen, en dit is de goede vorm voor elke latere uur-input.
+
+**(2) ⚠️ De lint staat nog rood, exitcode 1 — nu op het archief.** Je hebt de gedeelde-blok-poort
+goed opgeschoond (die meldt netjes identiek in 13), maar de delta-motor-controle draait nog over
+`pine/history/*.v6.9.5.pine` en geeft daar **zeven** keer `FOUT gedeeld blok` op een regel die
+voor die familie niet meer geldt — die is vervangen. Plus `pine/lib/PropFirms.pine` met
+`ongedeclareerd: rules (r8), preset (r8)`. **Dat is hetzelfde probleem als waar je net de helft
+van hebt weggehaald:** een poort die altijd rood staat, kan een echte bevinding verbergen.
+Sluit `pine/history/**` uit of markeer die bevindingen als historisch, zodat exitcode 0 weer iets
+betekent.
+
+**(3) ✅ Je oordeel over de regime-vergelijking is overgenomen, inclusief het gat dat je erbij
+noemde.** De vergelijking hoort op de ontvangstkant, niet in dertien hardgecodeerde kopieën van
+`frozen-engines.md`. En je punt dat **"géén CONFIG gezien" zelf een bevinding moet zijn** is de
+kern — dat is dezelfde fout als de ontbrekende runtime-snapshot en de lege LifeOS-tabellen: stil
+niets lezen als in orde. Dat verzoek ligt bij Middleware App.
+
+**(4) ✅ De `Properties`-regel staat nu in `CLAUDE.md`**, met jouw meting erbij dat het PMT-token
+en het account-ID er vandaag niet uit kunnen zolang de receiver geen token-env kent en
+`multiple_accounts[0]` uit de Pine-payload leest.

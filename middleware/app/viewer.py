@@ -917,9 +917,10 @@ footer{margin-top:30px;padding-top:18px;border-top:1px solid var(--line);color:v
   </section>
   <section role=tabpanel id=playbook hidden>
     <h2 class=sec>Payout Playbook</h2>
-    <p class=sec-note>Each account's route to the MAXIMUM payout this step, read from its OWN history against the firm rules. Withdrawable = min(profit − safety-net, rung cap); to pull the full cap you need profit = safety + cap, spread over the program's min trading days (reset each cycle) so its consistency ceiling (best day ≤ the program %) allows it. Funded runs only the edge on the real instrument (MGC · El Tesoro / MES · El Rey; NQ eval-only): <b style="color:var(--warn)">survival</b> 1 ct below the safety-net → <b style="color:var(--ok)">milking</b> 2 ct building to the full cap → <b style="color:var(--gold)">payout</b> pull the full cap, carry the excess, reset to the next rung; legacy <b style="color:var(--aqua)">compound</b>. The Route says what still has to happen and warns when banking early leaves money on the table. <span class=calc>Rules per account come from its <b>Account Type → Firm Program</b> in <b>data/propfirms.json</b> (the single source of truth: consistency, min-days, drawdown, target, ladder, max size). ⚠ = unverified program. Rung = "Payouts (0-6)".</span></p>
-    <div class=tablewrap><table id=pbTable style="min-width:1040px"><thead><tr>
+    <p class=sec-note>Per account de route naar de MAX payout, uit zijn eigen geschiedenis tegen de regels van zijn programma. <b>Fleet-input</b> toont de zes invoer-getallen van <code>tailor.py</code> (fleet-doc A-84/A-85): ruimte boven de floor, gelockt of vers, beste dag deze cycle, eerstvolgende cap, kwalificatiedagen, en de consistency-ruimte (hoogste winstdag ÷ limiet = minimaal vereiste totale winst). <b>Set</b> volgt A-90: vers = 1 ct, gelockt + room ≥ $3.000 → 2 ct, room ≥ $4.500 → 3 ct; eval = volle MINI 5 ct; legacy static = 2–3 ct compound. <span class=calc>Alle firma-getallen komen uit <b>data/propfirms.json</b> (de enige bron: ladder/cap, consistency, min-days, drawdown, target, max size); de merkentabel komt uit <code>CLAUDE.md</code>; de contract-schaling komt uit <code>docs/state.md</code> (A-90). ⚠ = programma onbevestigd.</span></p>
+    <div class=tablewrap><table id=pbTable style="min-width:1180px"><thead><tr>
       <th data-k=id data-t=s>Account</th><th>Run</th><th data-k=playbook.phase data-t=s>Phase</th>
+      <th style="text-align:left">Fleet-input</th>
       <th style="text-align:left" data-k=playbook.profit data-t=n>Where it stands</th>
       <th style="text-align:left" data-k=playbook.day_cap data-t=n>Set: size · DLL · day-cap</th><th style="text-align:left">Route to payout</th>
     </tr></thead><tbody></tbody></table></div>
@@ -1193,6 +1194,22 @@ function renderPlaybook(rows){
       +(p.exp_pc!=null?`<br><span class=calc>edge ${money0(p.exp_pc)}/ct × ${p.tpd}/d</span>`:'<br><span class=calc>doctrine size (thin data)</span>');
     const ph=PB_PHASE[p.phase]||["var(--muted)",p.phase];
     const phase=`<span class=pill style="background:${ph[0]};color:#04121a">${ph[1]}</span>`;
+    // Fleet-input: de zes invoer-getallen uit `tailor.py` (A-84). Zonder inputs-blok
+    // valt deze kolom stil terug op een streepje — oudere caches breken zo niet.
+    const inp=p.inputs||{};
+    const lockPill=inp.locked==null?'':`<span class=pill style="background:${inp.locked?'var(--aqua)':'var(--warn)'};color:#04121a">${inp.locked?'gelockt':'vers'}</span>`;
+    const roomCol=inp.room!=null?`<span style="color:${inp.thin_room?'var(--crit)':'var(--ink)'}">${money0(inp.room)}</span>`:'—';
+    const consLine=inp.consistency_min_total!=null
+      ? `cons ${money0(inp.best_day||0)}÷${Math.round((inp.consistency_limit||0.3)*100)}% ≥ <b>${money0(inp.consistency_min_total)}</b> totaal`
+      : (inp.consistency_limit==null?'<span class=calc>geen cons-regel</span>':'');
+    const daysCol=inp.min_days!=null
+      ? `${inp.trading_days||0}/${inp.min_days} dgn${inp.days_to_go>0?` <span style="color:var(--warn)">· +${inp.days_to_go}</span>`:''}`
+      : '—';
+    const capCol=inp.next_cap!=null?`cap <b>${money0(inp.next_cap)}</b>`:'—';
+    const fleetCol=`${lockPill} <span style="font-size:11px;color:var(--muted)">room</span> ${roomCol}`
+      +`<br><span style="font-size:11px;color:var(--muted)">top ${money0(inp.best_day||0)} · ${capCol}</span>`
+      +`<br><span style="font-size:11px">${daysCol}</span>`
+      +(consLine?`<br><span style="font-size:11px;color:var(--muted)">${consLine}</span>`:'');
     const consWarn=p.consistency_pct!=null&&p.consistency_pct>=20;
     const hasCons=p.consistency_limit!=null;      // no rule on an evaluation — don't quote one
     const topWarn=hasCons&&p.best_day&&p.cons_cap&&p.best_day>p.cons_cap;
@@ -1208,11 +1225,12 @@ function renderPlaybook(rows){
       <td class=acct>${a.id} <span class=firmdot>· ${a.stage}</span>${p.program?`<br><span class=calc title="rules from data/propfirms.json — the single source of truth${p.firm_verified===false?' (unverified — VERIFY)':''}">${p.program}${p.firm_verified===false?' ⚠':''}</span>`:'<br><span class=calc style="color:var(--warn)">no Account Type set</span>'}</td>
       <td style="text-align:left">${run}</td>
       <td>${phase}</td>
+      <td style="text-align:left;font-family:var(--mono);font-size:12px">${fleetCol}</td>
       <td style="text-align:left;font-size:12px;font-family:var(--mono)">${st}</td>
       <td style="text-align:left;font-family:var(--mono);font-size:12px">${setCol}</td>
-      <td style="text-align:left;white-space:normal;max-width:430px">${flag}<span style="color:${rcol}">${p.route}</span></td>
+      <td style="text-align:left;white-space:normal;max-width:380px">${flag}<span style="color:${rcol}">${p.route}</span></td>
     </tr>`;
-  }).join('')||'<tr><td colspan=6 class=calc>no accounts</td></tr>';
+  }).join('')||'<tr><td colspan=7 class=calc>no accounts</td></tr>';
 }
 function bar(label,pct,right,color){
   return `<div style="margin:9px 0;font-family:var(--mono);font-size:12px">

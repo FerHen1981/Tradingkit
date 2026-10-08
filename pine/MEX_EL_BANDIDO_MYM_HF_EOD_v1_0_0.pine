@@ -320,8 +320,47 @@
 //   buiten de poort (geen `f_firm*`) en is referentiedata die het script niet nodig heeft,
 //   want het leest `syminfo.*` van de chart. Weghalen raakt de generatie-regiomarkers en
 //   hoort in een eigen ronde.
+// v3.10.0 (08-10, D-148 + D-139): het payout-maximum klopt met Apex, en een onbekende
+// account-fase sluit alles.
+//   D-148 — GEEN OPLOPENDE LADDER. Apex' eigen pagina zegt: het maximum per payout is
+//   VAST per accountgrootte ($25k $1.500 · $50k $2.000 · $100k $2.500 · $150k $2.750 ·
+//   $250k $3.000 · $300k $3.500) en het VERVALT vanaf de zesde payout, mits de minimum
+//   vereiste balans in het account blijft. Wij hadden [1500,1500,2000,2500,2500,3000].
+//   Dat kostte twee keer geld: op payout #1 blokkeerde het script op $1.500 terwijl Apex
+//   $2.000 toestaat, en voorbij de vijfde payout kende het script nog een plafond van
+//   $3.000 dat in werkelijkheid niet bestaat -- precies de fase waar account 018 in zit.
+//   `f_firmLadder` draagt nu beide vormen uit de registry (een vast maximum of een rij per
+//   payoutnummer) plus het payoutnummer vanaf waar er GEEN maximum is. Geen maximum komt
+//   terug als `na`, bewust niet als 0: nul zou "maximum van nul" betekenen en dat is exact
+//   de D-108-fout die elke eval stillegde.
+//   ⛔ Daardoor moet ELKE lezer van `curLadderCap` zeggen wat "geen maximum" daar betekent,
+//   en dat is per plek anders: voor `fullCapReady` is de volle-trede-eis dan VERVULD, voor
+//   `pmtBlock` is er niets om op te stoppen, voor de PA-simulatie is de hele opneembare
+//   stand de payout, en `lockOnCap` heeft niets om vast te zetten. `capExists` en `capStr`
+//   maken dat expliciet; een vergeten plek zou een stille NaN zijn geweest.
+//   Nagerekend: apex_50k_legacy_pa P1-P5 $2.000 en P6+ geen maximum; apex_250k_legacy_pa
+//   P1-P5 $3.000 en P6+ geen maximum.
+//   ⚠️ apex_50k_eod_pa en apex_50k_intraday_pa dragen in de registry nog de oude rij en
+//   geen vast maximum, dus daar verandert niets -- en dat is de `firmPreset`-default op
+//   zeven van de negen PA-scripts. Een legacy-account hoort op `apex_50k_legacy_pa` te
+//   staan; dat is een keuze in het instellingenvenster, geen code.
+//
+//   D-139 — ONBEKENDE FASE = ALLES DICHT. `phaseOn = isEval or isPA`, en "Research" is geen
+//   van beide: dan viel élke accountpoort weg -- trailing, goal, breach-halt. A-82 mat de
+//   rekening: eval 274 nam vier stops voor -$9.762 op een account dat na de eerste al dood
+//   was, en 268-274 waren zeven evals in twee dagen. `canTrade` eist nu `not phaseUnknown`,
+//   dus geen nieuwe entries. SLUITEN BLIJFT WEL MOGELIJK -- een poort die ook de exit
+//   dichtzet maakt het erger dan het was.
+//   WAAROM EEN CHART DIE WAARDE NOG UITZENDT: `accountPhase` kent hier drie opties en
+//   "Research" staat er niet meer bij. TradingView bewaart een opgeslagen inputwaarde die
+//   niet meer in de optielijst voorkomt en blijft die gebruiken tot iemand het
+//   instellingenvenster opent en opnieuw kiest. De chart ziet er dan bijgewerkt uit, staat
+//   op deze versie, en draait tóch zonder poorten. Daarom staat er nu ook een rood label op
+//   de laatste bar, buiten de teken-laag: die zit achter een tekenbudget, en een
+//   veiligheidsmelding die kan wegvallen omdat dat budget vol is, is er geen.
+//   DE OOS-KLOK GAAT OP NUL -- akkoord Ferry 08-10, en dat is hier de prijs waard.
 var string SCRIPT_NAME = "MΞX EL BANDIDO · MYM HF EOD"
-var string currentVersion = "v3.9.0"
+var string currentVersion = "v3.10.0"
 strategy("MΞX EL BANDIDO · MYM HF EOD · " + currentVersion, shorttitle="BAN-MYM-H", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -882,17 +921,24 @@ f_firmMinPayout(string _p) =>
     _mp
 f_firmLadder(string _p, int _n) =>
     float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+    int _unc = 0
     if _p == "apex_250k_legacy_pa"
-        _l := array.from(3000.0, 3000.0, 3000.0)
+        _l := array.from(3000.0)
+        _unc := 6
     else if _p == "apex_50k_eod_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_intraday_pa"
         _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
     else if _p == "apex_50k_legacy_pa"
-        _l := array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)
+        _l := array.from(2000.0)
+        _unc := 6
     else if _p == "blueguardian_50k_standard_pa"
         _l := array.from(2500.0, 3000.0)
-    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
+    else if _p == "topone_50k_elite_pa"
+        _l := array.from(2500.0)
+    else if _p == "tradeify_50k_growth_pa"
+        _l := array.from(3000.0)
+    (_unc > 0 and _n >= _unc) ? na : array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))
 f_firmDays(string _p) =>
     int _md = 0
     int _pd = 0
@@ -1198,6 +1244,21 @@ float firmLimitUSD  = firmDllActive ? acctDLL : na
 float dailyLossLimitEff = na(ownerLimitUSD) ? firmLimitUSD : na(firmLimitUSD) ? ownerLimitUSD : math.min(ownerLimitUSD, firmLimitUSD)
 bool  dailyLossOn       = not na(dailyLossLimitEff)
 useDDGuard = (isPA and guardPA) or (isEval and guardEval)
+// === D-139 (08-10) — een ONBEKENDE fase sluit alles, in plaats van alles te openen ====
+// A-82 mat het uit het alerts-log: eval 274 nam vier stops voor -$9.762 op een account dat
+// na de eerste al dood was, en 268-274 waren zeven evals in twee dagen. De oorzaak zit
+// hierboven: `phaseOn = isEval or isPA`. "Research" is geen van beide, dus `phaseOn` werd
+// onwaar en élke accountpoort viel weg -- trailing, goal, breach-halt, alles. De onveilige
+// stand was de default en de veilige de uitzondering.
+// WAAROM EEN CHART DIE WAARDE NOG UITZENDT: `accountPhase` kent in v1_0_0 drie opties en
+// "Research" staat er niet meer bij. TradingView bewaart een opgeslagen inputwaarde die
+// niet meer in de optielijst voorkomt, en blijft die gebruiken tot iemand het
+// instellingenvenster opent en opnieuw kiest. De chart ziet er dan bijgewerkt uit, staat op
+// de nieuwe versie, en draait tóch zonder poorten.
+// DE REGEL NU: wat niet een van de drie bekende fases is, is onbekend -- en onbekend
+// handelt niet. `canTrade` krijgt `not phaseUnknown`, dus er komen GEEN nieuwe entries.
+// Sluiten blijft wel mogelijk: een openstaande positie moet er altijd uit kunnen.
+bool phaseUnknown = not (phaseEff == "Developer" or phaseEff == "Eval" or phaseEff == "Funded")
 bool phaseOn = isEval or isPA
 var bool  acctHalted = false
 var string acctHaltReason = ""
@@ -2001,9 +2062,16 @@ int   effPayoutNr = (isPA and paBacktestModeEff) ? math.min(paPayoutsThisCycle +
 // programma dat de registry geen ladder geeft valt `f_firmLadder` terug op de Apex-50K-
 // ladder, en dat is exact wat hier tot vandaag hardgecodeerd stond.
 float curLadderCap = f_firmLadder(firmPreset, effPayoutNr)
+// D-148: `na` betekent GEEN maximum -- Apex laat het maximum per payout vervallen vanaf
+// de zesde. Bewust `na` en niet 0: nul zou "cap van nul" betekenen en dat is precies de
+// D-108-fout die elke eval stillegde. Elke lezer van `curLadderCap` hieronder moet dus
+// expliciet zeggen wat "geen maximum" daar betekent; vergeten = stil een NaN.
+bool   capExists = not na(curLadderCap)
+string capStr    = capExists ? "$" + str.tostring(curLadderCap, "#") : "GEEN MAX (payout 6+)"
 bool  payoutEligible = isPA and acctLocked and acctRealized >= acctTrailDD + 100 + payoutBuffer + minPayout and qualDays >= fdProfDays and tradedDays >= fdMinDays and consistencyOK
 float withdrawable = acctRealized - (acctTrailDD + 100)
-bool  fullCapReady = payoutEligible and withdrawable >= curLadderCap
+// Geen maximum betekent dat de volle-trede-eis vervuld IS, niet dat hij nooit kan.
+bool  fullCapReady = payoutEligible and (not capExists or withdrawable >= curLadderCap)
 bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
 // === D-125 (06-10) — de blokkade hangt nu op `payoutReady`, niet op de cap alleen =====
 // HIER STOND: `pmtBlock := isPA and useWaitForCap and withdrawable >= curLadderCap`.
@@ -2024,7 +2092,10 @@ bool  payoutReady = useWaitForCap ? fullCapReady : payoutEligible
 // breach-risico -- de cap begrenst de HOOGTE van een payout-aanvraag, niet het verlies --
 // maar het betekent dat de "altijd op de volle trede aanvragen"-discipline in die ene
 // toestand wijkt voor de uitweg. Dat is de afweging, bewust zo.
-pmtBlock := isPA and useWaitForCap and payoutReady
+// D-148: zonder maximum is er niets om op te stoppen, dus geen blokkade. Dit is de
+// toestand waar account 018 in zit: voorbij vijf payouts, en het plafond waar het tegen
+// aan liep bestond alleen in onze code.
+pmtBlock := isPA and useWaitForCap and payoutReady and capExists
 pmtBlockReason := "PAYOUT CAP REACHED — payout is aanvraagbaar: vraag hem aan, dan payout-nummer omhoog"
 if phaseOn and not acctHalted
     if acctPnL <= acctFloor
@@ -2048,12 +2119,13 @@ var bool payoutAlerted = false
 if payoutReady and not payoutAlerted
     payoutAlerted := true
     if plainAlertsOK
-        alert(f_msgHead() + " | 💰 PAYOUT " + str.tostring(effPayoutNr) + " READY" + (useWaitForCap ? " (VOLLE CAP $" + str.tostring(curLadderCap, "#") + ")" : "") + " | withdrawable $" + str.tostring(withdrawable, "#"), alert.freq_once_per_bar)
+        alert(f_msgHead() + " | 💰 PAYOUT " + str.tostring(effPayoutNr) + " READY" + (useWaitForCap ? " (VOLLE CAP " + capStr + ")" : "") + " | withdrawable $" + str.tostring(withdrawable, "#"), alert.freq_once_per_bar)
 if not payoutReady
     payoutAlerted := false
 
 if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
-    float _take = useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap)
+    // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
+float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
     paTotalBanked += _take
     paPayoutsThisCycle += 1
     paResetPnLPrev := paResetPnLPrev + _take
@@ -2091,7 +2163,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = not acctStartArmed
-canTrade = inValidWindow and timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock
+canTrade = inValidWindow and timeGatePass and evtGateOK and rgWindowOK and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and not phaseUnknown
 
 
 // ============================================================================
@@ -2299,7 +2371,7 @@ if sendCfgOnStart and barstate.isrealtime and not cfgSent
 var bool payoutDiscordSent = false
 if payoutReady and not payoutDiscordSent
     payoutDiscordSent := true
-    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP $" + str.tostring(curLadderCap, "#") + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
+    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP " + capStr + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
 // === D-107 — één sluiting per bar naar buiten ===============================
 // Vijf paden kunnen op dezelfde bar plat willen: cap-/pass-lock, auto-flat, venster-grace,
 // dag-halt en account-halt. Elk had alleen zijn eigen once-guard, geen onderlinge
@@ -2313,7 +2385,7 @@ bool flatSentBar = false
 var bool capLocked = false
 if lockOnCap and isPA and useWaitForCap and not capLocked and strategy.position_size != 0
     float _lockBufC = lockBufTicks * syminfo.mintick * syminfo.pointvalue * math.abs(strategy.position_size)
-    if (acctRealized + strategy.openprofit) - (acctTrailDD + 100) >= curLadderCap + _lockBufC
+    if capExists and (acctRealized + strategy.openprofit) - (acctTrailDD + 100) >= curLadderCap + _lockBufC
         capLocked := true
         exitReasonNext := "CAP-LOCK"
         strategy.close_all(comment="CAP-LOCK")
@@ -2885,7 +2957,7 @@ if inDrawWin and barstate.isconfirmed
     if lblDayCap and _haltEdge and (haltReason == "Day-cap" or haltReason == "Day-trail" or haltReason == "Daily Target")
         f_evtLabel("🎯 Day cap · " + haltReason + " $" + str.tostring(riskDayPeak, "#"), color.new(vPOS, 20))
     if lblPayout and payoutReady and not payoutReady[1]
-        f_evtLabel("💰 Payout P" + str.tostring(effPayoutNr) + " ready · $" + str.tostring(withdrawable, "#") + "/$" + str.tostring(curLadderCap, "#"), color.new(color.olive, 20))
+        f_evtLabel("💰 Payout P" + str.tostring(effPayoutNr) + " ready · $" + str.tostring(withdrawable, "#") + "/" + capStr, color.new(color.olive, 20))
     if lblBreach and acctHalted and not acctHalted[1]
         f_evtLabel("🏁 Account breached · " + acctHaltReason, color.new(color.maroon, 10))
     if lblTrail and ((rgTrailArmed and not rgTrailArmed[1]) or (dayTrailArmed and not dayTrailArmed[1]))
@@ -3142,3 +3214,18 @@ if showDashboard and barstate.islast
     table.cell(dash, 1, rTrd + 2, not inTrade ? "—" : (posRiskOff ? "armed" : "—") + " / " + (posTrailOn ? (posRecovOn ? "recovery" : "armed") : "—"), text_color=inTrade and (posRiskOff or posTrailOn) ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
     table.cell(dash, 0, rTrd + 3, "Open PnL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
     table.cell(dash, 1, rTrd + 3, inTrade ? (strategy.openprofit >= 0 ? "+$" : "-$") + str.tostring(math.abs(strategy.openprofit), "#.##") : "—", text_color=inTrade ? f_valCol(strategy.openprofit) : txtColor, text_size=txtSize, text_halign=text.align_right)
+
+// === D-139 — de waarschuwing bij een onbekende account-fase =====================
+// Deze hangt bewust NIET in de teken-laag hierboven. Die zit achter `inDrawWin` EN achter
+// een maximum aantal drawings (`f_capDrawings`), en een veiligheidsmelding die kan wegvallen
+// omdat het tekenbudget vol is of omdat het tekenvenster elders staat, is geen
+// veiligheidsmelding. Eén label, op de laatste bar, altijd zichtbaar zolang de fase
+// onbekend is -- en hij verdwijnt zodra Ferry de fase opnieuw kiest.
+var label phaseWarnLbl = na
+if barstate.islast
+    label.delete(phaseWarnLbl)
+    if phaseUnknown
+        phaseWarnLbl := label.new(bar_index, high,
+             "⛔ ONBEKENDE ACCOUNT-FASE: \"" + phaseEff + "\"\nGEEN ENTRIES — open het instellingenvenster en kies Account phase opnieuw",
+             style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white,
+             size=size.normal, textalign=text.align_left)

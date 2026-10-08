@@ -9,6 +9,30 @@ _Geschoond bij de herijking van 27-09-2026. Zie `docs/PLAN-2026-09-27-herijking.
 ---
 
 
+## Gesloten chats — 08-10
+
+> Ferry 08-10: *"Deze hebben geen taken meer? Dan naar het archief toch?"* Ja — maar pas nadat
+> ik **alle remote branches heb gemeten**, want een chat zonder taken op het bord kan werk op
+> een eigen branch hebben staan. Dat is precies hoe Analyses & Data zes weken onzichtbaar bleef.
+
+| Chat | Branch | Stand bij sluiten |
+|---|---|---|
+| **Discord Notify** | `claude/discord-notify-hnydfa` · 9 commits vooruit, laatste 19-08 | Raakt uitsluitend het **Python-pad** (`middleware/app/main.py`, `config.py`, `journal.py`) en dat draait niet live — het live executiepad is `mex-receiver` (.NET). Geen inbox-tekst op die branch (gemeten: 0 regels). **Niets te oogsten, niets te verliezen.** |
+| **Legacy accounts · setup en scripts** | `claude/legacy-accounts-scripts-analysis-ui0j6m` · 8 commits, laatste 07-09 | 🔑 Droeg **309 regels inbox** die het bord nooit bereikten — **geoogst naar `docs/inbox.md` op 08-10**. De code op die branch gaat NIET mee: `middleware/receiver-src/**` en `middleware/dotnet-receiver/Program.cs` staan op de oude maplaag en een merge zou die terugzetten. |
+| **LifeOS taken overzicht** | geen eigen branch | De LifeOS-sync loopt sinds 24-08 via de Scrum Master; deze chat had geen eigen leveringen. |
+
+**Twee branches die Ferry niet noemde en die óók nog werk dragen** — niet gesloten, wel vastgelegd:
+
+| Branch | Stand |
+|---|---|
+| `claude/el-tesoro-ftmo-xauusd-sv56tr` · 1 commit, 19-09 | **76 regels inbox, geoogst 08-10.** Een complete analyse van EL TESORO op FTMO XAUUSD met de conclusie dat dit een **nieuwe markt** is en dus een onderzoeksronde vanaf trap 0 — plus vijf concrete verschillen (tick-eenheden, chartfeed ≠ executiefeed, delta op een CFD, de firm-preset, sizing). Stond in de Approval Queue als `🛠️ MEX D-77`. |
+| `claude/mex-traders-website-ont1mk` · 4 commits, 16-08 | Een volledige `web/`-opzet met merkcomponenten. De huidige `web/sites/mex/` is hier vermoedelijk uit voortgekomen; **niet gemeten of er nog iets uniek in zit.** Laten staan tot iemand dat naloopt. |
+
+📌 **Procesregel die hieruit volgt, en hij staat nu ook in de ronde:** een chat sluiten begint met
+`git for-each-ref refs/remotes/origin` of de vergelijking per branch. Een leeg bord zegt niets
+over een volle branch.
+
+
 ## Geparkeerd 08-10 — fase 3 en hoger
 > **Waarom van het bord:** besluit Ferry 08-10 — *"het begint steeds meer projectmatig te worden in plaats
 > van quick releases"*. Deze dertien items zitten allemaal in fase 3 of hoger en kunnen volgens de

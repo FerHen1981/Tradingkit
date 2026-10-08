@@ -177,7 +177,18 @@ def patch_strategies(progs):
         emitted += 1
     body.append("    _mp")
     # payout ladder per program: the cap on payout number _n (1-based)
-    body += ["f_firmLadder(string _p, int _n) =>", "    float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)"]
+    # D-148: Apex kent GEEN oplopende ladder. Het maximum per payout is VAST per
+    # accountgrootte ($50k -> $2.000) en VERVALT vanaf de zesde payout. De oude vorm
+    # (payout_ladder: een rij van zes) bestaat nog voor programma's die hem echt zo
+    # hebben, dus beide vormen worden ondersteund:
+    #   funded.payout_cap               -> één vast maximum
+    #   funded.payout_ladder            -> maximum per payoutnummer
+    #   funded.payout_cap_uncapped_from -> payoutnummer vanaf waar er GEEN maximum is
+    # Geen maximum wordt als `na` teruggegeven, niet als 0: 0 zou "cap van nul" betekenen
+    # en dat is exact de D-108-fout die de evals stillegde.
+    body += ["f_firmLadder(string _p, int _n) =>",
+             "    float[] _l = array.from(1500.0, 1500.0, 2000.0, 2500.0, 2500.0, 3000.0)",
+             "    int _unc = 0"]
     emitted = 0
     for p in keep:
         lad = None
@@ -189,15 +200,31 @@ def patch_strategies(progs):
             or next((t for t in tiers if t.get("payout_ladder")), None)
         if pick and pick.get("payout_ladder"):
             lad = [float(x) for x in pick["payout_ladder"]]
+        funded = p_raw(p.key).get("funded") or {}
         if lad is None:
-            lad = [float(x) for x in ((p_raw(p.key).get("funded") or {}).get("payout_ladder") or [])]
+            lad = [float(x) for x in (funded.get("payout_ladder") or [])]
+        if not lad and funded.get("payout_cap"):
+            lad = [float(funded["payout_cap"])]
+        unc = funded.get("payout_cap_uncapped_from")
+        if unc is None and funded.get("payout_cap") and not funded.get("payout_ladder"):
+            # Het getal hoort in de registry, niet hier. Zolang het veld ontbreekt leiden we
+            # het af van de vorm PLUS de notitie -- en we zeggen op elke run dat we dat doen,
+            # want een stille aanname in de generator is hoe D-126 weken onzichtbaar bleef.
+            note = (funded.get("payout_cap_note") or "").lower()
+            if "zesde" in note or "sixth" in note:
+                unc = 6
+                print(f"  LET OP {p.key}: payout_cap_uncapped_from staat niet in de registry; "
+                      f"afgeleid als {unc} uit payout_cap_note. Zet het veld in "
+                      f"data/propfirms.json zodat dit geen aanname blijft.")
         if lad:
             # Count branches actually written, not loop position: the eval programs carry no
             # ladder, so keying off the loop index opened the chain with "else if".
             body += ['    %s _p == "%s"' % ("if" if emitted == 0 else "else if", p.key),
                      "        _l := array.from(%s)" % ", ".join(str(x) for x in lad)]
+            if unc:
+                body.append("        _unc := %d" % int(unc))
             emitted += 1
-    body.append("    array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))")
+    body.append("    (_unc > 0 and _n >= _unc) ? na : array.get(_l, math.max(0, math.min(_n - 1, array.size(_l) - 1)))")
     # day counters per program: a firm runs TWO of them and they are not the same number.
     # _md = days with FILLS, _pd = days that cleared _qd in profit. Apex legacy: 8 and 5x$50.
     body += ["f_firmDays(string _p) =>", "    int _md = 0", "    int _pd = 0", "    float _qd = 50.0"]

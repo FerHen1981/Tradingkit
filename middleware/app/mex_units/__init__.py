@@ -1,8 +1,8 @@
 """Units en de rolgrens (D-17).
 
-Overgenomen uit `web/handover/mex_units/` — Web bouwde de code, Middleware App
-draait hem, want de trades en accounts leven in `middleware/`. De originele
-handover-map blijft staan als bron; Web ruimt die zelf op.
+Web bouwde de code, Middleware App draait hem, want de trades en accounts leven
+in `middleware/`. **Dit is sinds D-132 (08-10) de enige kopie** — de
+handover-map `web/handover/mex_units/` is opgeruimd. Zie `README.md` hiernaast.
 
 Bevat twee modules, allebei zonder datatoegang:
 

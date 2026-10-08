@@ -19,17 +19,28 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import dataclass, field
 
-# ---- Apex config (verify against current Apex terms) ---------------------------------
-# Fallbacks only — a program from data/propfirms.json wins. APEX_DD had no 75K entry at all, so
-# a 75K account fell through to a zero floor and a zero safety net; the 75K and 300K targets were
-# off against Apex's own table (4,500 and 18,000).
+# ---- noodval-constanten — data/propfirms.json LEIDT, dit is alleen een vangnet -------------
+# D-142 / Release 3a: elke regelwaarde die de evaluator gebruikt komt uit het programma
+# in `data/propfirms.json` (via `firm_rules.rules_for_account`). Deze constanten vuren
+# uitsluitend wanneer het programma een veld onbekend of null laat — ze mogen nooit
+# een geldwaarde van een gevalideerd programma overrulen. Elke `prog.get(...) or <const>`
+# hieronder is daarmee een "noodval, mocht de registry het veld missen". Verdwijnen deze
+# constanten later volledig, dan is dat géén regressie — het bevestigt alleen dat elke
+# firma zijn eigen regels draagt.
+#
+# APEX_DD had bijvoorbeeld geen 75K-entry; een 75K-account viel daardoor eerder op een
+# nulfloor terug en kreeg geen safety-net — dat is precies het soort stilte dat een
+# geleidende constante maakt. Oplossing is níet een scherpere constante maar een
+# volledig programma in `propfirms.json`.
 APEX_TARGET = {25_000: 1_500, 50_000: 3_000, 75_000: 4_500, 100_000: 6_000,
                150_000: 9_000, 250_000: 15_000, 300_000: 18_000}
 APEX_DD = {25_000: 1_500, 50_000: 2_500, 75_000: 2_750, 100_000: 3_000, 150_000: 5_000,
            250_000: 6_500, 300_000: 7_500}
 SAFETY_NET = {sz: dd + 100 for sz, dd in APEX_DD.items()}   # min profit to leave in on payout
 
-# Apex PA payout ladder — max withdrawal per payout, rungs 1..6 (50k; scaled for other sizes).
+# Apex PA payout ladder — max withdrawal per payout. Historische Apex-50K-ladder; D-148
+# bewees dat deze lijst in werkelijkheid niet bestaat (vaste cap tot payout 5, dan geen cap).
+# Alleen gebruikt als `prog["payout_ladder"]` leeg is én `prog["payout_cap"]` niet geplaatst.
 APEX_LADDER_50K = [1_500, 1_500, 2_000, 2_500, 2_500, 3_000]
 
 MIN_TRADING_DAYS = 8

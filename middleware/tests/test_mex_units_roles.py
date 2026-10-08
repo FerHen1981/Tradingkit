@@ -6,7 +6,8 @@ The value check matters as much as the key check. A field could be renamed to
 something innocuous and still carry dollars; comparing against the actual
 amounts in the fixture catches that.
 
-Overgenomen uit `web/handover/mex_units/tests/test_roles.py` bij de handover
+Overgenomen uit `web/handover/mex_units/tests/test_roles.py` bij de handover;
+die map is bij D-132 opgeruimd, dit bestand is sindsdien de enige plek
 naar Middleware App (D-17). Imports aangepast op de nieuwe locatie.
 """
 from __future__ import annotations
@@ -179,6 +180,9 @@ def test_partner_sees_currency_but_is_labelled_separately(fleet):
 def test_unknown_role_falls_back_to_the_most_restrictive_view(fleet):
     payload = stats.serialise(fleet, "typo-role")  # type: ignore[arg-type]
     assert payload["role"] == "viewer"
+    # Overgenomen uit de handover-kopie bij D-132: die controleerde niet alleen
+    # dat de rol versmalt maar ook dat de payload er echt bedragvrij uitziet.
+    assert "net_usd" not in payload["headline"]
 
 
 # --- eval-publicatiepoort (D-74) -------------------------------------------

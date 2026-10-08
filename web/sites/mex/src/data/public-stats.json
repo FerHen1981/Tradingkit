@@ -5,7 +5,7 @@
     "markets": "symbol · label · unit · net_units · trades · win_rate · r_total · profit_factor · slippage_ticks · status",
     "equity": "{ t: 'YYYY-MM', v: <cumulatieve R> }",
     "status": "het type rekening waarop de markt draait; NOOIT een oordeel over de edge",
-    "regel": "zolang sample true is moet elk headline-getal null zijn en elke lijst leeg — scripts/check_public_stats.py faalt anders"
+    "regel_bij_sample_true": "elk headline-getal null, elke lijst leeg", "regel_bij_sample_false": "de canonieke poorten uit middleware/app/mex_units/roles.py lopen over alles: een AANTAL mag evals meenemen (Ferry 07-10), een BEDRAG nooit, en eval-tellers per status horen in for_public_evals() en niet hier", "grendel": "web/scripts/check_public_stats.py, in make check"
   },
   "generated_at": "2026-10-06T00:00:00Z",
   "period": { "from": "", "to": "" },

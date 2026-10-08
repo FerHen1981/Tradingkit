@@ -96,6 +96,11 @@ def rules(key: str | None) -> dict | None:
         "consistency": (cons["value"] / 100.0 if cons and cons.get("value") else None),
         "max_position": (mp["value"] if mp else None),
         "payout_ladder": fu.get("payout_ladder"),
+        # D-148 / Release 2: elke 50K-PA-ladder uit Apex' eigen pagina blijkt een
+        # VASTE cap tot payout 5 (en daarna geen cap) — zie `payout_cap_note`.
+        # `payout_cap` is daarmee een alternatief voor `payout_ladder`; de
+        # consumer kiest de aanwezige.
+        "payout_cap": fu.get("payout_cap"),
         "min_payout": fu.get("min_payout"),
         "safety_net_payouts": fu.get("safety_net_payouts"),
         "converts_to": rec.get("converts_to"),

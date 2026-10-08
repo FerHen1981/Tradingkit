@@ -6,7 +6,8 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))   # run this file on its own
 
 from app.playbook import (account_track, base_asset, build_playbook, contract_label,
-                          dd_amount, ladder_caps, ladder_rung, parse_size, recommend_setup)
+                          contracts_for_room, dd_amount, ladder_caps, ladder_rung,
+                          parse_size, recommend_setup)
 
 
 def _hist(day_net: float, n: int) -> dict:
@@ -40,9 +41,14 @@ def test_track_classification():
 
 
 def test_recommend_keeps_micro_instrument():
+    # Elke merkregel komt uit `CLAUDE.md`'s merkentabel: MGC → El Tesoro, MNQ → El Rey,
+    # MES → El Matador, MYM → El Leon. Een funded account houdt zijn eigen micro.
     r = recommend_setup({}, "trailing", "MGC")
     assert r["instrument"] == "MGC" and r["strategy"] == "El Tesoro" and r["keep"]
-    assert recommend_setup({}, "trailing", "NQ")["off_edge"]
+    r = recommend_setup({}, "trailing", "MNQ")
+    assert r["instrument"] == "MNQ" and r["strategy"] == "El Rey" and r["keep"]
+    r = recommend_setup({}, "trailing", "MES")
+    assert r["instrument"] == "MES" and r["strategy"] == "El Matador" and r["keep"]
 
 
 def test_eval_default_is_el_toro_on_mini():
@@ -111,10 +117,14 @@ def test_thin_buffer_flags_critical():
     assert pb["quality"] == "thin_buffer" and "critical" in pb["note"]
 
 
-def test_off_edge_nq_on_funded():
+def test_nq_on_funded_is_el_rey_not_off_edge():
+    # De 24-08-regel "NQ/YM = eval-only" is INGETROKKEN (`CLAUDE.md`). MNQ op een
+    # funded account is nu de normale instelling van El Rey; `off_edge` zou de
+    # cockpit anders waarschuwen voor iets wat gewoon volgens de merkentabel is.
     a = _acct(current=50_400, buffer=1_500)
-    pb = build_playbook(a, _hist(100, 3), "NQ")
-    assert pb["off_edge"] and pb["quality"] == "switch" and pb["rec_instrument"] == "MGC"
+    pb = build_playbook(a, _hist(100, 3), "MNQ")
+    assert pb["rec_strategy"] == "El Rey"
+    assert pb["off_edge"] is False
 
 
 def test_eval_sprint_route():
@@ -215,6 +225,80 @@ def test_broken_consistency_without_a_day_cap_does_not_crash():
     pb = build_playbook(a, _hist(1_200, 9), "MGC")
     assert pb["phase"] == "maxed" and pb["broken"] is True
     assert "total wins reach" in pb["note"]        # and it did not raise
+
+
+# --- Release 3a / D-142 — de zes invoer-getallen van het fleet-doc + room-doctrine --------------
+
+def test_contracts_for_room_follows_a90_ladder():
+    # A-90 (fleet-doc): post-lock schaalt het aantal op ruimte boven de floor.
+    # 2 ct vanaf $3.000, 3 ct vanaf $4.500; daaronder 1 ct.
+    assert contracts_for_room(None) == 1
+    assert contracts_for_room(0) == 1
+    assert contracts_for_room(2_999) == 1
+    assert contracts_for_room(3_000) == 2
+    assert contracts_for_room(4_499) == 2
+    assert contracts_for_room(4_500) == 3
+    assert contracts_for_room(10_000) == 3
+
+
+def test_locked_account_scales_contracts_on_room_not_balance():
+    # Zelfde profit, verschillende lock-status: vers = 1 ct, gelockt met voldoende room = 2 ct.
+    # Dit vangt het patroon dat A-90 beschrijft: contracten schalen op ruimte, niet op saldo.
+    vers = _acct(current=50_500, buffer=1_500)   # profit $500, safety $2.600 → vers
+    pb = build_playbook(vers, _hist(100, 3), "MGC")
+    assert pb["inputs"]["locked"] is False and pb["contracts"] == 1
+    # locked met room $3.100 → 2 ct volgens A-90
+    gelockt = _acct(current=55_000, buffer=3_100)   # profit $5.000 > safety $2.600 → locked
+    pb2 = build_playbook(gelockt, _hist(100, 3), "MGC")
+    assert pb2["inputs"]["locked"] is True
+    # (set_size kan verder herrekend worden door edge-data; de interne contracts-regel is 2.)
+
+
+def test_inputs_block_carries_the_six_tailor_inputs():
+    # `inputs` is wat Backtest Setup (Release 3b) als invoer leest voor de score.
+    a = _acct(current=52_000, buffer=2_400, payouts_taken=0,
+              payout={"eligible": False, "trading_days": 4, "days_to_go": 4,
+                      "consistency_pct": 50.0, "profit": 2_000})
+    pb = build_playbook(a, _hist(500, 4), "MGC")
+    inp = pb["inputs"]
+    # 1. ruimte boven de floor
+    assert "room" in inp and inp["room"] > 0
+    # 2. gelockt / vers (profit vs safety)
+    assert "locked" in inp
+    # 3. beste dag sinds payout
+    assert inp["best_day"] == 500
+    # 4. eerstvolgende cap — uit propfirms.json via payout_rules.ladder_caps
+    assert inp["next_cap"] is not None and inp["next_cap"] > 0
+    # 5. kwalificatiedagen — done + nodig + nog
+    assert inp["trading_days"] == 4 and inp["min_days"] == 8 and inp["days_to_go"] == 4
+    # 6. consistency-ruimte: hoogste winstdag ÷ 0,30 = minimaal vereiste totale winst
+    assert inp["consistency_limit"] == 0.30
+    assert inp["consistency_min_total"] == round(500 / 0.30)
+
+
+def test_evaluation_inputs_hide_the_consistency_room():
+    # Een evaluatie draagt geen consistency-regel (D-82 inzicht): het veld blijft None,
+    # zodat de cockpit géén Apex-30% quote toont bij een account dat die regel niet heeft.
+    a = {"id": "214", "firm": "Apex Trader Funding", "stage": "Eval", "size": 50_000,
+         "starting": 50_000, "current": 52_000, "dd_rule": "Trailing Equity Peak",
+         "firm_program": "apex_50k_legacy_eval",
+         "payout": {"stage": "Eval", "profit": 2_000, "target": 3_000, "trading_days": 6,
+                    "eligible": False, "days_to_go": 1, "consistency_pct": 40.0}}
+    pb = build_playbook(a, _hist(400, 6), "MGC")
+    assert pb["inputs"]["consistency_limit"] is None
+    assert pb["inputs"]["consistency_min_total"] is None
+    assert pb["inputs"]["next_cap"] is None    # eval → geen payout-cap
+
+
+def test_funded_markets_follow_the_claude_md_brand_table():
+    # El Rey → MNQ (base NQ), El Matador → MES (base ES), El Leon → MYM (base YM).
+    from app.playbook import FUNDED_STRAT, STRAT_ASSET
+    assert FUNDED_STRAT["NQ"] == "El Rey"
+    assert FUNDED_STRAT["ES"] == "El Matador"
+    assert FUNDED_STRAT["YM"] == "El Leon"
+    assert STRAT_ASSET["El Rey"] == "NQ"
+    assert STRAT_ASSET["El Matador"] == "ES"
+    assert STRAT_ASSET["El Leon"] == "YM"
 
 
 def test_the_coaching_text_quotes_the_account_types_own_ceiling():

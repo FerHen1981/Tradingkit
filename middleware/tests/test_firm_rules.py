@@ -29,7 +29,10 @@ def test_rules_dict_from_registry():
     assert r["consistency"] == 0.30 and r["min_days"] == 8          # legacy: 30% / 8 days
     assert r["drawdown"] == 2500 and r["trailing_locks_at"] == 2600
     assert r["max_position"] == 10 and r["min_payout"] == 500
-    assert r["payout_ladder"] == [1500, 1500, 2000, 2500, 2500, 3000]
+    # D-148: legacy-PA draagt een vaste cap van $2.000 i.p.v. een oplopende ladder;
+    # vanaf payout 6 vervalt de cap. `payout_ladder` blijft daarom leeg.
+    assert r["payout_ladder"] is None
+    assert r["payout_cap"] == 2000
     assert r["drawdown_type"] == "eod_trailing" and r["verified"] is True   # owner-confirmed
     r2 = firm_rules.rules("apex_50k_intraday_pa")
     assert r2["consistency"] == 0.50 and r2["min_days"] == 5        # intraday: 50% / 5 days

@@ -1,15 +1,15 @@
-"""Payout Playbook — the fleet Operating Schema turned into a per-account preset table.
+"""Payout Playbook — per-account route to the maximum payout, from the SOURCES.
 
-This is NOT an optimizer. It follows the owner's doctrine (LifeOS "MEX Fleet — Operating
-Schema"): funded runs ONLY the edge on MICROS (El Tesoro/MGC + El Rey/MES), survival-first
-1 ct until the trailing DD locks, then milking 2 ct / day-trail $150; legacy static/EOD
-accounts compound at 2–3 ct GC+ES; eval accounts are pass-hunters — the full MINIS at 5 ct,
-led by El Toro (NQ), the top eval passer (El Minero/GC + El León/ES behind it).
+The brand table (merk → markt) komt uit `CLAUDE.md`; de programma-regels komen uit
+`data/propfirms.json` via `firm_rules.py`; de contract-doctrine komt uit het
+fleet-doc (`docs/state.md`, A-84/A-85/A-90). Dit bestand draagt GEEN eigen
+doctrine meer — een regel die hier staat zonder brontverwijzing is een bug.
 
-Per account it decides the TRACK (trailing / static / eval) and the PHASE (survival /
-milking / payout-ready / compound / eval-sprint), then shows the doctrine preset for it —
-asset·strategy, contracts, day-trail — alongside the live payout progress. The owner's own
-Fase Config wins where set; doctrine fills the gaps. Pure + deterministic (testable).
+De schaling in A-90 is ruimte-gebaseerd, niet saldo-gebaseerd: vers draait 1
+contract tot de trailing-DD vergrendelt (de "lock"); daarna schaalt het aantal
+op de room boven de floor (2 ct vanaf $3.000, 3 ct vanaf $4.500). Een ruimte-
+klasse onder $1.300 blijft 1 contract mét dagstop. Eval is een pass-hunter: de
+volle MINI op 5 ct, led by El Toro (NQ).
 """
 from __future__ import annotations
 
@@ -21,40 +21,56 @@ from dataclasses import dataclass
 from .payout_rules import (APEX_LADDER_50K, APEX_TARGET, CONSISTENCY_LIMIT, MIN_TRADING_DAYS,
                            ladder_caps)
 
-BASES = ("GC", "ES", "NQ", "YM", "CL")
-_MICRO = {"GC": "MGC", "ES": "MES", "NQ": "MNQ", "YM": "MYM", "CL": "MCL"}
+BASES = ("GC", "NQ", "ES", "YM", "CL")
+# Merk → micro-instrument, uit de merkentabel in `CLAUDE.md`. De 24-08-regel
+# "NQ/YM = eval-only" is INGETROKKEN; El Rey/El Principe draaien MNQ en El
+# Leon/El Bandido draaien MYM, ook funded.
+_MICRO = {"GC": "MGC", "NQ": "MNQ", "ES": "MES", "YM": "MYM", "CL": "MCL"}
 
-# Validated edges. Funded = edge only (El Tesoro/GC, El Rey/ES). Eval = pass-hunter led by
-# El Toro (NQ), then El Minero (GC) / El León (ES). NQ/YM are eval-only variance lots — never
-# on a funded account.
-FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}
-EVAL_STRAT = {"GC": "El Minero", "ES": "El León", "NQ": "El Toro", "YM": "El Toro"}
+# Validated edges per markt — uit `CLAUDE.md` (herijkt 24-08). Elke regel heeft
+# een merk + markt in dat document; iets wat hier staat zonder bronregel is
+# een bug. El Minero staat *gereserveerd* en is bewust nog niet in beeld.
+FUNDED_STRAT = {"GC": "El Tesoro", "NQ": "El Rey", "ES": "El Matador", "YM": "El Leon"}
+EVAL_STRAT = {"NQ": "El Toro", "GC": "El Tesoro", "ES": "El Matador", "YM": "El Leon"}
 
-# Strategy name (Notion Accounts DB "Strategy" field) → base asset, for counting eval passes.
-STRAT_ASSET = {"El Tesoro": "GC", "El Minero": "GC", "El Rey": "ES", "El León": "ES", "El Leon": "ES",
-               "El Toro": "NQ", "El Matador": "NQ", "El Dorado": "NQ", "El Patrón": "NQ", "El Patron": "NQ"}
-
-# Doctrine presets per phase (contracts + $ day-trail + instrument class). The Operating Schema
-# numbers. instrument = "micro" (funded, conservative) / "mini" (eval + legacy compound).
-DOCTRINE = {
-    "survival":     {"contracts": 1, "day_trail": None, "instrument": "micro",
-                     "note": "1 ct survival-first on the MICRO until the trailing DD locks — payout is won by surviving, not size."},
-    "milking":      {"contracts": 2, "day_trail": 150, "instrument": "micro",
-                     "note": "2 ct MICRO · day-trail $150 — many small green days, keep any day <30% of total profit."},
-    "payout-ready": {"contracts": 2, "day_trail": 150, "instrument": "micro",
-                     "note": "Threshold + min days met → request the payout, then step up the ladder."},
-    "compound":     {"contracts": 2, "day_trail": None, "instrument": "mini",
-                     "note": "Static/EOD legacy — GC+ES full-size parallel, 2–3 ct compound motor (roomy buffer)."},
-    "eval-sprint":  {"contracts": 5, "day_trail": None, "instrument": "mini",
-                     "note": "Eval lot — pass-hunter, full MINI 5c / TP144, ~1 pass/day. New evals on El Toro (NQ)."},
+# Strategie-naam (Notion Accounts DB "Strategy") → base asset — volgt `CLAUDE.md`.
+STRAT_ASSET = {
+    "El Tesoro": "GC", "El Patron": "GC", "El Patrón": "GC",
+    "El Rey": "NQ", "El Principe": "NQ", "El Príncipe": "NQ", "El Toro": "NQ",
+    "El Matador": "ES",
+    "El Leon": "YM", "El León": "YM", "El Bandido": "YM",
 }
 
-# lock_at = profit at which the Apex trailing DD stops trailing (floor locks at start+$100).
-_APEX_RULES = {"ladder": APEX_LADDER_50K, "consistency": CONSISTENCY_LIMIT, "min_days": MIN_TRADING_DAYS,
-               "eval_target": APEX_TARGET, "lock_at": 2_600, "min_payout": 500, "days_reset": True,
-               "verified": True, "note": ""}
-_ASSUMED_RULES = {**_APEX_RULES, "verified": False, "note": "assumed Apex-like — set real firm rules"}
-FIRM_RULES = {"Apex Trader Funding": _APEX_RULES, "Apex": _APEX_RULES}
+# A-90 ruimte-doctrine (fleet-doc, `docs/state.md`). Schaal op *room above floor*,
+# niet op saldo. Vers (profit < safety) blijft 1 contract tot de DD vergrendelt;
+# daarna schaalt het op de ruimte, met dagstop onder de ondergrens.
+A90_LOCKED_LADDER = (
+    (4_500, 3),   # ruimte ≥ $4.500 → 3 contracten
+    (3_000, 2),   # ruimte ≥ $3.000 → 2 contracten
+)
+A90_THIN_ROOM = 1_300           # ruimteklasse < $1.300 → 1 contract + dagstop
+A90_DAY_TRAIL_USD = 150         # milking day-trail — fleet-doc A-85
+
+
+def contracts_for_room(room: float | None) -> int:
+    """A-90: room boven de floor → aantal contracten (post-lock). Zonder room → 1."""
+    if room is None:
+        return 1
+    for threshold, qty in A90_LOCKED_LADDER:
+        if room >= threshold:
+            return qty
+    return 1
+
+# NOODVAL alleen — `firm_rules.rules_for_account()` leidt. Deze tabel vuurt wanneer een
+# account geen `firm_program` draagt (dus geen regel in `data/propfirms.json` resolvet)
+# en de firma-naam de firm-name-fallback raakt. Elke waarde hieronder is daarmee een
+# vangnet — overlay-velden uit het echte programma overschrijven ze in
+# `resolve_account_rules()`. lock_at = profit waarop de trailing-DD vergrendelt.
+_APEX_FALLBACK = {"ladder": APEX_LADDER_50K, "consistency": CONSISTENCY_LIMIT, "min_days": MIN_TRADING_DAYS,
+                  "eval_target": APEX_TARGET, "lock_at": 2_600, "min_payout": 500, "days_reset": True,
+                  "verified": True, "note": ""}
+_ASSUMED_RULES = {**_APEX_FALLBACK, "verified": False, "note": "assumed Apex-like — set real firm rules"}
+FIRM_RULES = {"Apex Trader Funding": _APEX_FALLBACK, "Apex": _APEX_FALLBACK}
 
 
 @dataclass
@@ -348,12 +364,27 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     cons_cap = round(limit * (target if funded else max(profit, target)))
     day_cap = cons_cap                                          # back-compat alias
 
+    # Vers = profit < safety (DD trailt nog mee); gelockt = DD staat vast op −safety.
+    locked = profit >= safety
+    # Ruimte boven de floor: hoeveel $ er nog zit tussen hier en de breach.
+    #   gelockt → safety is de breach-afstand (vast = $2.600 bij 50K trailing).
+    #   vers    → `buffer` draagt de live afstand; valt die weg: safety − |profit vóór safety|.
+    if locked:
+        room = float(safety)
+    elif buffer is not None:
+        room = max(0.0, float(buffer))
+    else:
+        room = max(0.0, float(safety) + float(profit))
+    thin_room = room < A90_THIN_ROOM
+
     if track == "eval":
         contracts = 5
     elif track == "static":
         contracts = 3 if (size_usd or 0) >= 300_000 else 2
-    else:                                                   # trailing
-        contracts = 1 if profit < safety else 2
+    elif locked:                                             # trailing, DD gelockt
+        contracts = contracts_for_room(room)                 # A-90 room-ladder
+    else:                                                    # trailing, vers
+        contracts = 1
     mname = "compound" if track == "static" else "milking"
     quality, flags = "ok", []
 
@@ -473,11 +504,38 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         flags.append(f"consistency {consistency_pct:.0f}% of wins on one day — keep spreading "
                      f"(the {100 * limit:.0f}% ceiling rises as you earn)")
 
+    # --- de ZES invoer-getallen van de fleet-berekening (`tailor.py`, A-84/A-85) ---
+    # Zie `docs/state.md` A-84: dit zijn de input-signalen; de score + voorstel
+    # komt uit Backtest Setup (Release 3b), niet uit de cockpit.
+    #   1. ruimte tot liquidatie      → room (post-lock) / buffer (vers)
+    #   2. gelockt of vers            → locked
+    #   3. beste dag sinds payout     → best_day (al gemeten in daily_pnl)
+    #   4. eerstvolgende cap          → cap (uit payout_rules → propfirms.json)
+    #   5. kwalificatiedagen          → {done: trading_days, nodig: min_days, nog: need_days}
+    #   6. consistency-ruimte         → heal_total: hoogste winstdag ÷ consistency-%
+    inputs = {
+        "room": round(room),                 # ruimte boven de floor
+        "locked": bool(locked),              # gelockt of vers (trailing-DD)
+        "best_day": round(best_day or 0),    # hoogste winstdag deze cycle
+        "next_cap": round(cap) if funded else None,
+        "min_days": min_days,
+        "trading_days": trading_days,
+        "days_to_go": int(need_days),
+        # Consistency-ruimte zoals Apex hem zelf formuleert in `propfirms.json`
+        # (`formula: hoogste winstdag / 0,3 = minimaal vereiste totale winst`).
+        # Zonder cons-regel (eval, legacy post-6): None, dan quoten we niets.
+        "consistency_min_total":
+            round((best_day or 0) / limit) if (has_cons and limit and (best_day or 0) > 0) else None,
+        "consistency_limit": limit if has_cons else None,
+        "thin_room": bool(thin_room),
+    }
+
     return {
         "track": track, "phase": phase, "firm": firm, "firm_verified": rules["verified"],
         "program": rules.get("program"), "program_name": rules.get("program_name"),
         "drawdown_type": rules.get("drawdown_type"), "max_position": rules.get("max_position"),
         "min_days": min_days, "target": round(target), "target_label": target_label, "route": route,
+        "inputs": inputs,                     # D-142 — de invoer van `tailor.py` live
         "cur_instrument": cur_instrument, "rec_instrument": inst, "rec_base": rec.get("base"),
         "rec_strategy": rec["strategy"], "rec_why": rec["why"],
         "switch": not rec["keep"] and cur_instrument is not None, "off_edge": bool(rec.get("off_edge")),

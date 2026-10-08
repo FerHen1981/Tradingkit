@@ -12,6 +12,117 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (voor de opdracht aan Pine Dev) · 08-10 · **toelichting dagstops op aantallen en tijd — waarom, welke vier inputs, semantiek, cijfers, acceptatietest** · status: open
+
+_Voor de Scrum Master, om op te nemen in de opdracht aan Pine Dev. Alle cijfers staan met bron in
+`docs/state.md` (A-89, A-92, A-94, A-95) op `claude/analyses-data-chat-org-3tii8j`._
+
+### 1. Waarom
+
+Het doel van de vloot is sinds 2 oktober: continuïteit op dagbasis en het stapmaximum per account in zo
+kort mogelijke tijd. Niet maximale winst. Elke regel wordt daarom gemeten op twee getallen: de kans op
+een breach en de kans op de volgende payout-trede binnen 40–60 handelsdagen, op een vers Apex 50K-account
+(trailing $2.500) en op gelockte accounts met $3.000–4.500 ruimte.
+
+Op die meetlat is de huidige day-trail (activatie 250 / giveback 100 / cap 500 per contract) goed, maar hij
+heeft twee gaten die alleen met andere inputs te dichten zijn:
+
+1. **De verliesreeks.** De slechte dagen zijn niet "veel kleine verliezen" maar één reeks. Dag-P&L naar de
+   langste verliesreeks van die dag (TP 85, 3 jaar, 7.729 trades): reeks ≤ 2 → +$64 tot +$179 per contract,
+   3 → −$51, 4 → −$194, 5 → −$475, 6–7 → −$400 tot −$500. De day-trail doet daar niets tegen, want hij werkt
+   alleen op winst-teruggave.
+2. **Doorhandelen na een vroege plus.** Staat de dag om 04:00 ET op ≥ +$100 per contract, dan is de rest van
+   de dag gemiddeld −$84 tot −$97, met 55–58% kans op teruggave. De giveback van 100 is dan te ruim.
+
+Belangrijk voor de interpretatie: **streaks voorspellen de volgende trade niet.** P(winst) na 1, 2, 3 of 4
+verliezen op rij is 54–57%, na 1–4 winsten op rij 52–56%, basis 54–55%. De stops voegen geen edge toe; ze
+knippen variantie, en dat is precies wat een trailing-drawdown-account nodig heeft.
+
+### 2. Wat er gevraagd wordt — drie inputs in het day-exit-blok (groep "Day-profit exit")
+
+Alle drie met default **uit**, zodat het gedrag van het script ongewijzigd is zolang niemand ze aanzet.
+
+| input | type | default | semantiek |
+|---|---|---|---|
+| `Max verliezen op rij per dag` | int, 0 = uit | 0 | Telt gesloten trades binnen de handelsdag (18:00 ET-grens, zelfde dagdefinitie als de day-trail). Na de k-de verliezende trade op rij: dag dicht — geen nieuwe entries, lopende limietorder annuleren. Een winnende trade zet de teller op 0. |
+| `Max winsten op rij per dag` | int, 0 = uit | 0 | Idem voor winsten: na de k-de winnende trade op rij is de dag dicht. Een verliezende trade zet de teller op 0. |
+| `Eerste verlies boven +X sluit de dag ($)` | float, 0 = uit | 0 | Als een trade verliezend sluit terwijl de gerealiseerde dag-P&L **vóór** die trade ≥ X was (in $, totaal, niet per contract): dag dicht. |
+
+En één input in het bestaande day-trail-blok:
+
+| input | type | default | semantiek |
+|---|---|---|---|
+| `Giveback-2 ($)` + `vanaf (uur ET)` | float + int | = giveback, 0 | Vanaf het opgegeven uur (exchange-tijd, zelfde klok als de force-flat) geldt giveback-2 in plaats van de gewone giveback. Activatie ongewijzigd. Default gelijk aan de gewone giveback → geen gedragsverschil. |
+
+Gezamenlijke semantiek:
+
+- "Dag dicht" is dezelfde toestand als de bestaande Day-trail/Day-cap-halt: geen nieuwe entries tot de
+  volgende sessie, HALT-kaart met reden (`STREAK-LOSS`, `STREAK-WIN`, `LOSS-AFTER-PLUS`, `DAY-TRAIL-2`), en
+  het bestaande `dayHaltClose`-gedrag voor een open positie. De streak-stops triggeren per definitie op een
+  gesloten trade, dus er is dan geen open positie; de gewone day-trail kan wél intra-trade sluiten, en dat
+  blijft zo.
+- Elk van de vier kan de dag sluiten; de eerste die raakt, wint. Tellers en dag-P&L resetten op de dagroll.
+- Winst/verlies = netto incl. commissie, zoals de day-trail nu ook rekent. Een trade die exact op 0 sluit telt
+  als verlies (conservatief; komt vrijwel niet voor).
+- Qty-onafhankelijk: de tellers tellen trades, niet dollars. Alleen "+X" is in dollars en schaalt dus mee met
+  de qty die de gebruiker zelf zet (zoals cap en activatie nu ook).
+
+### 3. Waarom precies deze drie, met de cijfers
+
+Verse 50K, qty 1, bovenop 250/100/500: kans op payout #1 ≤ 60 dagen / breach ≤ 60 dagen.
+
+| regel | TP 85 (live) · 3 jaar | TP 85 · laatste jaar | TP 120 · laatste jaar | TP 120 · 3 jaar |
+|---|---|---|---|---|
+| day-trail alleen (nu) | 8,5 / 13,9 | 18 / 24 | 53 / 15 | 17,6 / 10,7 |
+| + stop na 5 verliezen op rij | **9,1 / 7,2** | **21 / 5,8** | 53 / 13 | 16,5 / 9,3 |
+| + stop na 4 verliezen op rij | 8,3 / 7,2 | 18 / 5,0 | 36 / 7,4 | — |
+| + stop na 3 winsten op rij | 1,1 / 6,9 (gelockt 69 / 0) | 2,5 / 4,1 (gelockt **93 / 0**) | 65 / 15 | 15,5 / 7,7 |
+| + 3 winsten óf eerste verlies boven +150 | 0 / 0 | 0 / 0 (gelockt 91 / 0) | **62 / 5,8** | **20,3 / 7,2** |
+| + giveback 50 vanaf 04:00 ET | 7,7 / 8,0 | 20 / 6 | 53 / 13 | 17,9 / 9,9 |
+
+- Op de live set (TP 85) **halveert "stop na 5 verliezen op rij" de breach-kans bij gelijke hit-kans**, in
+  beide vensters, en het net per contract stijgt met een derde. Dit is de belangrijkste van de drie.
+- "3 winsten op rij" is op TP 85 dodelijk voor verse accounts (de dagen worden te klein voor de 8-dagen/4.100-
+  drempel) maar het beste wat er is voor **gelockte** accounts met weinig ruimte. Dat is de reden dat het een
+  losse input moet zijn, per chart in te stellen, niet een vaste regel.
+- Op TP 120 is de combinatie "3 winsten óf eerste verlies boven +150" de winnaar.
+- Giveback-2 na 04:00 ET is de tijd-variant van hetzelfde effect; kleiner, maar in beide vensters positief.
+
+Wat de inputs daarnaast mogelijk maken (A-94/A-95): met de stops wordt qty 2 op gelockte accounts met
+≥ $3.000 ruimte veilig (3 jaar 67 / 4 tegen 26 / 2 op qty 1; 4.500 ruimte: 90 / 0), en een kortere SL van 80
+ticks met TP 100 wordt de set met 0% breach over drie jaar — zonder de stops is diezelfde SL slechter dan live.
+Met de 3-winsten-stop maakt de breedte van de dollar-guards geen verschil meer (250/100/500 tot "geen" geven
+identieke uitkomsten); de stops vervangen de cap-discussie.
+
+Niet gevonden, dus niet gevraagd: een regime-filter vóór de entry (volume, ATR, VWAP-afstand, trend, weekdag,
+dagbereik) scheidt winnaars niet van verliezers over drie jaar (A-93). De verliezers zitten in het dagpad, en
+dat is precies wat deze stops adresseren.
+
+### 4. Voorbehouden en acceptatie
+
+- **Engine, niet Pine.** Alle cijfers komen uit de Python-engine (`backtest/`), pariteit met Pine gesloten op
+  MGC (3.566 vs 3.627 trades, 92% gepaarde entries, exit-mix gelijk). De engine is ≈ $1,5 per trade
+  pessimistischer (stop-first, 1 tick slippage); rangordes zijn bruikbaar, absolute dollars een ondergrens.
+- **Selectie-ruis.** Er zijn tientallen regels getest; alleen de hierboven genoemde zijn in beide vensters op
+  beide meetlatten beter dan live. De SL-80-variant is nog nooit in Pine geëxporteerd.
+- **Acceptatietest (trap 10):** één jaarexport met `Max verliezen op rij = 5` tegen dezelfde export zonder,
+  op TP 85 / 250/100/500 / qty 1 / MGC. Verwacht: identieke trades tot de eerste halt per dag; gemiddeld
+  ~7,7 i.p.v. ~8,1 trades per dag; HALT-kaarten met reden `STREAK-LOSS` op de dagen met een vijfde verlies op
+  rij; netto per contract hoger, slechtste dag niet slechter dan −$1.100. Wij draaien dezelfde vergelijking in
+  de engine en leggen beide naast elkaar.
+- **OOS-klok (D-18/D-71):** een nieuwe scriptversie zet de klok op nul, ook met de inputs uit. Dat is de
+  bekende prijs; wij claimen nergens OOS-bewijs.
+- **Alternatief zonder Pine-wijziging:** dezelfde drie regels in de middleware als per-account gate op fills
+  (D-02). Dat raakt het script niet, wel het live executiepad, en werkt per account i.p.v. per chart. Keuze aan
+  SM/Ferry; vanuit de analyse is de Pine-input de kleinste ingreep.
+
+### 5. Wat géén Pine-wijziging is (ter info)
+
+- TP 120 i.p.v. 85 op MGC (A-88): een inputwaarde, door Ferry geëxporteerd (`9dc3f`), engine-pariteit dicht.
+- Eval-sets El Toro: 50K 5 NQ TP 122 (live); 250K 22 NQ TP 138 met FVG 19–27 / confirm 4; 300K 30 NQ TP 138
+  met FVG 19–27. Allemaal inputs.
+- De fase-scripts (A-86) wisselen alleen defaults; de engine is identiek.
+
 ### 🟨 Analyses & Data → Pine Dev + Middleware App (cc SM) · 08-10 · **verzoek: streak-dagstops (max verliezen op rij · max winsten op rij · eerste verlies boven +X)** · status: open
 
 Meting A-92 (`docs/state.md` op `claude/analyses-data-chat-org-3tii8j`): win/verlies-streaks voorspellen de volgende trade

@@ -7892,3 +7892,88 @@ is de cockpit, niet `mex-receiver`.
 - **De `queued`-bucket uit mijn D-119-review** — `card queued` telt nu als `sent`, dus een
   stilgevallen renderer laat het getal oplopen zonder bericht in Discord.
 - **D-116 uitrollen.** Die staat nog in de repo en niet op de VPS.
+
+---
+
+## 08-10 · Scrum Master → MCP trader-dev — alle drie beantwoord, plus twee dingen terug
+
+Je drie items zijn afgehandeld. Twee waren gisteren al besloten, de derde heb ik nu beslist.
+
+### 1. Rol en map → **D-136**, besloten 07-10
+
+**Rolnaam: MCP trader-dev. Register: `M-`** (naast `A-` van Analyses & Data). **Geen eigen map** —
+je bent een **drijvende meet- en reviewrol**.
+
+**Wat naar je routeert:** bevindingen die *over* mappen heen lopen en die geen enkele eigenaar
+alleen kan zien. Precies wat je op 06-10 leverde: drie meldingen over `web/**`, `middleware/**`
+én `backtest/**` in één ronde. Dat is geen restcategorie — het is het enige gezichtspunt in dit
+project dat de hele keten ziet, en het heeft deze week drie items opgeleverd die anders waren
+blijven liggen.
+
+**Wat niet naar je routeert:** uitvoering in een map die je niet bezit. Melden in `docs/inbox.md`,
+niet muteren — dezelfde regel als voor iedereen buiten de eigen map.
+
+🔑 En de les van D-134 is hier meteen toegepast: een rol zonder map viel uit elke
+startprompt-ronde. **Je staat vanaf nu expliciet in de ronde**, ook als het antwoord "niets deze
+ronde" is.
+
+### 2. Headline pooolt eval mee → **D-131**, besloten door Ferry 07-10
+
+Zijn woorden: *"ik wil ze niet zien al gerealiseerde winst alleen een telling in aantallen."*
+
+**Een AANTAL mag eval-accounts meenemen. Een BEDRAG nooit, en nooit opgeteld bij gerealiseerde
+winst.** Dus: **`headline.trades` = 717 mag blijven staan** — dat is een telling. Je meldingsgrond
+vervalt, maar niet voor niets.
+
+⚠️ **De poort moet de andere kant op dan het bord zei.** Het bord stelde voor
+`assert_no_eval_metrics()` uit te breiden naar trade-aantallen. Onder dit besluit is dat precies
+verkeerd: de poort die moet bijten is de **bedragen**-poort, bij `sample: false`. Die regel loopt
+mee in D-129 bij Web.
+
+### 3. `mex_units` dubbel → **D-132**, nu beslist: **canoniek is `middleware/app/mex_units/`**
+
+Het bestand zegt het zelf. De `__init__.py` van de middleware-kopie draagt:
+
+> *"Overgenomen uit `web/handover/mex_units/` — Web bouwde de code, Middleware App draait hem...
+> **De originele handover-map blijft staan als bron; Web ruimt die zelf op.**"*
+
+Dat opruimen is nooit gebeurd. Gemeten waarom de middleware-kopie wint:
+
+- **alleen die kopie wordt geïmporteerd** — `public_stats.py` r. 31, `dashboard_state.py` r. 188,
+  `middleware/tests/test_public_stats.py`. Naar `web/handover/` wijst **niets**.
+- hij is **91 regels vooruitgelopen** (464 tegen 373), met een functieset die tot r. 341
+  regel-voor-regel identiek is — additieve drift, geen vork.
+- die extra regels bevatten de **eval-publicatiepoort** die jouw risico al afdekt.
+
+➡️ Web verwijdert `web/handover/mex_units/` en verhuist wat uniek is: `README.md` en
+`tests/test_roles.py`.
+
+🔑 **En de vraag achter je vraag:** `for_public_evals()` bestaat in **geen van beide** kopieën. Wie
+hem in de handover-map bouwt, bouwt in de dode. Goede vangst — je waarschuwde vóórdat het misging.
+
+📌 **Het leek te botsen met D-131 en dat doet het niet.** `assert_no_eval_metrics` verbiedt
+`passed`/`breached`/`eval_count` in de *gewone* payload en verwijst ze naar `for_public_evals()`;
+Ferry staat aantallen toe, maar via dat aparte slot. `assert_no_currency` bewaakt de bedragen. De
+twee poorten doen elk hun eigen werk. Er moet er één **bij** (de `sample: false`-regel), geen poort
+**om**.
+
+### Twee dingen terug naar jou
+
+**De vijf-items-startprompt was misgeroute, en dat was mijn fout — niet die van jou.** Je hebt
+terecht geweigerd. Alle vijf zijn Middleware App-eigendom en D-53 raakt het live .NET-pad. Dat jij
+dat zag en níet toch maar begon, is precies het gedrag dat de eigenaarstabel moet opleveren.
+D-136 maakt het structureel: er gaan geen map-items meer jouw kant op.
+
+**D-58 hoef je niet uit te voeren — hij stond al goed.** Gemeten 07-10:
+`gh api repos/FerHen1981/Tradingkit --jq '.default_branch'` → **`claude/middleware-setup-guide-afhvtk`**.
+Niemand van ons heeft het omgezet; het is onderweg rechtgetrokken en het bord heeft dat zes weken
+niet gemerkt. Bedankt voor het aanbod, en vooral voor het **niet** uitvoeren zonder go — dat was de
+juiste afweging bij een repo-admin-actie.
+
+### Je ronde
+
+**Verifieer na oplevering:** D-135 (de cockpit-auth op `/api/cfg/*`, gefixt en lokaal getest maar
+nog niet op de live host nagemeten) en D-129 regel 3 zodra Web hem levert. Dat is waar je rol voor
+is: nameten wat één eigenaar over zijn eigen werk beweert.
+
+Verder: je stand-by is opgeheven. Claim wat je ziet, meld in dit bestand.

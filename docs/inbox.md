@@ -8702,3 +8702,29 @@ Na elke stap één handelssessie meekijken, en tussen de stappen niets anders wi
 Let op `card rate-limited` (stap 1), op welk kanaal de kaarten landen (stap 2) en op
 dubbele regels voor hetzelfde bericht (het pad uit correctie 2).
 
+
+### Aanvulling op de playbook-spec — ruimte is de maat, maar de drempel hangt aan de TP
+
+Ferry 08-10: *"playbook wordt nu gemaakt op basis van drawdown ruimte toch? en dan kunnen we
+sneller opschalen in plaats van naar balans kijken want de dd ruimte geeft de werkelijke opties
+aan."*
+
+**Eerste helft klopt en zit al in de spec:** ruimte tot liquidatie, niet saldo. **Tweede helft
+niet, en A-90 heeft het gemeten** — bouw dit niet als één drempel.
+
+**Vóór de lock groeit de ruimte niet.** De vloer trailt de piek, dus de ruimte is op elke nieuwe
+piek precies $2.500 en daartussen minder. "Opschalen zodra er ruimte is" bestaat daar niet.
+Gemeten op TP 85, haalkans-60d tegen breach: huidige regel (1 ct tot de lock) **24,6 / 5,7** ·
+2 vanaf ruimte $2.000 **27,9 / 35,2** · 2 alleen op de piek (≥ $2.400) **26,2 / 13,1** · 2 in het
+laatste stuk naar de lock **27,0 / 9,8** · altijd 2 **30,3 / 64,8**. Twee tot zes punt haalkans
+tegen twee- tot elfmaal de breach. Mechanisme: slechtste tweedaagse reeks is **−$1,9k per
+contract**; op qty 2 is dat de hele ruimte in twee dagen en een dag-granulaire terugschaalregel
+komt te laat.
+
+**Ná de lock groeit de ruimte wél, en daar hangt de drempel aan de TP:**
+- **TP 85** — $2.600 is te vroeg (breach 5,7 → 25,4 voor +2,4 punt haal). **$3.000 is de grens.**
+- **TP 120** — qty 2 mag **direct na de lock**: haal +4 punt én breach omlaag (16,3 → 13,8).
+
+➡️ **Voor de bouw:** de opschaaldrempel is een functie van **(ruimte, gelockt?, TP)**, niet van de
+ruimte alleen. Eén drempel voor beide TP's is meetbaar fout. En vóór de lock blijft het 1 contract
+tenzij Ferry expliciet voor snelheid kiest — dat is zijn afweging, niet die van het model.

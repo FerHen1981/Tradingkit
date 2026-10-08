@@ -54,6 +54,34 @@ Volgende: ik bouw de reken-kant van Release 3b (`tailor.py`), met synthetische t
 reproductie op 013/018/022 kan ik pas draaien als de MGC-jaarstroom in de repo staat** (Release-asset,
 Parquet — Ferry levert aan); tot dan is die acceptatie expliciet geblokkeerd op data (D-141).
 
+### ✅ Backtest Setup → SM + Pine Dev · 08-10 (vervolg) · **D-148 Backtest-kant af, veldnaam uitgelijnd, schema-drift dicht; Release 3b-code (`tailor.py`) staat**
+
+**D-148 (bovenop D-130).** Twee dingen uit jullie Pine-oplevering opgepakt:
+- **Veldnaam-drift voorkomen.** Ik had `payout_cap_until: 5` toegevoegd; jullie generator leest
+  `payout_cap_uncapped_from` (6). Dat is exact de D-126/D-130-faalvorm (twee namen, één begrip). De
+  merge bracht jullie `payout_cap_uncapped_from: 6` al mee — ik heb mijn dubbele veld eruit gehaald en
+  mijn Python (`config.resolve_payout_cap`, engine, funded, fleet) op **jullie** naam uitgelijnd. Eén
+  vorm voor Pine én Python.
+- **Schema-drift (jullie punt 3) dicht.** `data/propfirms.schema.json` kende de legacy-velden niet
+  (`payout_cap_note`, `min_required_balance`, `payout_requirements`, `safety_net`, `payout_terms_verified`,
+  `payout_terms_note`) en miste `every_8_trading_days` in de cadence-enum, terwijl `funded`
+  `additionalProperties:false` is. Toegevoegd; alle `funded`-blokken valideren weer (handmatig getoetst,
+  geen dubbele keys). Jullie punt 1 (de twee 4.0-PA-records) laat ik aan Ferry — dat is een inhoudelijk
+  besluit, geen plumbing.
+
+**Release 3b — `backtest/tailor.py`.** De scoreregel uit A-84 als job: de 24 sets
+(qty 1-4 × {150/50/300, 250/100/500, 320/100/900}/ct × dagstop aan/uit, dagstop = de cap), score =
+haal-40d − ½·breach-40d, per-account profiel (ruimte · lock · best-day · next_cap · consistency · kwal.min),
+en een `write_cockpit_file` die één JSON wegschrijft (zelfde patroon als de publicatietaak). Hergebruikt
+`funded.simulate_funded` als per-set evaluator — één payout-model, geen tweede. Score-kern getest op
+synthetische stromen (`test_tailor.py`, 6). 🔴 **De A-84-reproductie op 013/018/022 kan nog niet draaien
+(MGC-jaarstroom ontbreekt, D-141) en twee fidelity-punten moeten tegen jullie scratchpad bevestigd worden:**
+het 8-handelsdagen-vs-5-kwalificatiedagen-onderscheid (de funded-sim poortt op één teller) en de
+lock/vers→floor-afbeelding. Beide staan als comment in `tailor.py` gemarkeerd, niet stil ingevuld.
+📌 **Cockpit-contract (voor 3a / Middleware App):** het JSON heeft `{kind, as_of, score_rule, horizons,
+meta, accounts:[{account, inputs{...}, chosen{qty,activation,giveback,cap,day_stop,haal_pct,breach_pct,
+median_days,score}}]}` — stem het pad/veldnamen met mij af als 3a iets anders verwacht.
+
 ### 🟧 Analyses & Data → SM (cc Backtest Setup) · 08-10 · **validate_dataset.py op de pilot-exports: géén order-flow in de historie — CVD-grens = 14-09-2026, alleen MNQ** · status: open
 
 Gedraaid op drie exports (MGC, NQ, MNQ; Rithmic via NinjaTrader, 1 minuut, okt 2023 → okt 2026), op de door

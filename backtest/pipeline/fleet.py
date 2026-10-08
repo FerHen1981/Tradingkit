@@ -50,7 +50,7 @@ def engine_config(name: str) -> Config:
     (sym, qty, gmin, gmax, cvdn, stop, r, expiry, dex, act, give, cap,
      regime, program, sunday) = _SPEC[name]
     acct_trail_dd, acct_dll, consistency_pct = _acct_rules(program, name)
-    payout_ladder, payout_cap, payout_cap_until = _payout_cap_fields(program, name)
+    payout_ladder, payout_cap, payout_cap_uncapped_from = _payout_cap_fields(program, name)
     return Config(
         name=name,
         contract=contract(sym),
@@ -86,7 +86,8 @@ def engine_config(name: str) -> Config:
         acct_trail_dd=acct_trail_dd, acct_dll=acct_dll, consistency_pct=consistency_pct,
         min_payout=500.0, payout_buffer=500.0,
         # payout cap shape from the registry, not the hardcoded ladder (D-130)
-        payout_ladder=payout_ladder, payout_cap=payout_cap, payout_cap_until=payout_cap_until,
+        payout_ladder=payout_ladder, payout_cap=payout_cap,
+        payout_cap_uncapped_from=payout_cap_uncapped_from,
         use_wait_for_cap=True, use_mae_guard=False,
         # account model — the scripts run with "Use firm preset" ON, so the
         # drawdown model comes from the firm program, NOT from the loose input
@@ -174,7 +175,7 @@ def _payout_cap_fields(program: str, name: str) -> tuple[tuple, float, int]:
     if ladder:
         return tuple(float(x) for x in ladder), 0.0, 0
     if cap:
-        return (), float(cap), int(fu.get("payout_cap_until") or 0)
+        return (), float(cap), int(fu.get("payout_cap_uncapped_from") or 0)
     return DEFAULT_PAYOUT_LADDER, 0.0, 0
 
 

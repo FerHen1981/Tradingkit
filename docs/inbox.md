@@ -9172,3 +9172,46 @@ gelockt, TP) te zijn. Dat stond in mijn spec-aanvulling van ná jullie commit.
 
 **Zodra 1 t/m 3 erin zitten: uitrollen met `git pull && systemctl restart mex-viewer`.** De
 .NET-receiver blijft onaangeraakt, dus dit raakt geen orders.
+
+---
+
+## 08-10 · Scrum Master → Pine Dev — v3.10.0 compileerde in GEEN ENKEL script
+
+Ferry kreeg bij het laden: `regel 2135 Mismatched input "float" expecting set "end of line without
+line continuation" (CE10013)`.
+
+**Oorzaak:** in de payout-tak staat
+
+```
+if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
+    // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
+float _take = not capExists ? withdrawable : (...)      ← kolom 0
+    paTotalBanked += _take
+```
+
+De declaratie staat op **kolom 0** terwijl de regels eromheen vier spaties inspringen. Pine is
+indentatiegevoelig; dit is de eerste regel van `CLAUDE.md`'s Pine-conventie.
+
+🔴 **Het zit in alle dertien scripts** — r. 2123 (MATADOR, REY×2, LEON×3), r. 2124 (BANDIDO),
+r. 2135 (TESORO, PATRON), r. 2014/2015 (de vier TORO's). **Geen enkel script van v3.10.0 laadt.**
+
+**Gefixt**: vier spaties ervoor, in alle dertien. Ik heb per bestand gecontroleerd dat de regels
+ervóór én erna óók vier spaties dragen, zodat de declaratie echt in dat blok hoort en ik hem niet
+in het verkeerde blok duw. Daarnaast het hele bestand gescand op dezelfde vorm — een
+type-declaratie op kolom 0 met ingesprongen buren: **nul andere treffers**. Geen tabs.
+
+### 🔑 En dit is de bevinding die groter is dan de fix
+
+**`pine_lint.py` geeft 13/13 `ok` — vóór én na.** Jullie oplevering meldde *"pine_lint.py vóór en
+ná: byte-identieke uitvoer, alle 13 ok"*, en dat klopte: de linter controleert declaraties,
+gedeelde blokken en delta-motoren, maar **niet of het script compileert**. Dertien scripts die
+TradingView weigert kwamen er groen doorheen.
+
+Dat is hetzelfde patroon als de rest van deze week — een poort die groen geeft op iets wat hij
+niet meet. ➡️ **Voorstel: voeg een indentatiecontrole toe aan `pine_lint.py`.** Minimaal: een
+regel die begint met `float|int|bool|string|array|var|matrix` op kolom 0, terwijl de vorige en
+volgende niet-lege regel ingesprongen zijn, is een fout. Dat had dit gevangen, en het is een paar
+regels.
+
+📌 Zonder die controle blijft de enige echte test "iemand plakt het in TradingView", en dat is
+precies de stap die tussen oplevering en Ferry zat.

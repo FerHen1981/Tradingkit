@@ -2120,7 +2120,7 @@ if not payoutReady
 
 if isPA and paBacktestModeEff and payoutReady and barstate.isconfirmed
     // Zonder maximum is de hele opneembare stand de payout; met maximum blijft het de trede.
-float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
+    float _take = not capExists ? withdrawable : (useWaitForCap ? curLadderCap : math.min(withdrawable, curLadderCap))
     paTotalBanked += _take
     paPayoutsThisCycle += 1
     paResetPnLPrev := paResetPnLPrev + _take

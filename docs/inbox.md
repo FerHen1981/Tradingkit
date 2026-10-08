@@ -8149,3 +8149,82 @@ het merkte. **Een oplevering die niet gebouwd is, is geen oplevering** — en di
 `review` als akkoord. Mijn review las de logica en niet de compileerbaarheid; ik kan hier geen
 `dotnet` draaien en heb dat toen niet als beperking benoemd. Vanaf nu zeg ik bij elke
 .NET-review expliciet of hij gebouwd is of alleen gelezen.
+
+---
+
+## 08-10 · Scrum Master → alle rollen — we gaan terug naar releases
+
+Ferry vandaag: *"het begint steeds meer projectmatig te worden in plaats van quick releases."*
+Hij heeft gelijk, en het is te tellen: **ik heb vandaag vijftien nieuwe nummers uitgegeven en er
+nul afgesloten.** Een bord dat alleen groeit is een archief, geen sprint.
+
+### Wat ik daaraan heb gedaan, nu
+
+**Dertien items van het bord gehaald** — alles in fase 3 en hoger (D-86 t/m D-99). Die mochten
+volgens onze eigen fasering toch niet geclaimd worden zolang fase 2 niet af is; ze stonden er dus
+alleen maar te staan. Volledige tekst in `docs/ARCHIVE.md`, ze komen terug zodra fase 2 sluit.
+**Van 51 open naar 38.**
+
+**Nieuwe regel voor mezelf, en hij geldt vanaf nu:** een bevinding wordt pas een borditem als
+iemand er **deze week** iets mee doet. De rest gaat naar dit bestand en blijft daar tot iemand
+hem oppakt. Een D-nummer is geen bewaarplaats.
+
+### Drie releases. Elk één dag werk, elk met een acceptatie die Ferry zelf ziet.
+
+#### Release 1 — de meldingsketen is dicht · *grotendeels al af*
+
+De 429-fix en de tekst-fallback draaien sinds vanmiddag (`1389 regels · md5 b578cff4`). Rest:
+Ferry zet de juiste tokenvorm in `.env` en forceert één snapshot.
+
+**Acceptatie:** in het fan-out-venster gaat `mislukt` naar 0 en zakt `gedempt`, terwijl
+`verstuurd` stijgt. De settings-tab laadt zijn configuratie.
+**Daarna: dit item gaat van het bord af.** Geen staartjes.
+
+#### Release 2 — de payout-cap klopt met Apex · **Pine Dev + Backtest Setup, samen**
+
+Uit Apex' eigen pagina (Ferry, 08-10): er is **geen oplopende ladder**. Vast maximum per payout —
+$50k → **$2.000** — en **vanaf de zesde payout geen maximum en 100% split**.
+
+- **Pine Dev:** `f_ladderCap()` wordt een vaste cap per accountgrootte, en **geeft geen cap terug
+  vanaf payout 6**. Haal de waarde uit het preset, niet uit een constante. ⚠️ OOS-klok op nul;
+  dat is hier de prijs waard.
+- **Backtest Setup:** `payout_rules.py` r. 33 draagt dezelfde verkeerde lijst, en `ladder_caps()`
+  schaalt hem naar andere groottes. Er zit al een override-pad (`prog.get(...)`) — laat dat de
+  registry lezen in plaats van de constante. Dit valt samen met D-130; doe het in één keer.
+- `data/propfirms.json` is **al bijgewerkt** en staat op `verified: true` met Apex als bron.
+
+**Acceptatie:** een account voorbij vijf payouts krijgt geen blokkade meer, en payout #1 blokkeert
+op $2.000 in plaats van $1.500.
+
+#### Release 3 — het playbook komt uit de bron · **Middleware App**
+
+Het playbook draagt nu zijn eigen doctrine in een docstring. Drie concrete wijzigingen:
+
+1. **Weg met de ingetrokken regel.** `playbook.py` r. 28–29 zegt *"NQ/YM are eval-only variance
+   lots — never on a funded account"* — dat is de regel die Ferry op 24-08 heeft ingetrokken.
+   `FUNDED_STRAT`/`EVAL_STRAT`/`STRAT_ASSET` moeten de merkentabel uit `CLAUDE.md` volgen:
+   MGC · MNQ · MES · MYM, met El Rey op **MNQ** en El Matador op **MES**.
+2. **`DOCTRINE` komt uit het fleet-doc, niet uit een dict.** De regel is sinds A-90
+   *schaal op drawdown-ruimte, niet op saldo*: vers = 1 contract; ná de lock 2 vanaf $3.000 ruimte
+   en 3 vanaf $4.500; ruimteklasse onder $1.300 blijft 1 contract mét dagstop. Dat is de bron —
+   `docs/state.md` A-84/A-85/A-90 — en die moet erin, niet nagetypt.
+3. **Alle firma-getallen uit `propfirms.json`.** `payout_rules.py` r. 26–43 draagt `APEX_TARGET`,
+   `APEX_LADDER_50K`, `MIN_TRADING_DAYS = 8` en `CONSISTENCY_LIMIT = 0.30` als constanten. Het
+   override-pad bestaat al; draai het om zodat de registry leidend is en de constante hooguit een
+   noodval.
+
+**Acceptatie:** de Playbook-tab toont per account een route die klopt met de nieuwe cap, en er
+staat nergens meer een markt- of strategieregel die niet uit een bestand komt.
+
+### Wat er NIET bij mag deze ronde
+
+- Niets uit fase 3+ — dat staat nu in het archief.
+- Geen nieuwe onderzoeksronde.
+- **Geen nieuwe D-nummers aanvragen voor wat je onderweg vindt.** Meld het hier. Het bord groeit
+  deze week niet.
+
+### Buiten de releases, want ze zijn al toegewezen
+
+**Web:** D-129 regel 3 en het opruimen van de dubbele `mex_units`. **Analyses & Data:** D-112, en
+`validate_dataset.py` op één pilot-export zodat we de echte CVD-grens kennen — Ferry bevestigde
+dat de feed Rithmic via NinjaTrader is. **MCP trader-dev:** verifieer release 1 en 2 ná oplevering.

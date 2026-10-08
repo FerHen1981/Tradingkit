@@ -8,6 +8,54 @@ _Geschoond bij de herijking van 27-09-2026. Zie `docs/PLAN-2026-09-27-herijking.
 
 ---
 
+
+## Geparkeerd 08-10 — fase 3 en hoger
+> **Waarom van het bord:** besluit Ferry 08-10 — *"het begint steeds meer projectmatig te worden in plaats
+> van quick releases"*. Deze dertien items zitten allemaal in fase 3 of hoger en kunnen volgens de
+> fasering uit `PLAN-2026-09-27-herijking.md` niet geclaimd worden zolang fase 2 niet af is. Ze stonden
+> dus op het bord zonder dat iemand ze mocht pakken — dat maakt het bord onleesbaar en de sprint
+> onherkenbaar. **Geparkeerd is niet weerlegd:** ze komen terug zodra fase 2 sluit, met volledige tekst.
+> Het bord ging hiermee van 51 open items naar 38.
+
+### D-86 · fase 3 · _Pine Dev_
+| **D-86** | 3 | todo | Pine Dev | **Eén canoniek alert per script in plaats van vijf routes.** Alle 13 scripts van de `v1_0_0`-lijn. ⛔ **Geen enkele wijziging aan entry-, exit- of risicologica** — alleen de alert-plumbing. Dat onderscheid is niet cosmetisch: het is de grond waarop besloten is dat de OOS-klok **niet** op nul gaat (Ferry 27-09, zie `DECISIONS.md`). **Acceptatie: een diff die aantoont dat uitsluitend plumbing wijzigde.** Kan dat niet aangetoond worden, dan gaat de klok alsnog op nul. |
+
+### D-87 · fase 3 · _Middleware App_
+| **D-87** | 3 | todo | Middleware App | **Payload-bouwers in de middleware.** De PMT-JSON, de Discord-embed, het PineConnector-commando en de journaalregel worden voortaan in de middleware gebouwd uit het canonieke event (D-77) plus de config (D-78). Dat is de code die vandaag in Pine staat. |
+
+### D-88 · fase 3 · _Middleware App_
+| **D-88** | 3 | todo | Middleware App | **Schaduwdraai en omschakeling.** Beide wegen draaien een **volle handelsweek** naast elkaar in `DRY_RUN` en de oude en nieuwe payloads worden **byte-voor-byte** vergeleken op echt verkeer. Pas bij **nul verschil** gaat de oude weg eruit. 🔴 Een verschil in een PMT-payload is een verkeerde order — hier wordt niet op gevoel omgeschakeld. |
+
+### D-90 · fase 4 · _Middleware App_
+| **D-90** | 4 | todo | Middleware App | **T1 — de gemodelleerde laag.** Uit het canonieke event (D-77): wat de strategie *bedoelde*, direct zichtbaar. Bevat geen slippage en geen echte commissie, en moet dat ook nooit suggereren. |
+
+### D-91 · fase 4 · _Middleware App_
+| **D-91** | 4 | todo | Middleware App | **T2 — de bevestigingslaag.** Op basis van de meting uit D-73: promoveer een regel van *verstuurd* naar *geaccepteerd* of *geweigerd*. ➡️ Hier vervallen **D-72** en **D-46b**: met een expliciete T2-laag is *niet bevestigd* een **zichtbare toestand** in plaats van een poort die dichtvalt. Dat is de uitweg uit het fail-blind-probleem dat Web statisch had bewezen. |
+
+### D-92 · fase 4 · _Middleware App_
+| **D-92** | 4 | todo | Middleware App | **T3 — de wekelijkse Tradovate fills-CSV.** Besluit Ferry 27-09: *"wekelijks via het Tradovate fills csv bestand."* Dat is de brokerwaarheid: echte fills, echte commissies, funding en payouts. Bouw de import, de afstemming per account, en de **afwijking T1→T3 per account en per venue — dat ís de slippage-meting**. ➡️ Hierin gaan op: **D-75** (wat ligt er in `/root/exports`), **D-03** (de reconciliatietimer) en **D-07** (werkelijke commissie per contract). ✅ **FORMAAT GELEVERD EN DE METHODE IS BEWEZEN (28-09).** Ferry leverde 10 exports, 2.235 fills, PA013 t/m PA029, 01-09→25-09. **Kolommen:** `_id · _orderId · _contractId · _timestamp (UTC) · _tradeDate · _action · _qty · _price · _active · _accountId · Fill ID · Order ID · Timestamp · Date · Account · B/S · Quantity · Price · _priceFormat · _priceFormatType · _tickSize · Contract · Product · Product Description · commission`. Eén bestand per account. ⚠️ **Dit zijn fills, geen kasboek** — er zit geen balans, funding of payout in, dus dit voedt **niet** `_load_cash_ledgers()` (dat leest `*Cash_History*.csv`). Er is een koppelstap nodig; `middleware/app/fills_pairing.py` bestaat al. 🔴 **Bewijs dat het werkt:** eigen FIFO-koppeling ($10/punt MGC, commissie uit de kolom) reproduceert de `Winst`-kolom van het fleet-doc — die uit het **Apex-dashboard** komt en niet uit deze fills — **exact voor 7 van de 10 accounts**; de drie afwijkers zijn precies de accounts met historie vóór het venster, en PA013 ontving daarnaast payout #1 op 10-09. **Buy en sell sluiten per account én per dag exact op elkaar aan** (0 onbalans over alle 100 account-dagen), dus de export is compleet en er staan geen posities open. ➡️ Bouw de koppelstap tegen dit formaat; de puntwaarde komt uit de registry, niet uit een constante. ⛔ **De exports zelf gaan niet de repo in** — accountnummers en financiële standen. |
+
+### D-93 · fase 4 · _Middleware App_
+| **D-93** | 4 | todo | Middleware App | **Het herkomstlabel, overal.** Elk bedrag draagt zijn laag (T1/T2/T3) tot in de widget. Dit is het `✓ verified` / `⚠ unverified` uit D-74, veralgemeend. 🔴 **Zonder dit label is "actuals" een aanname in plaats van een feit** — een gemodelleerd getal en een afgestemd getal renderen anders identiek. |
+
+### D-94 · fase 4 · _Middleware App_
+| **D-94** | 4 | todo | Middleware App | **Notion wordt afnemer van dezelfde journaalregels.** Ferry 27-09, antwoord 1: *"Notion moet gewoon de trades met parameters doorkrijgen en dezelfde waarheid hebben als de webapp."* Eén bron, twee vensters — geen tweede schrijfweg. ⚠️ **D-20 stelde vast dat de Notion-schrijfkant nooit automatisch heeft gedraaid**; waaróm niet is nooit uitgezocht. Begin daarmee, niet met bouwen. |
+
+### D-95 · fase 4 · _Middleware App_
+| **D-95** | 4 | todo | Middleware App | **Webapp-push bij elk event met effect.** Ferry 27-09, antwoord 2. De receiver stuurt een seintje naar de viewer, die zijn state ververst. Geen polling. |
+
+### D-96 · fase 5 · _Middleware App_
+| **D-96** | 5 | todo | Middleware App | **Alle vijf, volledig uitgewerkt, per account** (Ferry 27-09, antwoord 10: *"alle 5 zijn even belangrijk"*): (1) dagen tot payout-eligible · (2) ruimte tot de trailing drawdown · (3) ruimte tot de daily loss limit vandaag · (4) de consistency-regel · (5) kwalificerende dagen. 🔴 **Alle vijf lezen hun regels uit `data/propfirms.json` en falen HARD bij een ontbrekende regel.** Geen hardgecodeerde drempels en geen stille terugval — dat is exact wat **D-68** in de backtest-pijplijn blootlegde (`fleet.py:84` codeert 2000/1000 hard, `higher.py:237` valt stil terug op 2500) en die fout mag hier niet opnieuw ontstaan. ✅ **ACCEPTATIETEST VASTGESTELD 28-09: `docs/fleet-report-spec.md`.** Dat document zet Ferry's handmatige fleet-rapport om in kolommen en formules — de webapp is af wanneer hij tabel A, C en D daaruit zelf produceert uit actuals + registry. De formules zijn geverifieerd tegen de cijfers van 28-09, waaronder het consistency-percentage op drie accounts. 🔴 **Twee dingen die je anders mist:** (a) een **payout verlaagt de balans maar staat niet in de fills** — payout-registratie is een aparte invoer naast T3; (b) de DLL mag **nooit meer dan ⅓ van de ruimte** zijn, wat een tweede begrenzing is naast de ladder en eerder bijt. **Geblokkeerd tot D-104** — zonder complete registry faalt dit item per ontwerp hard voor zeven van de acht firma's. |
+
+### D-97 · fase 6 · _Middleware App_
+| **D-97** | 6 | todo | Middleware App | **6a — accountmechanica.** Precies de drie vragen uit antwoord 15, en het zijn alle drie **meetbare** vragen op de eigen historie, geen meningsvragen: (1) op welk niveau hoort een daily halt — op x verliezen, x winsten, of op een bedrag? (2) wanneer op- en wanneer afschalen? (3) welke accountgrootte past het best bij welke regels? Voedt zich met de actuals uit fase 4 en de regels uit `propfirms.json`. 📄 **Invoer: `docs/fleet-report-spec.md` §6.** Ferry's doctrine staat daar uitgeschreven, inclusief de twee regels die niet voor de hand liggen: *afschalen doe je direct, niet bij de aanvraag* (na een payout en na een DLL-dag), en *een cap-dag op de oude qty in de week vóór de aanvraag is de dag die de consistency breekt*. ⚠️ **D-97 kopieert die doctrine niet, hij toetst hem** — antwoord 15 vraagt letterlijk óp welk niveau een halt hoort en wannéér op- en afschalen, en dat zijn meetbare vragen op de eigen historie. Komt de meting op iets anders uit, dan is dat de uitkomst en geen fout. |
+
+### D-98 · fase 6 · _Middleware App_
+| **D-98** | 6 | todo | Middleware App | 🔴 **`playbook.py`'s ingetrokken tabellen verwijderen, niet bijwerken.** Gemeten 27-09: `FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}` plus de commentaarregel *"NQ/YM are eval-only variance lots — never on a funded account"* — dat is de **GC+ES-regel die Ferry op 24-08 heeft ingetrokken**. En de asset-mapping spreekt de vloottabel op vier engines tegen: El Rey staat er op **ES** (is MNQ), El Matador op **NQ** (is MES), El León op **ES** (is MYM), El Patrón op **NQ** (is MGC). **6b — strategiekeuze blijft geblokkeerd** zolang er geen geldige vlootrangorde is; het scherm toont dat expliciet in plaats van een oud getal. |
+
+### D-99 · fase 7 · _Middleware App_
+| **D-99** | 7 | todo | Middleware App | **Alleen weergave, geen advies** (Ferry 27-09, antwoord 11). Twee doorsneden: **funded → saldo-ontwikkeling**, **eval → accountontwikkeling** (saldo doet niet ter zake). Vier perioden: **vandaag · laatste handelsdag · week · overall**. ⚠️ *"Laatste handelsdag"* is **niet** hetzelfde als gisteren — op maandag is dat vrijdag, en na een stille dag schuift hij door. Bouwt voort op D-76 (Today per stack, afgerond) en draagt de herkomstlabels uit D-93. |
+
 ## Geparkeerd tot het platform staat
 
 ### D-54 · _Backtest Setup + Pine Dev_

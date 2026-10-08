@@ -117,6 +117,59 @@ Acceptatiecriteria (voor mijn ná-oplevering-verificatie): voor een 50k-PA geven
   identiek: payout 1-5 cap = $2.000, payout ≥6 = geen cap; en payout_rules.py/engine lezen dat uit
   `propfirms.json`, niet uit een hardcoded lijst.
 
+---
+### 🔴 Middleware App → SM · 08-10 · **Release 3a / D-142 opgeleverd — de doctrine is uit het playbook, de zes invoer-getallen van `tailor.py` staan live**
+
+**Scope uit de inbox-opdracht:** het playbook moet de **invoer van de fleet-berekening** tonen en de hardgecodeerde doctrine moet eruit. Elke firma- en markt-regel komt uit een bestand.
+
+**Wat er gewijzigd is, in volgorde van scope-eis:**
+
+**(1) Retracted-doctrine docstring uit `middleware/app/playbook.py` r. 28–29.**
+Vóór: *"NQ/YM are eval-only variance lots — never on a funded account"*. Dat was de 24-08-regel die `CLAUDE.md` als INGETROKKEN markeert. Vervangen door een docstring die naar de drie bronnen verwijst: `CLAUDE.md` (merkentabel), `data/propfirms.json` (programma-regels), `docs/state.md` A-90 (contract-schaling). Een regel in dit bestand zonder brontverwijzing is nu per definitie een bug.
+
+**(2) `FUNDED_STRAT` / `EVAL_STRAT` / `STRAT_ASSET` volgen de merkentabel uit `CLAUDE.md`.**
+Vóór: `FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}` — maar El Rey draait MNQ en El Matador is bij ES. STRAT_ASSET had bovendien **vijf** verkeerde entries (El Rey → ES, El Matador → NQ, El Dorado → NQ, El Patrón → NQ, El León → ES). Nu:
+- `FUNDED_STRAT`: GC → El Tesoro · NQ → El Rey · ES → El Matador · YM → El Leon
+- `EVAL_STRAT`: NQ → El Toro (default passer) · GC/ES/YM volgen funded
+- `STRAT_ASSET`: elke regel traceerbaar naar de brand table
+
+**(3) `DOCTRINE` dict is weg, A-90 ruimte-ladder is terug op haar plek.**
+Vóór: een dict met per-phase hardgecodeerde `contracts`. Vervangen door `contracts_for_room(room)` dat de A-90-regel uitvoert: vers = 1 ct; gelockt + room ≥ $3.000 = 2 ct; room ≥ $4.500 = 3 ct; `A90_THIN_ROOM = $1.300` (ruimteklasse eronder = 1 ct met dagstop). De oude regel `contracts = 1 if profit < safety else 2` schaalde op **saldo**; de nieuwe schaalt op **ruimte boven de floor**, exact zoals A-90 voorschrijft.
+
+**(4) Registry leidt, constanten noodval — expliciet gemaakt.**
+`payout_rules.py` draagt nog `APEX_TARGET`, `APEX_DD`, `APEX_LADDER_50K`, `MIN_TRADING_DAYS`, `CONSISTENCY_LIMIT`, maar nu met een topcomment dat elke `prog.get(...) or <const>` een noodval is "mocht de registry het veld missen". `_APEX_RULES` in `playbook.py` is hernoemd naar `_APEX_FALLBACK` zodat de rol niet meer suggereert dat Apex-defaults de werkelijkheid vastleggen. De override-richting klopt al in de code; dit maakt de intentie leesbaar.
+
+**(5) D-148 cap gewired door `firm_rules.rules()`.**
+`payout_cap` was in `data/propfirms.json` toegevoegd op 08-10 (`$50k → $2.000, geen cap vanaf payout 6`) maar werd nog niet door `firm_rules.rules()` geëxporteerd. Nu wel. De payout-engine zelf (`payout_rules.evaluate()`) blijft bij **Release 2 (Backtest Setup)** — die zet de cap om in gedrag.
+
+**(6) `build_playbook` draagt een nieuw `inputs`-blok met de zes `tailor.py`-signalen:**
+- `room` — ruimte boven de floor
+- `locked` — gelockt (profit ≥ safety) of vers
+- `best_day` — hoogste winstdag deze cycle
+- `next_cap` — eerstvolgende payout-maximum uit de registry (None voor eval)
+- `trading_days` / `min_days` / `days_to_go` — kwalificatiedagen
+- `consistency_min_total` — hoogste winstdag ÷ limiet (de Apex-formule verbatim uit `propfirms.json`)
+
+Een evaluatie geeft `consistency_limit: None` en `next_cap: None` zodat de cockpit géén Apex-30% quote toont bij een account dat die regel niet heeft.
+
+**(7) Playbook-tab in `viewer.py` toont de zes getallen in een nieuwe kolom "Fleet-input".**
+De sec-note is herschreven: de ingetrokken *"MGC · El Tesoro / MES · El Rey; NQ eval-only"*-regel is weg; er staat nu dat elke firma-waarde uit `data/propfirms.json` komt, de merkentabel uit `CLAUDE.md`, en de contract-schaling uit A-90. De `survival/milking/payout`-pills blijven — die zijn **symptoom**, niet doctrine.
+
+**Tests:** 174 bestaand + 5 nieuwe = **179 passed**. De twee bestaande tests die de ingetrokken NQ-off-edge-regel codeerden (`test_recommend_keeps_micro_instrument` second assert · `test_off_edge_nq_on_funded`) zijn vervangen door tests die de nieuwe brand table verifiëren. Eén test in `test_firm_rules.py` was stale sinds D-148; bijgewerkt naar `payout_ladder is None` + `payout_cap == 2000`.
+
+**Acceptatie-check (van de opdracht):**
+*"de Playbook-tab toont per account ruimte / gelockt-of-vers / beste dag sinds laatste payout / eerstvolgende cap / kwalificatiedagen / consistency-ruimte."* → ✅ zes velden in de Fleet-input-kolom, één pill (gelockt/vers), room/best_day/next_cap/days/cons-ruimte als mono-getallen daaronder.
+*"er staat nergens meer een markt- of strategieregel die niet uit een bestand komt."* → ✅ grep op `playbook.py`/`payout_rules.py`/`viewer.py` levert geen hardgecodeerde brand-regel of markt-regel meer op; elke waarde komt uit `CLAUDE.md`, `data/propfirms.json` of `docs/state.md`.
+
+**🔴 STAAT IN DE REPO, NOG NIET UITGEROLD** — dit raakt het cockpit-proces `mex-viewer`. Deploy op VPS: `cd /root/mex-journal && git pull && systemctl restart mex-viewer`. De receiver (`.NET`) heeft niets veranderd en hoeft niet opnieuw gebouwd te worden.
+
+**Niet-dit-release opengelaten (bewust, binnen de kaders):**
+- De `cap` uit `payout_rules.evaluate()` leest nog `prog["payout_ladder"]` en valt bij `null` terug op de 50K-fallback-ladder — Release 2 (Pine Dev + Backtest Setup) laat dit onderweg `payout_cap` lezen. Het `inputs.next_cap` dat de cockpit toont klopt dus pas 100% ná Release 2.
+- `El Minero` staat in `CLAUDE.md` als *gereserveerd*; is daarom NIET in de brand table van `FUNDED_STRAT`/`EVAL_STRAT`. Komt het merk live, dan is dat één regel toevoegen.
+- `El Dorado` / `El Patrón` zonder markt-koppeling in `CLAUDE.md` → bewust niet in STRAT_ASSET. Zodra de merkentabel ze noemt, één regel toevoegen.
+
+📌 **Aan M-rol / Scrum Master:** M-verificatie hierboven (payout-cap op VIER plekken) is cruciaal voor Release 2. Mijn Release 3a-fix dekt alleen de EXPORT van `payout_cap` via `firm_rules.rules()` — de echte cap-logica in `payout_rules.evaluate()` (`caps = prog.get("payout_ladder") or ladder_caps(size)`) blijft bij Release 2. Zolang die ladder-fallback op `[1500,1500,…]` leest terwijl `legacy_pa` een vaste cap 2000 draagt, geeft de cockpit het verkeerde `inputs.next_cap`-getal voor dat ene programma. Het inputs-blok draagt wel al het veld — de registry hoeft alleen `payout_cap` ook op `apex_50k_eod_pa` en `apex_50k_intraday_pa` te krijgen (M-rol constateert dat die beide nog de oude ladder dragen).
+
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 
 Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:

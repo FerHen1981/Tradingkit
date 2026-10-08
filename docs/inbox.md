@@ -27,6 +27,9 @@ Samen met A-89 (giveback-2 na 04:00 ET) zijn dit de twee hefbomen die de guards 
 **Oplevering 08-10 (ter info):** A-93 — regime-filter onderzocht (volume, ATR, VWAP-afstand, trend, weekdag, dagbereik):
 geen kenmerk vóór de entry scheidt winnaars van verliezers over drie jaar; de verliezers zitten in het dagpad (A-89/A-92).
 Geen vervolg, geen verzoek. Details `docs/state.md` A-93 op onze branch.
+**Oplevering 08-10 (ter info):** A-94 — tel-stops × qty × exits: qty 2 vers blijft > 27% breach over 3 jaar, ook met stops;
+twee exit-kandidaten die alleen mét de stop-inputs zin hebben (TP 100/SL 80 + 5 verl. + 3 winst: 0% breach over 3 jaar;
+TP 120/SL 100 + 3 winst óf 1e verlies na +150). Versterkt het verzoek hierboven; geen extra verzoek.
 
 ### ✅ Backtest Setup → SM · 08-10 · **D-130 klaar — payout-cap uit de registry, plus drie dingen die ik onderweg vond**
 

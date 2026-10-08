@@ -30,14 +30,14 @@ def test_resolver_ladder_shape_clamps_at_the_last_rung():
 
 def test_resolver_fixed_cap_lapses_to_uncapped():
     # Apex legacy after D-148: $2,000 through payout 5, then NO maximum.
-    assert resolve_payout_cap(1, cap=2000, cap_until=5) == 2000
-    assert resolve_payout_cap(5, cap=2000, cap_until=5) == 2000
-    assert resolve_payout_cap(6, cap=2000, cap_until=5) is None
-    assert resolve_payout_cap(99, cap=2000, cap_until=5) is None
+    assert resolve_payout_cap(1, cap=2000, uncapped_from=6) == 2000
+    assert resolve_payout_cap(5, cap=2000, uncapped_from=6) == 2000
+    assert resolve_payout_cap(6, cap=2000, uncapped_from=6) is None
+    assert resolve_payout_cap(99, cap=2000, uncapped_from=6) is None
 
 
 def test_resolver_fixed_cap_without_lapse_never_expires():
-    assert resolve_payout_cap(50, cap=2500, cap_until=0) == 2500
+    assert resolve_payout_cap(50, cap=2500, uncapped_from=0) == 2500
 
 
 def test_resolver_hard_fails_when_no_shape_given():
@@ -48,7 +48,7 @@ def test_resolver_hard_fails_when_no_shape_given():
 
 # --- config method + fleet wiring --------------------------------------------
 def test_config_method_delegates_to_resolver():
-    c = Config(name="t", payout_ladder=(), payout_cap=2000.0, payout_cap_until=5)
+    c = Config(name="t", payout_ladder=(), payout_cap=2000.0, payout_cap_uncapped_from=6)
     assert c.payout_cap_for(1) == 2000.0 and c.payout_cap_for(6) is None
 
 
@@ -68,8 +68,8 @@ def test_fleet_uses_the_registry_shape_when_one_is_present():
     from backtest.pipeline import fleet
     # A program that carries a fixed cap (Apex legacy) comes through as a cap, not
     # the default ladder — proving the registry shape wins where it exists.
-    ladder, cap, until = fleet._payout_cap_fields("apex_50k_legacy_pa", "test")
-    assert ladder == () and cap == 2000.0 and until == 5
+    ladder, cap, uncapped_from = fleet._payout_cap_fields("apex_50k_legacy_pa", "test")
+    assert ladder == () and cap == 2000.0 and uncapped_from == 6
 
 
 def test_fleet_cap_fields_raise_for_an_unknown_program():
@@ -87,9 +87,9 @@ def _days(vals, start=dt.date(2026, 1, 5)):
 # dd pinned small and consistency disabled so the cap is the ONLY thing under test.
 _LEGACY_CAP = {"drawdown": 2_500.0, "min_qual_days": 8, "min_day_profit": 50.0,
                "consistency_limit": 1.0, "safety_buffer": 100.0,
-               "cap": 2_000.0, "cap_until": 5, "ladder": None,
+               "cap": 2_000.0, "uncapped_from": 6, "ladder": None,
                "min_payout": 0.0, "profit_split": 1.0, "daily_loss_limit": None}
-_OLD_LADDER = {**_LEGACY_CAP, "cap": 0.0, "cap_until": 0,
+_OLD_LADDER = {**_LEGACY_CAP, "cap": 0.0, "uncapped_from": 0,
                "ladder": [1_500, 1_500, 2_000, 2_500, 2_500, 3_000]}
 
 
@@ -115,6 +115,6 @@ def test_sixth_payout_is_uncapped():
 def test_sim_hard_fails_when_rules_carry_no_cap_shape():
     # A rule set with neither a ladder nor a cap must refuse at the first payout,
     # not silently bank an Apex-50K amount.
-    rules = {**_LEGACY_CAP, "cap": 0.0, "cap_until": 0, "ladder": None}
+    rules = {**_LEGACY_CAP, "cap": 0.0, "uncapped_from": 0, "ladder": None}
     with pytest.raises(ValueError, match="no payout cap shape"):
         simulate_funded(_days([700] * 8), account_size=50_000, rules=rules)

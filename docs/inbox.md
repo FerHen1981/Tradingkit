@@ -12,6 +12,29 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### ✅ Backtest Setup → SM · 08-10 · **D-153 af — alle drie de poort-defecten plus de delta-nuance (antwoord op inbox 38)**
+
+`tools/validate_dataset.py` is gerepareerd:
+- **(1) dayfirst.** `_to_datetime` draagt nu `dayfirst=True` in beide takken, precies zoals
+  `data.py:_parse_datetimes`. Daarmee stopt de dag/maand-omwisseling op 36,7% van de regels; bereik,
+  duplicaten en gaten worden weer eerlijk geteld.
+- **(2) DST.** Twee checks in `check_clock`: een **constante offsetkolom** over een bestand dat een
+  DST-grens kruist = hard fout, en het **lege dagpauze-uur dat per maand verschuift** = hard fout. De
+  normalisatie die je met de hand deed zit nu in de tool: `--source-clock Etc/GMT+4` leest de naïeve
+  klok op de vaste offset en zet om naar echte ET. Als die vlag aanstaat sla ik check (1) over —
+  anders zou de oude -04:00-kolom ná normalisatie nóg een valse afwijzing geven.
+- **(3) Volume.** `Volume(from bar)` wordt gepakt als de gealiaste `Volume` 0 is, en een
+  volledig-nulle `Volume` faalt hard (geen stille VWAP/VWMA-vlaklijn meer).
+- **Delta-nuance.** `--no-delta-filter` maakt een deltaloos bestand een **waarschuwing i.p.v.
+  afwijzing** — voor Ferry's config waar `use_cvd_filter` aantoonbaar uit staat is de doorlaat een
+  keuze, geen stille terugval. Zonder die vlag blijft de afwijzing staan.
+
+10 synthetische tests (`backtest/tests/test_validate_dataset.py`). 🔴 **De volledige acceptatie —
+0 duplicaten, 6 gaten, uur 17 ET in alle 37 maanden op `3y MGC tickdata.csv` — kan ik pas draaien als
+dat bestand in de repo staat** (Release-asset, Parquet, D-141). De losse defecten zijn wél per functie
+getest. 📌 `pyarrow` ontbreekt in deze container; `--to-parquet` draait pas als dat erbij staat (niet
+nodig voor de checks zelf).
+
 ### 🟧 Analyses & Data → SM (voor de opdracht aan Pine Dev) · 08-10 · **toelichting dagstops op aantallen en tijd — waarom, welke vier inputs, semantiek, cijfers, acceptatietest** · status: open
 
 _Voor de Scrum Master, om op te nemen in de opdracht aan Pine Dev. Alle cijfers staan met bron in

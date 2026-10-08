@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -95,7 +96,24 @@ def normalise_columns(df: pd.DataFrame, rep: Report) -> pd.DataFrame:
     matched = {v for k, v in mapping.items() if k != v}
     if matched:
         rep.note(f"header aliases matched: {', '.join(sorted(matched))}")
-    unknown = [c for c in renamed.columns if c not in set(ALIASES.values())]
+
+    # D-153 defect 3: some feeds carry a bar-volume column ("Volume(from bar)")
+    # alongside an order-flow "Volume" that is all zero. The plain alias would then
+    # pick the zero column and silently break VWAP/VWMA. Prefer the bar volume when
+    # the aliased Volume is absent or entirely zero.
+    bar_vol = next((c for c in df.columns
+                    if "volume" in str(c).strip().lower()
+                    and ("from bar" in str(c).strip().lower()
+                         or "(from bar)" in str(c).strip().lower())), None)
+    if bar_vol is not None:
+        vol_zero = ("Volume" not in renamed.columns
+                    or not pd.to_numeric(renamed["Volume"], errors="coerce").fillna(0).any())
+        if vol_zero:
+            renamed["Volume"] = df[bar_vol].to_numpy()
+            rep.note(f"Volume taken from {bar_vol!r} (the aliased Volume was absent or all-zero)")
+
+    known = set(ALIASES.values())
+    unknown = [c for c in renamed.columns if c not in known]
     if unknown:
         rep.note(f"columns ignored: {', '.join(map(str, unknown[:8]))}")
 
@@ -111,16 +129,28 @@ def normalise_columns(df: pd.DataFrame, rep: Report) -> pd.DataFrame:
 def _to_datetime(values: pd.Series) -> pd.Series:
     """Parse timestamps that may or may not carry an offset. A multi-year export
     spans DST, so the offsets themselves are mixed (-05:00 / -04:00) — pandas
-    refuses that unless we normalise to UTC first."""
+    refuses that unless we normalise to UTC first.
+
+    `dayfirst=True` is NOT optional: the repo's canonical format is `%d-%m-%Y`
+    (backtest/data.py:_parse_datetimes), so without it every date whose day <= 12
+    silently has its day and month swapped. On Ferry's 3y MGC file that was 36.7%
+    of the rows, which faked the range, the duplicates and the gap report (D-153)."""
     try:
-        return pd.to_datetime(values, errors="coerce", format="mixed")
+        return pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True)
     except ValueError as exc:
         if "Mixed timezones" not in str(exc):
             raise
-        return pd.to_datetime(values, errors="coerce", format="mixed", utc=True)
+        return pd.to_datetime(values, errors="coerce", format="mixed", dayfirst=True, utc=True)
 
 
-def parse_time(df: pd.DataFrame, rep: Report) -> pd.DataFrame | None:
+def parse_time(df: pd.DataFrame, rep: Report, source_clock: str | None = None) -> pd.DataFrame | None:
+    """Parse DateTime into an ET-localised `et` column.
+
+    `source_clock` is the D-153 normalisation: some feeds (NinjaTrader/Rithmic MGC)
+    stamp on a FIXED offset clock — a constant -04:00 that does NOT track DST — so
+    the real ET wall clock drifts an hour in winter. Passing e.g. `Etc/GMT+4` reads
+    the naive DateTime on that fixed clock and converts the instant to real ET,
+    which puts the CME maintenance break back on a single ET hour year-round."""
     ts = _to_datetime(df["DateTime"])
     if ts.isna().all():
         rep.error("no DateTime value could be parsed")
@@ -130,7 +160,19 @@ def parse_time(df: pd.DataFrame, rep: Report) -> pd.DataFrame | None:
         rep.warn(f"{bad} unparseable DateTime rows dropped")
         df = df.loc[ts.notna()].copy()
         ts = ts.loc[ts.notna()]
-    if ts.dt.tz is None:
+    if source_clock:
+        # Normalisation: ignore any (constant, wrong) offset the feed carried and
+        # re-read the wall clock on the fixed source clock, then convert to real ET.
+        if ts.dt.tz is not None:
+            ts = ts.dt.tz_localize(None)
+        ts = ts.dt.tz_localize(source_clock, ambiguous="NaT", nonexistent="shift_forward")
+        keep = ts.notna()
+        if (~keep).any():
+            rep.warn(f"{int((~keep).sum())} rows fell in a fold localising to "
+                     f"{source_clock} and were dropped")
+            df, ts = df.loc[keep].copy(), ts.loc[keep]
+        rep.note(f"normalised clock: read as {source_clock} → America/New_York")
+    elif ts.dt.tz is None:
         rep.warn("timestamps are timezone-naive — assuming America/New_York. "
                  "Re-export with UTC or an explicit offset to remove the guess "
                  "(DST transitions are silently wrong otherwise).")
@@ -180,6 +222,72 @@ def check_structure(df: pd.DataFrame, rep: Report) -> None:
                    | (df["Low"] > df[["Open", "Close"]].min(axis=1))).sum())
         if bad:
             rep.error(f"{bad} bars have inconsistent OHLC")
+
+    # D-153 defect 3: a wholly-zero Volume is not a quiet market, it is the wrong
+    # column — VWAP and VWMA would silently flatline. Reject it.
+    if "Volume" in df.columns:
+        v = pd.to_numeric(df["Volume"], errors="coerce").fillna(0)
+        if not v.any():
+            rep.error("Volume is zero on every bar — the wrong column was picked "
+                      "(e.g. an order-flow Volume while the real volume is in "
+                      "'Volume(from bar)'); VWAP/VWMA would be meaningless")
+
+
+_OFFSET_COL_RE = re.compile(r"^[+-]\d{2}:?\d{2}$")
+
+
+def check_clock(df: pd.DataFrame, rep: Report, normalised: bool = False) -> None:
+    """DST sanity on the ET timestamps (D-153 defect 2). Two cheap, data-driven
+    checks that catch a feed whose clock is a fixed offset not tracking DST:
+
+      1. an offset/UTC column that is CONSTANT while the file spans a DST boundary;
+      2. the empty CME maintenance-break hour (17:00-17:59 ET, year-round) shifting
+         between months — on a mis-clocked file it sits on 17 in summer and 18 in
+         winter. Pass --source-clock to re-read the wall clock and fix it.
+
+    When `normalised` is set (--source-clock was applied) check (1) is skipped: the
+    feed's constant offset was deliberately overridden, so the raw column is no
+    longer the clock. Check (2) still runs — it now POSITIVELY confirms the break
+    landed back on a single ET hour, which is the D-153 acceptance."""
+    et = df["et"]
+    if et.empty:
+        return
+    crosses_dst = len({bool(t.dst()) for t in (et.iloc[0], et.iloc[len(et) // 2], et.iloc[-1])}) > 1
+
+    # (1) a constant offset column over a DST-crossing span (not when normalised).
+    if not normalised:
+        for col in df.columns:
+            if col in ("et",):
+                continue
+            vals = df[col].astype(str).str.strip()
+            looks_like_offset = vals.head(200).map(lambda s: bool(_OFFSET_COL_RE.match(s))).any()
+            if looks_like_offset:
+                uniq = set(vals[vals.map(lambda s: bool(_OFFSET_COL_RE.match(s)))].unique())
+                if len(uniq) == 1 and crosses_dst:
+                    rep.error(f"column {col!r} carries a CONSTANT UTC offset "
+                              f"({next(iter(uniq))}) over a file that spans a DST boundary — "
+                              "the clock does not track DST, so ~5 of every 12 months are an "
+                              "hour off. Re-export with real ET, or pass --source-clock to normalise.")
+                break
+
+    # (2) empty maintenance-break hour must not move across months.
+    month = et.dt.tz_localize(None).dt.to_period("M")
+    hour = et.dt.hour
+    break_hours: set[int] = set()
+    for per, idx in month.groupby(month).groups.items():
+        h = hour.loc[idx]
+        counts = {b: int((h == b).sum()) for b in (16, 17, 18, 19)}
+        quiet = min(counts, key=counts.get)
+        # only count it as the break when it is genuinely (near-)empty vs its neighbours
+        if counts[quiet] == 0 or counts[quiet] < 0.05 * max(counts.values() or [1]):
+            break_hours.add(quiet)
+    if len(break_hours) > 1:
+        rep.error(f"the empty maintenance-break hour shifts across months "
+                  f"(ET hours {sorted(break_hours)}) — the clock does not track DST. "
+                  "Pass --source-clock (e.g. Etc/GMT+4) to re-read and fix it.")
+    elif break_hours and break_hours != {17}:
+        rep.warn(f"the maintenance break sits on ET hour {next(iter(break_hours))}, not 17 — "
+                 "check the source clock (expected 17:00-17:59 ET year-round).")
 
 
 def check_delta_consistency(df: pd.DataFrame, rep: Report) -> None:
@@ -276,6 +384,15 @@ def main() -> int:
                     help="how the continuous series was stitched")
     ap.add_argument("--to-parquet", type=Path, metavar="DIR",
                     help="also write a zstd parquet copy here")
+    ap.add_argument("--source-clock", metavar="TZ", default=None,
+                    help="normalise a fixed-offset feed: read the naive DateTime on "
+                         "this clock (e.g. Etc/GMT+4 for a constant -04:00 feed) and "
+                         "convert to real ET, fixing a clock that does not track DST (D-153)")
+    ap.add_argument("--no-delta-filter", action="store_true",
+                    help="the consuming config runs with the delta/CVD filter OFF "
+                         "(Pine use Delta Filter off, Python use_cvd_filter=False). "
+                         "A delta-less file is then a valid choice, not a silent "
+                         "pass-through, so missing/zero Delta is a warning, not a reject (D-153).")
     ap.add_argument("--write-manifest", action="store_true")
     args = ap.parse_args()
 
@@ -291,55 +408,75 @@ def main() -> int:
         rep.emit()
         return 1
 
-    parsed = parse_time(df, rep)
+    parsed = parse_time(df, rep, source_clock=args.source_clock)
     if parsed is None:
         rep.emit()
         return 1
     df = parsed
 
     check_structure(df, rep)
+    check_clock(df, rep, normalised=bool(args.source_clock))
 
-    if "Delta" not in df.columns and not {"BuyVolume", "SellVolume"} <= set(df.columns):
-        rep.error("no Delta (and no BuyVolume/SellVolume to derive it from). "
-                  "CVD is never disabled — this file cannot be used. Re-export "
-                  "with volume-analysis data loaded, or propose an alternative "
-                  "source for approval.")
-        rep.emit()
-        return 1
+    no_delta = ("Delta" not in df.columns
+                and not {"BuyVolume", "SellVolume"} <= set(df.columns))
+    if no_delta:
+        msg = ("no Delta (and no BuyVolume/SellVolume to derive it from). "
+               "Re-export with volume-analysis data loaded, or propose an "
+               "alternative source for approval.")
+        if args.no_delta_filter:
+            # The delta filter is OFF in the consuming config, so a pass-through is
+            # a deliberate choice, not the silent fallback the gate guards against.
+            rep.warn(msg + " (allowed: --no-delta-filter — the config does not use CVD)")
+        else:
+            rep.error(msg + " CVD is never disabled — this file cannot be used "
+                      "unless the consuming config has the delta filter off "
+                      "(--no-delta-filter).")
+            rep.emit()
+            return 1
 
-    check_delta_consistency(df, rep)
-    cov, cvd_from = cvd_coverage(df, rep)
+    if not no_delta:
+        check_delta_consistency(df, rep)
+        cov, cvd_from = cvd_coverage(df, rep)
+    else:
+        cov, cvd_from = None, None
 
     rep.emit()
-    print_coverage(cov)
+    if cov is not None:
+        print_coverage(cov)
 
     first, last = df["et"].iloc[0], df["et"].iloc[-1]
     print(f"\n  range          {first:%Y-%m-%d} → {last:%Y-%m-%d}")
 
-    if cvd_from is None:
-        print("\n  ✗ REJECT — no period reaches "
-              f"{MIN_NONZERO_SHARE:.0%} delta coverage. The order-flow data never "
-              "loaded. Do not run analyses on this file.")
-        return 1
-
+    # Structural errors (bad OHLC, zero Volume, a clock that does not track DST)
+    # reject regardless of the CVD question.
     if rep.errors:
         print(f"\n  ✗ REJECT — {len(rep.errors)} structural error(s) above. The file "
               "is internally inconsistent; fix the export before any analysis runs "
               "on it.")
         return 1
 
-    usable = df[df["et"] >= cvd_from.tz_localize("America/New_York")]
-    share_kept = len(usable) / len(df)
-    print(f"  CVD valid from {cvd_from:%Y-%m}  "
-          f"({len(usable):,} bars, {share_kept:.0%} of the file)")
-
-    if share_kept < 0.98:
-        verdict_window = f"{cvd_from:%Y-%m}"
-        print(f"\n  ⚠ PASS — but only from {cvd_from:%Y-%m}. Everything before that "
-              "carries no order flow and must not enter a backtest; it is context "
-              "only. The research window is the CVD-valid part, not the file.")
+    share_kept = 1.0
+    if no_delta:
+        print("\n  ✓ PASS — no order flow, and the consuming config has the delta "
+              "filter OFF (--no-delta-filter): CVD is not used on this file, so the "
+              "pass-through is a choice, not a silent fallback.")
+    elif cvd_from is None:
+        print("\n  ✗ REJECT — no period reaches "
+              f"{MIN_NONZERO_SHARE:.0%} delta coverage. The order-flow data never "
+              "loaded. Do not run analyses on this file (unless the config has the "
+              "delta filter off — then re-run with --no-delta-filter).")
+        return 1
     else:
-        print("\n  ✓ PASS — full file carries order flow.")
+        usable = df[df["et"] >= cvd_from.tz_localize("America/New_York")]
+        share_kept = len(usable) / len(df)
+        print(f"  CVD valid from {cvd_from:%Y-%m}  "
+              f"({len(usable):,} bars, {share_kept:.0%} of the file)")
+        if share_kept < 0.98:
+            print(f"\n  ⚠ PASS — but only from {cvd_from:%Y-%m}. Everything before that "
+                  "carries no order flow and must not enter a backtest; it is context "
+                  "only. The research window is the CVD-valid part, not the file.")
+        else:
+            print("\n  ✓ PASS — full file carries order flow.")
 
     if args.to_parquet:
         args.to_parquet.mkdir(parents=True, exist_ok=True)
@@ -358,8 +495,10 @@ def main() -> int:
             "rows": int(len(df)),
             "first": f"{first:%Y-%m-%d}",
             "last": f"{last:%Y-%m-%d}",
-            "cvd_valid_from": f"{cvd_from:%Y-%m-%d}",
+            "cvd_valid_from": (f"{cvd_from:%Y-%m-%d}" if cvd_from is not None else None),
             "cvd_window_share": round(share_kept, 4),
+            "source_clock": args.source_clock,
+            "delta_filter_off": bool(args.no_delta_filter),
             "sha256": sha256(args.path),
         })
 

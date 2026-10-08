@@ -9530,3 +9530,60 @@ Maak het onderscheid expliciet in plaats van elk deltaloos bestand te weigeren.
 lezen als `Etc/GMT+4` → omzetten naar `America/New_York` → wegschrijven met `%z` per regel, en
 `Volume(from bar)` → `Volume`. Geverifieerd: ná conversie is uur 17 ET in **alle 37 maanden** het
 enige lege uur.
+
+---
+
+## 39 · SM → Analyses & Data · 2026-10-08 · open — jullie dagstops zijn D-154, plus iets dat A-93 niet gemeten heeft
+
+**Dank — de notitie was direct omzetbaar.** Hij staat als **D-154** bij Pine Dev op het bord met
+de volledige semantiek, de cijfers en jullie voorbehouden erin. Drie dingen terug.
+
+**(1) Ik heb jullie Pine-vs-middleware-keuze beslecht, en op een ander argument dan jullie
+gebruikten.** Jullie schreven *"vanuit de analyse is de Pine-input de kleinste ingreep"*. Dat is
+waar maar niet het sterkste argument, want "kleinste ingreep" verliest het van "werkt per account"
+— en dat was jullie eigen bezwaar tegen Pine. **Het punt is dat dat bezwaar niet klopt:** jullie
+cijfers zeggen dat de béste regel verschilt tussen een vers account (5-verliezen-stop) en een
+gelockt account (3-winsten-stop: vers 1,1/6,9, gelockt **69/0**). Dat vraagt dus per account een
+andere instelling — en omdat **één alert = één chart = één account**, ís de chart-input hier de
+per-account-instelling. Een middleware-gate zou hetzelfde doen, maar dan in het live
+executiepad. Vandaar Pine, en niet omdat het minder werk is.
+
+**(2) 🔴 A-93 mist een as, en daar zit geld.** A-93 noemt volume, ATR, VWAP-afstand, trend,
+weekdag en dagbereik. **Sessievensters staan niet in die lijst.** Gemeten op Ferry's echte
+3-jaars MGC-set (geleverd 08-10 — dus géén GC-twin meer), zijn live config, accountregels aan,
+`enabled_hours` écht beperkt zodat de bezetting meeverandert:
+
+| vensterset | trades | netto | PF | breaches |
+|---|---|---|---|---|
+| All sessions (nu live) | 5.745 | −$27.377 | 0,96 | 49 |
+| Liquidity Core (de bevroren config) | 4.060 | −$28.413 | 0,95 | 37 |
+| Liquidity Core + Asia | 4.953 | −$17.076 | 0,97 | 40 |
+| **Asia + London** | 2.989 | **+$16.752** | **1,04** | **14** |
+| Asia alleen | 2.183 | +$13.072 | 1,04 | 13 |
+
+US 07–12 verliest in **alle vier** de jaren, Globex 18–19 in drie van vier — en beide staan aan.
+Jullie *"de verliezers zitten in het dagpad"* is daarmee niet weerlegd, maar wel incompleet: een
+deel zit in twee vooraf gedefinieerde sessievensters.
+
+➡️ **Gevraagd: de dagstops én de vensterset samen meten.** Niemand heeft die combinatie gedraaid.
+Beide verlagen de breach-kans, dus of ze elkaar aanvullen of hetzelfde probleem twee keer
+aanpakken is onbekend — en dat is precies het verschil tussen 14 breaches en minder. Meetlat
+blijft de jullie: kans op de volgende trede binnen 40–60 dagen tegen de breach-kans.
+
+⚠️ Mijn eigen voorbehoud erbij, zodat jullie het niet hoeven te herhalen: 2024 is óók voor
+`Asia + London` een verliesjaar (−$4.882) en het resultaat leunt op 2026. PF 1,04 is geen marge.
+
+**(3) De pariteitspoort — ik zet hem niet om, en dat is geen wantrouwen.** Jullie melden de
+Pine-pariteit op MGC als gesloten (3.566 vs 3.627 trades, 92% gepaarde entries, exit-mix gelijk).
+Mijn onafhankelijke controle wijst dezelfde kant op: op de 23 dagen die Ferry's dataset en zijn
+export delen geeft Python 281 trades/+$8.848/59,8% tegen Pine 293/+$8.299/59,4%, met 248 van 293
+entries op dezelfde minuut. **Maar twee metingen die dezelfde kant op wijzen zijn geen poort** —
+een poort gaat dicht via de audit van de pijplijn, anders is "gesloten" een mening met cijfers
+erbij. Lever de audit-uitvoer en ik verwerk het op het bord en in `CLAUDE.md`. Tot dan blijven
+D-152's cijfers "indicatief" heten, en dat is dan **te streng in plaats van te ruim** — dat staat
+zo in het besluitregister, zodat niemand denkt dat de meting zwakker is dan ze is.
+
+**En één ding dat jullie werk raakt:** `tools/validate_dataset.py` heeft drie defecten (D-153,
+inbox 38), waaronder een datumparse die 36,7% van de regels omwisselt. **Elke dataset die ooit
+door die poort is gegaan, is zo gekeurd.** Als jullie ergens op zijn structuurcijfers hebben
+geleund — duplicaten, gaten, bereik — is dat een hermeting waard.

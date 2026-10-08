@@ -9484,3 +9484,49 @@ alle uren, daarna `heatmap.marginal(res, by="hour")` en optellen per venster **p
 pad naar de 3-jaars-GC-set of de export. En noteer bij de oplevering dat het de **GC-twin** is —
 echte MGC-data ontbreekt nog steeds, dus elk oordeel over TESORO of PATRON staat onder dat
 voorbehoud.
+
+---
+
+## 38 · SM → Backtest Setup · 2026-10-08 · open — drie fouten in `tools/validate_dataset.py` (D-153)
+
+De poort die elke dataset keurt heeft **drie** defecten, alle drie gemeten op Ferry's
+`3y MGC tickdata.csv` van vandaag. Volgorde van belang:
+
+**(1) 🔴 Hij parseert het canonieke formaat van de repo verkeerd — 36,7% van de regels.**
+`_to_datetime` (r. 111-120) roept `pd.to_datetime(..., errors="coerce", format="mixed")`
+**zonder `dayfirst=True`**. `backtest/data.py:_parse_datetimes` doet dat juist expliciet wél en
+legt in zijn docstring uit waarom. Elke datum met dag ≤ 12 krijgt dag en maand omgewisseld:
+**386.750 van 1.053.095 regels** parseren anders dan de loader ze leest. Daardoor is alles wat
+`check_structure` en de gap-analyse rapporteren onbetrouwbaar — op dit bestand meldde hij
+bereik `2023-01-10 → 2026-12-08` (echt: `2023-09-26 → 2026-09-25`), **1.473 dubbele tijdstempels**
+(echt: **nul**) en **28 gaten > 3 dagen, grootste 28,7 dagen** (echt: **6 gaten, grootste 3,1
+dagen** — gewone weekends). De data was schoner dan de poort beweerde. Fix: `dayfirst=True` in
+beide takken, en daarna de structuurcijfers hertellen.
+
+**(2) 🔴 Hij ziet een constante UTC-offset over een DST-grens niet.** Dit bestand stempelt op een
+vaste `-04:00` klok terwijl ET in de winter `-05:00` is, dus ~5 van elke 12 maanden staat een uur
+te laat. Gevonden met een test die ook in de poort kan: de CME-dagpauze (17:00-18:00 ET, het hele
+jaar) stond 's zomers op uur 17 en 's winters op uur 18, met gesplitste overgangsmaanden in
+nov-2023, mrt-2024, mrt-2025, nov-2025 en mrt-2026. **Twee checks waard:** een offsetkolom die
+constant is over een bestand dat een DST-grens kruist = weigeren, en het lege dagpauze-uur mag
+niet per maand verschuiven.
+
+**(3) ⚠️ De aliastabel kan de verkeerde volumekolom kiezen.** `"volume" -> Volume` matcht in dit
+bestand een kolom die **overal 0** is; het echte volume zit in `Volume(from bar)`. Weiger een
+`Volume` die volledig nul is in plaats van hem door te laten — een nulvolume breekt stil VWAP en
+VWMA.
+
+**Wat wél goed werkte:** de delta-afwijzing. 0,0% dekking in alle vier de jaren, `✗ REJECT`,
+exitcode 1. Dat is kolomgewijs en dus niet door (1) geraakt.
+
+⚠️ **Maar één nuance die in de poort hoort:** hij weigert omdat de engine de deltafilter dan
+*stil* in een doorlaat zou veranderen. In Ferry's live config staat `Use Delta Filter` **expliciet
+uit** (Pine `bullCvdPass = not cvdEff or (...)`, Python `use_cvd_filter=False`), dus daar is de
+doorlaat een keuze en geen stille terugval. Zoals de poort nu staat, weigert hij een bestand dat
+voor die config bruikbaar is — en dat is hoe een goede poort een meting tegenhoudt die wel mag.
+Maak het onderscheid expliciet in plaats van elk deltaloos bestand te weigeren.
+
+📌 **De normalisatie die ik met de hand deed hoort in de tooling**, niet in een los script:
+lezen als `Etc/GMT+4` → omzetten naar `America/New_York` → wegschrijven met `%z` per regel, en
+`Volume(from bar)` → `Volume`. Geverifieerd: ná conversie is uur 17 ET in **alle 37 maanden** het
+enige lege uur.

@@ -15,7 +15,13 @@ def _hist(day_net: float, n: int) -> dict:
 
 
 def _acct(**kw):
+    # D-149 — elk testaccount loopt op een GEVERIFIEERD programma uit propfirms.json.
+    # De oude firm-name fallback (zonder `firm_program`) draagt na D-149 géén cap-vorm
+    # meer en de playbook weigert dan een getal uit te rekenen; dat is de nieuwe eis
+    # (unverified = refuse, niet stilzwijgend invullen). Legacy-PA is de enige owner-
+    # bevestigde Apex-50K-PA (D-148 bron) en past bij de default-aannames hieronder.
     base = {"stage": "Funded", "size": 50_000, "firm": "Apex Trader Funding",
+            "firm_program": "apex_50k_legacy_pa",
             "dd_rule": "Trailing Equity Peak", "starting": 50_000}
     base.update(kw)
     return base
@@ -80,33 +86,38 @@ def test_survival_below_safety_net():
 
 
 def test_building_warns_it_leaves_money_on_the_table():
-    # profit $3,000 → above safety ($400), but the full rung-1 cap is $1,500 (needs profit $4,100)
+    # D-148: cap voor legacy-PA is $2.000 vast; profit $3,000 ligt $400 boven safety ($2,600),
+    # dus de FULL cap vraagt profit $4,600. Volledige $2.000-cap pakken laat $1,600 liggen.
     a = _acct(current=53_000, buffer=2_600, payouts_taken=0,
               payout={"eligible": False, "trading_days": 6})
     pb = build_playbook(a, _hist(200, 6), "MGC")
-    assert pb["phase"] == "milking" and pb["cap"] == 1_500
-    assert pb["withdrawable_now"] == 400 and pb["leaving"] == 1_100 and pb["to_full"] == 1_100
-    assert "FULL $1,500" in pb["route"] and "leaves $1,100" in pb["route"]
+    assert pb["phase"] == "milking" and pb["cap"] == 2_000
+    assert pb["withdrawable_now"] == 400 and pb["leaving"] == 1_600 and pb["to_full"] == 1_600
+    assert "FULL $2,000" in pb["route"] and "leaves $1,600" in pb["route"]
 
 
 def test_full_cap_in_reach_needs_days():
-    # profit $4,200 ≥ target $4,100 but only 5 trading days → hold for 3 more, then full cap
-    a = _acct(current=54_200, buffer=2_600, payouts_taken=0,
+    # D-148: cap $2,000 → target $4,600. Profit $4,800 ≥ $4,600, 5 trading days → 3 more.
+    a = _acct(current=54_800, buffer=2_600, payouts_taken=0,
               payout={"eligible": False, "trading_days": 5})
     pb = build_playbook(a, _hist(200, 5), "MGC")
     assert pb["phase"] == "milking" and "in reach" in pb["route"] and "3 more" in pb["route"]
 
 
 def test_payout_ready_pulls_full_cap_and_carries_excess():
-    a = _acct(current=54_200, buffer=3_000, payouts_taken=0,
+    # D-148: cap $2,000; above_safety $2,100 → payout-ready, carries $100.
+    a = _acct(current=54_700, buffer=3_000, payouts_taken=0,
               payout={"eligible": True, "trading_days": 9})
     pb = build_playbook(a, _hist(200, 9), "MGC")
     assert pb["phase"] == "payout-ready" and pb["quality"] == "payout"
-    assert "PAYOUT" in pb["route"] and "FULL $1,500" in pb["route"] and "carries" in pb["route"]
+    assert "PAYOUT" in pb["route"] and "FULL $2,000" in pb["route"] and "carries" in pb["route"]
 
 
 def test_maxed_account_minimizes_risk():
-    a = _acct(current=53_000, payout_total=13_000, payout={"eligible": False, "trading_days": 6})
+    # D-148: ladder lapses from payout 6; "maxed" nu bij payouts_taken >= 6 én total_paid >= 10000.
+    # total_cap = payout_cap × payout_cap_uncapped_from = $2,000 × 6 = $12,000.
+    a = _acct(current=53_000, payouts_taken=6, payout_total=12_000,
+              payout={"eligible": False, "trading_days": 6})
     pb = build_playbook(a, _hist(200, 6), "MGC")
     assert pb["phase"] == "maxed" and "Maxed" in pb["route"] and pb["contracts"] == 1
 
@@ -134,12 +145,13 @@ def test_eval_sprint_route():
 
 
 def test_exact_settables_day_cap_and_dll():
-    # building to the full cap: day-cap paces to_full over the window; DLL = 20% of the buffer
+    # D-148: building to the full cap: cap $2,000 → target $4,600; to_full 1600 / 2 days.
+    # DLL = 20% of the buffer; cons_cap = 30% of target.
     a = _acct(current=53_000, buffer=2_600, payouts_taken=0,
               payout={"eligible": False, "trading_days": 6, "days_to_go": 2})
     pb = build_playbook(a, _hist(200, 6), "MGC")
-    assert pb["day_cap"] == 550 and pb["days_plan"] == 2      # to_full 1100 / 2 days
-    assert pb["dll"] == 520 and pb["cons_cap"] == 1_230       # 20% of 2600 ; 30% of 4100
+    assert pb["day_cap"] == 800 and pb["days_plan"] == 2      # to_full 1600 / 2 days
+    assert pb["dll"] == 520 and pb["cons_cap"] == 1_380       # 20% of 2600 ; 30% of 4600
 
 
 def test_survival_settables_stay_small():
@@ -225,6 +237,46 @@ def test_broken_consistency_without_a_day_cap_does_not_crash():
     pb = build_playbook(a, _hist(1_200, 9), "MGC")
     assert pb["phase"] == "maxed" and pb["broken"] is True
     assert "total wins reach" in pb["note"]        # and it did not raise
+
+
+# --- D-149 blockers: fallback-ladder weg · payout_cap_uncapped_from gelezen · unverified weigert
+
+def test_apex_fallback_carries_no_hardcoded_ladder_anymore():
+    """D-149 blocker 1 — `_APEX_FALLBACK` droeg nog `APEX_LADDER_50K` met `verified: True`.
+    Die ladder bestaat niet (D-148). De fallback moet daarom geen ladder vastleggen én
+    `verified: False` zijn — anders presenteert de playbook een plafond dat alleen in
+    onze code bestaat."""
+    from app.playbook import _APEX_FALLBACK
+    assert _APEX_FALLBACK["ladder"] is None
+    assert _APEX_FALLBACK["verified"] is False
+
+
+def test_fixed_cap_uncapped_from_lifts_the_cap_in_the_playbook():
+    """D-149 blocker 2 — `payout_cap_uncapped_from` werd nergens in middleware/app/
+    gelezen. Nu wel: payout 6 van een legacy-PA ligt zonder plafond ("cap-ladder")."""
+    pre = _acct(current=53_000, buffer=2_600, payouts_taken=4,
+                payout={"eligible": False, "trading_days": 6})
+    pb_pre = build_playbook(pre, _hist(200, 6), "MGC")
+    assert pb_pre["cap"] == 2_000               # payout 5 nog begrensd
+    post = _acct(current=55_000, buffer=2_600, payouts_taken=6,
+                 payout={"eligible": True, "trading_days": 9})
+    pb_post = build_playbook(post, _hist(400, 9), "MGC")
+    # Vanaf payout 6 vervalt de cap; de cockpit toont geen plafond-getal meer.
+    assert pb_post["cap"] is None or pb_post["cap"] == 0 or pb_post["phase"] == "maxed"
+
+
+def test_unverified_payout_terms_refuse_and_flag_in_the_playbook():
+    """D-149 blocker 3 — een programma met `payout_terms_verified: false` MAG geen
+    cap-getal invullen; het scherm toont een expliciete weigering."""
+    a = _acct(firm_program="apex_50k_eod_pa",       # verified: false in propfirms.json
+              current=53_500, buffer=2_600,
+              payout={"eligible": False, "trading_days": 6})
+    pb = build_playbook(a, _hist(200, 6), "MGC")
+    assert pb["cap"] is None
+    assert pb["inputs"]["next_cap"] is None
+    assert pb["inputs"]["payout_terms_verified"] is False
+    assert pb["quality"] == "unverified_terms"
+    assert "unverified" in pb["note"].lower()
 
 
 # --- Release 3a / D-142 — de zes invoer-getallen van het fleet-doc + room-doctrine --------------

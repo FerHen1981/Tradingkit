@@ -26,14 +26,31 @@ def test_eval_below_target():
 
 
 def test_funded_eligible():
-    # 8 qualifying days, best day 400/3000 = 13% (<30%), balance above safety net
-    daily = _days([400, 400, 400, 400, 400, 400, 400, 200])   # sums 3000, 8 days
-    p = evaluate(50000, 50000, 53000, "Funded", daily)
+    # 8 qualifying days, best day 400/3000 = 13% (<30%), balance above safety net.
+    # D-149 — zonder geverifieerd programma mag `evaluate` NIET stilzwijgend een cap
+    # verzinnen. We draaien het verified Apex-50K-legacy-PA-programma; dat is de
+    # enige set die D-148-correct is in de registry.
+    prog = firm_rules.rules("apex_50k_legacy_pa")
+    daily = _days([450, 450, 450, 450, 450, 450, 450, 450])   # sums 3600, 8 days
+    p = evaluate(50000, 50000, 53200, "Funded", daily, program=prog)
     assert p.stage == "Funded"
     assert p.trading_days == 8
     assert p.safety_net_balance == 52600            # 50000 + 2500 + 100
-    assert p.withdrawable == 400                    # 53000 - 52600
+    assert p.withdrawable == 600                    # 53200 - 52600, above min_payout 500
     assert p.eligible is True
+    # D-148: legacy-PA draagt een VASTE cap $2.000 tot payout 5, uncapped vanaf 6.
+    assert p.cap == 2000.0 and p.cap_unlimited is False
+
+
+def test_funded_without_verified_terms_refuses_to_quote_a_cap():
+    # D-149 — zonder `payout_terms_verified: true` of een echte ladder in de registry
+    # geeft evaluate GEEN cap-getal en WEIGERT het de payout. Dat is de harde regel:
+    # geen plausibel-maar-ongefundeerd plafond.
+    daily = _days([400, 400, 400, 400, 400, 400, 400, 200])
+    p = evaluate(50000, 50000, 53000, "Funded", daily)   # geen program
+    assert p.eligible is False and p.withdrawable == 0.0
+    assert p.cap == 0.0 and p.total_cap == 0.0
+    assert any(r.name == "Payout terms" and r.ok is False for r in p.rules)
 
 
 def test_funded_too_few_days():
@@ -130,3 +147,34 @@ def test_a_payout_under_the_minimum_is_not_a_payout():
 def test_the_result_names_the_rule_set_it_scored_against():
     p = evaluate(50000, 50000, 53000, "Funded", _days([400] * 8), 0, _prog())
     assert p.ruleset == LEGACY
+
+
+# --- D-149: payout-cap-vorm uit de registry — vast cap + uncapped_from (D-148) ------------------
+
+def test_fixed_cap_uncapped_from_payout_six():
+    """D-148: Apex legacy-PA kent GEEN oplopende ladder — vast $2.000 t/m payout 5,
+    daarna uncapped. De oude ladder [1500,1500,2000,2500,2500,3000] is weerlegd."""
+    prog = _prog()
+    daily = _days([700] * 8)                             # profit $5.600, binnen de regels
+    # Payout #1: cap vast op $2.000, niet $1.500 (oude ladder).
+    first = evaluate(50000, 50000, 55600, "Funded", daily, 0, prog)
+    assert first.cap == 2000.0 and first.cap_unlimited is False
+    # Payout #5: nog gewoon $2.000.
+    fifth = evaluate(50000, 50000, 55600, "Funded", daily, 5, prog)
+    assert fifth.cap == 2000.0 and fifth.cap_unlimited is False
+    # Payout #6: cap vervalt (`payout_cap_uncapped_from: 6`); de kop is `above_safety`.
+    sixth = evaluate(50000, 50000, 55600, "Funded", daily, 6, prog)
+    assert sixth.cap_unlimited is True
+    assert sixth.cap == sixth.above_safety               # geen plafond meer
+
+
+def test_unverified_payout_terms_refuse_a_cap_from_a_registry_hit():
+    """D-149: een programma dat IN de registry staat maar `payout_terms_verified: false` draagt
+    (bv. apex_50k_eod_pa vóór owner-bevestiging) MAG geen cap-getal invullen."""
+    prog = firm_rules.rules("apex_50k_eod_pa")           # verified: false in propfirms.json
+    assert prog is not None and prog["payout_terms_verified"] is False
+    daily = _days([700] * 8)
+    p = evaluate(50000, 50000, 55600, "Funded", daily, 0, prog)
+    assert p.eligible is False and p.withdrawable == 0.0
+    assert p.cap == 0.0
+    assert any(r.name == "Payout terms" and r.ok is False for r in p.rules)

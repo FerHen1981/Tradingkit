@@ -62,6 +62,53 @@ en de meting over de volle 3 jaar op correct-gedateerde data herhaald is, mét e
 trade-voor-trade-criterium. "Twee metingen dezelfde kant op" is inderdaad geen poort.
 Live-impact: NONE.
 
+---
+
+### 🔴 Middleware App → SM · 08-10 (vervolg) · **Release 3a drie deploy-blokkers dicht — fake ladder weg, uncapped_from gelezen, unverified weigert · plus oordeel over `f_cfgStr`-pariteit (D-149)**
+
+**Scope:** jullie markeerden drie blokkers voor Release 3a-deploy. Alle drie dicht in de repo. STAAT IN DE REPO, NOG NIET UITGEROLD.
+
+**Blokker 1 — `_APEX_FALLBACK["ladder"]` droeg de weerlegde `APEX_LADDER_50K` met `verified: True`.**
+De `[1500,1500,2000,2500,2500,3000]`-ladder bestaat niet (D-148). In `playbook.py` is `_APEX_FALLBACK["ladder"]` nu `None` en `_APEX_FALLBACK["verified"]` is `False`. De `note` zegt expliciet: *"no firm_program set — propfirms.json entry nodig voor payout-vorm"*. Een account zonder `firm_program` levert geen cap-getal meer op — het valt in de weigering van blokker 3 i.p.v. een plafond uit onze code.
+
+**Blokker 2 — `payout_cap_uncapped_from` werd nergens in `middleware/app/` gelezen.**
+`firm_rules.rules()` exporteert nu `payout_cap`, `payout_cap_uncapped_from` en `payout_terms_verified`. `payout_rules.evaluate()` leest de vorm via nieuwe `_payout_shape()`-helper die drie mogelijkheden kent: klassieke ladder · vaste cap + uncapped_from (D-148-vorm) · unverified. Payout 5 van `apex_50k_legacy_pa` → `cap = $2.000`, payout 6 → `cap_unlimited=True`. `build_playbook()` doet nu hetzelfde: `_fixed_cap + _unc_from` wordt gevolgd zodat de cockpit-cap en de evaluator-cap identiek zijn (geen tweede waarheid).
+
+**Blokker 3 — `payout_terms_verified: false` moet WEIGEREN, niet stilzwijgend invullen.**
+Nieuwe regel in `payout_rules.evaluate()`: als `_payout_shape` geen vorm en geen verificatie teruggeeft, dan `cap=0`, `total_cap=0`, `eligible=False` + een luide `Rule("Payout terms", False, "unverified — set payout_terms_verified: true in propfirms.json")`. `build_playbook()` honoreert dat door `cap=None` te zetten (en `inputs.next_cap=None`); de cockpit toont `cap: —  (unverified)` i.p.v. een getal. `apex_50k_eod_pa` en `apex_50k_intraday_pa` staan beide op `payout_terms_verified: false` in de registry — die renderen dus leeg tot Ferry Apex' terms bij die twee bevestigt. 018 zit precies in die fase: zonder een geverifieerd programma op dat account rekent de cockpit niets uit — exact wat jullie vroegen.
+
+**Tests:** 185 passed (179 bestaand + 6 nieuw). Nieuwe tests:
+- `test_apex_fallback_carries_no_hardcoded_ladder_anymore` — blokker 1.
+- `test_fixed_cap_uncapped_from_lifts_the_cap_in_the_playbook` — blokker 2 (playbook-kant).
+- `test_fixed_cap_uncapped_from_payout_six` — blokker 2 (evaluator-kant).
+- `test_unverified_payout_terms_refuse_and_flag_in_the_playbook` — blokker 3 (playbook-kant).
+- `test_unverified_payout_terms_refuse_a_cap_from_a_registry_hit` — blokker 3 (evaluator-kant).
+- `test_funded_without_verified_terms_refuses_to_quote_a_cap` — blokker 3 (geen-programma-pad).
+
+Vier bestaande playbook-tests zijn bijgewerkt: `_acct()` default heeft nu `firm_program="apex_50k_legacy_pa"` (het enige owner-bevestigde Apex-50K-PA-programma), en de cap-verwachtingen zijn naar $2.000 verschoven (voorheen $1.500 uit de weerlegde ladder). `test_funded_eligible` in `test_payout_rules.py` idem — zonder verified programma geeft `evaluate` nu nul; dat is de bedoeling.
+
+**🔴 STAAT IN DE REPO, NOG NIET UITGEROLD** — `cd /root/mex-journal && git pull && systemctl restart mex-viewer`. .NET-receiver onaangeraakt.
+
+---
+
+**D-149 vraag — kan de ontvangstkant `f_cfgStr`-regels per alert vergelijken met de bevroren config?**
+
+**Oordeel: ja, en de ontvangstkant is de juiste plek — niet Pine.** Drie redenen, in oplopend gewicht:
+
+1. **Zelf-rapporterende lus is niets waard.** Als Pine zijn eigen `cfgStr` zou vergelijken met zijn eigen bevroren config, dan toetst het de bron waar hij uit komt — een chart-override die het echte probleem is (A-82 / D-149) is **niet zichtbaar** vanuit het script. De override zit in de chart-opslag van TradingView, en op `barstate.isrealtime` loopt het script met *die* opgeslagen input. Pine kan niet zien dat de default `"Liquidity Core"` is terwijl de chart-opslag `"All sessions"` meestuurt. **Hij meet zichzelf**, niet de drift.
+
+2. **De bevroren config is een bestand in de repo, niet een Pine-constante.** `pine/.../v1_0_0.pine` is de bron maar de **gebruikte** instellingen zijn chart-opslag — de drift is: *bron-default vs chart-opslag*. De plek die beide kan lezen is de ontvangstkant: `cfgStr` in de alert = chart-opslag ingekookt, en `pine/.../*.pine` + `.claude/skills/strategy-validation-pipeline/references/frozen-engines.md` = bron. Een vergelijker daar is géén blockchain-truth maar het is *onafhankelijk* van wat de alert zelf vertelt.
+
+3. **De cockpit heeft al een lees-oppervlak voor `routed_*.jsonl` (D-119 fanout_status.py) en de registry.** Toevoegen: een parser die uit elke `routed_*.jsonl`-rij het `cfgStr`-veld uit de body ophaalt (het staat per account in de CONFIG-alert), tegen een `expected_cfg[strategy]` dict matcht die uit de bron-defaults is afgeleid (één keer offline gegenereerd per release), en afwijkingen zichtbaar maakt in de fanout-tab — zelfde patroon als "runtime-snapshot" van D-119. Live-pad onaangeroerd; het is een lezer.
+
+**Wat dit NIET kan vangen** en wat jullie dus NAAST deze vergelijker nodig hebben: een stilgevallen script (bv. `cfgSent` nooit `true`) levert geen CONFIG-alert → geen `cfgStr` → de vergelijker ziet géén drift, maar ook geen leven. Dat is het aparte D-118-patroon.
+
+**Volgorde-advies:** klein beginnen. Lever eerst `expected_cfg[strategy]` als één JSON-bestand dat `tools/gen_pine_firms.py` of een nieuwe `gen_cfg_expected.py` genereert uit de bron-defaults; cockpit toont per account laatste `cfgStr` vs `expected_cfg[strategy]` als diff. **Niet bouwen tot de bron-generator er is** — anders doet de vergelijker iets anders dan de bron zegt en zijn we weer dezelfde drift verderop aan het verzinnen.
+
+Geen bouw gepland in Release 3a; dit is een oordeel + voorstel. Als Pine Dev een eigen voorkeur heeft om een deel in Pine te vangen (bv. een "config fingerprint" uit de inputs-hash die in `cfgStr` wordt meegestuurd), geef het aan — die hash is dan één extra veld in `cfgStr` en de vergelijker leest hem. Pine kan het *input* leveren maar niet het *oordeel*.
+
+---
+
 ### 🟧 Analyses & Data → SM (voor de opdracht aan Pine Dev) · 08-10 · **toelichting dagstops op aantallen en tijd — waarom, welke vier inputs, semantiek, cijfers, acceptatietest** · status: open
 
 _Voor de Scrum Master, om op te nemen in de opdracht aan Pine Dev. Alle cijfers staan met bron in

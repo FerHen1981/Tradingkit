@@ -63,13 +63,17 @@ def contracts_for_room(room: float | None) -> int:
 
 # NOODVAL alleen — `firm_rules.rules_for_account()` leidt. Deze tabel vuurt wanneer een
 # account geen `firm_program` draagt (dus geen regel in `data/propfirms.json` resolvet)
-# en de firma-naam de firm-name-fallback raakt. Elke waarde hieronder is daarmee een
-# vangnet — overlay-velden uit het echte programma overschrijven ze in
-# `resolve_account_rules()`. lock_at = profit waarop de trailing-DD vergrendelt.
-_APEX_FALLBACK = {"ladder": APEX_LADDER_50K, "consistency": CONSISTENCY_LIMIT, "min_days": MIN_TRADING_DAYS,
+# en de firma-naam de firm-name-fallback raakt.
+#
+# D-149 — géén `ladder` meer in de fallback. De historische `APEX_LADDER_50K` is weerlegd
+# door D-148 (vast $2.000 t/m payout 5, uncapped vanaf 6); hem hier opnemen zou precies de
+# stilte zijn die D-149 verbiedt (plausibel-maar-onbestaand plafond). `verified: False`
+# betekent dat de playbook deze fallback expliciet markeert als onvolledig — zet een
+# `firm_program` op het account om een echte, geverifieerde regel te krijgen.
+_APEX_FALLBACK = {"ladder": None, "consistency": CONSISTENCY_LIMIT, "min_days": MIN_TRADING_DAYS,
                   "eval_target": APEX_TARGET, "lock_at": 2_600, "min_payout": 500, "days_reset": True,
-                  "verified": True, "note": ""}
-_ASSUMED_RULES = {**_APEX_FALLBACK, "verified": False, "note": "assumed Apex-like — set real firm rules"}
+                  "verified": False, "note": "no firm_program set — propfirms.json entry nodig voor payout-vorm"}
+_ASSUMED_RULES = {**_APEX_FALLBACK, "note": "assumed Apex-like — set real firm rules"}
 FIRM_RULES = {"Apex Trader Funding": _APEX_FALLBACK, "Apex": _APEX_FALLBACK}
 
 
@@ -117,10 +121,26 @@ def resolve_account_rules(account: dict) -> dict:
         base["lock_at"] = prog["trailing_locks_at"]
     if prog.get("min_payout") is not None:
         base["min_payout"] = prog["min_payout"]
+    # D-149 — payout-vorm uit de registry; GEEN stille val op `APEX_LADDER_50K` meer.
+    # Twee vormen worden erkend; `payout_terms_verified` bepaalt of de playbook iets
+    # mag invullen. `false` = de playbook mag géén cap-getal verzinnen.
     if prog.get("payout_ladder"):
         base["ladder"] = prog["payout_ladder"]
-    base["verified"] = bool(prog.get("verified"))
-    base["note"] = "" if prog.get("verified") else f"program {prog['key']} unverified — VERIFY"
+    else:
+        base["ladder"] = None
+    base["payout_cap"] = prog.get("payout_cap")
+    base["payout_cap_uncapped_from"] = prog.get("payout_cap_uncapped_from")
+    base["payout_terms_verified"] = bool(prog.get("payout_terms_verified"))
+    # `verified` dekt het hele programma; `payout_terms_verified` dekt uitsluitend de cap-
+    # vorm. Beide moeten waar zijn voordat de playbook een cap-getal toont — dat is de
+    # weigering die D-149 vraagt.
+    base["verified"] = bool(prog.get("verified")) and base["payout_terms_verified"]
+    if not prog.get("verified"):
+        base["note"] = f"program {prog['key']} unverified — VERIFY"
+    elif not base["payout_terms_verified"]:
+        base["note"] = f"program {prog['key']} payout terms NOT verified — set payout_terms_verified"
+    else:
+        base["note"] = ""
     return base
 
 
@@ -333,30 +353,66 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     daily_rate = statistics.median(green) if green else None            # $/green-day, for pacing only
     best_day = green[0] if green else 0.0
 
-    # --- max-payout mechanics: the ladder CAP + safety come from the ONE engine (payout_rules),
-    # the same source L5 renders. Fallbacks only for thin unit-test payloads. ---
-    _caps = ladder_caps(size_usd)
-    cap = round(pay["cap"]) if pay.get("cap") else _caps[max(0, min(payouts_taken, len(_caps) - 1))]
-    total_cap = round(pay["total_cap"]) if pay.get("total_cap") else sum(_caps)
+    # --- max-payout mechanics: cap + safety komen uit ÉÉN engine (payout_rules), zelfde bron
+    # als L5. D-149 — zonder geverifieerde payout-vorm KRIJGT de cockpit géén cap-getal: dan
+    # staat `cap = None` en toont het scherm een expliciet "unknown". De historische
+    # `ladder_caps(size_usd)` is NIET meer de stille val — hij wordt alleen gebruikt wanneer
+    # het programma een echte ladder heeft (verified door bestaan) en de live engine daarvan
+    # een rung heeft bepaald. Zie `_payout_shape` in payout_rules.
+    _caps = rules.get("ladder")
+    _fixed_cap = rules.get("payout_cap")
+    _unc_from = rules.get("payout_cap_uncapped_from")
+    terms_known = bool(rules.get("payout_terms_verified"))
+    if not terms_known and _caps is None and not _fixed_cap:
+        # D-149 — unverified of ongeldige cap-vorm. Zelfs als `pay["cap"]` een getal
+        # draagt (bv. 0.0 van de evaluator): niet renderen.
+        cap = None
+    elif pay.get("cap") is not None and pay.get("cap") != 0:
+        cap = round(pay["cap"])                         # live engine already resolved it
+    elif _caps:                                         # klassieke ladder uit de registry
+        cap = _caps[max(0, min(payouts_taken, len(_caps) - 1))]
+    elif _fixed_cap and terms_known:                    # D-148-vorm, uncapped vanaf _unc_from
+        cap = 0 if (_unc_from and payouts_taken >= _unc_from) else int(_fixed_cap)
+    else:
+        cap = None                                      # D-149 — niet raden
+    if pay.get("total_cap") is not None:
+        total_cap = round(pay["total_cap"])
+    elif _caps:
+        total_cap = sum(_caps)
+    elif _fixed_cap and terms_known and _unc_from:
+        total_cap = int(_fixed_cap) * int(_unc_from)
+    else:
+        total_cap = None
+    if cap is None:
+        # Zonder cap kan er geen "withdrawable" of "to full" berekend worden.
+        cap_for_math = 0
+    else:
+        cap_for_math = cap
     total_paid = round(account.get("payout_total") or 0)
     safety_bal = pay.get("safety_net_balance")
     dd = rules.get("program_drawdown") or dd_amount(account, size_usd)
     safety = round(safety_bal - starting) if (safety_bal is not None and starting is not None) else round(dd + 100)
     above_safety = round(pay.get("above_safety")) if pay.get("above_safety") is not None \
         else round(max(0.0, profit - safety))
-    withdrawable_now = round(min(above_safety, cap))         # what you can actually pull this step
-    maxed = total_cap > 0 and total_paid >= total_cap
+    withdrawable_now = round(min(above_safety, cap_for_math))   # what you can actually pull this step
+    maxed = (total_cap or 0) > 0 and total_paid >= (total_cap or 0)
     need_days = days_to_go if days_to_go is not None else max(0, min_days - trading_days)
 
     if funded:
-        target, target_label = float(safety + cap), f"rung {payouts_taken + 1} · ${cap:,.0f}"   # profit for FULL cap
+        if cap is None:
+            # D-149 — zonder cap kan de "profit for FULL cap"-regel niet worden berekend;
+            # we laten de target op above_safety (de brekende grens) staan en labelen hem
+            # expliciet "unverified".
+            target, target_label = float(safety + above_safety), "cap unverified — set payout_terms_verified"
+        else:
+            target, target_label = float(safety + cap_for_math), f"rung {payouts_taken + 1} · ${cap:,.0f}"
     else:
         et = rules.get("program_target")
         if et is None:
             et = rules["eval_target"].get(int(size_usd or 0), 3_000)
         target, target_label = float(et), "pass target"
     to_full = round(max(0.0, target - profit))
-    leaving = round(max(0.0, cap - withdrawable_now))
+    leaving = round(max(0.0, cap_for_math - withdrawable_now))
     # TWO distinct daily numbers, deliberately kept apart:
     #  - day_trail: how you RUN a day (doctrine milking $150 / your Fase Config) — small.
     #  - cons_cap:  the consistency CEILING you must never exceed = 30% of the eventual total.
@@ -395,11 +451,18 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
                  "variance lot, ~1 pass/day, reset on breach.")
     elif maxed:
         phase, contracts, quality = "maxed", 1, "maxed"
-        route = (f"Maxed — ${total_paid:,.0f} of ${total_cap:,.0f} ladder paid. Minimize risk: bank & hold, "
+        _tc = f"${total_cap:,.0f}" if total_cap is not None else "cap-ladder"
+        route = (f"Maxed — ${total_paid:,.0f} of {_tc} paid. Minimize risk: bank & hold, "
                  "shift size to newer accounts.")
-    elif eligible and above_safety >= cap:
+    elif cap is None:                                        # D-149 — cap unverified
+        phase, quality = mname if funded else "eval-sprint", "unverified_terms"
+        route = (f"Payout-vorm is niet geverifieerd voor dit programma. Zet "
+                 f"`payout_terms_verified: true` in `data/propfirms.json` nadat Ferry de "
+                 f"regels bij de firma heeft bevestigd; tot dan toont de cockpit geen cap.")
+        flags.append("payout terms unverified — propfirms.json entry mist of `payout_terms_verified: false`")
+    elif eligible and above_safety >= cap_for_math:
         phase, quality = "payout-ready", "payout"
-        extra = round(above_safety - cap)
+        extra = round(above_safety - cap_for_math)
         route = (f"PAYOUT — pull the FULL ${cap:,.0f} now"
                  + (f" (${extra:,.0f} above the cap carries to next cycle)" if extra > 0 else "")
                  + f", then reset to rung {payouts_taken + 2}.")
@@ -419,8 +482,9 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
     else:                                                    # below the safety net → can't withdraw yet
         phase = "compound" if track == "static" else "survival"
         to_safety = round(safety - profit)
+        _cap_txt = f"${cap:,.0f}" if cap is not None else "cap-ladder"
         route = (f"{'Build' if track == 'static' else 'Survival'} — +${to_safety:,.0f} to the "
-                 f"safety net (${safety:,.0f}); withdrawals unlock there, then build to the full ${cap:,.0f} cap. "
+                 f"safety net (${safety:,.0f}); withdrawals unlock there, then build to the full {_cap_txt} cap. "
                  f"Keep days small (well under the ${cons_cap:,.0f} consistency ceiling).")
         if track != "static" and buffer is not None and buffer < 700:
             quality = "thin_buffer"
@@ -517,7 +581,10 @@ def build_playbook(account: dict, daily_pnl: dict, instrument: str | None,
         "room": round(room),                 # ruimte boven de floor
         "locked": bool(locked),              # gelockt of vers (trailing-DD)
         "best_day": round(best_day or 0),    # hoogste winstdag deze cycle
-        "next_cap": round(cap) if funded else None,
+        # D-149 — None wanneer de registry geen geverifieerde cap-vorm draagt. De cockpit
+        # moet "cap: —" tonen i.p.v. een plausibel-maar-ongefundeerd getal.
+        "next_cap": (round(cap) if (funded and cap is not None) else None),
+        "payout_terms_verified": bool(rules.get("payout_terms_verified")) if funded else None,
         "min_days": min_days,
         "trading_days": trading_days,
         "days_to_go": int(need_days),

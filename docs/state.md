@@ -221,6 +221,31 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-94 — Streak-stops × qty × exits: hogere qty blijft vers onhaalbaar, een kortere SL wordt wél interessant (8 okt 2026)
+
+**Vraag Ferry 8/10:** kunnen we met tel-stops (x winsten/verliezen) een andere qty draaien of andere TP/SL per trade?
+**Grid:** exits {85/100, 120/100, 150/100, 120/80, 100/80, 120/130} × stops {geen, 4 verl., 5 verl., 3 winst óf 1e verlies
+na +150, 5 verl. + 3 winst} × qty {1, 2, 3}, bovenop 250/100/500 × qty; vers hit60/br60 (3 jaar · laatste jaar):
+
+| set | qty 1 | qty 2 |
+|---|---|---|
+| 85/100 live, geen stop | 8,5/13,9 · 18/24 | 38,9/33,3 · 33/55 |
+| 85/100 + 5 verl. | 9,1/7,2 · 21/5,8 | 40,5/29,3 · 41/41 |
+| 85/100 + 5 verl. + 3 winst | 2,1/0 · 5,8/0 (gelockt 67/0 · 93/0) | 44,8/26,7 · 79/11,6 |
+| 120/100 + 3 winst óf 1e verlies na +150 | **20,3/7,2 · 62/5,8** | 36,8/38,7 · 75/13 |
+| **100/80 + 5 verl. + 3 winst** | **12,8/0,0 · 31/0,0** (hit90 29,8/1,3) | 46,8/35,6 · 72/9,9 |
+| 120/80 + 5 verl. | 9,1/0,0 · 28/0,0 | 34,7/37,9 · 60/14 |
+
+**Lezing.** (1) **Qty 2 op een vers account blijft onhaalbaar, ook met tel-stops:** over 3 jaar nooit onder 27% breach
+(een reeks van 5 verliezen op qty 2 is al −$1.000, en twee van die dagen zijn de ruimte); de mooie laatste-jaar-cijfers
+(79/11,6) zijn één regime. Op **gelockte** accounts helpen de stops wél om qty 2 veilig te maken (3 j 83/3,7, jaar 95/3,3
+met 5 verl. + 3 winst). (2) **De exits mogen wél terug naar de tekentafel, maar alleen samen met de stops:** een kortere SL
+van 80 ticks is zonder stops slechter dan live (breach 13–15%), mét "5 verliezen + 3 winsten" wordt hij de set met de
+laagste breach van de hele grid (0,0% over 3 jaar en op het jaar) bij 1,5× de hit-kans van live; TP 120 / SL 100 met
+"3 winsten óf eerste verlies na +150" blijft de snelste (20/7 · 62/6). (3) Voorbehoud: 90 combinaties → selectie-ruis;
+alleen de twee genoemde sets zijn in beide vensters beter dan live op beide meetlatten, en beide vragen een Pine-export
+(SL 80 is nog nooit geëxporteerd) én de drie stop-inputs uit A-92. Zonder die inputs is er niets te zetten.
+
 ## A-93 — Regime-filter: de verliezende entries hebben geen leesbare handtekening (8 okt 2026)
 
 **Vraag Ferry 8/10:** is er een rode draad in de entries die structureel tegenwerken — volume, volatiliteit, iets anders?

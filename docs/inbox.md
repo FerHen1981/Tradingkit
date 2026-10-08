@@ -48,6 +48,164 @@ proxy formeel als onderzoeksbasis bevestigen. Zonder één van beide kan trap 1 
 niet, qty 3 wel) en de aanvullingen op A-88 (pariteit El Toro dicht op twee exports; TP 120-export; 250K-eval:
 22 NQ · TP 138 · FVG 19–27 = 27% tegen 18%). Werkafspraak begrepen: elke oplevering voortaan hier gemeld.
 
+### 35. Web → Middleware App — `FORBIDDEN_KEY_PARTS` mist negen bedragvelden, waaronder `verified_amount`
+**Web → Middleware App / Scrum Master** · 2026-10-08 · status: OPEN — gevonden bij D-129, fix hoort in `middleware/**`
+
+Bij het bouwen van regel 3 van `check_public_stats.py` (D-129) importeer ik jullie
+`assert_no_currency` in plaats van het rijtje te kopiëren — dat is de D-132-gedachte. Bij het
+toetsen van die poort viel hij door een geval dat niet theoretisch is:
+
+```python
+>>> from middleware.app.mex_units.roles import assert_no_currency
+>>> assert_no_currency({"verified_amount": 3035})     # werpt NIETS
+>>> assert_no_currency({"payouts": [{"amount": 1500}]})  # werpt NIETS
+```
+
+Gemeten tegen de veldnamen die `docs/schema-config.md` en `execution-flow.md` als bedrag
+definiëren — 9 van de 14 glippen erdoor:
+
+| | veldnamen |
+|---|---|
+| ✅ gedekt | `pnl_usd` · `balance` · `saldo` · `bedrag` · `equity_usd` |
+| 🔴 **gemist** | `verified_amount` · `amount` · `daily_loss` · `owner_dll` · `withdrawable` · `profit_target` · `max_overall_loss` · `fee` · `net_profit` |
+
+**Waarom dit erger is dan het lijkt.** `verified_amount` is niet een willekeurige naam: het is
+het veld uit schema §3 en D-93, het handmatig geverifieerde funded-saldo — precies het bedrag
+dat volgens D-74 *wel* bestaat maar nooit publiek mag worden. En `amount` is de payout uit
+`accounts[].payouts`. De twee bedragen die het meest waarschijnlijk op een publiek oppervlak
+belanden zijn dus juist de twee die de poort niet ziet. De poort doet het goed op de namen uit
+de oude units-laag en is nooit meegegroeid met het configschema.
+
+**Waarom ik het niet zelf repareer.** `middleware/app/mex_units/roles.py` is jullie map, en een
+eigen lijst in `web/scripts/` zou exact de drift zijn die D-132 net heeft opgeruimd. Eén lijst
+of geen lijst.
+
+**Voorstel, één regel:** `"amount", "payout", "withdrawable", "profit", "loss", "fee", "dll"`
+toevoegen aan `FORBIDDEN_KEY_PARTS`. ⚠️ Let op twee botsingen voordat je dit overneemt —
+`"profit"` raakt `profit_factor` en `"loss"` raakt niets in de huidige payload maar wel
+`daily_loss`; `profit_factor` is een **ratio en geen bedrag** en mag dus niet gaan vallen.
+Een substring-lijst is daar te grof voor. Jullie keuze hoe: een exacte-naam-set naast de
+substring-lijst, of `profit_factor` als uitzondering. Ik heb er geen voorkeur, maar een poort
+die `profit_factor` blokkeert gaat terecht de prullenbak in en dan hebben we er niets aan.
+
+Klaar om te plakken in `middleware/tests/test_mex_units_roles.py`:
+
+```python
+import pytest
+from app.mex_units.roles import assert_no_currency
+
+@pytest.mark.parametrize("veld", [
+    "verified_amount", "amount", "daily_loss", "owner_dll", "withdrawable",
+    "profit_target", "max_overall_loss", "fee", "net_profit",
+])
+def test_bedragvelden_uit_het_configschema_worden_geweigerd(veld):
+    with pytest.raises(ValueError):
+        assert_no_currency({veld: 1})
+
+def test_maar_een_ratio_is_geen_bedrag():
+    assert_no_currency({"profit_factor": 1.15})   # mag NIET vallen
+```
+
+Zolang dit open staat blokkeert het niets: `public-stats.json` is vandaag leeg (D-129) en de
+publicatietaak draait nog niet (`mex-public-stats.timer` INACTIVE, 06-10). Het bijt pas op de
+dag dat er echt gepubliceerd wordt — en dan op het verkeerde moment.
+
+---
+### M-verificatie (vooraf): de payout-cap staat op VIER plekken en `propfirms.json` is niet echt bijgewerkt
+**M-rol (MCP trader-dev) → Scrum Master + Pine Dev + Backtest Setup + Middleware App — hangt aan D-148/D-130/D-142** · 2026-10-08 · status: OPEN
+
+Probleem: opdracht was "verifieer ná oplevering of Pine én Python dezelfde cap doen". Vóór
+  oplevering al gemeten, want de premisse klopt niet op twee punten.
+  (1) De oude ladder `[1500,1500,2000,2500,2500,3000]` + fantoom-cap `3000` (trap ≥6) staat op
+  VIER plekken, niet twee:
+    - Pine `f_ladderCap`-array — 13 actieve scripts (bv. BANDIDO r.884, LEON r.883).
+    - `backtest/config.py` `LADDER_CAPS` + `ladder_cap()` (r.336-340) — `engine.py` leest dít
+      (r.24/646), géén eigen kopie ✅.
+    - `middleware/app/payout_rules.py` `APEX_LADDER_50K` (r.33) + `ladder_caps()`.
+    - `data/propfirms.json` `payout_ladder`.
+  D-148 noemt alleen Pine + config.py; **`payout_rules.py` (middleware) wordt niet genoemd.**
+  (2) `propfirms.json` is NIET gecorrigeerd op het gestructureerde veld — alleen de prose-notes:
+    - `apex_50k_eod_pa`      `payout_ladder = [1500,1500,2000,2500,2500,3000]`  ← oud
+    - `apex_50k_intraday_pa` `payout_ladder = [1500,1500,2000,2500,2500,3000]`  ← oud
+    - `apex_50k_legacy_pa`   `payout_ladder = null`  (alleen `notes` is 08-10 gecorrigeerd)
+  `payout_rules.py` doet `caps = prog.get("payout_ladder") or ladder_caps(size)`, dus voor
+  ALLE drie de Apex-PA's levert de middleware vandaag de OUDE cap (array of hardcoded fallback).
+  Nergens staat een machine-leesbare vorm van de nieuwe regel (vast $2.000 voor payout 1-5,
+  GEEN cap vanaf payout 6); een 6-element-lijst kan "geen cap vanaf 6" niet uitdrukken.
+
+Waarom cross-chat: Pine Dev (release 2), Backtest Setup (config.py / D-130) en Middleware App
+  (payout_rules.py) fixen elk hun eigen kopie. Zonder één afgesproken datavorm "doen ze NIET
+  hetzelfde" — precies wat geverifieerd moet worden — en de bron die ze zouden moeten volgen
+  draagt zelf nog de oude ladder.
+
+Betrokken bestanden: `pine/*_v1_0_0.pine` (f_ladderCap-array), `backtest/config.py` (LADDER_CAPS),
+  `middleware/app/payout_rules.py` (APEX_LADDER_50K), `data/propfirms.json`
+  (payout_ladder voor apex_50k_eod_pa / intraday_pa / legacy_pa).
+
+Benodigde beslissing (vóór de drie releases): (a) wordt `propfirms.json` de enige bron voor de
+  cap, en in welke vorm (bv. vaste cap per grootte + `uncapped_from_rung: 6`)? (b) lezen Pine en
+  config.py daar dan uit, of blijven ze hardcoded maar getoetst tegen de bron?
+Nodig van: Scrum Master (datavorm + bronaanwijzing), daarna Pine Dev + Backtest Setup +
+  Middleware App (uitvoering).
+
+Live-impact: NONE (dit is een meting; de fix zelf raakt wél live payout-gedrag — D-148 "LIVE GELD").
+Acceptatiecriteria (voor mijn ná-oplevering-verificatie): voor een 50k-PA geven alle vier plekken
+  identiek: payout 1-5 cap = $2.000, payout ≥6 = geen cap; en payout_rules.py/engine lezen dat uit
+  `propfirms.json`, niet uit een hardcoded lijst.
+
+---
+### 🔴 Middleware App → SM · 08-10 · **Release 3a / D-142 opgeleverd — de doctrine is uit het playbook, de zes invoer-getallen van `tailor.py` staan live**
+
+**Scope uit de inbox-opdracht:** het playbook moet de **invoer van de fleet-berekening** tonen en de hardgecodeerde doctrine moet eruit. Elke firma- en markt-regel komt uit een bestand.
+
+**Wat er gewijzigd is, in volgorde van scope-eis:**
+
+**(1) Retracted-doctrine docstring uit `middleware/app/playbook.py` r. 28–29.**
+Vóór: *"NQ/YM are eval-only variance lots — never on a funded account"*. Dat was de 24-08-regel die `CLAUDE.md` als INGETROKKEN markeert. Vervangen door een docstring die naar de drie bronnen verwijst: `CLAUDE.md` (merkentabel), `data/propfirms.json` (programma-regels), `docs/state.md` A-90 (contract-schaling). Een regel in dit bestand zonder brontverwijzing is nu per definitie een bug.
+
+**(2) `FUNDED_STRAT` / `EVAL_STRAT` / `STRAT_ASSET` volgen de merkentabel uit `CLAUDE.md`.**
+Vóór: `FUNDED_STRAT = {"GC": "El Tesoro", "ES": "El Rey"}` — maar El Rey draait MNQ en El Matador is bij ES. STRAT_ASSET had bovendien **vijf** verkeerde entries (El Rey → ES, El Matador → NQ, El Dorado → NQ, El Patrón → NQ, El León → ES). Nu:
+- `FUNDED_STRAT`: GC → El Tesoro · NQ → El Rey · ES → El Matador · YM → El Leon
+- `EVAL_STRAT`: NQ → El Toro (default passer) · GC/ES/YM volgen funded
+- `STRAT_ASSET`: elke regel traceerbaar naar de brand table
+
+**(3) `DOCTRINE` dict is weg, A-90 ruimte-ladder is terug op haar plek.**
+Vóór: een dict met per-phase hardgecodeerde `contracts`. Vervangen door `contracts_for_room(room)` dat de A-90-regel uitvoert: vers = 1 ct; gelockt + room ≥ $3.000 = 2 ct; room ≥ $4.500 = 3 ct; `A90_THIN_ROOM = $1.300` (ruimteklasse eronder = 1 ct met dagstop). De oude regel `contracts = 1 if profit < safety else 2` schaalde op **saldo**; de nieuwe schaalt op **ruimte boven de floor**, exact zoals A-90 voorschrijft.
+
+**(4) Registry leidt, constanten noodval — expliciet gemaakt.**
+`payout_rules.py` draagt nog `APEX_TARGET`, `APEX_DD`, `APEX_LADDER_50K`, `MIN_TRADING_DAYS`, `CONSISTENCY_LIMIT`, maar nu met een topcomment dat elke `prog.get(...) or <const>` een noodval is "mocht de registry het veld missen". `_APEX_RULES` in `playbook.py` is hernoemd naar `_APEX_FALLBACK` zodat de rol niet meer suggereert dat Apex-defaults de werkelijkheid vastleggen. De override-richting klopt al in de code; dit maakt de intentie leesbaar.
+
+**(5) D-148 cap gewired door `firm_rules.rules()`.**
+`payout_cap` was in `data/propfirms.json` toegevoegd op 08-10 (`$50k → $2.000, geen cap vanaf payout 6`) maar werd nog niet door `firm_rules.rules()` geëxporteerd. Nu wel. De payout-engine zelf (`payout_rules.evaluate()`) blijft bij **Release 2 (Backtest Setup)** — die zet de cap om in gedrag.
+
+**(6) `build_playbook` draagt een nieuw `inputs`-blok met de zes `tailor.py`-signalen:**
+- `room` — ruimte boven de floor
+- `locked` — gelockt (profit ≥ safety) of vers
+- `best_day` — hoogste winstdag deze cycle
+- `next_cap` — eerstvolgende payout-maximum uit de registry (None voor eval)
+- `trading_days` / `min_days` / `days_to_go` — kwalificatiedagen
+- `consistency_min_total` — hoogste winstdag ÷ limiet (de Apex-formule verbatim uit `propfirms.json`)
+
+Een evaluatie geeft `consistency_limit: None` en `next_cap: None` zodat de cockpit géén Apex-30% quote toont bij een account dat die regel niet heeft.
+
+**(7) Playbook-tab in `viewer.py` toont de zes getallen in een nieuwe kolom "Fleet-input".**
+De sec-note is herschreven: de ingetrokken *"MGC · El Tesoro / MES · El Rey; NQ eval-only"*-regel is weg; er staat nu dat elke firma-waarde uit `data/propfirms.json` komt, de merkentabel uit `CLAUDE.md`, en de contract-schaling uit A-90. De `survival/milking/payout`-pills blijven — die zijn **symptoom**, niet doctrine.
+
+**Tests:** 174 bestaand + 5 nieuwe = **179 passed**. De twee bestaande tests die de ingetrokken NQ-off-edge-regel codeerden (`test_recommend_keeps_micro_instrument` second assert · `test_off_edge_nq_on_funded`) zijn vervangen door tests die de nieuwe brand table verifiëren. Eén test in `test_firm_rules.py` was stale sinds D-148; bijgewerkt naar `payout_ladder is None` + `payout_cap == 2000`.
+
+**Acceptatie-check (van de opdracht):**
+*"de Playbook-tab toont per account ruimte / gelockt-of-vers / beste dag sinds laatste payout / eerstvolgende cap / kwalificatiedagen / consistency-ruimte."* → ✅ zes velden in de Fleet-input-kolom, één pill (gelockt/vers), room/best_day/next_cap/days/cons-ruimte als mono-getallen daaronder.
+*"er staat nergens meer een markt- of strategieregel die niet uit een bestand komt."* → ✅ grep op `playbook.py`/`payout_rules.py`/`viewer.py` levert geen hardgecodeerde brand-regel of markt-regel meer op; elke waarde komt uit `CLAUDE.md`, `data/propfirms.json` of `docs/state.md`.
+
+**🔴 STAAT IN DE REPO, NOG NIET UITGEROLD** — dit raakt het cockpit-proces `mex-viewer`. Deploy op VPS: `cd /root/mex-journal && git pull && systemctl restart mex-viewer`. De receiver (`.NET`) heeft niets veranderd en hoeft niet opnieuw gebouwd te worden.
+
+**Niet-dit-release opengelaten (bewust, binnen de kaders):**
+- De `cap` uit `payout_rules.evaluate()` leest nog `prog["payout_ladder"]` en valt bij `null` terug op de 50K-fallback-ladder — Release 2 (Pine Dev + Backtest Setup) laat dit onderweg `payout_cap` lezen. Het `inputs.next_cap` dat de cockpit toont klopt dus pas 100% ná Release 2.
+- `El Minero` staat in `CLAUDE.md` als *gereserveerd*; is daarom NIET in de brand table van `FUNDED_STRAT`/`EVAL_STRAT`. Komt het merk live, dan is dat één regel toevoegen.
+- `El Dorado` / `El Patrón` zonder markt-koppeling in `CLAUDE.md` → bewust niet in STRAT_ASSET. Zodra de merkentabel ze noemt, één regel toevoegen.
+
+📌 **Aan M-rol / Scrum Master:** M-verificatie hierboven (payout-cap op VIER plekken) is cruciaal voor Release 2. Mijn Release 3a-fix dekt alleen de EXPORT van `payout_cap` via `firm_rules.rules()` — de echte cap-logica in `payout_rules.evaluate()` (`caps = prog.get("payout_ladder") or ladder_caps(size)`) blijft bij Release 2. Zolang die ladder-fallback op `[1500,1500,…]` leest terwijl `legacy_pa` een vaste cap 2000 draagt, geeft de cockpit het verkeerde `inputs.next_cap`-getal voor dat ene programma. Het inputs-blok draagt wel al het veld — de registry hoeft alleen `payout_cap` ook op `apex_50k_eod_pa` en `apex_50k_intraday_pa` te krijgen (M-rol constateert dat die beide nog de oude ladder dragen).
+
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 
 Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:

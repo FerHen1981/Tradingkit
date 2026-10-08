@@ -10,18 +10,57 @@ staan. Een `sample`-vlag met een banner eroverheen heeft dat niet voorkomen —
 een voorbeeldgetal op een resultatenpagina is na een week niet meer van een
 resultaat te onderscheiden.
 
-Daarom twee regels, en ze zijn opzettelijk hard:
+Daarom drie regels, en ze zijn opzettelijk hard:
 
   1. `sample: true`  =>  elk headline-getal null, `markets` en `equity` leeg.
      Een placeholder mag geen cijfer dragen. Punt.
   2. `status` per markt mag geen oordeel over de edge zijn. Het veld noemt het
      type rekening (funded / evaluatie) en niets anders.
+  3. `sample: false` =>  de twee canonieke poorten uit `mex_units.roles` lopen
+     over de hele payload. Dat is de regel die bij een ECHTE publicatie bijt,
+     waar regel 1 en 2 alleen de placeholder dekken (D-129, restregel uit D-131).
 
-Draait in `make check`. Geen afhankelijkheden.
+Regel 3 in Ferry's woorden (07-10): *"ik wil ze niet zien al gerealiseerde winst
+alleen een telling in aantallen"* — **een aantal mag evals meenemen, een bedrag
+nooit.** Die twee helften zijn precies de twee bestaande poorten, dus er hoefde
+niets om; er moest er een bij:
+
+  - `assert_no_currency`     — bewaakt BEDRAGEN. Dit is de helft van Ferry's
+    regel die hier moest landen. `headline.trades = 717` mag dus blijven staan,
+    ook met 19 eval-trades erin: een aantal is geen bedrag.
+  - `assert_no_eval_metrics` — bewaakt de SCHEIDING. Eval-tellers per status
+    (`passed`, `breached`, `50k_eq`) horen in `for_public_evals()`, niet
+    vermengd in de gewone payload. Ferry staat aantallen toe via dat aparte
+    slot, niet ernaast.
+
+Ze worden GEIMPORTEERD uit `middleware/app/mex_units/roles.py` en niet
+nagebouwd. Dat is de canonieke module (D-132) en daarmee de enige plek waar de
+verboden sleutels staan; een tweede rijtje hier zou precies de drift zijn die
+D-132 opruimt.
+
+Draait in `make check`. Geen externe afhankelijkheden.
 """
 import json
 import pathlib
 import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
+
+try:
+    from middleware.app.mex_units.roles import (  # noqa: E402
+        assert_no_currency,
+        assert_no_eval_metrics,
+    )
+except ImportError as exc:  # pragma: no cover
+    print(
+        f"kan de canonieke poorten niet importeren uit "
+        f"middleware/app/mex_units/roles.py: {exc}\n"
+        f"Die module is de single source voor de verboden sleutels (D-132); "
+        f"dit script houdt bewust geen eigen kopie.",
+        file=sys.stderr,
+    )
+    raise SystemExit(2) from exc
 
 SNAPSHOT = pathlib.Path(__file__).resolve().parents[1] / "sites/mex/src/data/public-stats.json"
 
@@ -55,6 +94,18 @@ def main() -> int:
                     f"geen placeholder (regel 1)"
                 )
 
+    # Regel 3 — bij een echte publicatie lopen de canonieke poorten over alles.
+    # Bij een placeholder heeft dit geen zin: die is per regel 1 al leeg.
+    if data.get("sample") is not True:
+        for gate, wat in (
+            (assert_no_currency, "bedrag"),
+            (assert_no_eval_metrics, "vermengde eval-metriek"),
+        ):
+            try:
+                gate(data)
+            except ValueError as exc:
+                problems.append(f"{wat} in een gepubliceerde payload: {exc} (regel 3)")
+
     for market in data.get("markets") or []:
         status = str(market.get("status") or "")
         low = status.lower()
@@ -79,8 +130,10 @@ def main() -> int:
         )
         return 1
 
-    flag = "placeholder, leeg" if data.get("sample") else "publicatie"
-    print(f"public-stats.json in orde ({flag}).")
+    if data.get("sample") is True:
+        print("public-stats.json in orde (placeholder, leeg — regels 1 en 2).")
+    else:
+        print("public-stats.json in orde (publicatie — regels 2 en 3, poorten gepasseerd).")
     return 0
 
 

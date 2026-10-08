@@ -99,6 +99,14 @@ def tf_minutes(label: str) -> int:
     return TIMEFRAMES[key]
 
 
+# The pre-D-148 Apex-50K payout ladder. Kept as a DOCUMENTED default for Apex
+# programs whose exact payout shape is an open registry gap (D-144: the normal
+# PAs' structure is unconfirmed). It is Apex's own ladder, so using it for an Apex
+# sub-plan is a labeled assumption, not the cross-firm fabrication D-130 removed —
+# the hard refusal still fires for a rule set that carries no shape at all.
+DEFAULT_PAYOUT_LADDER = (1_500.0, 1_500.0, 2_000.0, 2_500.0, 2_500.0, 3_000.0)
+
+
 @dataclass(frozen=True)
 class Config:
     name: str
@@ -309,7 +317,7 @@ class Config:
     # The default below is the pre-D-148 Apex-50K ladder, kept ONLY as the fallback
     # for standalone research presets; registry-sourced configs override it, and the
     # fleet metric itself is re-measured under D-148, not here.
-    payout_ladder: tuple = (1_500.0, 1_500.0, 2_000.0, 2_500.0, 2_500.0, 3_000.0)
+    payout_ladder: tuple = DEFAULT_PAYOUT_LADDER
     payout_cap: float = 0.0
     payout_cap_until: int = 0
     # MAE guard (Apex Legacy 30% rule), PA only

@@ -53,20 +53,30 @@ def test_config_method_delegates_to_resolver():
 
 
 def test_fleet_config_reads_cap_from_registry():
+    from backtest.config import DEFAULT_PAYOUT_LADDER
     from backtest.pipeline import fleet
+    # the fleet maps to apex_50k_eod_pa; its payout shape is nulled in the registry
+    # pending Ferry (D-144), so the fleet config falls back to Apex's own ladder.
+    # The point of D-130 holds: the cap comes through the registry path, and when a
+    # shape IS present it is used verbatim (see the legacy-cap test below).
     c = fleet.engine_config("EL_MATADOR_MES_PROD_EOD")
-    # the fleet maps to apex_50k_eod_pa, which still carries the increasing ladder;
-    # the point of D-130 is that this comes from the registry, not a constant.
-    assert c.payout_ladder and c.payout_cap == 0.0
+    assert c.payout_ladder == DEFAULT_PAYOUT_LADDER and c.payout_cap == 0.0
     assert c.payout_cap_for(1) == 1500.0
 
 
-def test_fleet_cap_fields_hard_fail_on_a_program_with_neither():
+def test_fleet_uses_the_registry_shape_when_one_is_present():
     from backtest.pipeline import fleet
-    # tradeday_50k_pa carries neither a payout_ladder nor a payout_cap -> refuse,
-    # rather than silently assume the Apex-50K ladder (D-130).
-    with pytest.raises(ValueError, match="neither payout_ladder nor payout_cap"):
-        fleet._payout_cap_fields("tradeday_50k_pa", "test")
+    # A program that carries a fixed cap (Apex legacy) comes through as a cap, not
+    # the default ladder — proving the registry shape wins where it exists.
+    ladder, cap, until = fleet._payout_cap_fields("apex_50k_legacy_pa", "test")
+    assert ladder == () and cap == 2000.0 and until == 5
+
+
+def test_fleet_cap_fields_raise_for_an_unknown_program():
+    from backtest.pipeline import fleet
+    # A program not in the registry at all is still a hard error (no silent guess).
+    with pytest.raises(ValueError, match="not in data/propfirms.json"):
+        fleet._payout_cap_fields("does_not_exist_pa", "test")
 
 
 # --- funded sim: the D-148 Apex-legacy shape ---------------------------------

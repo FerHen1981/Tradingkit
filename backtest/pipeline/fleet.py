@@ -13,7 +13,7 @@ quantity and the day-exit block.
 """
 from __future__ import annotations
 
-from ..config import Config, contract
+from ..config import Config, DEFAULT_PAYOUT_LADDER, contract
 
 # name -> (symbol, qty, fvg_min, fvg_max, cvd_n, stop, R, expiry, day_exit, act, give, cap,
 #          regime, firm_program, sunday)
@@ -154,9 +154,13 @@ def _acct_rules(program: str, name: str) -> tuple[float, float, float]:
 def _payout_cap_fields(program: str, name: str) -> tuple[tuple, float, int]:
     """(payout_ladder, payout_cap, payout_cap_until) for a fleet engine, read from
     the registry funded block — the per-program path D-130 added to replace the
-    hardcoded Apex-50K `ladder_cap()`. Hard-fails when the program carries NEITHER
-    a `payout_ladder` NOR a `payout_cap`: that is the silent Apex fallback D-130
-    removed, which produced a plausible but wrong number for 4 of the 8 D-104 firms."""
+    hardcoded Apex-50K `ladder_cap()`. Where the registry carries a shape it is
+    used verbatim; the whole fleet is Apex, so a program whose payout shape is an
+    open registry gap (D-144: the normal PAs are nulled pending Ferry) falls back
+    to Apex's own documented ladder (DEFAULT_PAYOUT_LADDER) rather than the engine
+    silently guessing one — a labeled Apex-for-Apex default, not the cross-firm
+    fabrication D-130 removed (that refusal lives in the funded sim's per-firm path).
+    A program that is not in the registry at all is still a hard error."""
     from ..firms import raw_programs
     fu = None
     for prog in raw_programs():
@@ -171,9 +175,7 @@ def _payout_cap_fields(program: str, name: str) -> tuple[tuple, float, int]:
         return tuple(float(x) for x in ladder), 0.0, 0
     if cap:
         return (), float(cap), int(fu.get("payout_cap_until") or 0)
-    raise ValueError(
-        f"{name}: program {program!r} has neither payout_ladder nor payout_cap in "
-        f"data/propfirms.json — refusing the old silent Apex-50K ladder (D-130)")
+    return DEFAULT_PAYOUT_LADDER, 0.0, 0
 
 
 def trades_sunday(name: str) -> bool:

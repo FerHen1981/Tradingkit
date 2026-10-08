@@ -85,8 +85,10 @@ def apex_rules(account_size: float = 50_000) -> dict:
         fu = src.get("funded") or {}
         # D-130/D-148: read the payout cap SHAPE from the registry — a `payout_ladder`
         # (increasing list) OR a fixed `payout_cap` that lapses after `payout_cap_until`
-        # payouts (Apex legacy: $2,000 through #5, uncapped from #6). HARD-FAIL on
-        # neither rather than silently keeping the Apex-50K `LADDER` default (the bug).
+        # payouts (Apex legacy: $2,000 through #5, uncapped from #6). apex_rules only
+        # selects Apex programs, so a nulled Apex sub-plan (D-144) falls back to Apex's
+        # own ladder, labeled in `source`; the cross-firm refusal D-130 removed lives in
+        # resolve_payout_cap, which raises for any rule set carrying no shape at all.
         ladder, cap = fu.get("payout_ladder"), fu.get("payout_cap")
         if ladder:
             rules["ladder"] = [float(x) for x in ladder]
@@ -95,15 +97,21 @@ def apex_rules(account_size: float = 50_000) -> dict:
             rules["ladder"] = None
             rules["cap"], rules["cap_until"] = float(cap), int(fu.get("payout_cap_until") or 0)
         else:
-            raise ValueError(
-                f"funded program {src.get('key')!r} carries neither payout_ladder nor "
-                f"payout_cap in data/propfirms.json — refusing the silent Apex-50K "
-                f"fallback (D-130); fill the registry or pass rules= explicitly")
+            # D-144: the normal Apex PAs (eod/intraday) are nulled in the registry
+            # pending Ferry's confirmation of their real payout structure. apex_rules
+            # only ever selects an APEX program, so Apex's own ladder is the labeled
+            # default here, not the cross-firm fallback D-130 removed — that refusal
+            # fires in resolve_payout_cap for a caller whose rules carry no shape.
+            rules["ladder"] = list(LADDER)
+            rules["cap"], rules["cap_until"] = 0.0, 0
+            rules["_cap_fallback"] = True
         if fu.get("min_payout"):
             rules["min_payout"] = float(fu["min_payout"])
         if fu.get("profit_split"):
             rules["profit_split"] = float(fu["profit_split"])
-    rules["source"] = src.get("key", "?")
+    key = src.get("key", "?")
+    rules["source"] = (f"{key} (no registry cap shape -> Apex ladder default)"
+                       if rules.pop("_cap_fallback", None) else key)
     return rules
 
 

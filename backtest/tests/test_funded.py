@@ -114,11 +114,15 @@ def test_daily_from_trades_groups_on_session_not_calendar():
 def test_registry_supplies_apex_50k_rules():
     from backtest.funded import apex_rules
     r = apex_rules(50_000)
-    assert r["source"] == "apex_50k_eod_pa"
+    assert r["source"].startswith("apex_50k_eod_pa")
     # $2000, not $2500: the D-67 correction fixed a half-year-old registry error.
     # This is the registry-path test, so it asserts what the registry now holds.
     assert r["drawdown"] == 2_000 and r["profit_split"] == 0.9
     assert r["daily_loss_limit"] == 1_000 and r["min_payout"] == 500
+    # D-144: eod_pa's payout shape is nulled pending Ferry, so apex_rules falls back
+    # to Apex's own ladder and SAYS SO in source (a labeled default, not silent).
+    assert r["ladder"] == list(LADDER)
+    assert "Apex ladder default" in r["source"]
 
 
 def test_unknown_size_falls_back_to_constants():

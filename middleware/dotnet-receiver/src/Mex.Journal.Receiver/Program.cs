@@ -598,6 +598,19 @@ static async Task<string> ForwardAsync(HttpClient http, string url, string paylo
                 return Rejected(reply)
                     ? $"GEWEIGERD {code} door doelserver: {reply}"
                     : $"sent {code} (poging {attempt}){(reply.Length > 0 ? " · " + reply : "")}";
+            // D-146/D-138 · 429 is de ENIGE 4xx die je wél moet herhalen: hij zegt niet
+            // "dit verzoek deugt niet" maar "je bent te snel". Discord geeft er bovendien
+            // zelf bij hoe lang je moet wachten — `retry_after` in seconden in de body,
+            // of de `Retry-After`-header. Dit viel eerder onder `code < 500` en werd
+            // weggegooid; het kaartpad verderop wachtte wél, dus twee verzendpaden in dit
+            // bestand deden iets anders met dezelfde fout. Gemeten op 07-10: 94 berichten
+            // verloren op een `retry_after` van 0,356 s.
+            if (code == 429 && attempt < 3)
+            {
+                var waitMs = RetryAfterMs(resp, reply);
+                await Task.Delay(TimeSpan.FromMilliseconds(waitMs));
+                continue;
+            }
             if (code < 500) return $"error {code} (4xx, niet opnieuw): {reply}";
         }
         catch (Exception ex)
@@ -607,6 +620,32 @@ static async Task<string> ForwardAsync(HttpClient http, string url, string paylo
         await Task.Delay(TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1)));
     }
     return "error: retries op";
+}
+
+// D-146/D-138 · Hoe lang wachten na een 429. Volgorde: de `Retry-After`-header (seconden),
+// dan `retry_after` uit de JSON-body (Discord geeft seconden als decimaal, bv. 0.356).
+// Zonder bruikbare waarde een halve seconde — genoeg voor Discord's venster, kort genoeg
+// om een alert niet merkbaar te vertragen. Boven de 5 s wachten we niet: dan is het geen
+// burst meer maar een structurele limiet, en dan hoort de melding hard te falen in plaats
+// van de hele keten op te houden.
+static int RetryAfterMs(HttpResponseMessage resp, string? body)
+{
+    const int fallback = 500, ceiling = 5_000;
+    try
+    {
+        var hdr = resp.Headers.RetryAfter;
+        if (hdr?.Delta is TimeSpan d && d > TimeSpan.Zero)
+            return (int)Math.Min(d.TotalMilliseconds, ceiling);
+    }
+    catch { /* header kan onparseerbaar zijn; val door naar de body */ }
+
+    var m = System.Text.RegularExpressions.Regex.Match(body ?? "", "\"retry_after\"\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)");
+    if (m.Success && double.TryParse(m.Groups[1].Value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var secs) && secs > 0)
+        return (int)Math.Min(secs * 1000 + 50, ceiling);   // +50 ms marge
+
+    return fallback;
 }
 
 static decimal? TryDec(JsonNode? n)

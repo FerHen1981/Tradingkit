@@ -8065,3 +8065,60 @@ regel 3 na oplevering.** Stand-by opgeheven.
    verschil over 1–2 okt: trail-set −620 tot −780 per contract, set zonder trail +150 tot +330.
 5. **D-144/D-145** — prop-firmkeuze. Goedkoopste zet eerst: je Apex-PA's van legacy-**30%** naar de
    gewone 50K-PA op **50%**. Verified, nul integratiewerk, en het haalt de D-125-klem weg.
+
+---
+
+## 08-10 · Scrum Master → Middleware App — 429-fix geschreven, NIET gebouwd
+
+Ferry vroeg vanmiddag letterlijk *"repareer het zodat het werkt"*. Ik heb de 429-afhandeling in
+`ForwardAsync` geschreven. **Melding, geen oplevering** — `middleware/**` is jullie map en ik kon
+hem hier niet compileren.
+
+### Wat er nu staat
+
+In `ForwardAsync`, vóór de `code < 500`-afslag:
+
+```csharp
+if (code == 429 && attempt < 3)
+{
+    var waitMs = RetryAfterMs(resp, reply);
+    await Task.Delay(TimeSpan.FromMilliseconds(waitMs));
+    continue;
+}
+```
+
+Plus een nieuwe `RetryAfterMs(HttpResponseMessage, string?)`: eerst de `Retry-After`-header, dan
+`retry_after` uit de body (Discord geeft seconden als decimaal), anders 500 ms. **Plafond 5 s** —
+daarboven is het geen burst meer maar een structurele limiet, en dan hoort de melding hard te
+falen in plaats van de keten op te houden.
+
+### 🔴 Wat ik NIET heb kunnen doen, en dat moeten jullie weten
+
+**Er is geen `dotnet` in mijn container. De code is niet gecompileerd.** Op het live executiepad
+is dat geen detail. Wat ik wél heb gedaan:
+
+- **Eén echte compileerfout gevonden en gefixt bij handmatige controle:** ik schreef `Regex.Match`,
+  maar `System.Text.RegularExpressions` is in dit bestand **nergens geïmporteerd** — r. 567 en 569
+  schrijven hem volledig uit. Dat had de build gebroken. Nu ook volledig uitgeschreven.
+- `body` op `string?` gezet, want `Nullable` staat aan en `?? ""` op een non-nullable gaf anders
+  een waarschuwing.
+- **De regex los uitgevoerd** tegen vier echte Discord-bodies, inclusief die uit ons eigen
+  fan-out-venster:
+
+  | body | gelezen | wacht |
+  |---|---|---|
+  | `{"message": "You are being rate limited.", "retry_after": 0.356, …}` | 0,356 | 406 ms |
+  | `{"retry_after":2}` | 2,0 | 2.050 ms |
+  | `{"retry_after" : 1.25 }` | 1,25 | 1.300 ms |
+  | `{"message":"nope"}` | — | 500 ms |
+
+**Bouwen en uitrollen is aan jullie.** Faalt de build, dan is dat mijn fout en hoor ik het graag —
+de draaiende binary blijft intussen gewoon staan, dus er gaat niets stuk.
+
+### Twee dingen die hierbij horen
+
+1. **Rol dit samen met de tekst-fallback uit** die al in de repo staat en nog niet draait. Die
+   fallback loopt over ditzelfde pad; los uitrollen verplaatst het probleem.
+2. 📌 **`Program.cs` r. 1348 doet nog steeds `if (code == 429) { await Task.Delay(2000); continue; }`
+   — een vaste 2 s.** Dat is niet fout, maar het is een tweede antwoord op dezelfde vraag in
+   hetzelfde bestand. Overweeg hem op `RetryAfterMs` te zetten zodat er één regel is.

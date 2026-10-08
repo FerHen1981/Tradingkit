@@ -1205,7 +1205,12 @@ function renderPlaybook(rows){
     const daysCol=inp.min_days!=null
       ? `${inp.trading_days||0}/${inp.min_days} dgn${inp.days_to_go>0?` <span style="color:var(--warn)">· +${inp.days_to_go}</span>`:''}`
       : '—';
-    const capCol=inp.next_cap!=null?`cap <b>${money0(inp.next_cap)}</b>`:'—';
+    // D-149 — zonder geverifieerd programma geen cap-getal (dan "cap: —, unverified").
+    const capCol=inp.next_cap!=null
+      ? `cap <b>${money0(inp.next_cap)}</b>`
+      : (inp.payout_terms_verified===false
+         ? `<span style="color:var(--warn)" title="payout_terms_verified: false in propfirms.json">cap: — <small>(unverified)</small></span>`
+         : '—');
     const fleetCol=`${lockPill} <span style="font-size:11px;color:var(--muted)">room</span> ${roomCol}`
       +`<br><span style="font-size:11px;color:var(--muted)">top ${money0(inp.best_day||0)} · ${capCol}</span>`
       +`<br><span style="font-size:11px">${daysCol}</span>`

@@ -351,8 +351,42 @@
 //   de laatste bar, buiten de teken-laag: die zit achter een tekenbudget, en een
 //   veiligheidsmelding die kan wegvallen omdat dat budget vol is, is er geen.
 //   DE OOS-KLOK GAAT OP NUL -- akkoord Ferry 08-10, en dat is hier de prijs waard.
+// v3.11.0 (08-10, D-154): vier dagstops in het day-exit-blok, ALLE VIER UIT.
+//   Geleverd door Analyses & Data. De slechte dagen zijn niet veel kleine verliezen maar
+//   ÉÉN reeks: dag-P&L naar de langste verliesreeks van die dag (TP 85, 3 jaar, 7.729
+//   trades) loopt van +$64..+$179 per contract bij reeks <= 2 naar -$475 bij reeks 5. De
+//   bestaande day-trail doet daar niets tegen, want die werkt alleen op winst-TERUGGAVE --
+//   een dag die nooit boven de activatie komt en gewoon wegzakt raakt hem nooit.
+//   ⛔ DIT IS GEEN EDGE EN MAG NERGENS ZO HETEN -- niet op de site, niet in een rapport,
+//   niet tegenover een prop firm. P(winst) na 1-4 verliezen op rij is 54-57%, na 1-4
+//   winsten 52-56%, basis 54-55%: streaks voorspellen de volgende trade NIET. Deze stops
+//   knippen VARIANTIE, en dat is wat een account met een trailing drawdown nodig heeft:
+//   bij gelijke payout-kans halveert de breach-kans (8,5/13,9 -> 9,1/7,2).
+//   DE VIER (groep 7, dagdefinitie = dezelfde dagroll als riskDayPeak):
+//     1. Max verliezen op rij per dag   -- int, 0 = uit
+//     2. Max winsten op rij per dag     -- int, 0 = uit. ⚠️ Gemeten DODELIJK op een vers
+//        account (payout-kans 1,1%) en het beste wat er is op een gelockt account met
+//        weinig ruimte (69/0). Daarom een losse knop: de juiste waarde verschilt per fase.
+//     3. Eerste verlies boven +X ($)    -- float, 0 = uit. In dollars TOTAAL, dus deze
+//        schaalt mee met de qty; de andere drie tellen trades en zijn qty-onafhankelijk.
+//     4. Giveback-2 ($) + vanaf (uur ET) -- 0/0 = uit. Activatie ongewijzigd.
+//   SEMANTIEK: netto incl. commissie zoals de day-trail al rekent, en exact 0 telt als
+//   VERLIES. Een winnaar zet de verliesteller op 0 en omgekeerd. Eerste die raakt wint.
+//   "Dag dicht" is GEEN nieuw mechanisme: de drie vlaggen voeden `dayHalted`, en daarmee
+//   erven ze de bestaande cancel + close_all + HALT-kaart ongewijzigd -- alleen de reden
+//   is nieuw (STREAK-LOSS / STREAK-WIN / LOSS-AFTER-PLUS / DAY-TRAIL-2).
+//   Het uur van giveback-2 wordt BINNEN de handelsdag gemeten, niet op de kalenderklok:
+//   direct na de roll om 18:00 ET zijn de uren 18-23 hoger dan bijvoorbeeld 4, en een
+//   platte `hour >= uur`-test zou giveback-2 dus meteen aan het BEGIN van de dag aanzetten
+//   in plaats van halverwege.
+//   `f_cfgStr()` draagt de vier mee als `dexStop=<verliezen>/<winsten>/<+X>/<gb2>@<uur>`,
+//   zodat je aan het alert zelf kunt zien wat er op die chart staat.
+//   ⚠️ ALLE VIER STAAN UIT, dus het gedrag is ongewijzigd tot iemand ze aanzet.
+//   `pine/tools/daystop_check.py` is de poort: die controleert in alle dertien dat de
+//   defaults 0 zijn en dat de semantiekregels letterlijk in de bron staan.
+//   DE OOS-KLOK GAAT OP NUL -- ook met de inputs uit, want het zijn nieuwe inputs.
 var string SCRIPT_NAME = "MΞX ΞL TORO · NQ HF INTRA"
-var string currentVersion = "v3.10.0"
+var string currentVersion = "v3.11.0"
 strategy("MΞX ΞL TORO · NQ HF INTRA · " + currentVersion, shorttitle="TOR-NQ-HF", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -582,6 +616,28 @@ dayTrailUSD = input.float(150.0, "Day-trail give-back ($)", minval=10, step=10, 
      tooltip="Legacy model: the trail arms once the day peak exceeds this value and closes the day after giving the same amount back. Only active when the mode above uses the trail.", display=display.none)
 dayCapUSD   = input.float(300.0, "Day-cap hard target ($)", minval=50, step=25, group=GROUP_DEX,
      tooltip="Day profit at which the day is closed. Only active when the mode above uses the cap.", display=display.none)
+// === D-154 — vier dagstops, ALLE VIER DEFAULT UIT ============================
+// Geleverd door Analyses & Data (A-89/A-92/A-94/A-95). De slechte dagen zijn niet veel
+// kleine verliezen maar ÉÉN reeks: dag-P&L naar de langste verliesreeks van die dag
+// (TP 85, 3 jaar, 7.729 trades) loopt van +$64..+$179 per contract bij reeks <= 2 naar
+// -$475 bij reeks 5. De bestaande day-trail doet daar niets tegen, want die werkt alleen
+// op winst-TERUGGAVE -- een dag die nooit boven de activatie komt en gewoon wegzakt,
+// raakt hem nooit.
+// ⛔ DIT IS GEEN EDGE EN MAG NERGENS ZO HETEN. P(winst) na 1-4 verliezen op rij is
+// 54-57%, na 1-4 winsten 52-56%, basis 54-55%: streaks voorspellen de volgende trade
+// NIET. Deze stops knippen variantie, en dat is wat een account met een trailing
+// drawdown nodig heeft -- bij gelijke payout-kans halveert de breach-kans.
+// ⚠️ Alle vier staan UIT. Zolang niemand ze aanzet is het gedrag ongewijzigd.
+maxLossStreak        = input.int(0, "Max verliezen op rij per dag (0 = uit)", minval=0, maxval=50, group=GROUP_DEX,
+     tooltip="Na de k-de verliezende GESLOTEN trade op rij gaat de dag dicht: geen nieuwe entries, een lopende limietorder wordt geannuleerd. Een winnaar zet de teller op 0. 5 is de gemeten waarde met de beste verhouding (gelijke payout-kans, breach-kans gehalveerd). 0 = uit.")
+maxWinStreak         = input.int(0, "Max winsten op rij per dag (0 = uit)", minval=0, maxval=50, group=GROUP_DEX,
+     tooltip="Zelfde mechanisme, maar op winsten. ⚠️ Gemeten is dit DODELIJK voor een vers account (payout-kans 1,1%) en het beste wat er is voor een GELOCKT account met weinig ruimte (69% payout, 0% breach). Daarom een losse knop: de juiste waarde verschilt per accountfase. 0 = uit.")
+lossAfterPlusUSD     = input.float(0, "Eerste verlies boven +X sluit de dag ($, 0 = uit)", minval=0, step=25, group=GROUP_DEX,
+     tooltip="Sluit een trade verliezend terwijl de gerealiseerde dag-P&L VÓÓR die trade al >= X stond, dan gaat de dag dicht. In dollars TOTAAL, niet per contract, dus deze schaalt mee met je qty. Gemeten gat: staat de dag om 04:00 ET op >= +$100 per contract, dan is de rest van de dag gemiddeld -$84 tot -$97. 0 = uit.")
+dayTrailGiveback2USD = input.float(0, "Giveback-2 ($, 0 = de gewone giveback)", minval=0, step=10, group=GROUP_DEX,
+     tooltip="Een tweede, meestal strakkere giveback die vanaf een bepaald uur geldt. De ACTIVATIE verandert niet. 0 = gebruik de gewone giveback, dus uit.")
+dayTrail2FromHour    = input.int(0, "Giveback-2 vanaf (uur ET, 0 = uit)", minval=0, maxval=23, group=GROUP_DEX,
+     tooltip="Vanaf dit uur in de handelsdag geldt giveback-2. Gemeten variant: 50 vanaf 04:00 ET. Het uur wordt gemeten BINNEN de handelsdag die om 18:00 ET begint, niet op de kalenderklok. 0 = uit.")
 ddModel       = input.string("Intraday", "Drawdown Model", options=["EOD","Intraday"], group=GROUP_PHASE,
      tooltip="EOD (Apex 4.0 default): trailing ratchets on the daily closing balance only; open profit peaks do not count. Intraday (legacy): ratchets in real time with the live peak.", display=display.none)
 payoutBuffer  = 500.0
@@ -1329,7 +1385,15 @@ pcLicense    = input.string("", "PineConnector license ID", group=GROUP_EXEC, to
 pcSymbol     = input.string("", "PineConnector symbol (empty = chart)", group=GROUP_EXEC, tooltip="Broker symbol for the MT4/5 order, e.g. EURUSD. Empty = this chart's ticker. Set it when your broker's symbol differs from the chart symbol.", display=display.none)
 pcRisk       = input.float(1.0, "PineConnector risk / lots", minval=0, group=GROUP_EXEC, tooltip="The 'risk' value sent to PineConnector (lot size or risk units, per your EA's configuration).", display=display.none)
 bool routeMiddleware = false   // D-51/inbox 25: deze route plaatst geen order op het live pad; geen knop
-mwSecret   = input.string("", "Middleware secret", group=GROUP_EXEC, tooltip="Alleen gelezen door de Python-middleware; de live .NET-receiver authenticeert op de token in de URL, niet op dit veld.", display=display.none)
+// D-150 (08-10): hier stond `mwSecret = input.string(...)`, en die is WEG.
+// Reden 1 — een strategie-export schrijft ÉLKE `input.string` in platte tekst naar de
+// Properties-tab, ook met `display=display.none`. Elke export die ooit gedeeld is, droeg
+// dus dit secret. Een input is daarmee geen plek voor een geheim, punt.
+// Reden 2 — hij deed al niets: `routeMiddleware` is een constante `false` (D-51), dus de
+// tak die hem gebruikte werd nooit uitgevoerd.
+// Reden 3 — en hij komt ook niet terug: `docs/schema-event.md` §5 legt vast dat het secret
+// in de URL hoort (`/signal/{token}`), één authenticatiemechanisme en niet twee. Als D-86
+// de middleware-route aanzet, draagt het bericht dus geen secret meer.
 mwStrategy = input.string("TOR-NQ-HF", "Middleware strategy key", group=GROUP_EXEC, tooltip="Sleutel waarop de middleware accounts opzoekt. Default is de shorttitle van dit script; moet overeenkomen met de sleutel in accounts.yaml.", display=display.none)
 useMiddleware = routeMiddleware
 usePMT       = routePMT
@@ -1859,6 +1923,15 @@ var float riskDayPeak = 0.0
 var bool  dayHalted = false
 var bool  flattenedToday = false
 var string haltReason = ""
+// D-154: tellers voor de vier dagstops. Ze staan hier en niet bij de dagstops zelf, omdat
+// het dagreset-blok hieronder ze al moet kunnen leegmaken.
+var int   dexLossStreak    = 0
+var int   dexWinStreak     = 0
+var int   dexClosedSeen    = 0
+var float dexDayRealized   = 0.0
+var bool  dexStreakLossHit = false
+var bool  dexStreakWinHit  = false
+var bool  dexLossAfterPlus = false
 if isNewTradingDay
     float _yday = strategy.netprofit - nz(riskBaseNetProfit, strategy.netprofit)
     if isPA and time > lastPayoutTime and not na(riskBaseNetProfit)
@@ -1876,6 +1949,15 @@ if isNewTradingDay
         acctHwm := math.max(nz(acctHwm, math.max(acctPnlOffset, acctHwmOffset)), acctPnlOffset + strategy.netprofit - paResetPnLPrev)
     riskBaseNetProfit := strategy.netprofit
     riskDayPeak := 0.0
+    // D-154: tellers en dag-P&L leeg op de dagroll. `dexClosedSeen` NIET -- dat is een
+    // vaste positie in de tradehistorie en moet blijven doorlopen, anders worden de
+    // trades van gisteren opnieuw geteld.
+    dexLossStreak    := 0
+    dexWinStreak     := 0
+    dexDayRealized   := 0.0
+    dexStreakLossHit := false
+    dexStreakWinHit  := false
+    dexLossAfterPlus := false
     dayHalted := false
     flattenedToday := false
     haltReason := ""
@@ -1936,11 +2018,43 @@ bool rgDllHit   = useRiskGate and rgDLL > 0 and rgLive <= -rgDLL
 bool rgTrailHit = useRiskGate and rgTrailArmed and not na(rgExitLvl) and rgCum <= rgExitLvl
 bool _dexTrailOn = (dayExitMode == "Day-trail (keep peak)" or dayExitMode == "Trail + cap") and not (polOn and not na(polCapUSD))
 bool _dexCapOn   = dayExitMode == "Day-cap (hard target)" or dayExitMode == "Trail + cap"
-dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dayTrailUSD
+// === D-154 — de tellers lopen over GESLOTEN trades ==========================
+// Netto incl. commissie, zoals de day-trail al rekent (`strategy.netprofit` is netto en
+// Pine rapporteert de commissie los van de winst). Exact 0 telt als VERLIES.
+// Er kan meer dan één trade op één bar sluiten, dus dit is een lus en geen enkele test.
+// "Dag dicht" is hier geen eigen mechanisme: deze drie vlaggen voeden `dayHalted`, en
+// daarmee erven ze de bestaande cancel + close_all + HALT-kaart ongewijzigd.
+if strategy.closedtrades > dexClosedSeen
+    for _i = dexClosedSeen to strategy.closedtrades - 1
+        float _net    = strategy.closedtrades.profit(_i) - strategy.closedtrades.commission(_i)
+        float _before = dexDayRealized
+        dexDayRealized += _net
+        if _net <= 0
+            dexLossStreak += 1
+            dexWinStreak  := 0
+            if lossAfterPlusUSD > 0 and _before >= lossAfterPlusUSD
+                dexLossAfterPlus := true
+        else
+            dexWinStreak  += 1
+            dexLossStreak := 0
+        if maxLossStreak > 0 and dexLossStreak >= maxLossStreak
+            dexStreakLossHit := true
+        if maxWinStreak > 0 and dexWinStreak >= maxWinStreak
+            dexStreakWinHit := true
+    dexClosedSeen := strategy.closedtrades
+// Positie BINNEN de handelsdag die om 18:00 ET begint (rgRollHour): 18 -> 0, ..., 17 -> 23.
+// Een platte `hour >= uur`-test zou fout zijn: direct na de roll om 18:00 zijn de uren
+// 18-23 hoger dan bijvoorbeeld 4, en dan stond giveback-2 meteen aan bij het BEGIN van de
+// dag in plaats van halverwege.
+int  _dexHourPos    = (hour(time, activeTz) - rgRollHour + 24) % 24
+int  _dexT2Pos      = (dayTrail2FromHour - rgRollHour + 24) % 24
+bool dexTrail2Active = dayTrail2FromHour > 0 and dayTrailGiveback2USD > 0 and _dexHourPos >= _dexT2Pos
+float dexGivebackEff = dexTrail2Active ? dayTrailGiveback2USD : dayTrailUSD
+dayTrailHit = _dexTrailOn and riskDayPeak > dayTrailUSD and runningPnL <= riskDayPeak - dexGivebackEff
 dayCapHit   = polOn and not na(polCapUSD) ? riskDayPeak >= polCapUSD : (_dexCapOn and riskDayPeak >= dayCapUSD)
-if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit)
+if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dayTrailHit or dayCapHit or rgDllHit or rgTrailHit or dexStreakLossHit or dexStreakWinHit or dexLossAfterPlus)
     dayHalted := true
-    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? "Day-trail" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : "Equity Lock"
+    haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? (dexTrail2Active ? "DAY-TRAIL-2" : "Day-trail") : dexStreakLossHit ? "STREAK-LOSS" : dexStreakWinHit ? "STREAK-WIN" : dexLossAfterPlus ? "LOSS-AFTER-PLUS" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : "Equity Lock"
 
 // === ACCOUNT ENGINE (trailing floor / eval goal / payout) ====================
 float acctPnL      = acctPnlOffset + strategy.netprofit - paResetPnLPrev + strategy.openprofit
@@ -2219,7 +2333,7 @@ f_sendExec(_action, _qty, _price, _slD, _tpD, _ordType) =>
             alert(pcLicense + "," + _action + "," + f_pcSym() + ",sl=" + str.tostring(_slPx, format.mintick) + ",tp=" + str.tostring(_tpPx, format.mintick) + ",risk=" + str.tostring(pcRisk), alert.freq_once_per_bar)
     if useMiddleware
         string _mwEv = _action == "close" ? "EXIT" : "ENTRY"
-        alert("{\"secret\":\"" + mwSecret + "\",\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
+        alert("{\"strategy\":\"" + mwStrategy + "\",\"event\":\"" + _mwEv + "\",\"action\":\"" + _action + "\",\"symbol\":\"" + syminfo.ticker + "\",\"price\":" + str.tostring(_price) + ",\"order_type\":\"" + _ordType + "\",\"dollar_sl\":" + str.tostring(_slD) + ",\"dollar_tp\":" + str.tostring(_tpD) + ",\"qty\":" + str.tostring(_qty) + "}", alert.freq_once_per_bar)
 f_sendDiscord(_title, _desc) =>
     if useDiscord
         _tag = roleID == "" ? "" : "\"content\":\"<@&" + roleID + ">\","
@@ -2243,7 +2357,7 @@ f_evalTail(bool _started, float _dT, float _dF, string _acct) =>
 // === v6.0: order alert_message — same structure as the CSV journal + CFG ====
 var string cfgStr = ""
 if barstate.isfirst
-    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (dailyLossOn ? str.tostring(dailyLossLimitEff, "#") + "(" + str.tostring(ownerDllSlUSD, "#") + "x" + str.tostring(ownerDllStops, "#") + "x" + str.tostring(contractSize, "#.#") + (firmDllActive ? "|firm" + str.tostring(acctDLL, "#") : "") + ")" : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz + ";validFrom=" + str.format_time(validFrom, "yyyy-MM-dd HH:mm", activeTz) + ";validUntil=" + str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + ";graceH=24"
+    cfgStr := "ver=" + currentVersion + ";acct=" + jrnlAcct + ";qty=" + str.tostring(contractSize, "#.#") + ";entry=" + (isLimitMode ? "limit50" : "market") + ";expiry=" + str.tostring(expiryBars) + ";fvg=" + str.tostring(gapMinSize, "#") + "-" + str.tostring(gapMaxSize, "#") + ";confW=" + str.tostring(confirmBars) + ";stop=" + stopMode + ";pivK=" + str.tostring(pivotK) + ";buf=" + str.tostring(swingBufSize, "#") + ";maxStop=" + str.tostring(maxStopSize, "#") + ";tp=" + tpMode + (tpMode == "Fixed (units)" ? "(" + str.tostring(tpSize, "#") + ")" : "") + ";R=" + str.tostring(rMultIn, "#.#") + ";goalTp=" + (useGoalTp and isEval ? "1" : "0") + ";guard=" + (useDDGuard ? "1" : "0") + ";BEeff=" + (useBEeff ? str.tostring(beTrigEff, "#") + "/" + str.tostring(beOffEff, "#") : "off") + ";trailEff=" + (useTrailEff ? str.tostring(trStartEff, "#") + "/" + str.tostring(trBufEff, "#") : "off") + ";tpEff=" + tpModeEff + "(" + str.tostring(tpSizeEff, "#") + ")" + ";vwapVeto=" + (useVwapVeto ? "1" : "0") + ";cvd=" + (useCVDFilter ? "1" : "0") + ";streak=" + (useCvdStreak ? str.tostring(cvdTrendCount) : "off") + ";bias=" + (useBiasFilter ? "1" : "0") + ";sweep=" + (useSweepFilter ? "1" : "0") + ";DLL=" + (dailyLossOn ? str.tostring(dailyLossLimitEff, "#") + "(" + str.tostring(ownerDllSlUSD, "#") + "x" + str.tostring(ownerDllStops, "#") + "x" + str.tostring(contractSize, "#.#") + (firmDllActive ? "|firm" + str.tostring(acctDLL, "#") : "") + ")" : "off") + ";phase=" + accountPhase + ";firm=" + (useFirmPreset ? firmPreset : "manual") + ";ddModel=" + ddModel + ";trailDD=" + str.tostring(acctTrailDD, "#") + ";paDLL=" + str.tostring(acctDLL, "#") + ";mae=" + (useMaeGuard ? str.tostring(maeBasePct, "#") + "/" + str.tostring(maeGrownPct, "#") + "-m" + str.tostring(maeMarginPct, "#") : "off") + ";derisk=" + (useDerisk ? str.tostring(deriskLvl1, "#") + "->" + str.tostring(deriskQty1) + "/" + str.tostring(deriskLvl2, "#") + "->" + str.tostring(deriskQty2) : "off") + ";deriskPA=" + (useDeriskPA ? str.tostring(deriskPaLvl, "#") + "->" + str.tostring(deriskPaQty) : "off") + ";tz=" + activeTz + ";validFrom=" + str.format_time(validFrom, "yyyy-MM-dd HH:mm", activeTz) + ";validUntil=" + str.format_time(validUntil, "yyyy-MM-dd HH:mm", activeTz) + ";graceH=24" + ";dexStop=" + str.tostring(maxLossStreak) + "/" + str.tostring(maxWinStreak) + "/" + str.tostring(lossAfterPlusUSD, "#") + "/" + str.tostring(dayTrailGiveback2USD, "#") + "@" + str.tostring(dayTrail2FromHour)
 
 var bool cfgSent = false
 if sendCfgOnStart and barstate.isrealtime and not cfgSent

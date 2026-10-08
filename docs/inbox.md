@@ -9093,3 +9093,40 @@ hem volledig in de volgende ronde. **Lees eerst het besluit hierboven**: `payout
 `prog.get("payout_ladder") or ladder_caps(size)`, en nu `payout_ladder` overal `null` is valt dat
 pad op de **hardcoded** lijst terug. Dat moet `payout_cap` + `payout_cap_uncapped_from` worden, en
 bij `payout_terms_verified: false` hoort het te weigeren in plaats van te raden.
+
+### Review Middleware · Release 3a — ✅ akkoord, drie dingen vóór de uitrol
+
+Uitgevoerd in plaats van gelezen. `contracts_for_room()` geeft: ruimte 2.999 → **1 contract**,
+3.000 → **2**, 4.499 → **2**, 4.500 → **3**, `None` → **1**. Dat is A-90, exact. En het staat
+achter `elif locked:` op r. 384, dus een vers account bereikt die drempels niet — goed, want
+vóór de lock is de ruimte hooguit $2.500 en groeit hij niet.
+
+`firm_rules` leest de registry correct: voor `apex_50k_legacy_pa` komt er
+`payout_ladder: None · payout_cap: 2000 · consistency: 0.3` uit. **De keten bron → code werkt.**
+
+Ook goed: de ingetrokken NQ/YM-regel is weg, de merkentabel klopt (El Rey → MNQ, El Matador →
+MES, El Leon → MYM), `_APEX_RULES` heet nu `_APEX_FALLBACK`, en een evaluatie krijgt
+`consistency_limit = None` in plaats van een Apex-30% die daar niet geldt. Dat laatste is precies
+het soort detail dat anders jaren meegaat.
+
+🔴 **Drie dingen vóór de uitrol:**
+
+1. **`_APEX_FALLBACK` draagt `APEX_LADDER_50K = [1500, 1500, 2000, 2500, 2500, 3000]` met
+   `"verified": True`.** Dat is de ingetrokken ladder, en hij presenteert zich als geverifieerd.
+   Een account zonder `firm_program` krijgt hem stilzwijgend. Zelfde familie als de default in
+   Pine's `f_firmLadder`. ➡️ Zet `verified: False` en haal de ladder eruit, of laat de noodval
+   **weigeren** in plaats van invullen.
+2. **`payout_cap_uncapped_from` wordt nergens gelezen** (gemeten: nul treffers in
+   `middleware/app/*.py`). Het veld bestaat sinds een uur geleden, dus dit kon je niet weten —
+   maar zonder dat leest het playbook vanaf payout 6 nog steeds een maximum dat niet bestaat.
+3. **`payout_terms_verified: false`** staat sinds vandaag op `apex_50k_eod_pa` en
+   `apex_50k_intraday_pa`. Daar hoort het playbook **te weigeren**, niet te substitueren: toon
+   "voorwaarden onbekend" in plaats van een cap uit de noodval.
+
+📌 **En één ding voor later, geen blokkade:** `A90_LOCKED_LADDER` is één drempel voor alle TP's.
+A-90 meet dat op TP 85 $3.000 de grens is, maar dat op TP 120 qty 2 **direct na de lock** mag —
+daar gaat de haalkans omhoog én de breach omlaag. De drempel hoort een functie van (ruimte,
+gelockt, TP) te zijn. Dat stond in mijn spec-aanvulling van ná jullie commit.
+
+**Zodra 1 t/m 3 erin zitten: uitrollen met `git pull && systemctl restart mex-viewer`.** De
+.NET-receiver blijft onaangeraakt, dus dit raakt geen orders.

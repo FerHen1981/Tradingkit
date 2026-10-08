@@ -8299,3 +8299,406 @@ ladder. Verschil verwacht — maar benoem het, verzwijg het niet.
 
 📌 Dit hangt aan de datahosting: zonder jaarstroom in de repo kan 3b niet draaien. Ferry gaf
 akkoord op Parquet als Release-assets; dat is hetzelfde spoor.
+
+---
+
+## 08-10 · Scrum Master — GEOOGST uit twee branches vóór het archief dichtging
+
+Ferry vroeg of drie stilgevallen chats naar het archief kunnen. Vóór ik ja zei heb ik **alle
+remote branches gemeten** — de les van 07-10 — en twee ervan droegen inbox-berichten die het
+bord nooit bereikt hebben: **76 regels** van de EL TESORO/FTMO-chat (19-09) en **309 regels**
+van de legacy-accounts-chat (07-09). Hieronder letterlijk, met de bron erbij. De branches zelf
+gaan NIET mee: ze dragen code in een oude maplaag (`middleware/receiver-src/**`,
+`middleware/dotnet-receiver/Program.cs` op het oude pad) die een merge zou terugzetten.
+
+### Uit `claude/el-tesoro-ftmo-xauusd-sv56tr` (19-09) — EL TESORO op FTMO XAUUSD
+
+> Geoogst 08-10. Deze tekst stond alleen op die branch.
+
+### 35. Scrum Master → CLO + Ferry (cc Backtest Setup, Pine Dev) — **D-77: EL TESORO-mechaniek op FTMO XAUUSD via PineConnector**
+**Scrum Master → CLO + Ferry** · 2026-09-19 · ⏳ **wacht op Ferry — staat in de Approval Queue als `🛠️ MEX D-77`.**
+
+**Vraag van Ferry (19-09):** *"We hebben nu een mooi script (EL TESORO) dat stabiele profits geeft
+op MGC. Zouden we dit kunnen laten werken via PineConnector op een FTMO XAUUSD-account?"*
+
+**Kort antwoord:** technisch kan het en de leidingen liggen er grotendeels al. Maar volgens de
+eigen regels van dit project is dit **geen herconfiguratie maar een nieuwe markt — dus een
+nieuwe onderzoeksronde vanaf trap 0.** En de premisse "stabiele profits op MGC" staat op dit
+moment niet in het bewijs.
+
+### Wat er al ligt
+| Laag | Stand |
+|---|---|
+| Pine | `MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine` heeft een PineConnector-route (`routePineConnector`, licentie, brokersymbool, risk). Stuurt `{license},buy\|sell\|exit,{symbool},sl=,tp=,risk=` met SL/TP als **prijs** |
+| Live pad | `Program.cs` herkent PineConnector-commando's, respecteert de kill-switch en stuurt door naar `MEX_PC_URL`. **D-41 heeft die route op 25-08 live geverifieerd** |
+| Middleware-config | `accounts.example.yaml` kent al `ftmo_mt5_1` met `symbol_override` |
+| Backtester | `backtest/config.py` heeft een FTMO-fase (statische max loss + daily loss) en `pct_risk`-sizing met fractionele lots. **Ontbreekt:** een XAUUSD-contractrij en XAUUSD-data |
+
+### Wat de premisse tegenspreekt
+- De bevroren Pine-cijfers (≈94 trades, PF 1,665 op 7 MGC, `frozen-engines.md`) zijn een
+  **validatiecurve binnen het venster**, geen out-of-sample bewijs. De OOS-klok staat sinds 07-09 op nul (D-71).
+- De vloot-sweep van 25-08 (`validation/FLEET_sweep_20260825.md`) zegt over TESORO: **"fundeert niet
+  op 1 contract"**, geen TradingView-export, pariteitspoort nooit gesloten. Gemeten op de **GC-twin** (D-56).
+- TESORO draait bewust TV-delta in plaats van de canonieke proxy (D-66). Van dat verschil is de richting onbekend.
+
+Kortom: er is een Pine-curve, geen gevalideerde edge. Die naar een andere markt tillen is precies
+wat grondregel 9 verbiedt.
+
+### Wat XAUUSD wezenlijk anders maakt
+1. **Tick-eenheden.** Alle afstanden staan in ticks. MGC heeft mintick 0,10; XAUUSD op MT5 0,01. De
+   bevroren FVG 11–16 en SL 140 worden dan **tien keer zo klein** in $/oz — het script vuurt een andere
+   strategie. Oplossing is `unitMode = Points`, maar dat is een config-wijziging en dus een nieuwe freeze.
+2. **Chartfeed ≠ executiefeed.** De chart draait op een TradingView-XAUUSD-feed, de EA vult op FTMO's
+   MT5-feed. Op 1-minuut-FVG's is dat verschil materieel. Dit is exact waar trap 1 voor bestaat — nu tussen twee feeds.
+3. **Delta.** Op een CFD is `syminfo.type` geen `futures`, dus de streak wordt automatisch versoepeld en
+   TV-delta wordt tick-volume. `deltaBorrowSym` op COMEX GC is de logische route (`docs/forex_delta.md`).
+4. **Accountoverlay.** De firm-preset in Pine kent alleen trailing-DD futures-firms. Op FTMO moet de fase
+   op Developer, waardoor DLL-, derisk- en payoutgedrag uitgaan. Dat is ander gedrag dan gevalideerd.
+5. **Sizing en drawdown.** 7 MGC = 70 oz ≈ 0,70 lot. Volle stop 140t = $14/oz × 70 = **$980**. Max
+   intrabar DD in validatie ≈ **$5.054** — dat is méér dan de statische max loss van een FTMO 50K ($5.000)
+   en de helft van de daily loss van een 100K ($5.000). **Een 50K-account past niet.**
+6. **Kosten.** MGC: $0,52 round-turn per 10 oz. XAUUSD-CFD: spread per ounce + commissie per lot. Op 70 oz
+   een veelvoud van MGC. Klein tegenover $980 stop, maar **meten, niet aannemen.**
+7. **Sessie.** "Liquidity Core" en de force-flat 16:55–18:00 zijn op CME-structuur gedefinieerd; het
+   Globex-reopen-venster is een futures-fenomeen.
+8. **FTMO-nieuwsregel.** Funded FTMO-accounts kennen een restrictie rond high-impact nieuws. Goud is precies
+   het instrument dat daarop beweegt; het script heeft geen nieuwsfilter. `firms.py` markeert de
+   FTMO-regels zelf al als "VERIFY".
+
+### Aanbeveling — als nieuwe engine door de trechter, niet als overzetting
+1. **Backtest Setup:** XAUUSD 1-minuutdata, drie jaar, liefst uit FTMO's eigen MT5-history zodat je de
+   executiefeed test. Trap 0.
+2. **Backtest Setup:** contractrij `XAUUSD` (mintick 0,01, 1 lot = 100 oz) + FTMO-preset in
+   `backtest/config.py`; TESORO-mechaniek in Points herschreven. Trap 2 op XAUUSD **naast** de GC-twin
+   over dezelfde periode. Overleeft de edge de feedwissel niet, dan stopt het hier — zonder een euro uit te geven.
+3. **Pine Dev, pas daarna:** Points-modus, delta geleend van GC, fase Developer, PC-route. Export, trap 1, trap 10.
+4. **Ferry:** forward-test op een FTMO Free Trial met een PineConnector-demolicentie vóór de challenge-fee.
+
+**Strategisch is het idee de moeite:** FTMO heeft statische regels en dus andere faalmodi dan Apex'
+trailing drawdown, en goud blijft de enige niet-index-bucket. **Maar:** een nieuwe prop-firm is per
+rolstructuur een **CLO-besluit**, en het is bouwwerk voor Backtest Setup én Pine Dev terwijl D-53
+(live pad) nog op build + restart wacht. Prioriteit is aan Ferry.
+
+### Wat ik NIET heb gedaan
+Geen code, geen config, geen Pine aangeraakt. Alleen dit item, de bordregel (D-77, `blocked`), één regel
+in `DECISIONS.md` en de Approval Queue-kaart.
+
+### Na akkoord
+Backtest Setup claimt D-77 (stap 1–2). Pine Dev pas na een positieve trap 2. Merknaam/shorttitle voor
+de XAUUSD-variant is een aparte naming-vraag (EL MINERO is gereserveerd voor HF/commodity — niet
+automatisch dit).
+
+---
+
+### Uit `claude/legacy-accounts-scripts-analysis-ui0j6m` (07-09) — Legacy accounts · setup en scripts
+
+> Geoogst 08-10. Deze tekst stond alleen op die branch.
+
+## 2026-09-07 · Item 32/3 — notificatie-taxonomie in de .NET-receiver (KLAAR, LIVE PAD)
+
+Scope zoals toegewezen: alleen de `Program.cs`-kant. **Niets gebouwd in de exit-echo** —
+dat is Python en ligt bij Middleware App.
+
+### Wat er nu gebeurt
+
+De Discord-melding heet niet meer kaal "⛔ Order NIET geplaatst" maar draagt de reden in
+de titel: `⛔ [DLL] Order NIET geplaatst`. Beide meldpunten zijn gedekt — de poort van
+D-40 én de weigering ná het doorsturen. Ferry ziet de reden dus in de scroll, zonder de
+body te openen.
+
+De categorie komt uit dezelfde reply-inhoud die `Rejected()` na de 05-09-fix beoordeelt;
+die fix (`"error":false` short-circuit) is intact gelaten en meegetest.
+
+### Eén classificatie, geen tweede lijst
+
+`RejectKind.Of()` voedt zowel de Discord-prefix als de poort van D-40. De aparte
+markerlijst in `AccountGate.IsAccountHalt` is weg: die riep om twee lijsten die uit de pas
+gaan lopen, precies wat werkafspraak 3 verbiedt. `MEX_PMT_HALT_MARKERS` blijft werken en
+wint nog steeds, zodat je zonder herbouw kunt bijsturen.
+
+**Welke categorieën sluiten een account?** Alleen `DLL` en `BREACHED`. `IP-POOL`,
+`RATE-LIMIT` en `NETWORK` bewust niet: dat zijn problemen van de verbinding, niet van het
+account, en een IP-fout raakt álle accounts tegelijk. Getest, zie hieronder.
+
+### Drie dingen die de SM moet wegen
+
+**1 — kleine gedragswijziging op het live pad.** De blokkeerset bevat nu ook `breach` en
+`blown` (via `BREACHED`); die stonden niet in de oude markerlijst. Een account waarvan PMT
+zegt dat het breached is, krijgt nu geen entries meer tot 18:00 ET. Ik vind dat juister,
+maar het is een wijziging die niet in de opdracht stond — draai hem terug als je dat liever
+hebt.
+
+**2 — `TARGET` sluit het account NIET.** Doelbereik is geen overtreding. Of een account na
+het raken van zijn target stil moet vallen is een besluit voor jullie, niet voor deze poort.
+Eén regel werk zodra het besluit er is.
+
+**3 — auth-weigeringen vallen in `UNKNOWN`.** `unauthorized` en `forbidden` passen in geen
+van de zeven opgegeven categorieën. Ze zijn familie van `IP-POOL` (PMT weigert ons, niet het
+account), maar ik heb er geen achtste categorie bij verzonnen. Als CLO een `[AUTH]` wil, is
+dat één regel.
+
+### Waar de categorie NIET voor staat
+
+In het journaal komt hij **achteraan** (`GEWEIGERD 200 … [DLL]`), nooit vooraan. De
+journal-sync en het dashboard matchen op prefix (`GEWEIGERD…`, `sent 200…`); een label
+ervóór zou die parsers breken. Dat was de waarschuwing uit mijn melding van 19-08 en die
+geldt nog steeds.
+
+### Getest — gebouwd én gedraaid, tegen een stub met zeven antwoorden
+
+| antwoord van PMT | categorie |
+|---|---|
+| "Daily loss limit reached" | `DLL` ✔ |
+| "Account drawdown breached" | `BREACHED` ✔ |
+| "Profit target reached, payout pending" | `TARGET` ✔ |
+| "Too many requests, rate limit exceeded" | `RATE-LIMIT` ✔ |
+| "valid ip not found in pool" | `IP-POOL` ✔ |
+| dode poort → `HttpRequestException` | `NETWORK` ✔ |
+| "Something we have never seen before" | `UNKNOWN` ✔ |
+| `{"res":"Successfully send","error":false}` | géén label ✔ |
+
+En de poort-eigenschappen apart:
+
+| geval | tweede poging | verwacht |
+|---|---|---|
+| DLL | geblokkeerd ✔ | account dicht |
+| IP-POOL | doorgelaten ✔ | verbindingsprobleem, geen accountprobleem |
+| NETWORK | doorgelaten ✔ | idem |
+
+Build schoon (0 warnings, 0 errors) met de SDK in mijn sessie via `receiver-src` uit D-06.
+
+### Uitrollen
+
+Zelfde recept als D-40. Geen nieuwe env-var.
+
+## 2026-08-25 (4) · D-40 LIVE — melding aan de Scrum Master
+
+Uitgerold 25-08 23:20 UTC. Bewijs: `dotnet build src/Mex.Journal.Receiver -c Release`
+geslaagd (beide projecten), en `/health` geeft nu het veld `gatedAccounts` — dat bestond
+in de vorige binary niet, dus bron → binary → proces sluiten aan.
+
+    {"status":"alive","dryRun":false,"armed":true,"pmtConfigured":true,
+     "renderEnabled":true,"gatedAccounts":0}
+
+**Vóór het kopiëren gecontroleerd wat de herstelactie van Ferry had achtergelaten.** De
+diff tussen VPS en nieuwe versie gaf één regel die alleen op de VPS stond: `renderScript`
+— zonder komma, omdat `gatedAccounts` erachter kwam. Geen verlies. Alles van D-28 en
+D-35 stond er nog.
+
+### Status van de items die bij mij lagen
+
+| Item | Status |
+|---|---|
+| **D-06** | opgeleverd — `middleware/receiver-src/` (sln, csproj's, `Mex.Journal.Recon`). Receiver buiten de VPS bouwbaar. |
+| **D-40** | **live** — poort per account, exits nooit geblokkeerd, `/gate/clear` als ontsnappingsluik. |
+| **D-28/5** | rate-limit expliciet gezet op 12. Heeft in vijf dagen **nul keer** gebeten. |
+
+### Wat D-06 direct opleverde
+
+Ik heb de .NET 10 SDK in mijn sessie geïnstalleerd. Daarmee:
+- de **IPv4/body-check van 19-08 compileert schoon** — die stond een week ongecompileerd live;
+- D-40 gaf bij de eerste build een `CS0136`, hier gevangen in plaats van op de VPS.
+
+Dat is precies waar D-06 voor bedoeld was. Voorstel: opnemen in de werkafspraken dat
+wijzigingen aan het live pad hier gebouwd worden vóór ze naar de VPS gaan.
+
+### Twee dingen die nog open staan
+
+**1 — de gokmarkers.** De poort kijkt naar `daily loss`, `day loss`, `loss limit`,
+`max loss`, `drawdown`, `account locked`, `trading disabled`, `not allowed to trade`.
+Bewust **nauwer dan `Rejected()`**: die bevat ook `not found in pool` en `unauthorized`,
+en dat zijn configuratieproblemen die de hele fan-out raken — een IP-fout mag geen account
+een halve dag stilleggen. `MEX_PMT_HALT_MARKERS` staat klaar om de lijst te vervangen
+zodra er één echte PMT-weigering in `routed_*.jsonl` staat. **De poort is nog nooit tegen
+PMT's echte tekst afgegaan**; alleen tegen een stub die ik zelf schreef.
+
+**2 — twee secrets moeten nog geroteerd** (item 25-08 (2)): `MEX_WEBHOOK_SECRET` en de
+Discord-webhook-URL stonden kort publiek doordat ik de solution via `/var/www/charts` liet
+ophalen en mijn secret-check naar het verkeerde bestand keek. Status bij Ferry onbekend.
+
+## 2026-08-25 (3) · D-40 gebouwd en getest — LIVE PAD, klaar voor uitrol
+
+**Voor het eerst gecompileerd én gedraaid.** Ik heb de .NET 10 SDK in mijn sessie
+geïnstalleerd; met `middleware/receiver-src/` uit D-06 bouwt de receiver nu buiten de VPS.
+Dat leverde meteen twee dingen op: de **IPv4- en body-check-wijziging van 19-08 compileert
+schoon** (0 warnings, 0 errors) — die vraag stond een week open — en D-40 gaf bij de eerste
+build een `CS0136` op een naamconflict, gevangen hier in plaats van op de VPS.
+
+### Wat D-40 doet
+
+Poort per account in de PMT-tak, ná de kill-switch en vóór `ForwardJsonAsync`. Weigert PMT
+een order met een **account-halt**-reden, dan gaat dat account dicht tot de eerstvolgende
+**18:00 ET**. Reactief zoals afgesproken: de eerste order na een halt vertrekt nog en wordt
+geweigerd, daarna is het account dicht.
+
+**Exits worden nooit geblokkeerd** — zelfde regel als de kill-switch, en getest.
+
+### Bewust nauwer dan `Rejected()`
+
+`Rejected()` bevat ook `"not found in pool"` en `"unauthorized"`. Die mogen **geen** account
+sluiten: dat zijn configuratieproblemen die de hele fan-out raken, en een IP-fout zou dan een
+halve dag stilte per account opleveren. De poort heeft daarom een eigen, smallere lijst:
+`daily loss`, `day loss`, `loss limit`, `max loss`, `drawdown`, `account locked`,
+`trading disabled`, `not allowed to trade`. Te overschrijven met `MEX_PMT_HALT_MARKERS`
+zodra PMT's echte bewoordingen bekend zijn — dat blijft de openstaande verfijning.
+
+### Ontsnappingsluik
+
+`POST /gate/clear?token=<secret>[&account=<id>]` opent één account of alle. Zonder dat zou
+een te brede marker een account tot de volgende herstart stilleggen. `/health` toont
+`gatedAccounts`.
+
+State staat alleen in het geheugen: na een herstart is de poort open. Dat is de veilige
+kant — een gemiste blokkade kost één geweigerde order, een blijvende blokkade een handelsdag.
+
+### Getest tegen een lokale PMT-stub die een daglimiet-weigering teruggeeft
+
+| | verwacht | uitkomst |
+|---|---|---|
+| 1e entry | gaat door, PMT weigert, account dicht | `GEWEIGERD 200 door doelserver` ✔ |
+| 2e entry | poort blokkeert | `GEWEIGERD door poort — … (dicht tot 26-08 22:00 UTC)` ✔ |
+| exit | gaat er altijd doorheen | doorgelaten ✔ |
+| `/health` | telt geblokkeerde accounts | `gatedAccounts: 1` ✔ |
+| `/gate/clear` | opent zonder herstart | `cleared: 1` ✔ |
+
+### Uitrollen
+
+Bouwen op de VPS zoals gebruikelijk (`dotnet build src/Mex.Journal.Receiver -c Release`).
+Geen nieuwe env-var nodig; `MEX_PMT_HALT_MARKERS` is optioneel.
+
+⚠️ Raakt het live executiepad met `dryRun:false` en `armed:true`. De poort kan orders alleen
+**tegenhouden**, nooit extra versturen — het faalpad is dus "een order gaat niet uit", en
+`/gate/clear` maakt dat direct ongedaan.
+
+## 2026-08-25 (2) · D-06 opgeleverd — én een secret-incident dat ik zelf veroorzaakte
+
+### ⚠️ Eerst: twee secrets moeten geroteerd
+
+De solution is van de VPS geëxporteerd en tijdelijk gepubliceerd op
+`https://mw.mex-traders.com/charts/recv-<random>.tgz` zodat ik hem kon ophalen.
+`src/Mex.Journal.Receiver/mex-receiver.service` bleek **live secrets** te bevatten:
+
+- `MEX_WEBHOOK_SECRET=97876d1d…` — stond al sinds 11-08 op de rotatielijst omdat hij
+  ook in een gedeeld alerts-log voorkwam. Nu tweede keer geëxposeerd.
+- `MEX_DISCORD_WEBHOOK=https://discord.com/api/webhooks/1517…` — volledige URL.
+
+**Mijn fout.** Ik stelde de publicatieroute voor en gaf een controlecommando dat alleen
+`appsettings.json` bekeek — terwijl systemd-env-vars per definitie in het `.service`-bestand
+staan. Verkeerde plek gecontroleerd. Het bestand stond ongeveer twee minuten publiek onder
+een 64-bits willekeurige naam, dus de kans op misbruik is klein, maar niet nul.
+
+**Beide roteren.** Het webhook-secret betekent ook: alle alert-URL's in TradingView bijwerken.
+
+### D-06 — wat er nu in git staat
+
+`middleware/receiver-src/`: `MexJournal.sln`, `Mex.Journal` (incl. `Recon/DiscordNotifier`),
+`Mex.Journal.Cli` en `Mex.Journal.Receiver` (csproj, appsettings, Caddyfile, SETUP.md,
+service-**sjabloon**). Daarmee is de receiver voor het eerst buiten de VPS bouwbaar.
+
+Bewust weggelaten:
+- `src/Mex.Journal.Receiver/Program.cs` — de authoritatieve versie is
+  `middleware/dotnet-receiver/Program.cs`. Twee kopieën is precies wat werkafspraak 3
+  verbiedt. Bouwinstructie staat in `middleware/receiver-src/README.md`.
+- `Program.cs.bak` (17-08-versie).
+- De echte waarden in `mex-receiver.service` → sjabloon met placeholders.
+
+### Twee constateringen bij de export
+
+**De tarball is van 20-08, niet van nu.** Zijn `Program.cs` mist de IPv4-fix; het is de
+staat vóór de D-35-build. Bruikbaar voor de projectstructuur, niet als bewijs over de
+draaiende binary.
+
+**De rate-limit heeft nog nooit gebeten.** `grep -c "card rate-limited"` geeft 0 op
+20, 21, 23, 24 en 25 augustus. De drempel van 12/min is dus nooit geraakt;
+`MEX_CARD_MAX_PER_MINUTE=12` staat nu expliciet in `env.conf` (stap 1 van D-28 afgerond).
+
+### Wat dit deblokkeert
+
+D-40 wachtte op D-06 plus één echte PMT-weigering. De eerste helft is hiermee weg.
+
+## 2026-08-25 · D-28 — volgorde van aanzetten + drie correcties (LIVE PAD, vóór env-vars)
+
+Conform werkafspraak 4 gemeld vóórdat er één env-var gezet wordt.
+
+### Correctie 1 — de rate-limit is NIET inert, die draait al
+
+De briefing zegt dat de drie hooks niets doen zolang `MEX_CARD_MAX_PER_MINUTE` niet
+gezet is. Voor D-28/5 klopt dat niet. `Program.cs` regel 576-577:
+
+    static readonly int MaxPerMinute = int.TryParse(
+        Environment.GetEnvironmentVariable("MEX_CARD_MAX_PER_MINUTE"), out var m) ? m : 12;
+
+Niet gezet ⇒ **12 per minuut per webhook**, niet uit. Sinds de D-35-build (25-08 01:23 UTC)
+worden tier-B-kaarten boven die drempel dus al gedempt; tier A gaat altijd door. De env-var
+zetten *verandert* het getal, hij zet de hook niet aan.
+
+Gevolg: als er sinds 01:23 een burst is geweest, staan er al `card rate-limited`-regels in
+het journaal. Te controleren met:
+
+    grep -c "card rate-limited" /root/intent-store/routed_2026082*.jsonl
+
+Discord staat 30/min per webhook toe; 12 is conservatief gekozen. Dat is te verdedigen,
+maar het is nu een impliciete waarde in productie — die wil je expliciet.
+
+### Correctie 2 — hook 2 en 6 samen kunnen dubbelposten
+
+`NotifyRoute.WebhookFor(..., "telegram")` heeft een cross-channel fallback (regel 518):
+staat er geen `TELEGRAM_*`-var, dan valt hij terug op `NOTIFY_WEBHOOK`. In de Discord-tak
+staat vervolgens (regel 204):
+
+    if (telegram.Length > 0 && telegram != url) -> tweede post
+
+Zet je dus **`NOTIFY_WEBHOOK` (globaal) én `NOTIFY_WEBHOOK_FUNDED`** aan, dan wordt
+`url` = de funded-webhook en `telegram` = de globale — die zijn ongelijk, dus hetzelfde
+bericht gaat een tweede keer naar het globale Discord-kanaal, als ruwe tekst naast de
+kaart. Geen crash, wel dubbele meldingen op je drukste kanaal.
+
+**Vermijdbaar door het globale `NOTIFY_WEBHOOK` niet te zetten** zolang Telegram niet
+echt bestaat. Zonder die var geeft de telegram-lookup een lege string en blijft de hook
+inert. Per-fase-vars alleen is dus veilig.
+
+### Correctie 3 — D-06 is hier niet opgeleverd
+
+Het bord zet D-06 op opgeleverd, maar in de werkbranch staat nog steeds alleen
+`middleware/dotnet-receiver/Program.cs` + README: geen `.csproj`, geen `.sln`, geen
+`Mex.Journal.Recon`. De tarball is 20-08 op de VPS gemaakt (`/tmp/mex-receiver-src.tgz`,
+24 kB) maar nooit in de repo geland. **Ik kan deze wijzigingen dus nog steeds niet
+compileren of testen** — er is ook geen .NET SDK in deze sessie.
+
+### Voorgestelde volgorde — één voor één
+
+**1. Rate-limit expliciet maken** (geen nieuwe functionaliteit, alleen de bestaande
+waarde vastleggen). Eerst tellen of er al gedempt is; daarna:
+
+    Environment=MEX_CARD_MAX_PER_MINUTE=12
+
+Waarom eerst: hij draait al, dus dit is de enige stap met nul nieuw risico, en hij haalt
+een impliciete productiewaarde weg.
+
+**2. Per-kanaal routing, alleen per fase** (D-28/2). Wél:
+
+    Environment=NOTIFY_WEBHOOK_FUNDED=<webhook funded-kanaal>
+    Environment=NOTIFY_WEBHOOK_EVAL=<webhook eval-kanaal>
+
+**Niet** `NOTIFY_WEBHOOK` globaal zetten — zie correctie 2. Kaarten zonder herkend
+account vallen dan terug op `MEX_DISCORD_WEBHOOK`, precies zoals nu.
+
+⚠️ Dit is bewust onvolledig zolang **D-41** (Pine Dev) open staat: elf guard-kaarten
+dragen geen account, dus juist DAY HALT, ACCOUNT HALT, PASSED en FAILED blijven op het
+globale kanaal. Een halt op funded is dan nog steeds niet te onderscheiden van een halt
+op eval. Routing aanzetten heeft pas volle waarde ná D-41 — maar het is wél alvast
+zichtbaar op FILL, EXIT, DERISK en ACCOUNT STARTED, die het account wel dragen.
+
+**3. Telegram (D-28/6) als laatste, en pas als er een echt Telegram-endpoint is.**
+Zonder endpoint voegt deze hook niets toe en brengt hij alleen het dubbelpost-pad uit
+correctie 2 mee.
+
+### Meten per stap
+
+Na elke stap één handelssessie meekijken, en tussen de stappen niets anders wijzigen:
+
+    tail -f /root/intent-store/routed_$(date -u +%Y%m%d).jsonl
+
+Let op `card rate-limited` (stap 1), op welk kanaal de kaarten landen (stap 2) en op
+dubbele regels voor hetzelfde bericht (het pad uit correctie 2).
+

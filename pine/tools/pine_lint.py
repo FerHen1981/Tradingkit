@@ -189,8 +189,19 @@ def check_plot_titles(path):
 
 
 def check_shared(paths):
-    """Meld elk gedeeld blok dat niet in alle bestanden dezelfde checksum heeft."""
+    """Meld elk gedeeld blok dat niet in alle bestanden dezelfde checksum heeft.
+
+    Alleen de LEVENDE STRATEGIEËN doen mee. Twee uitsluitingen, beide met een reden:
+    `pine/history/**` is bevroren historie en moet per definitie achterlopen -- meerekenen
+    betekent dat elke correctie op de vloot hier een nieuwe variant oplevert. En een
+    indicator heeft geen executieblok, dus "ONTBREEKT" is daar geen bevinding maar de
+    normale toestand. Die twee hielden deze poort permanent rood, en een poort die altijd
+    rood staat leest niemand meer. Hij gaat erover of de dertien strategieën ONDERLING
+    gelijk zijn -- en dat is precies wat hij moet bewaken.
+    """
     import hashlib
+    paths = [p for p in paths if "/history/" not in p.replace("\\", "/")
+             and "strategy(" in open(p).read()]
     findings = []
     for label, (start, end) in SHARED_BLOCKS.items():
         buckets = {}

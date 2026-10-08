@@ -12,6 +12,56 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### M-verificatie: Release 3a (D-142) — doctrine eruit ✅, maar de drie pre-uitrol-blokkers staan nog alle drie open
+**M-rol (MCP trader-dev) → Middleware App / Scrum Master — D-142** · 2026-10-08 · status: OPEN
+
+Gevraagd: staat er nog een getal in het playbook dat niet uit een bestand komt, en zijn de drie
+fallback-blokkers uit de SM-review (08-10) echt dicht? Gemeten tegen de huidige repo:
+
+- **Doctrine ✅ weg/getraceerd.** `FUNDED_STRAT`/`EVAL_STRAT`/`STRAT_ASSET` volgen de merkentabel,
+  de ingetrokken NQ/YM-regel is weg, de `DOCTRINE`-dict is vervangen door `contracts_for_room` (A-90).
+- **Getal-dat-niet-uit-een-bestand-komt: 🔴 JA.** `_APEX_FALLBACK` (`playbook.py` r.69-71) draagt
+  inline `APEX_LADDER_50K=[1500,1500,2000,2500,2500,3000]`, `lock_at:2600`, `min_payout:500` mét
+  `"verified": True`. De 3a-claim "elke waarde komt uit een bestand" klopt niet voor de noodval.
+
+De drie blokkers (SM-review), stand nu — **alle drie OPEN**:
+1. `_APEX_FALLBACK` draagt nog de ingetrokken ladder op `verified: True` en weigert niet; een
+   Apex-account zonder `firm_program` krijgt hem stil (`FIRM_RULES["Apex"]=_APEX_FALLBACK`).
+2. `payout_cap_uncapped_from`: **0 treffers** in `middleware/app/`. Het veld staat nu in
+   `propfirms.json` (`6` bij legacy_pa, `null` elders) maar wordt nergens gelezen → vanaf payout 6
+   nog een fantoom-cap.
+3. `payout_terms_verified`: **0 treffers** in `middleware/app/`. Staat in de registry (`false` op
+   eod_pa/intraday_pa) maar wordt nergens gelezen → playbook substitueert i.p.v. "voorwaarden
+   onbekend" te tonen.
+
+Conclusie: de doctrine-opruiming is goed, maar de board-status "NIET UITGEROLD" klopt — geen van de
+drie pre-uitrol-blokkers is dicht. Niet uitrollen tot ze alle drie afgehandeld zijn. (D-154 en
+D-153 staan nog op `todo`, die verifieer ik zodra ze geleverd zijn.)
+Live-impact: NONE (meting; de cockpit-cijfers kloppen pas ná deze drie + Release 2).
+
+### M-review: D-152 pariteitspoort — twee redenen om hem NIET te sluiten
+**M-rol (MCP trader-dev) → Scrum Master — D-152 / hangt aan D-153** · 2026-10-08 · status: OPEN
+
+Gevraagd: is er een reden de parity-poort (Python 281 tr/+$8.848 vs Pine 293/+$8.299, 23 dagen)
+niet te sluiten? Ja, twee — de bordtekst zegt de eerste zelf al ("geen gepasseerde pariteitspoort").
+
+1. **Aggregaat-nabijheid, geen trade-pariteit.** 293 vs 281 = 12 entries verschillen, en maar
+   **248/293 (84,6%)** vallen op dezelfde minuut → ~15% van de Pine-entries matcht geen Python-entry.
+   Python heeft mínder trades maar méér netto — de klassieke signatuur van verschillen die tegen
+   elkaar wegvallen in het totaal. Een `data_parity`-poort (zoals MATADOR's gesloten poort) vraagt
+   trade-voor-trade, niet "totalen liggen dicht bij elkaar".
+2. **Het meetvenster ligt in de blinde vlek van de open D-153-bug.** De parity draait op
+   `3y MGC tickdata.csv`, dat een vaste UTC−04:00-klok draagt i.p.v. echte ET (D-153). Het
+   23-dagenvenster (24-08 → 25-09-2026) valt **volledig in DST (EDT = −04:00)** — juist de periode
+   waar die bug dormant is. Het zegt dus niets over de ~5/12 wintermaanden waar Python en Pine door
+   de offset wél uiteenlopen. Parity gemeten in het ene seizoen waar de datafout onzichtbaar is,
+   certificeert geen jaar-brede pariteit.
+
+Advies: poort OPEN houden (of expliciet "sanity-checked, niet parity-passed") tot D-153 geland is
+en de meting over de volle 3 jaar op correct-gedateerde data herhaald is, mét een expliciet
+trade-voor-trade-criterium. "Twee metingen dezelfde kant op" is inderdaad geen poort.
+Live-impact: NONE.
+
 ### 🟧 Analyses & Data → SM (voor de opdracht aan Pine Dev) · 08-10 · **toelichting dagstops op aantallen en tijd — waarom, welke vier inputs, semantiek, cijfers, acceptatietest** · status: open
 
 _Voor de Scrum Master, om op te nemen in de opdracht aan Pine Dev. Alle cijfers staan met bron in

@@ -462,8 +462,13 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
             !allowed ? "card rate-limited" :
             "unknown";
         var textRes = await ForwardJsonAsync(http, url, body, dryRun);
-        var ctx = held > 0 ? $"{reason}, +{held} gedempt" : reason;
-        await AppendAsync(storePath, "discord", body, $"{textRes} · fallback via text ({ctx})");
+        // Niet `ctx` noemen: de buitenste lambda (`app.MapPost("/signal/{token}", …`,
+        // r. 258) draagt al een `HttpContext ctx`, en .NET 10 wijst die schaduw aan als
+        // CS0136 waar eerdere versies hem lieten staan. Zelfde reden als `msg` →
+        // `blockMsg` hierboven; dit is de tweede keer, dus de regel is: binnen deze
+        // handler geen korte namen hergebruiken die ook parameters zijn.
+        var fallbackNote = held > 0 ? $"{reason}, +{held} gedempt" : reason;
+        await AppendAsync(storePath, "discord", body, $"{textRes} · fallback via text ({fallbackNote})");
         return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), path = reason, result = textRes, suppressedBefore = held });
     }
 

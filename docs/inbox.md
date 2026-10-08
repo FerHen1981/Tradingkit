@@ -8122,3 +8122,30 @@ de draaiende binary blijft intussen gewoon staan, dus er gaat niets stuk.
 2. 📌 **`Program.cs` r. 1348 doet nog steeds `if (code == 429) { await Task.Delay(2000); continue; }`
    — een vaste 2 s.** Dat is niet fout, maar het is een tweede antwoord op dezelfde vraag in
    hetzelfde bestand. Overweeg hem op `RetryAfterMs` te zetten zodat er één regel is.
+
+### Aanvulling — CS0136 op `ctx` in de tekst-fallback, gefixt
+
+De build faalde op de VPS, en **niet op mijn 429-wijziging**:
+
+```
+Program.cs(465,13): error CS0136: A local or parameter named 'ctx' cannot be declared
+in this scope because that name is used in an enclosing local scope
+```
+
+`var ctx = held > 0 ? … : reason;` staat binnen `app.MapPost("/signal/{token}", async (string
+token, HttpContext ctx) => …` (r. 258). Hernoemd naar **`fallbackNote`**, met de reden in een
+comment.
+
+🔑 **Dit is de tweede keer in hetzelfde blok.** Vijftig regels hoger staat jullie eigen comment:
+*"Hernoemd van `msg` naar `blockMsg` om schaduw met een gelijknamige variabele verderop in
+dezelfde lambda te vermijden — .NET 10 wijst CS0136 aan waar eerdere versies dat lieten liggen."*
+Dezelfde val, een andere naam. ➡️ **Werkregel: binnen de `/signal`-handler geen korte lokale
+namen gebruiken die ook parameters zijn** (`ctx`, `token`, `body`, `http`, `url`). Ik heb r.
+258–520 nagelopen op diezelfde botsing — verder geen treffers.
+
+📌 **En de bredere bevinding: `be861eb` is nooit gecompileerd.** De draaiende binary was 1319
+regels (van vóór die commit), dus deze fout zat sinds de oplevering in de repo zonder dat iemand
+het merkte. **Een oplevering die niet gebouwd is, is geen oplevering** — en die lag bij mij op
+`review` als akkoord. Mijn review las de logica en niet de compileerbaarheid; ik kan hier geen
+`dotnet` draaien en heb dat toen niet als beperking benoemd. Vanaf nu zeg ik bij elke
+.NET-review expliciet of hij gebouwd is of alleen gelezen.

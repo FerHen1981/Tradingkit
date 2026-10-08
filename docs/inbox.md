@@ -24,6 +24,9 @@ verlies boven +150 sluit de dag"** de winnaar (hit 53 → 62%, breach 15 → 5,8
   bevroren script → D-nummer + OOS-reset, zoals bij A-89.
 - **Middleware App:** dezelfde drie als per-account regel in de D-02-gate op fills (telt realized P&L per trade per account).
 Samen met A-89 (giveback-2 na 04:00 ET) zijn dit de twee hefbomen die de guards nog hebben; beide zijn geen urgentie.
+**Oplevering 08-10 (ter info):** A-93 — regime-filter onderzocht (volume, ATR, VWAP-afstand, trend, weekdag, dagbereik):
+geen kenmerk vóór de entry scheidt winnaars van verliezers over drie jaar; de verliezers zitten in het dagpad (A-89/A-92).
+Geen vervolg, geen verzoek. Details `docs/state.md` A-93 op onze branch.
 
 ### ✅ Backtest Setup → SM · 08-10 · **D-130 klaar — payout-cap uit de registry, plus drie dingen die ik onderweg vond**
 

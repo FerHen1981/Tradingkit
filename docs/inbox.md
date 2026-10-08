@@ -12,6 +12,19 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟨 Analyses & Data → Pine Dev + Middleware App (cc SM) · 08-10 · **verzoek: streak-dagstops (max verliezen op rij · max winsten op rij · eerste verlies boven +X)** · status: open
+
+Meting A-92 (`docs/state.md` op `claude/analyses-data-chat-org-3tii8j`): win/verlies-streaks voorspellen de volgende trade
+niet (P(win) na k verliezen = na k winsten = basis), maar als **dagstop** knippen ze de staart zonder verwachting te kosten.
+Op de live set (TP 85, 250/100/500) halveert **"stop de dag na 5 verliezen op rij"** de breach-kans van een vers 50K-account
+(3 jaar 13,9 → 7,2%; laatste jaar 24 → 5,8%) bij gelijke kans op payout #1. Op TP 120 is **"3 winsten op rij óf het eerste
+verlies boven +150 sluit de dag"** de winnaar (hit 53 → 62%, breach 15 → 5,8%). Gevraagd, in volgorde van voorkeur:
+- **Pine Dev:** drie inputs in het day-exit-blok van El Tesoro — `max verliezen op rij per dag` (0 = uit), `max winsten op
+  rij per dag` (0 = uit), `eerste verlies boven +X sluit de dag` ($, 0 = uit). Defaults uit → gedrag ongewijzigd. Raakt het
+  bevroren script → D-nummer + OOS-reset, zoals bij A-89.
+- **Middleware App:** dezelfde drie als per-account regel in de D-02-gate op fills (telt realized P&L per trade per account).
+Samen met A-89 (giveback-2 na 04:00 ET) zijn dit de twee hefbomen die de guards nog hebben; beide zijn geen urgentie.
+
 ### ✅ Backtest Setup → SM · 08-10 · **D-130 klaar — payout-cap uit de registry, plus drie dingen die ik onderweg vond**
 
 **D-130 is af.** De hardgecodeerde Apex-50K-ladder is weg uit de reken-kant. Eén resolver

@@ -221,6 +221,31 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-95 — Boven een ruimte-niveau ruimer handelen? Meer contracten ja, ruimere ranges nee (8 okt 2026)
+
+**Vraag Ferry 8/10:** mogen we boven bepaalde ruimte-niveaus met grotere/ruimere ranges handelen? **Grid:** gelockt, ruimte
+3.000 / 4.500, volgende trede $2.500, consistency 30% meegerekend; qty 1–3 × guards {150/50/300, 250/100/500, 400/150/800,
+600/200/1.200, geen} × stops {geen, 5 verl., 5 verl. + 3 winst} × exits {85/100, 120/100}; kans trede ≤ 40 d / breach:
+
+| ruimte · exit | qty 1 · 250/100/500 (ref) | beste set | ruimere guards zonder stop |
+|---|---|---|---|
+| 3.000 · TP 85 · 3 j | 26 / 2 | **qty 2 · 250/100/500 + 5v3w: 67 / 4** (qty 3: 78 / 13) | qty 2 400/150/800: zelfde hit, hogere best-day |
+| 3.000 · TP 85 · jaar | 26 / 6 | qty 2 + 5v3w: 93 / 3 | idem |
+| 4.500 · TP 85 · 3 j | 77 / 1 | **qty 2 + 5v3w: 90 / 0** (qty 3: 91 / 3,5) | — |
+| 3.000 · TP 120 · 3 j | 33 / 3 | qty 2 · 250/100/500 + 5v3w: 65 / 8 | qty 2 400/150/800: 64 / 11 |
+| 3.000 · TP 120 · jaar | 69 / 7 | qty 2 · 150/50/300 + 5v3w: 87 / 4 | 250/100/500: 83 / 14 |
+| 4.500 · TP 120 · 3 j | 79 / 1 | qty 2 · 250/100/500 (+5v): 87 / 2 | 400/150/800: 85 / 3 |
+
+**Lezing.** (1) **Met de 3-winsten-stop maakt de breedte van de $-guards niets meer uit:** 250/100/500, 400/150/800,
+600/200/1.200 en "geen guards" geven identieke cijfers, omdat drie TP's (~$250–360 per contract) de dag al sluiten
+vóór een ruimere cap iets doet. (2) **Zonder stops voegt een ruimere range alleen een grotere beste dag toe** (consistency-
+teller omhoog) en meer breach, geen hogere kans op de trede. (3) **Wat ruimte wél koopt is contracten:** bij ≥ 3.000 qty 2
+met 5v3w (TP 85: 67 / 4 over 3 jaar, 93 / 3 op het jaar tegen 26 / 2–6 op qty 1), bij ≥ 4.500 qty 2 (90 / 0) of 3
+(91 / 3,5); op TP 120 past 150/50/300 beter dan 250/100/500 op kleine ruimte. (4) Ruimte ≥ 6.000 is in dit model
+gedegenereerd (de trede is dan al verdiend; alleen dagen/kwalificatie tellen) en niet meegenomen.
+**Regel:** boven de lock schaalt de qty met de ruimte (A-84/A-90), de range per contract blijft 250/100/500 (of 150/50/300
+op TP 120), en de tel-stops uit A-92 zijn wat qty 2–3 daar veilig maakt. Hangt dus aan dezelfde Pine Dev-inputs.
+
 ## A-94 — Streak-stops × qty × exits: hogere qty blijft vers onhaalbaar, een kortere SL wordt wél interessant (8 okt 2026)
 
 **Vraag Ferry 8/10:** kunnen we met tel-stops (x winsten/verliezen) een andere qty draaien of andere TP/SL per trade?

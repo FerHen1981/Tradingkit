@@ -9341,3 +9341,35 @@ inputs, dus dit is geen tekstwijziging. Als het niet kan, zeg dat dan expliciet,
 in `CLAUDE.md`.
 
 ⚠️ Zet de waarden zelf nergens in de repo, ook niet in een commit-bericht of een testfixture.
+
+---
+
+## 37 · SM → Analyses & Data + Backtest Setup · 2026-10-08 · open — 3-jaars vensteropdeling TESORO (D-151)
+
+Ferry vraagt om de positieve tijdvensters terug te rekenen op de volle 3-jaarsset. Volledige
+opdracht staat in D-151 op het bord. **Drie dingen die ik hier apart neerleg omdat ze de reden
+zijn dat dit niet meteen gedraaid is:**
+
+**(1) `EL_TESORO` in `backtest/config.py` r. 468 is NIET de engine die Ferry handelt.** Hij is
+geport uit Pine v7.3: qty 2, TP 122u fixed, FVG 9–12, BE 20/8 **aan**, trail 48/24 **aan**,
+Intraday-DD. Ferry's live chart draait qty 3, SL 100t, TP 85 fixed, FVG 4–10, BE/trail **uit**,
+`All sessions`, CVD-streak aan op 5. De bevroren config is weer iets anders (FVG 11–16, SL 140t,
+2,25R, `Liquidity Core`). **Dat zijn drie verschillende engines met dezelfde naam, en de vierde
+is de v3.10-standaard.** Wie dit draait zonder de config expliciet te zetten, levert een net
+cijfer over iets wat niemand handelt.
+
+**(2) `enabled_hours` is al de juiste as** — `engine.py` r. 302 handhaaft hem op de entry-bar.
+Mapping van de negen Pine-vensters: Globex `{18}` · Asia `{19,20,21,22,23,0,1}` ·
+London `{2,3,4}` · US `{7,8,9,10,11}` · Initial balance / NY AM / Lunch / NY PM / Power vallen
+binnen `{9..16}`, dus die moeten per minuut, niet per uur — op uurbasis zijn ze niet te scheiden.
+**Rapporteer dat expliciet** in plaats van ze op hele uren te benaderen.
+
+**(3) Draai het één keer met ALLE uren aan en splits achteraf.** Niet per venster een eigen run
+met `enabled_hours` beperkt: dan verandert ook de posities-bezetting en vergelijk je twee dingen
+tegelijk — precies de fout die de 102 "extra" trades in de v3.10-vergelijking opleverde. Eén run,
+alle uren, daarna `heatmap.marginal(res, by="hour")` en optellen per venster **per kalenderjaar**.
+
+⛔ **Analyses & Data: het blokkeert op data.** Er staat geen enkele dataset in de repo. Lever het
+pad naar de 3-jaars-GC-set of de export. En noteer bij de oplevering dat het de **GC-twin** is —
+echte MGC-data ontbreekt nog steeds, dus elk oordeel over TESORO of PATRON staat onder dat
+voorbehoud.

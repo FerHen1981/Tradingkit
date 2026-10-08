@@ -221,6 +221,42 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-92 — Streaks: geen voorspellende waarde, wél een betere dag-stop dan een dollarbedrag (8 okt 2026)
+
+**Vraag Ferry 8/10:** chronologisch dagverloop, win/verlies-streaks, en daarmee scherpere caps en eventueel sessies.
+**Meting** (engine-stromen zonder guards, 92% pariteit; TP 85 3 jaar = 7.729 trades / 760 dagen, laatste jaar 5.025 /
+252; TP 120 laatste jaar 4.246):
+
+1. **Geen volgorde-afhankelijkheid.** P(winst) na 1/2/3/4 verliezen op rij = 54–57% en na 1/2/3/4 winsten = 52–56%, tegen
+   een basis van 54–55% (TP 85); op TP 120 46–49% rondom 47%. De streak-stand vóór een trade zegt niets over die trade.
+   Per sessie idem: Globex wint vaker (57% tegen 53–54%) maar ook daar geen afhankelijkheid. **Streak-regels zijn dus
+   geen edge-regels maar variantie-regels**: ze knippen de staart van de dag zonder verwachting te kosten.
+2. **De staart zit in de verliesreeks.** Dag-P&L naar langste verliesreeks van die dag (TP 85, 3 j): reeks ≤ 2 → +64…+179,
+   3 → −51, 4 → −194, 5 → −475, 6–7 → −400…−500. Mediaan langste verliesreeks per dag 2–3, P95 5–6, max 10.
+3. **Na 3 winsten op rij is de rest van de dag negatief** (−25…−59 gem., 48–55% kans op teruggave) — hetzelfde
+   "vroege plus vasthouden"-effect als A-89, nu op tradevolgorde i.p.v. klok.
+
+**Regels op de doel-meetlat** (bovenop 250/100/500, qty 1; vers hit60/br60 · gelockt 3k hit40/br40 · wd):
+
+| regel | TP 85 · 3 j | TP 85 · jaar | TP 120 · jaar | TP 120 · 3 j |
+|---|---|---|---|---|
+| live 250/100/500 | 8,5/13,9 · 58/2 · 57% | 18/24 · 60/6 · 60% | 53/15 · 80/7 · 62% | 17,6/10,7 · 63/2 · 57% |
+| **+ stop na 5 verliezen op rij** | **9,1/7,2** · 62/1 · 57% | **21/5,8** · 75/4 · 60% | 53/13 · 81/6 · 61% | 16,5/9,3 · 64/2 · 56% |
+| + stop na 4 verliezen op rij | 8,3/7,2 · 60/0 · 56% | 18/5,0 · 65/1 · 58% | 36/7,4 · 75/2 | — |
+| + stop na 3 winsten op rij | 1,1/6,9 · 69/0 · 59% | 2,5/4,1 · **93/0** · 66% | 65/15 · 84/7 · 67% | 15,5/7,7 · 65/1 |
+| + 3 winsten óf eerste verlies na +150 | 0/0 · 54/0 · 61% | 0/0 · 91/0 · 71% | **62/5,8 · 88/0 · 75%** | **20,3/7,2** · 57/0 · 62% |
+| + eerste verlies na +150 | 3,7/14 · 51/2 | 7,4/25 · 66/6 | 50/7,4 · 80/3 · 74% | — |
+
+**Lezing.** (1) **Op TP 85 (live): een stop na 5 verliezen op rij halveert de breach-kans bij gelijke hit-kans**, 3 jaar én
+laatste jaar, net +32%. Dat is de beste toevoeging die er voor de huidige set is gevonden, en hij kost niets aan
+verwachting (punt 1). (2) Op TP 85 is "3 winsten = klaar" dodelijk voor verse accounts (dagen te klein) maar het beste
+wat er is voor **gelockte** accounts met kleine ruimte (93% / 0% op het jaar). (3) **Op TP 120 is "3 winsten op rij óf
+het eerste verlies na +150 sluit de dag" de winnaar**: hit 53 → 62, breach 15 → 5,8, winstdagen 75%, en over 3 jaar
+20,3/7,2 tegen 17,6/10,7. (4) Sessies: geen reden om streak-regels per sessie te maken; de 3-verliezen-stop alleen ná
+04:00 doet hetzelfde als de hele dag. (5) Niets hiervan bestaat als Pine-input (El Tesoro kent alleen de $-day-trail) of
+in Tradovate; het is een Pine Dev-verzoek (drie inputs: max verliezen op rij/dag, max winsten op rij/dag, "eerste verlies
+boven +X sluit de dag") of een middleware-regel op fills (D-02-gate, per account). Gemeld in de inbox op de werkbranch.
+
 ## A-91 — PA018: de cap kan de consistency niet versnellen, de qty wel (7 okt 2026)
 
 Apex-dashboard 7/10: balans 54.862, consistency 51,5% = best-day **$2.504** ÷ winst 4.862; drempel = 2.504 / 0,30 =

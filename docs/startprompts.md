@@ -88,7 +88,7 @@ jullie ligt:
 ### 4. Fase 2 — D-83/D-84 zijn nu van jullie
 
 D-120: de tab komt in `middleware/app/viewer.py`, tussen `Playbook` en `Live` (r. 702–716).
-Auth erft van `_api_authorized()`.
+Auth: **alleen `_authed()`** — de cookie-sessie. **Niet `_api_authorized()`**: die laat ook de read-only widget-token door, en dit scherm schrijft secrets (D-135).
 
 🔴 **Eén ontwerpeis vooraf:** de cockpit draait op `app.mex-traders.com`, de config-API op de
 .NET-receiver achter `mw.mex-traders.com`. **Proxy server-side** naar `localhost:5000` en voeg

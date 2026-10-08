@@ -432,28 +432,44 @@ app.MapPost("/signal/{token}", async (string token, HttpContext ctx) =>
         if (telegram.Length > 0 && telegram != url)
             _ = Task.Run(() => ForwardJsonAsync(http, telegram, body, dryRun));
 
-        // Tier A/B krijgt een kaart. Renderen duurt seconden, dus dat gebeurt in
-        // de achtergrond: TradingView krijgt direct antwoord en probeert niet
-        // opnieuw. Mislukt de render, dan gaat het originele bericht alsnog door.
-        if (renderEnabled && tier != 'C')
+        // D-116 · Rate-limit staat nu vóór élke tier-afslag — ook tier C.
+        // Reden: `ACCOUNT STARTED` en de routine-`SIGNAL BLOCKED` zijn tier C
+        // en gingen voorheen ongelimiteerd door, terwijl `FILL`/`DAY HALT`/
+        // `TRAIL` (tier B) op het karige budget strandden. Dat is omgekeerd aan
+        // wat we willen — de minst informatieve berichten hadden vrij baan.
+        // Tier A blijft binnen `PostRate.Allow` exempt, zoals altijd.
+        int held = 0;
+        bool allowed = PostRate.Allow(url, tier, out held);
+
+        // Tier A/B als kaart, tier C alleen als tekst. Alleen als zowel render
+        // aan staat als de rate-limit het toelaat, gaat de kaart naar de queue.
+        if (renderEnabled && tier != 'C' && allowed)
         {
-            // D-28/5 — rate-limit. Bij een burst kost elke kaart een Chromium-render plus
-            // een post op een webhook die 30/min toestaat. Tier A gaat altijd door.
-            int held;
-            if (!PostRate.Allow(url, tier, out held))
-            {
-                await AppendAsync(storePath, "discord", body, $"card rate-limited (tier {tier})");
-                return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), rateLimited = true });
-            }
             var note = held > 0 ? $" (+{held} gedempt)" : "";
             _ = Task.Run(() => CardRender.RenderAndPostAsync(http, url, body, title, storePath, dryRun));
             await AppendAsync(storePath, "discord", body, $"card queued (tier {tier}){note}");
             return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), card = "queued", suppressedBefore = held });
         }
 
-        var res = await ForwardJsonAsync(http, url, body, dryRun);
-        await AppendAsync(storePath, "discord", body, res);
-        return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), result = res });
+        // D-116 fix 1 · Een kaart mag sneuvelen, het bericht niet. Val door
+        // naar het platte bericht in plaats van `return`. Het auditspoor
+        // noteert in de resultaat-string **waarom** we hier zijn — dat wordt
+        // door `fanout_status.classify()` als "sent" geteld (prefix "sent" of
+        // "error" wint; "rate-limited" verderop is dan context, geen demping).
+        var reason =
+            !renderEnabled ? "render-disabled" :
+            tier == 'C' ? "tier-C" :
+            !allowed ? "card rate-limited" :
+            "unknown";
+        var textRes = await ForwardJsonAsync(http, url, body, dryRun);
+        // Niet `ctx` noemen: de buitenste lambda (`app.MapPost("/signal/{token}", …`,
+        // r. 258) draagt al een `HttpContext ctx`, en .NET 10 wijst die schaduw aan als
+        // CS0136 waar eerdere versies hem lieten staan. Zelfde reden als `msg` →
+        // `blockMsg` hierboven; dit is de tweede keer, dus de regel is: binnen deze
+        // handler geen korte namen hergebruiken die ook parameters zijn.
+        var fallbackNote = held > 0 ? $"{reason}, +{held} gedempt" : reason;
+        await AppendAsync(storePath, "discord", body, $"{textRes} · fallback via text ({fallbackNote})");
+        return Results.Ok(new { accepted = true, kind = "discord", tier = tier.ToString(), path = reason, result = textRes, suppressedBefore = held });
     }
 
     // ---------------------------------------------------- journal (CSV) ----
@@ -587,6 +603,19 @@ static async Task<string> ForwardAsync(HttpClient http, string url, string paylo
                 return Rejected(reply)
                     ? $"GEWEIGERD {code} door doelserver: {reply}"
                     : $"sent {code} (poging {attempt}){(reply.Length > 0 ? " · " + reply : "")}";
+            // D-146/D-138 · 429 is de ENIGE 4xx die je wél moet herhalen: hij zegt niet
+            // "dit verzoek deugt niet" maar "je bent te snel". Discord geeft er bovendien
+            // zelf bij hoe lang je moet wachten — `retry_after` in seconden in de body,
+            // of de `Retry-After`-header. Dit viel eerder onder `code < 500` en werd
+            // weggegooid; het kaartpad verderop wachtte wél, dus twee verzendpaden in dit
+            // bestand deden iets anders met dezelfde fout. Gemeten op 07-10: 94 berichten
+            // verloren op een `retry_after` van 0,356 s.
+            if (code == 429 && attempt < 3)
+            {
+                var waitMs = RetryAfterMs(resp, reply);
+                await Task.Delay(TimeSpan.FromMilliseconds(waitMs));
+                continue;
+            }
             if (code < 500) return $"error {code} (4xx, niet opnieuw): {reply}";
         }
         catch (Exception ex)
@@ -596,6 +625,32 @@ static async Task<string> ForwardAsync(HttpClient http, string url, string paylo
         await Task.Delay(TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1)));
     }
     return "error: retries op";
+}
+
+// D-146/D-138 · Hoe lang wachten na een 429. Volgorde: de `Retry-After`-header (seconden),
+// dan `retry_after` uit de JSON-body (Discord geeft seconden als decimaal, bv. 0.356).
+// Zonder bruikbare waarde een halve seconde — genoeg voor Discord's venster, kort genoeg
+// om een alert niet merkbaar te vertragen. Boven de 5 s wachten we niet: dan is het geen
+// burst meer maar een structurele limiet, en dan hoort de melding hard te falen in plaats
+// van de hele keten op te houden.
+static int RetryAfterMs(HttpResponseMessage resp, string? body)
+{
+    const int fallback = 500, ceiling = 5_000;
+    try
+    {
+        var hdr = resp.Headers.RetryAfter;
+        if (hdr?.Delta is TimeSpan d && d > TimeSpan.Zero)
+            return (int)Math.Min(d.TotalMilliseconds, ceiling);
+    }
+    catch { /* header kan onparseerbaar zijn; val door naar de body */ }
+
+    var m = System.Text.RegularExpressions.Regex.Match(body ?? "", "\"retry_after\"\\s*:\\s*([0-9]+(?:\\.[0-9]+)?)");
+    if (m.Success && double.TryParse(m.Groups[1].Value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var secs) && secs > 0)
+        return (int)Math.Min(secs * 1000 + 50, ceiling);   // +50 ms marge
+
+    return fallback;
 }
 
 static decimal? TryDec(JsonNode? n)
@@ -1209,7 +1264,22 @@ public static class CardRender
         }
         catch (Exception ex)
         {
-            result = $"card exception {ex.GetType().Name}: {ex.Message}";
+            // D-116 fix 2 · De catch had geen tekst-fallback — bij een
+            // render-exception ging het bericht stil verloren terwijl de
+            // twee andere takken hierboven (`!ok` en `result.StartsWith("error")`)
+            // allebei `PostJsonAsync` als vangnet gebruiken. Nu zelfde patroon:
+            // het bericht moet door, de kaart mag sneuvelen.
+            try
+            {
+                var fb = await PostJsonAsync(http, url, body, dryRun);
+                result = $"card exception {ex.GetType().Name}: {ex.Message} -> tekst-fallback: {fb}";
+            }
+            catch (Exception ex2)
+            {
+                // Zelfs de fallback faalde — dan hebben we niets te doen
+                // behalve de ketting zichtbaar in audit zetten.
+                result = $"card exception {ex.GetType().Name}: {ex.Message} -> fallback ook mislukt: {ex2.Message}";
+            }
         }
         finally
         {

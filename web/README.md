@@ -118,10 +118,22 @@ gezaghebbende bronnen — trades via `fills_pairing.py`, balansen via
 `docs/inbox.md`; de Web-chat kan het niet zelf doen, want het leest uit
 `middleware/**`.
 
-Zolang het meegeleverde bestand `"sample": true` bevat, toont elke pagina die de
-cijfers rendert een zichtbare placeholder-melding. Illustratieve getallen kunnen
-zo nooit voor een track record worden aangezien. De eerste echte publicatierun
-zet die vlag om.
+**Het meegeleverde bestand is leeg, en dat is opzet (D-129).** Elk getal staat op
+`null`, `markets` en `equity` zijn leeg; `/resultaten` en de homepage tonen dan een
+expliciete leegstand die zegt wát er gepubliceerd gaat worden en in welke eenheid.
+
+De vorige opzet deed het anders: `"sample": true` plús echte cijfers, met een
+banner eroverheen. Dat hield niet. Die cijfers droegen GC en ES als `Funded` en NQ
+als `Evaluatie` — de regel die op 24-08 is ingetrokken — en een tegel *Live 36 mnd*
+over 2023–2026, terwijl die reeks sinds D-18/optie B validatie heet en de OOS-klok
+op 07-09 op nul is gezet. De banner zei intussen dat de marktregels *wél* echt
+waren. Een voorbeeldgetal op een resultatenpagina is na een week niet meer van een
+resultaat te onderscheiden, en een banner verandert daar niets aan.
+
+`make check-stats` grendelt dat: bij `"sample": true` moet elk headline-getal
+`null` zijn en elke lijst leeg, en `status` per markt mag alleen een rekeningtype
+noemen — nooit een oordeel over de edge. De eerste echte publicatierun zet de vlag
+om en vult de velden.
 
 **Let op bij de eerste echte publicatie:** controleer de voorwaarden van je
 prop-firms. Die beperken vaak wat je over rekeningen mag publiceren. De
@@ -157,6 +169,7 @@ make dev-ppt        # blog + CMS
 make build          # beide sites statisch bouwen
 make test           # units/rolgrens-tests
 make check-glossary # faalt op een kapot bron-id of een dode verwijzing
+make check-stats    # faalt op een publieke claim die niet onderbouwd is
 make check          # alles
 ```
 

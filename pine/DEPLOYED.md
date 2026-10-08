@@ -23,27 +23,28 @@ Ferry na het plakken). Lopen ze uit elkaar, dan is dat zichtbaar in plaats van v
 4. **Loopt de kolom achter, dan is dat het antwoord**, niet een reden om te gokken.
 
 De versie is ook live af te lezen zonder dit bestand: hij staat in de scripttitel op de chart
-(`MΞX EL MATADOR · MES PROD EOD · v3.8.0`) en in de CONFIG-kaart in Discord (`ver=v3.8.0`).
+(`MΞX EL MATADOR · MES PROD EOD · v3.9.0`) en in de CONFIG-kaart in Discord (`ver=v3.9.0`).
 
 ## Stand
 
 | Script | Shorttitle | In de repo | Sinds | Op TradingView | Geplakt op |
 |---|---|---|---|---|---|
-| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.8.0 | 29-09 | **D-110 stap 2** — `dllHit` is weg; één dagrem over. `acctDLL` blijft als weergave (D-96). Een halt op de firmawaarde heet voortaan "Daily Loss" | **nee** — de rem is niet losser geworden, alleen de dubbele weg; de klok staat sinds v3.6.0 op nul |
+| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.9.0 | 06-10 | **D-126** de payout-ladder komt uit de registry (`f_ladderCap` → `f_firmLadder`) · **D-125** `pmtBlock` hangt op `payoutReady` i.p.v. op de cap alleen — deadlock weg · **D-124** `useWaitForCap` is een input, default `true` · **poort** `gen_pine_firms.py` faalt nu als een `f_firm*` geen call-site heeft, en vond meteen `f_firmMinPayout` | **ja, hele vloot** — één reset voor alle drie, want ze raken dezelfde poort |
+| v3.8.0 | 29-09 | **D-110 stap 2** — `dllHit` is weg; één dagrem over. `acctDLL` blijft als weergave (D-96). Een halt op de firmawaarde heet voortaan "Daily Loss" | **nee** — de rem is niet losser geworden, alleen de dubbele weg; de klok staat sinds v3.6.0 op nul |
 | v3.7.0 | 29-09 | **D-110 stap 1b** — de firmalimiet doet mee IN de eigen rem: `min(SL × stops × qty, firm_dll)`. Daarmee halteert de eigen rem per definitie op of vóór de firmalimiet en is `dllHit` strikt overbodig — dat opent stap 2. De derde term (ruimte × fractie) blijft een middleware-signaal | **nee** — de klok staat sinds v3.6.0 al op nul en deze versie zet hem niet opnieuw (besluit Ferry 29-09) |
-| v3.8.0 | 29-09 | — | — |
-| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.8.0 | 29-09 | — | — |
-| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.8.0 | 29-09 | — | — |
+| v3.9.0 | 06-10 | — | — |
+| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.9.0 | 06-10 | — | — |
+| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.9.0 | 06-10 | — | — |
 
 **De rechterkolom staat bewust leeg.** Ik weet niet wat er op de charts hangt en dat verzin ik
 niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevestigd", niet

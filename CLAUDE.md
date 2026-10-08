@@ -161,8 +161,20 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
 - 🔴 **Sinds 27-09 werkt het project volgens `docs/PLAN-2026-09-27-herijking.md`.** Dat
   document zegt *waarom* een item bestaat; `docs/SPRINT.md` zegt wie het doet en hoe ver
   het is. Wijkt een item af van het plan, dan wint het plan. Zeven fasen plus twee
-  parallelsporen; **fasen zijn dwingend** — claim geen item uit fase 3 zolang 1 en 2 niet
-  af zijn. De sporen B en C lopen ernaast en mogen altijd.
+  parallelsporen.
+- 🔴 **De fasering ordent BROKKEN, niet elke losse release** (besluit Ferry 08-10: *"pas het
+  besluit maar aan zodat we ook kleine releases doen"*). Tot 08-10 gold *fasen zijn dwingend*,
+  en dat maakte het werk projectmatig: op 08-10 stonden er **dertien items op het bord die
+  niemand mocht claimen**, puur omdat fase 2 nog liep. Die zijn naar `ARCHIVE.md` gegaan.
+  **De nieuwe regel:** een afgebakende release mag uit een latere fase komen als hij
+  (1) **binnen één dag** af is, (2) **op zichzelf werkt** zonder de rest van die fase,
+  (3) een **acceptatietest heeft die Ferry zelf kan zien**, en (4) **niets uit een eerdere
+  fase omzeilt** — een halve fase-2-laag inhalen via een fase-4-item mag niet. Voldoet hij
+  niet aan alle vier, dan blijft hij wachten. **Een grote brok houdt de volgorde.**
+- 🔴 **Een bevinding wordt pas een borditem als iemand er binnen de week iets mee doet.**
+  Op 08-10 gaf ik vijftien nummers uit en sloot er nul — een bord dat alleen groeit is een
+  archief. Alles wat niet deze week opgepakt wordt gaat naar `docs/inbox.md` en wacht daar.
+  Een D-nummer is een werkopdracht, geen bewaarplaats.
 - **Wat van het bord af ging staat in `docs/ARCHIVE.md`**, met volledige tekst. Geparkeerd
   is niet weerlegd — het wacht tot het platform staat. Kijk daar vóór je iets opnieuw
   uitzoekt.
@@ -203,10 +215,20 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   voorvoegsel is hoe twee documenten met hetzelfde nummer naar verschillende besluiten gaan
   wijzen.
 - Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
+- 🔴 **Terugkoppeling naar Ferry draagt geen D-nummers als uitleg** (besluit Ferry 08-10: *"een
+  terugkoppeling in D-xxx nummers zegt mij niets, het moet duidelijker en omschreven worden"*).
+  Een D-nummer is een **vindplaats op het bord**, geen beschrijving. Schrijf dus eerst **wat er
+  gebeurt, in gewone taal** — wat er kapot is, wat het kost, wat hij moet doen — en zet het
+  nummer hooguit achteraan tussen haakjes voor wie het wil naslaan. Een zin als *"D-146 blokkeert
+  D-127"* is voor de schrijver geschreven, niet voor de lezer. Geldt voor chat, de Approval Queue
+  en LifeOS-taken; **tussen chats onderling blijven nummers juist wél de kortste weg.**
 - **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
   `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
-  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. **Kijk daar
-  eerst** voor je iemand vraagt iets op de VPS na te kijken. Is de tabel oud, dan draait de
-  timer niet — en dat is zelf ook informatie.
+  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. 🔴 **Maar dat bestand staat er sinds 07-10 nog steeds niet, op geen enkele branch (D-137):**
+  de timer draait inmiddels wel, maar de commit-poort in het script is `git diff --quiet` op een
+  **niet-getrackt** bestand en die kan per constructie nooit opengaan. Tot D-137 gefixt is bestaat
+  de snapshot **alleen op de VPS** — zichtbaar in het fan-out-venster van de cockpit, niet in de
+  repo. Vraag hem daar op, of vraag Ferry. De oude heuristiek *"is de tabel oud, dan draait de
+  timer niet"* geldt pas weer als het bestand daadwerkelijk aankomt.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

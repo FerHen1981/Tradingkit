@@ -161,8 +161,20 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
 - 🔴 **Sinds 27-09 werkt het project volgens `docs/PLAN-2026-09-27-herijking.md`.** Dat
   document zegt *waarom* een item bestaat; `docs/SPRINT.md` zegt wie het doet en hoe ver
   het is. Wijkt een item af van het plan, dan wint het plan. Zeven fasen plus twee
-  parallelsporen; **fasen zijn dwingend** — claim geen item uit fase 3 zolang 1 en 2 niet
-  af zijn. De sporen B en C lopen ernaast en mogen altijd.
+  parallelsporen.
+- 🔴 **De fasering ordent BROKKEN, niet elke losse release** (besluit Ferry 08-10: *"pas het
+  besluit maar aan zodat we ook kleine releases doen"*). Tot 08-10 gold *fasen zijn dwingend*,
+  en dat maakte het werk projectmatig: op 08-10 stonden er **dertien items op het bord die
+  niemand mocht claimen**, puur omdat fase 2 nog liep. Die zijn naar `ARCHIVE.md` gegaan.
+  **De nieuwe regel:** een afgebakende release mag uit een latere fase komen als hij
+  (1) **binnen één dag** af is, (2) **op zichzelf werkt** zonder de rest van die fase,
+  (3) een **acceptatietest heeft die Ferry zelf kan zien**, en (4) **niets uit een eerdere
+  fase omzeilt** — een halve fase-2-laag inhalen via een fase-4-item mag niet. Voldoet hij
+  niet aan alle vier, dan blijft hij wachten. **Een grote brok houdt de volgorde.**
+- 🔴 **Een bevinding wordt pas een borditem als iemand er binnen de week iets mee doet.**
+  Op 08-10 gaf ik vijftien nummers uit en sloot er nul — een bord dat alleen groeit is een
+  archief. Alles wat niet deze week opgepakt wordt gaat naar `docs/inbox.md` en wacht daar.
+  Een D-nummer is een werkopdracht, geen bewaarplaats.
 - **Wat van het bord af ging staat in `docs/ARCHIVE.md`**, met volledige tekst. Geparkeerd
   is niet weerlegd — het wacht tot het platform staat. Kijk daar vóór je iets opnieuw
   uitzoekt.

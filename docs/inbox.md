@@ -8228,3 +8228,74 @@ staat nergens meer een markt- of strategieregel die niet uit een bestand komt.
 **Web:** D-129 regel 3 en het opruimen van de dubbele `mex_units`. **Analyses & Data:** D-112, en
 `validate_dataset.py` op één pilot-export zodat we de echte CVD-grens kennen — Ferry bevestigde
 dat de feed Rithmic via NinjaTrader is. **MCP trader-dev:** verifieer release 1 en 2 ná oplevering.
+
+---
+
+## 08-10 · Scrum Master → Middleware App + Backtest Setup — het playbook krijgt de logica van het fleet-doc
+
+Ferry: *"je hebt inzage hoe het doc opgebouwd wordt en die logica wil ik terugzien in het Playbook
+zonder documenten aan te leveren."* Terecht — het playbook toont nu een **vaste doctrine-tabel**
+terwijl het fleet-doc een **berekening** is. Niemand hoort nog een PDF te hoeven leveren.
+
+### Zo wordt het fleet-doc gebouwd (uit `docs/state.md`, A-84 en A-85)
+
+Het is `tailor.py`, en het is één scoreregel:
+
+**Invoer per account** — ruimte tot liquidatie · gelockt of vers (vers trailt de floor met de
+piek, gelockt staat vast op −ruimte) · beste dag sinds de laatste payout · het eerstvolgende
+payout-maximum · de regels van dát account: consistency-% en het kwalificatiedag-minimum.
+
+**Kandidaten** — 24 sets: qty 1–4 × `150/50/300`, `250/100/500`, `320/100/900` per contract ×
+met of zonder dagstop (dagstop = 3 × SL).
+
+**Meting** — elke set over rolling windows van de Pine-jaarstroom. Twee kansen: **P(stapmaximum
+gehaald binnen 20/40/60 dagen)** en **P(breach)**. Poorten: 8 handelsdagen, 5 kwalificatiedagen op
+het account-minimum, consistency op het account-percentage.
+
+**Score** — `haal-40d − 0,5 × breach-40d`. De hoogste wint. Uitvoer per account: de gekozen set,
+haal%, breach%, mediaan aantal dagen.
+
+**Dat is het.** Geen doctrine, geen tabel: een kansberekening per account tegen de regels van dat
+account. En precies dat hoort het playbook te doen.
+
+### Twee releases, elk één dag
+
+#### 3a · Middleware App — de invoerkant, en de doctrine eruit
+
+Het playbook toont per account de **invoer van die berekening**, live:
+
+ruimte tot liquidatie · gelockt of vers · beste dag sinds laatste payout · eerstvolgende
+payout-maximum · kwalificatiedagen tot nu toe (en hoeveel er nog moeten) · consistency-ruimte,
+met de formule die Apex zelf geeft: **hoogste winstdag ÷ 0,30 = minimaal vereiste totale winst**.
+
+En weg met wat er niet in hoort:
+- `playbook.py` r. 28–29, *"NQ/YM are eval-only variance lots"* — ingetrokken op 24-08.
+- `FUNDED_STRAT`/`EVAL_STRAT`/`STRAT_ASSET` → de merkentabel uit `CLAUDE.md`: El Rey op **MNQ**,
+  El Matador op **MES**, markten MGC/MNQ/MES/MYM.
+- `payout_rules.py` r. 26–43: `APEX_TARGET`, `APEX_LADDER_50K`, `MIN_TRADING_DAYS = 8`,
+  `CONSISTENCY_LIMIT = 0.30` zijn constanten. Het override-pad (`prog.get(...)`) bestaat al —
+  draai het om: de registry leidt, de constante is hooguit een noodval. `propfirms.json` draagt
+  sinds vandaag de **echte** cap ($50k → $2.000, **geen cap vanaf payout 6**).
+
+**Acceptatie:** de Playbook-tab toont per account die zes getallen, en er staat nergens meer een
+markt- of strategieregel die niet uit een bestand komt.
+
+#### 3b · Backtest Setup — de rekenkant
+
+De scoring hoort waar de data is, niet in de cockpit. Lever een job die per **accountprofiel**
+(ruimte-klasse × gelockt/vers × consistency-% × kwalificatie-minimum × eerstvolgende cap) de 24
+sets scoort op de jaarstroom en de beste teruggeeft met haal%, breach% en mediaan dagen. Schrijf
+dat weg als één bestand dat de cockpit leest — zelfde patroon als de publicatietaak.
+
+Zo hoeft de cockpit geen simulatie te draaien en hoeft niemand een document te leveren.
+
+**Acceptatie:** draai hem op 013, 018 en 022 en vergelijk met A-84. Daar staat: 013 → qty 2 ·
+300/100/600 · dagstop 600 · 66%/17% · mediaan 28 d; 018 → qty 4 · 600/200/1.200 · 73%/19% · 20 d;
+022 → qty 2 · 300/100/600 · 73%/19% · 19 d. **Komt dat eruit, dan klopt de implementatie.**
+
+⚠️ Twee dingen die het af laten wijken, en dat is goed: de cap is sinds vandaag $2.000 vast in
+plaats van een oplopende ladder, en er is geen cap vanaf payout 6. A-84 rekende nog met de oude
+ladder. Verschil verwacht — maar benoem het, verzwijg het niet.
+
+📌 Dit hangt aan de datahosting: zonder jaarstroom in de repo kan 3b niet draaien. Ferry gaf
+akkoord op Parquet als Release-assets; dat is hetzelfde spoor.

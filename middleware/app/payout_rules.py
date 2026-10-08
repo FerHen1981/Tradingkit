@@ -104,7 +104,13 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
     cons_limit = prog["consistency"] if prog.get("consistency") is not None else CONSISTENCY_LIMIT
     dd_amt = prog.get("drawdown") or APEX_DD.get(size, 0)
     safety = (dd_amt + 100) if dd_amt else SAFETY_NET.get(size, 0)
-    caps = prog.get("payout_ladder") or ladder_caps(size)
+    # D-148/D-149 — payout-vorm uit de registry. TWEE vormen, één bron:
+    #   • `payout_ladder`                               — oplopende lijst (klassiek).
+    #   • `payout_cap` + `payout_cap_uncapped_from`     — vaste cap die vervalt vanaf rung N.
+    # `payout_terms_verified: false` → de registry weet het niet zeker en WIJ MOGEN NIETS
+    # INVULLEN. Dat is de harde regel die D-149 vroeg: liever geen cap-getal (en een flag)
+    # dan een plausibel-maar-ongefundeerd plafond.
+    caps, fixed_cap, fixed_uncapped_from, terms_known = _payout_shape(prog, size)
     profit = round(current - starting, 2)
     funded = str(stage).lower().startswith("fund")
     trading_days = len(daily_pnl)                                    # days with fills
@@ -159,14 +165,30 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
                       (f"balance ${current:,.0f} above ${safety_bal:,.0f}" if meets_safety
                        else f"${safety_gap:,.0f} to go → ${safety_bal:,.0f}") if net_applies
                       else f"no longer applies after {net_payouts} payouts"))
-    # Ladder: capped per rung, and past the last rung the firm caps no further — Apex legacy pays
-    # without a maximum from the sixth payout, as long as the minimum balance stays in.
-    cap_unlimited = rung_taken >= len(caps)
-    rung = max(0, min(rung_taken, len(caps) - 1))
-    cap = float(above_safety) if cap_unlimited else float(caps[rung])
+    # D-149 — payout-vorm oplossen tegen `rung_taken`. Drie mogelijkheden:
+    #   (a) terms unknown        → cap=0, cap_unlimited=False, eligible=False, loud rule.
+    #   (b) fixed cap + uncapped → cap=fixed t/m rung<uncapped_from, daarna uncapped.
+    #   (c) klassieke ladder     → caps[rung] of uncapped voorbij de laatste rung.
+    if not terms_known:
+        cap_unlimited, rung, cap, total_cap = False, rung_taken, 0.0, 0.0
+    elif fixed_cap is not None:
+        rung = rung_taken
+        cap_unlimited = bool(fixed_uncapped_from) and rung_taken >= int(fixed_uncapped_from)
+        cap = float(above_safety) if cap_unlimited else float(fixed_cap)
+        # Totaal dat de ladder "zeker" uitkeert — alleen de begrensde periode telt.
+        total_cap = float(fixed_cap) * float(fixed_uncapped_from or 0)
+    else:
+        cap_unlimited = rung_taken >= len(caps)
+        rung = max(0, min(rung_taken, len(caps) - 1))
+        cap = float(above_safety) if cap_unlimited else float(caps[rung])
+        total_cap = float(sum(caps))
     # PA account AND every rule met → withdrawable (capped at the rung); otherwise no pay day (0).
-    eligible = meets_days and meets_cons and meets_safety and above_safety > 0
+    # Een unverified cap-vorm kan géén withdrawable opleveren — dat is de weigering van D-149.
+    eligible = terms_known and meets_days and meets_cons and meets_safety and above_safety > 0
     withdrawable = round(min(above_safety, cap), 2) if eligible else 0.0
+    if not terms_known:
+        rules.append(Rule("Payout terms", False,
+                          "unverified — set payout_terms_verified: true in propfirms.json"))
     floor = prog.get("min_payout")
     if floor and 0 < withdrawable < float(floor):
         rules.append(Rule("Minimum payout", False,
@@ -176,6 +198,29 @@ def evaluate(size, starting, current, stage, daily_pnl: dict, payouts_taken: int
                   None if consistency is None else round(100 * consistency, 1),
                   round(safety_bal, 2), withdrawable, eligible, above_safety=above_safety,
                   days_to_go=days_to_go, safety_gap=safety_gap,
-                  cap=cap, total_cap=float(sum(caps)), rung=rung, rules=rules,
+                  cap=cap, total_cap=total_cap, rung=rung, rules=rules,
                   profit_days=profit_days, profit_days_to_go=prof_to_go,
                   cap_unlimited=cap_unlimited, ruleset=str(prog.get("key") or ""))
+
+
+def _payout_shape(prog: dict, size: int) -> tuple[list, float | None, int | None, bool]:
+    """D-149 — lees de payout-cap-vorm uit het programma. Geeft terug:
+        (caps, fixed_cap, fixed_uncapped_from, terms_known)
+    `caps` is de klassieke ladder (lege lijst bij vaste cap); `fixed_cap` + `uncapped_from`
+    de D-148-vorm; `terms_known` = `payout_terms_verified` (geen vlag → onverifieerbaar,
+    tenzij er een echte ladder in de registry staat die zichzelf verifieert door bestaan).
+    De fallback op `APEX_LADDER_50K` is bewust GEEN veilige standaard — die ladder bestaat
+    niet (D-148) en levert daarom `terms_known=False` zodat de caller refuseert i.p.v.
+    stilzwijgend een plafond kiest."""
+    ladder = prog.get("payout_ladder")
+    cap = prog.get("payout_cap")
+    terms_known = bool(prog.get("payout_terms_verified"))
+    if ladder:
+        return [float(x) for x in ladder], None, None, True
+    if cap:
+        uncapped = prog.get("payout_cap_uncapped_from")
+        return [], float(cap), (int(uncapped) if uncapped is not None else None), terms_known
+    # Geen enkele vorm in de registry → onverifieerbaar; GEEN stille val op APEX_LADDER_50K.
+    # (Die ladder bestaat alleen als module-constante voor `ladder_caps()`-aanroepers die
+    # expliciet weten wat ze doen; zie D-148.)
+    return [], None, None, False

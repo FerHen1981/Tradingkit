@@ -4,7 +4,6 @@
 |---|---|---|
 | `sites/mex` | www.mex-traders.com | Corporate site. Statisch. |
 | `sites/ppt` | www.pipsandpalmtrees.com | Blog, gidsen en begrippenlijst. Statisch. |
-| `handover/mex_units` | — | Module ter overname door Middleware App, zie `docs/inbox.md`. |
 
 **Geen dashboard hier.** Dat draait al: `mex-viewer` op app.mex-traders.com,
 bron `middleware/app/viewer.py`. De sites linken ernaartoe; ze vervangen het
@@ -92,16 +91,21 @@ die commit triggert een deploy.
 
 ---
 
-## De units-laag (ter overname)
+## De units-laag staat niet meer hier
 
-`handover/mex_units/` bevat de omrekening naar ticks, pips en R, plus de
-rolgrens die een `viewer` alleen units laat zien. Die module is hier gebouwd
-maar hoort in `middleware/app/`; zie `handover/mex_units/README.md` en het
-verzoek in `docs/inbox.md`.
+`mex_units` — de omrekening naar ticks, pips en R plus de rolgrens die een
+`viewer` alleen units laat zien — is hier gebouwd en bij D-17 overgenomen door
+Middleware App. **De handover-kopie is bij D-132 (08-10) verwijderd**, want hij
+stond dubbel en dat is een SSOT-risico met een datum erop: wie
+`for_public_evals()` in de dode kopie zou uitbreiden, bouwt in het niets.
 
-```bash
-python3 -m pytest web/handover/mex_units/tests -q
-```
+Canoniek pad: **`middleware/app/mex_units/`**, met de documentatie in
+`middleware/app/mex_units/README.md` en 23 tests in
+`middleware/tests/test_mex_units_roles.py` (draaien vanuit `middleware/`).
+
+`web/` gebruikt die module op één plek: `make check-stats` importeert
+`assert_no_currency` en `assert_no_eval_metrics` eruit om de publieke
+momentopname te toetsen. Importeren, niet kopiëren — dat is het hele punt.
 
 ---
 
@@ -167,7 +171,6 @@ make install        # dependencies
 make dev-mex        # corporate site + CMS
 make dev-ppt        # blog + CMS
 make build          # beide sites statisch bouwen
-make test           # units/rolgrens-tests
 make check-glossary # faalt op een kapot bron-id of een dode verwijzing
 make check-stats    # faalt op een publieke claim die niet onderbouwd is
 make check          # alles

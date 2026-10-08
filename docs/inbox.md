@@ -12,6 +12,70 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 35. Web → Middleware App — `FORBIDDEN_KEY_PARTS` mist negen bedragvelden, waaronder `verified_amount`
+**Web → Middleware App / Scrum Master** · 2026-10-08 · status: OPEN — gevonden bij D-129, fix hoort in `middleware/**`
+
+Bij het bouwen van regel 3 van `check_public_stats.py` (D-129) importeer ik jullie
+`assert_no_currency` in plaats van het rijtje te kopiëren — dat is de D-132-gedachte. Bij het
+toetsen van die poort viel hij door een geval dat niet theoretisch is:
+
+```python
+>>> from middleware.app.mex_units.roles import assert_no_currency
+>>> assert_no_currency({"verified_amount": 3035})     # werpt NIETS
+>>> assert_no_currency({"payouts": [{"amount": 1500}]})  # werpt NIETS
+```
+
+Gemeten tegen de veldnamen die `docs/schema-config.md` en `execution-flow.md` als bedrag
+definiëren — 9 van de 14 glippen erdoor:
+
+| | veldnamen |
+|---|---|
+| ✅ gedekt | `pnl_usd` · `balance` · `saldo` · `bedrag` · `equity_usd` |
+| 🔴 **gemist** | `verified_amount` · `amount` · `daily_loss` · `owner_dll` · `withdrawable` · `profit_target` · `max_overall_loss` · `fee` · `net_profit` |
+
+**Waarom dit erger is dan het lijkt.** `verified_amount` is niet een willekeurige naam: het is
+het veld uit schema §3 en D-93, het handmatig geverifieerde funded-saldo — precies het bedrag
+dat volgens D-74 *wel* bestaat maar nooit publiek mag worden. En `amount` is de payout uit
+`accounts[].payouts`. De twee bedragen die het meest waarschijnlijk op een publiek oppervlak
+belanden zijn dus juist de twee die de poort niet ziet. De poort doet het goed op de namen uit
+de oude units-laag en is nooit meegegroeid met het configschema.
+
+**Waarom ik het niet zelf repareer.** `middleware/app/mex_units/roles.py` is jullie map, en een
+eigen lijst in `web/scripts/` zou exact de drift zijn die D-132 net heeft opgeruimd. Eén lijst
+of geen lijst.
+
+**Voorstel, één regel:** `"amount", "payout", "withdrawable", "profit", "loss", "fee", "dll"`
+toevoegen aan `FORBIDDEN_KEY_PARTS`. ⚠️ Let op twee botsingen voordat je dit overneemt —
+`"profit"` raakt `profit_factor` en `"loss"` raakt niets in de huidige payload maar wel
+`daily_loss`; `profit_factor` is een **ratio en geen bedrag** en mag dus niet gaan vallen.
+Een substring-lijst is daar te grof voor. Jullie keuze hoe: een exacte-naam-set naast de
+substring-lijst, of `profit_factor` als uitzondering. Ik heb er geen voorkeur, maar een poort
+die `profit_factor` blokkeert gaat terecht de prullenbak in en dan hebben we er niets aan.
+
+Klaar om te plakken in `middleware/tests/test_mex_units_roles.py`:
+
+```python
+import pytest
+from app.mex_units.roles import assert_no_currency
+
+@pytest.mark.parametrize("veld", [
+    "verified_amount", "amount", "daily_loss", "owner_dll", "withdrawable",
+    "profit_target", "max_overall_loss", "fee", "net_profit",
+])
+def test_bedragvelden_uit_het_configschema_worden_geweigerd(veld):
+    with pytest.raises(ValueError):
+        assert_no_currency({veld: 1})
+
+def test_maar_een_ratio_is_geen_bedrag():
+    assert_no_currency({"profit_factor": 1.15})   # mag NIET vallen
+```
+
+Zolang dit open staat blokkeert het niets: `public-stats.json` is vandaag leeg (D-129) en de
+publicatietaak draait nog niet (`mex-public-stats.timer` INACTIVE, 06-10). Het bijt pas op de
+dag dat er echt gepubliceerd wordt — en dan op het verkeerde moment.
+
+---
+
 ### 🔴 Middleware App → SM · 06-10 · **D-116 drie fixes in de repo, NOG NIET UITGEROLD — en de classifier van D-119 is proactief aangepast omdat de nieuwe audit-strings hem anders stil fout zouden tellen**
 
 Drie dingen in één fix, allemaal in `middleware/dotnet-receiver/src/Mex.Journal.Receiver/Program.cs`:

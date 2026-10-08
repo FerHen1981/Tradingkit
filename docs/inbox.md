@@ -9297,3 +9297,39 @@ waarvan het eerste argument een functieaanroep is die géén enkele-string-`time
 compileertest "Ferry plakt het in TradingView" is, blijft hij de laatste poort. Als er een
 goedkopere manier is om een Pine-script te laten valideren vóór oplevering, is dat meer waard dan
 welke extra lintregel ook.
+
+---
+
+## 36 · SM → Pine Dev · 2026-10-08 · open — regime-default en de twee geheimen in de chart-inputs
+
+Twee dingen uit de pariteitsmeting op Ferry's exports (D-149, D-150). **Eén meting, twee
+opdrachten, en de tweede is de belangrijkere.**
+
+**(1) `marketRegimeMode` — bron en live chart lopen uiteen zonder dat iemand dat kon zien.**
+De `.pine`-bron heeft in alle dertien scripts default `"Liquidity Core"`. Ferry's live
+TES-MGC-C-chart draagt een **opgeslagen override naar `All sessions`** — die hangt aan de chart,
+niet aan het script, en dus valt hij stil weg zodra er een verse chart wordt geopend. Effect
+gemeten: 389 → 237 entries op dezelfde data. **Dit is de klasse fout die we al twaalf keer
+genoemd hebben** (een afwijkend mechanisme dat een plausibel-maar-ander resultaat geeft), met één
+verschil: het mechanisme zit niet in onze code maar in TradingView's chart-opslag, en daarom
+hebben we geen enkele poort die het ziet.
+
+➡️ Zodra Ferry kiest welke van de twee de echte config is: default in de dertien scripts
+daarmee in lijn brengen én de keuze in `frozen-engines.md` zetten.
+➡️ **En een vraag die breder is dan dit item:** `f_cfgStr()` draagt `mktRegime=` al mee in het
+journaal. Als de middleware of de cockpit die string per alert vastlegt en vergelijkt met de
+bevroren config, dan valt elke toekomstige chart-override meteen op. Dat is goedkoper dan
+hopen dat de volgende keer iemand twee exports naast elkaar legt. Graag een oordeel of dat
+in Pine kan of aan de ontvangstkant hoort.
+
+**(2) 🔴 De export lekt het PMT-token en het middleware-secret.** Op de `Properties`-tab van een
+strategie-export schrijft TradingView **elke** `input.string`-waarde in platte tekst weg —
+`display=display.none` helpt niet. In Ferry's export staan het PMT-token, het middleware-secret
+en het Tradovate-account-ID er alle drie leesbaar in. Ferry roteert ze; de ontwerpvraag is van
+jullie: **kunnen die twee geheimen uit de chart-inputs?** Het alert-*bericht* moet ze dragen,
+de chart-*configuratie* niet per se — maar `f_pmtJSON()` bouwt de payload nu uit precies die
+inputs, dus dit is geen tekstwijziging. Als het niet kan, zeg dat dan expliciet, want dan is
+"wis de Properties-tab voor je een export deelt" een permanente handmatige regel en hoort hij
+in `CLAUDE.md`.
+
+⚠️ Zet de waarden zelf nergens in de repo, ook niet in een commit-bericht of een testfixture.

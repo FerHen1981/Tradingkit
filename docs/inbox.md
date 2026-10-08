@@ -9243,3 +9243,44 @@ regels.
 
 📌 Zonder die controle blijft de enige echte test "iemand plakt het in TradingView", en dat is
 precies de stap die tussen oplevering en Ferry zat.
+
+### Tweede compileerfout in v3.10.0 — `input.time` met een niet-const defval
+
+Ferry's tweede melding: `Cannot call "input.time" with argument "defval"="call timestamp (simple
+int)". An argument of "simple int" type was used but a "const int" is expected. (CE10123)`
+
+**Oorzaak:** r. 459/461 doen
+
+```pine
+validFrom  = input.time(timestamp("America/New_York", 2026, 1, 1, 0, 0, 0), "Valid from", ...)
+```
+
+De `timestamp`-overload **mét tijdzone-argument** geeft `simple int`; `input.time` eist
+`const int`. De enkele-ISO-string-vorm is wél const — r. 687 (`lastPayoutTime`) gebruikt die al,
+en die compileert dan ook gewoon.
+
+**Gefixt in alle dertien**, naar de const-vorm met expliciete offset:
+
+```pine
+validFrom  = input.time(timestamp("2026-01-01T00:00:00-05:00"), "Valid from", ...)
+validUntil = input.time(timestamp("2027-01-01T00:00:00-05:00"), "Valid until", ...)
+```
+
+Beide datums vallen op **1 januari**, dus in New York allebei EST = UTC−5. Zelfde wandkloktijd,
+geen gedragswijziging — alleen een andere notatie. Een zomerdatum zou hier wél een val zijn
+geweest: dan is de offset −04:00 en zet een vaste `-05:00` het venster een uur verkeerd. Dat is
+de reden dat ik de offset per datum heb nagelopen en niet één waarde heb opgelegd.
+
+**Gecontroleerd:** generator draait erna en raakt deze regels **niet** aan (checksum voor en na
+identiek), de indentatiefix van zojuist staat er nog (13/13), en `pine_lint.py` geeft 13/13 `ok`.
+
+📌 **Dit is dezelfde les als een uur geleden, nu scherper.** Twee compileerfouten in dezelfde
+oplevering, allebei gevonden door Ferry bij het laden, allebei langs een groene linter. **Dit was
+de tweede.** De indentatiecontrole die ik voorstelde had de eerste gevangen maar deze niet — een
+`input.*` met een niet-const defval is een eigen controle waard: `input.time(` of `input.int(`
+waarvan het eerste argument een functieaanroep is die géén enkele-string-`timestamp` is.
+
+➡️ **En het echte punt: de linter kan dit soort dingen blijven missen.** Zolang de enige
+compileertest "Ferry plakt het in TradingView" is, blijft hij de laatste poort. Als er een
+goedkopere manier is om een Pine-script te laten valideren vóór oplevering, is dat meer waard dan
+welke extra lintregel ook.

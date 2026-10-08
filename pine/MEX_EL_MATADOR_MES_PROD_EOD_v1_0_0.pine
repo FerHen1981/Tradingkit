@@ -448,9 +448,9 @@ string activeTz = input_tz
 // LET OP: de datumkiezer van TradingView interpreteert in de EXCHANGE-tijdzone van de chart,
 // niet in ET. De defaults hieronder staan expliciet in America/New_York, en het dashboard
 // toont de grenzen terug in je referentietijdzone -- zo zie je wat er ECHT staat.
-validFrom  = input.time(timestamp("America/New_York", 2026, 1, 1, 0, 0, 0), "Valid from", group=GROUP_TZ,
+validFrom  = input.time(timestamp("2026-01-01T00:00:00-05:00"), "Valid from", group=GROUP_TZ,
      tooltip="Vóór dit moment neemt het script geen enkele entry. Indicatoren warmen wel op over de volle historie, dus de signalen veranderen niet -- je backtest begint hier alleen te handelen. Zelfde grens voor backtest, forward-test en live.")
-validUntil = input.time(timestamp("America/New_York", 2027, 1, 1, 0, 0, 0), "Valid until", group=GROUP_TZ,
+validUntil = input.time(timestamp("2027-01-01T00:00:00-05:00"), "Valid until", group=GROUP_TZ,
      tooltip="Ná dit moment: geen entries meer, hard. Openstaande posities mogen nog 24 uur netjes sluiten; daarna wordt er eenmalig platgemaakt. Je krijgt één Discord-melding op de grens. Zet dit op de datum waarop dit account of deze configuratie afloopt.")
 // Het gedrag op de grens ligt vast in item 31 en is bewust GEEN knop: één regel, overal gelijk.
 int  EXIT_GRACE_MS = 24 * 60 * 60 * 1000

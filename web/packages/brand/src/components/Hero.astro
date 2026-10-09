@@ -1,0 +1,107 @@
+---
+/**
+ * Page opener. Deliberately typographic rather than image-led: the subject is a
+ * trading company, and a stock photo of a skyline would say less than the
+ * sentence it covers.
+ */
+interface Props {
+  eyebrow?: string;
+  headline: string;
+  lead?: string;
+  /** Rendered as the page's h1 by default; set false for interior pages. */
+  primary?: boolean;
+  align?: "start" | "center";
+  size?: "md" | "lg";
+}
+
+const {
+  eyebrow,
+  headline,
+  lead,
+  primary = true,
+  align = "start",
+  size = "lg",
+} = Astro.props;
+
+const Heading = primary ? "h1" : "h2";
+---
+
+<section class:list={["hero", `hero--${align}`, `hero--${size}`]}>
+  <div class="wrap">
+    {eyebrow && <span class="eyebrow eyebrow--accent">{eyebrow}</span>}
+    <Heading class="hero__headline">{headline}</Heading>
+    {lead && <p class="lead hero__lead">{lead}</p>}
+    <div class="hero__actions">
+      <slot name="actions" />
+    </div>
+    <slot />
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-block: clamp(3rem, 1.8rem + 5vw, 6rem) clamp(2.5rem, 1.5rem + 4vw, 4.5rem);
+    position: relative;
+  }
+
+  /* A hairline that fades out — separates the opener from the page without
+     drawing a hard rule across it. */
+  .hero::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      var(--line-strong),
+      var(--line) 45%,
+      transparent
+    );
+  }
+
+  .hero--center {
+    text-align: center;
+  }
+
+  .hero--center .hero__lead {
+    margin-inline: auto;
+  }
+
+  .hero--center .hero__actions {
+    justify-content: center;
+  }
+
+  .hero__headline {
+    font-size: var(--t-display);
+    max-width: 18ch;
+    letter-spacing: -0.025em;
+  }
+
+  .hero--md .hero__headline {
+    font-size: var(--t-h1);
+    max-width: 22ch;
+  }
+
+  .hero--center .hero__headline {
+    max-width: 24ch;
+    margin-inline: auto;
+  }
+
+  .hero__lead {
+    margin-top: var(--sp-5);
+    max-width: 58ch;
+  }
+
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin-top: var(--sp-6);
+  }
+
+  .hero__actions:empty {
+    display: none;
+  }
+</style>

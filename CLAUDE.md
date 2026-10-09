@@ -9,17 +9,80 @@
 ## What this repo is
 An automated prop-firm trading system with three parts:
 - `backtest/` — Python bar-by-bar backtester + walk-forward eval funnel + prop-firm registry.
-- `pine/` — 8 Pine v6 strategies (one engine, differ by phase/DD model). Spanish "El ___" names.
+- `pine/` — Pine v6 strategies, Spanish "El ___" names. **De v6.9.5-familie is vervangen**
+  door de `v1_0_0`-lijn uit `MEX_FLEET_PACKAGE_2026-08-23` (zie hieronder).
 - `middleware/` — the control plane: one TradingView alert → fan-out across channels.
 
-## The strategies & the edge (validated, 3y OOS)
-- **Real funded edges: GC + ES only** (both halves PF>1). GC (El Tesoro/El Minero) = robust
-  workhorse; ES (El Rey/El Leon) = strongest OOS after the factory.
-- NQ (El Toro/Matador/Dorado/Patron) + YM = **eval-only** (H2≈1.00, no funded edge) — use as
-  variance lottery tickets, never compound funded.
-- **Roll/OpEx/News factory (v6.9.x)**: selectable event-regime filters (avoid quarterly
-  roll/triple-witching, week-after-OpEx, FOMC/NFP) per strategy·type·phase. Mechanism-backed;
-  lifts ES funded H2 1.00→1.16. Fine-grained day×hour cherry-picking is OOS noise (disproven).
+## De vloot (stand 2026-08-23 — vervangt de oude GC+ES-conclusie)
+
+> ⚠️ **De regel "funded edge = alleen GC + ES, NQ/YM eval-only" is INGETROKKEN** (Ferry, 24-08).
+> Die kwam uit de funnel van vóór de pariteitscorrecties. Onder de research-invalidatieregel
+> van de pijplijn vervallen alle rankings die onder een materiële pariteitsfout tot stand
+> kwamen — en dat gold voor die conclusie. Zie `docs/DECISIONS.md`.
+
+Merknaam = vaste strategie-persoonlijkheid. Titel codeert MARKT + CON/AGG/PROD/HF + EOD/INTRA.
+Shorttitle ≤ 10 tekens. **EL TORO is voorbehouden aan evaluatie-accounts.**
+
+| Merk | Markt | Profiel | Shorttitle |
+|---|---|---|---|
+| EL TESORO | MGC | Conservative EOD | `TES-MGC-C` |
+| EL PATRON | MGC | Aggressive EOD | `PAT-MGC-A` |
+| EL REY | MNQ | Production EOD / Intraday | `REY-MNQ-P` / `REY-NQ-PI` |
+| EL MATADOR | MES | Production CVD6 EOD | `MAT-MES-P` |
+| EL LEON | MYM | Production / recovery | `LEO-MYM-P` / `LEO-YM-CI` / `LEO-YM-CE` |
+| EL BANDIDO | MYM | HF / Harvest EOD | `BAN-MYM-H` — **Pine-pariteit open, niet live** |
+| EL PRINCIPE | MNQ | Balanced | research, niet live |
+| EL MINERO | — | gereserveerd | toekomstige HF/commodity |
+
+- ⛔ **Er is op dit moment GEEN geldige rangorde.** De oude volgorde (REY › MATADOR ›
+  TESORO › LEON › PATRON › BANDIDO › PRINCIPE) is **ingetrokken** — die viel al onder de
+  research-invalidatieregel. De vloot-sweep van 25-08 (trap 0→9) leverde een verse meting,
+  maar die is maar voor één engine bruikbaar:
+
+  | Engine | Gemeten payout-$/account-dag (1 contract) | Status |
+  |---|---|---|
+  | MATADOR (MES) | $30,59 — P1 na 85 dagen | ✅ bruikbaar, pariteitspoort dicht (`data_parity`) |
+  | LEON (MYM) | $17,48 — P1 na 118 dagen | ⛔ **ongeldig**, harde poort open |
+  | REY (MNQ) | $13,21 — P1 na 161 dagen | ⛔ **ongeldig**, harde poort open |
+  | PATRON · TESORO · BANDIDO | funderen niet op 1 contract | ⚠️ voorlopig — zie MGC-voorbehoud |
+
+  "Ongeldig" is niet mijn woord maar dat van de pijplijn zelf: `state.py` noemt onvervulde
+  harde poorten de poorten die downstream-cijfers *"invalid rather than merely early"*
+  maken. Behandel LEON en REY dus niet als "indicatief maar ongeveer goed" — als de poort
+  dichtgaat kan het cijfer een andere kant op bewegen. **Rangorde ≠ accounttoewijzing.**
+- ⚠️ **MGC-voorbehoud:** beide MGC-engines zijn gemeten op de **GC-twin** omdat echte
+  MGC-data ontbreekt. Elk MGC-oordeel — ook een afwijzing — staat daarmee onder voorbehoud.
+- 🔴 **De bevroren volle contractgrootte is niet fresh-account-funderbaar** (sweep 25-08,
+  mechanisme-niveau vastgesteld en onafhankelijk van de rangorde). Op volle grootte breken
+  alle engines op trap 7/8; op 1 contract fundeert elke engine wél. Twee bindende muren:
+  de **$2.000 trailing drawdown** van een vers account (een verliesreeks van ~$2.700 breekt
+  hem voordat de buffer de floor vergrendelt) en de **$1.000 DLL** (MATADOR met 6 MES-
+  contracten à $150 stop gaat er met één slechte dag overheen). De `.pine`-bron schaalt
+  contracten in via `derisk`/`deriskPA`; **de bevroren config doet dat niet.** Dat gat is
+  een openstaande ontwerpkeuze, geen bug — zie D-53.
+- **Doel is niet PF maar gebankte payout-$ per bezette account-dag.** Account-mechanica kan
+  de rangorde van twee identieke engines omdraaien.
+- **Correlatie:** MGC is de enige niet-aandelenbucket; MNQ/MES/MYM zijn alle drie
+  index-exposure. Claim geen decorrelatie vóór 20–30 actieve dagen gemeten P&L-correlatie.
+- 🔴 **OOS is forward, niet historisch** (besluit Ferry 25-08, D-18). De drie jaar 2023–2026
+  heten **validatie**. Echte out-of-sample loopt **vooruit vanaf het bevriezen van een config**.
+  ⚠️ **De klok staat sinds 07-09-2026 op nul voor de HELE vloot.** `v3.4.0` (`9a411b0`, D-71)
+  verving vier verspreide datum-inputs door één `validFrom`/`validUntil`-venster in **dertien**
+  scripts — een gedragswijziging, dus de freeze is opnieuw gezet. Eerdere resets: 23-08
+  (pakket) en 25-08 (`skipMonEarly` eruit in vijf scripts). **Elke config-wijziging zet deze
+  klok opnieuw op nul** — dat is de prijs van de regel, en hij is bewust gekozen.
+  **Claim nergens dat deze vloot out-of-sample bewezen is** — niet op de site, niet in een
+  rapport, niet tegenover een prop firm. Ook de sweep-cijfers van 25-08 vallen volledig
+  binnen het validatievenster.
+- Fine-grained day×hour cherry-picking blijft OOS-ruis. Regimes mogen alleen economisch
+  vooraf gedefinieerd. 🔴 **Sinds 08-10 is dat niet langer een aanname maar gemeten** (D-155,
+  echte 3-jaars MGC-data, twee folds, uren gekozen op de eerste jaren en getest op het
+  laatste): de gekozen urenset **overlapt tussen twee folds in slechts 5 van de 11 uren**,
+  één van de twee folds is out-of-sample **negatief**, en de vooraf economisch gedefinieerde
+  vensters verslaan elke uurselectie in **beide** folds terwijl ze in-sample juist slecht
+  oogden. Wie dit opnieuw wil proberen: lees eerst D-155, het is al gedaan.
+- Bevroren parameters per engine: `.claude/skills/strategy-validation-pipeline/references/frozen-engines.md`.
+  **Die zijn bevroren** — wijzigen is een nieuwe onderzoeksronde vanaf trap 1, geen tweak.
 
 ## Middleware = control plane (NOT a copy-trader)
 One alert per strategy → middleware maps strategy→accounts and fans out. Per account YOU set
@@ -38,9 +101,164 @@ firm/asset/volume/channel; not identical mirroring. Channels:
 - Trade Journal `c3e9d05525404849ad484b648c82fd59`
 - Reconciliation `2e674ed0a07f4b2cb77822b9b456f350`
 - Content Hub data source `6cfcd7fa-1e15-439e-b7ab-274a907788f3`
+- 🔴 **Alle drie de id's kloppen, maar geen van de drie wordt gevuld** (alle drie gemeten
+  18-09, D-20): *Fleet Performance* **0 rijen** · *Trade Journal* **0 rijen** ·
+  *Reconciliation* 334 rijen die **alle van 19-08** zijn, één handmatige schrijfactie en
+  daarna niets. **De LifeOS-schrijfkant heeft nooit automatisch gedraaid.**
+  Gevolg: er is **geen geautomatiseerde saldobron** — dat funded-saldo in D-74 een
+  handmatige `verified_amount` is, volgt hieruit en is geen tijdelijke noodgreep.
+  Zie D-03 (de reconciliatie-timer) en D-74.
+### Rolstructuur — CLO, SM, en de ChatGPT CoS (25-08)
+
+Sinds 25-08 zit er boven de MEX Scrum Master een overkoepelende Claude-rol:
+de **Chief LifeOS Officer (CLO)** — zie `.claude/skills/chief-lifeos-officer/SKILL.md`.
+Opstelling:
+
+- **CLO** (Claude, overkoepelend) doet strategisch overzicht + cross-domain
+  coördinatie + rol-governance. Zit **boven** de SM op strategie, **en boven**
+  de ChatGPT CoS voor alles wat bij Ferry terechtkomt. CoS levert input, CLO
+  filtert en bepaalt met een gefundeerde reden wat naar Ferry gaat.
+  **Aanwezig op elk moment dat iets overkoepelend is**, geen wachttijd tot
+  een wekelijkse briefing.
+- **Scrum Master** (Claude, MEX) blijft eigenaar van SPRINT.md, DECISIONS.md,
+  D-nummer-uitgifte, en cross-chat coördinatie voor de dev-rollen. Operationeel.
+  Puur MEX-items lopen van SM direct naar Ferry.
+- **LifeOS Chief of Staff** (ChatGPT, hieronder) blijft eigenaar van de
+  non-MEX LifeOS. Puur non-MEX items lopen van CoS direct naar Ferry.
+  Zodra iets cross-domain is of strategisch effect heeft, loopt CoS's
+  input via CLO — voorvoegsel `📎 CoS → CLO —` in de Approval Queue.
+
+Bij twijfel welke rol: strategisch/cross-domain/rol-vraag → CLO; puur
+MEX-item of dev-coördinatie → SM; puur niet-MEX LifeOS-item → CoS.
+
+### ⚠️ Er is een tweede agent in deze workspace
+
+**LifeOS Chief of Staff** (Operating Spec v1.4, 21-08) beheert de **non-MEX** LifeOS:
+familie, gezondheid, persoonlijke financiën, huis/verbouwing, administratie, ontwikkeling,
+lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
+
+- **Van ons:** trading-executie, strategie, backtesting, MEX-development, middleware,
+  fleet-operations en de MEX technical backlog. *"These remain owned by the Claude Scrum
+  Master / El Presidente."* De CoS mag MEX-state **lezen** voor tijd-, agenda- en
+  cross-domain-afwegingen — **visibility does not imply authority**; hij herprioriteert
+  onze backlog niet en overschrijft ons niet.
+- **Van hen:** niet overnemen. Geen parallel taken-, backlog- of kennissysteem bouwen, en
+  geen non-MEX LifeOS-governance wijzigen zonder afstemming.
+- **Tasks heeft een nieuwe property `Route`** (Zelf/Aannemer/Elektricien/…). Die is voor
+  non-MEX uitvoerder-routing; **laat hem leeg op `🛠️ MEX Dev ·`-taken**.
+- **Approval Queue — ook voor MEX** (besluit Ferry 24-08). Beslissingen die op Ferry
+  wachten gaan in de 📥 Inbox-database (`collection://d0c8311b-b464-4132-b156-836250502aab`)
+  met `Type = Approval`, `Status = Inbox` en titel `🛠️ MEX D-xx — <beslissing>`.
+  De `Notitie` draagt vast: **CONTEXT · AANBEVELING · (ALTERNATIEF) · IMPACT · NA AKKOORD**.
+  Eén wachtrij voor beide agenten. Na verwerking `Status = Verwerkt`.
+  `docs/inbox.md` blijft het kanaal *tussen chats onderling*; de Approval Queue is het
+  kanaal *naar Ferry*. Dump er geen backlog in — alleen wat echt op hem wacht.
+- **Visuele standaard:** navy/sand/gold/azure/rose komt uit de goedgekeurde MEX
+  Traders-mockup en is nu LifeOS-breed. Relevant voor `web/**` (D-17, D-34).
+- Hun hub: *🎩 El Presidente — management & oversight* is de MEX-autoriteitspagina.
+
+- MEX Dev loopt via de bestaande LifeOS-databases — geen aparte structuur:
+  **Tasks** met voorvoegsel `🛠️ MEX Dev ·`, en **Notes** `🛠️ MEX Dev — Architectuur /
+  Besluitregister / Documentatieregister`. Beide gekoppeld aan Area *MEX Traders* en
+  project *MEX PROP TRADER*. Werkwijze in `docs/CHAT_INSTRUCTIE.md`.
 
 ## Dev conventions
-- Develop/commit/push only to branch `claude/mcp-trader-dev-sse-ibl64y`; never push elsewhere
-  without permission. Do not create PRs unless asked.
+- 🔴 **Sinds 27-09 werkt het project volgens `docs/PLAN-2026-09-27-herijking.md`.** Dat
+  document zegt *waarom* een item bestaat; `docs/SPRINT.md` zegt wie het doet en hoe ver
+  het is. Wijkt een item af van het plan, dan wint het plan. Zeven fasen plus twee
+  parallelsporen.
+- 🔴 **De fasering ordent BROKKEN, niet elke losse release** (besluit Ferry 08-10: *"pas het
+  besluit maar aan zodat we ook kleine releases doen"*). Tot 08-10 gold *fasen zijn dwingend*,
+  en dat maakte het werk projectmatig: op 08-10 stonden er **dertien items op het bord die
+  niemand mocht claimen**, puur omdat fase 2 nog liep. Die zijn naar `ARCHIVE.md` gegaan.
+  **De nieuwe regel:** een afgebakende release mag uit een latere fase komen als hij
+  (1) **binnen één dag** af is, (2) **op zichzelf werkt** zonder de rest van die fase,
+  (3) een **acceptatietest heeft die Ferry zelf kan zien**, en (4) **niets uit een eerdere
+  fase omzeilt** — een halve fase-2-laag inhalen via een fase-4-item mag niet. Voldoet hij
+  niet aan alle vier, dan blijft hij wachten. **Een grote brok houdt de volgorde.**
+- 🔴 **Een bevinding wordt pas een borditem als iemand er binnen de week iets mee doet.**
+  Op 08-10 gaf ik vijftien nummers uit en sloot er nul — een bord dat alleen groeit is een
+  archief. Alles wat niet deze week opgepakt wordt gaat naar `docs/inbox.md` en wacht daar.
+  Een D-nummer is een werkopdracht, geen bewaarplaats.
+- **Wat van het bord af ging staat in `docs/ARCHIVE.md`**, met volledige tekst. Geparkeerd
+  is niet weerlegd — het wacht tot het platform staat. Kijk daar vóór je iets opnieuw
+  uitzoekt.
+- **Eén branch: `claude/middleware-setup-guide-afhvtk`.** Develop/commit/push daar en nergens
+  anders zonder toestemming. **Begin elke sessie met `git pull origin claude/middleware-setup-guide-afhvtk`** —
+  het bord, de inbox en dit bestand staan daar en lopen anders achter. De chat-branches zijn
+  **bevroren**: `pine-dev` en `legacy` zijn opgenomen (24-08), `analyses` botst nog (D-43) en
+  `discord-notify` is dood materiaal sinds D-04. Push er niets nieuws heen — werk dat op een
+  eigen branch blijft staan bereikt niemand, en dat is precies hoe de analyses-chat dagen op een
+  ingetrokken aanname doorwerkte. Do not create PRs unless asked. (`claude/mcp-trader-dev-sse-ibl64y`
+  is dood — volledig opgenomen in de werkbranch, liep 186 commits achter.)
+- **Eigenaarstabel** (compleet sinds D-19/D-29, besluit Ferry 25-08):
+  `backtest/**` Backtest Setup · `pine/**` Pine Dev · `middleware/**` Middleware App ·
+  `web/**` Web · **`docs/**` Scrum Master** · **`tools/**` Backtest Setup** ·
+  **`validation/**` Backtest Setup** · `data/propfirms.json` gedeeld.
+  Uitzondering: `tools/gen_pine_firms.py` blijft bij **Pine Dev** — dat bestand genereert Pine.
+  **`validation/` is append-only:** bewijs wordt nooit herschreven als een conclusie vervalt,
+  het krijgt een notitie dat het ingetrokken is. Zo bleef het GC+ES-bewijs bruikbaar als
+  historie toen de conclusie eronder wegviel (23-08).
+  Buiten je eigen map: niet muteren, maar melden in `docs/inbox.md`.
+- 🔴 **Niet elke rol bezit een map, en dat is hoe er één uit beeld raakte.** De
+  **Analyses & Data**-chat heeft geen `xxx/**` maar levert wel het **fleet-startschema**,
+  dat sinds 28-09 de acceptatietest is voor D-96 en D-97. Omdat de eigenaarstabel op
+  mappen is gebouwd, viel die rol uit elke startprompt-ronde — een maand lang leverde hij
+  aan het plan zonder het plan te kennen. **Rollen zonder map staan daarom vanaf 29-09
+  expliciet in de ronde**, ook als het antwoord "niets deze ronde" is. Hun besluitregister
+  draagt het voorvoegsel `A-`.
+- **`middleware/app/main.py`, `router.py` en `brokers/` draaien NIET live.** Het live
+  executiepad is `mex-receiver` (.NET). Verifieer met `systemctl cat` vóór je aanneemt
+  dat een wijziging de executie raakt.
+- **Lees `docs/SPRINT.md` vóór je begint** en claim één item (status `wip` + owner +
+  losse commit) — dat is het slot dat dubbel werk voorkomt. Beslissing die een ander
+  raakt? Eén regel in `docs/DECISIONS.md`.
+- **D-nummers geeft alleen de Scrum Master uit.** Houdt een chat een eigen besluitregister
+  bij, dan krijgt dat een **eigen voorvoegsel** — Analyses & Data gebruikt `A-` (besluit
+  Ferry 28-09). Reikt zo'n besluit buiten het eigen werk, dan krijgt het daarnaast een
+  `D-`-nummer op het bord en verwijzen de twee naar elkaar. Twee registers met hetzelfde
+  voorvoegsel is hoe twee documenten met hetzelfde nummer naar verschillende besluiten gaan
+  wijzen.
+- Alle vastlegging in Notion loopt via de Scrum Master — chats schrijven daar niet zelf.
+- 🔴 **Terugkoppeling naar Ferry draagt geen D-nummers als uitleg** (besluit Ferry 08-10: *"een
+  terugkoppeling in D-xxx nummers zegt mij niets, het moet duidelijker en omschreven worden"*).
+  Een D-nummer is een **vindplaats op het bord**, geen beschrijving. Schrijf dus eerst **wat er
+  gebeurt, in gewone taal** — wat er kapot is, wat het kost, wat hij moet doen — en zet het
+  nummer hooguit achteraan tussen haakjes voor wie het wil naslaan. Een zin als *"D-146 blokkeert
+  D-127"* is voor de schrijver geschreven, niet voor de lezer. Geldt voor chat, de Approval Queue
+  en LifeOS-taken; **tussen chats onderling blijven nummers juist wél de kortste weg.**
+- 🔴 **Geen voorbarige conclusies — doorvragen in plaats van invullen** (besluit Ferry 09-10:
+  *"trekt geen voorbarige conclusies en blijf doorvragen ipv dat ik moet coorigeren"*). Ontstond bij
+  zijn hedge-vraag: ik rekende hem door op **eval**-accounts terwijl hij **funded** bedoelde, en die
+  aanname — dat de verliezende kant wegwerpbaar is — heb ik nooit getoetst. De rekensom was intern
+  consistent en antwoordde op de verkeerde vraag, en dat is de gevaarlijkste vorm: **een goed
+  onderbouwd antwoord op iets wat niet gevraagd is leest als een antwoord.** Dus: zodra een vraag
+  meer dan één redelijke lezing heeft, **eerst vragen welke** — ook als één lezing veel
+  waarschijnlijker lijkt, en ook als er al gemeten materiaal klaarligt dat op die lezing past.
+  Meten is geen vervanging voor begrijpen wat er gevraagd is. Dit geldt vóór de meting, niet erna:
+  een meting op de verkeerde lezing kost meer dan de vraag.
+- 🔴 **Geen aannames over Ferry's dag, tempo of beschikbaarheid** (besluit Ferry 08-10: *"stop
+  maar met bepalen of ik verder ga of niet of welke tijd van de dag het is"*). Schrijf geen
+  *"als je vanavond nog iets doet"*, *"morgen staat er dan"* of *"doe dit met een vlakke
+  positie"* tenzij hij er zelf naar vraagt of er een gemeten reden is. Hij bepaalt wanneer hij
+  werkt. **Lever de lijst, niet de planning.** Vraagt hij wat er van hem nodig is, dan is het
+  antwoord een korte opsomming van concrete handelingen — geen context, geen volgorde-advies,
+  geen vooruitblik.
+- **Wat er live draait staat in `docs/runtime-snapshot.md`** — checksum en regelaantal van
+  `Program.cs`, de mtime van de binary, wanneer de service startte, en welke env-namen gezet
+  zijn (namen, nooit waarden). Ververst elk uur door `mex-runtime-snapshot.timer`. 🔴 **Maar dat bestand staat er sinds 07-10 nog steeds niet, op geen enkele branch (D-137):**
+  de timer draait inmiddels wel, maar de commit-poort in het script is `git diff --quiet` op een
+  **niet-getrackt** bestand en die kan per constructie nooit opengaan. Tot D-137 gefixt is bestaat
+  de snapshot **alleen op de VPS** — zichtbaar in het fan-out-venster van de cockpit, niet in de
+  repo. Vraag hem daar op, of vraag Ferry. De oude heuristiek *"is de tabel oud, dan draait de
+  timer niet"* geldt pas weer als het bestand daadwerkelijk aankomt.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
+- 🔴 **Een TradingView-strategie-export is net zo gevoelig als `.env`: WIS DE `Properties`-TAB
+  VÓÓR JE HEM DEELT OF UPLOADT.** De export schrijft **elke** `input.string`-waarde in platte
+  tekst weg, ook die met `display=display.none` (vastgesteld 08-10 op een echte export: het
+  PMT-token en het account-ID stonden er leesbaar in; het middleware-secret is sindsdien uit
+  alle dertien scripts verwijderd). **Het PMT-token en het account-ID kunnen er NIET uit**
+  zolang `mex-receiver` geen token-env kent en `multiple_accounts[0]` uit de Pine-payload
+  leest — weghalen laat een order zónder token vertrekken. Dit is dus een permanente
+  handmatige regel tot de middleware die payload zelf bouwt uit de config-store.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

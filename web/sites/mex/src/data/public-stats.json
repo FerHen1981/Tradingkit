@@ -1,0 +1,25 @@
+{
+  "sample": true,
+  "_comment": "PLACEHOLDER — er staat GEEN enkel MEX-cijfer in dit bestand, en dat is opzet. Elk getal is null en elke lijst leeg; de pagina rendert daarop een expliciete leegstand. Wordt overschreven door de publicatietaak die Middleware App bezit (SPRINT D-17 / D-74). Reden dat hier geen illustratieve cijfers meer staan (D-129): de vorige vulling droeg GC/ES als 'Funded' en NQ als 'Evaluatie' — de regel die Ferry 24-08 heeft ingetrokken — plus een tegel 'Live 36 mnd' over 2023-2026, terwijl die reeks volgens D-18/optie B validatie heet en de OOS-klok sinds 07-09-2026 op nul staat. Een weerlegde conclusie met een actueel label is erger dan een lege pagina.",
+  "_shape": {
+    "markets": "symbol · label · unit · net_units · trades · win_rate · r_total · profit_factor · slippage_ticks · status",
+    "equity": "{ t: 'YYYY-MM', v: <cumulatieve R> }",
+    "status": "het type rekening waarop de markt draait; NOOIT een oordeel over de edge",
+    "regel_bij_sample_true": "elk headline-getal null, elke lijst leeg", "regel_bij_sample_false": "de canonieke poorten uit middleware/app/mex_units/roles.py lopen over alles: een AANTAL mag evals meenemen (Ferry 07-10), een BEDRAG nooit, en eval-tellers per status horen in for_public_evals() en niet hier", "grendel": "web/scripts/check_public_stats.py, in make check"
+  },
+  "generated_at": "2026-10-06T00:00:00Z",
+  "period": { "from": "", "to": "" },
+  "delay": "T+1",
+  "headline": {
+    "trades": null,
+    "win_rate": null,
+    "profit_factor": null,
+    "r_total": null,
+    "expectancy_r": null,
+    "months_live": null,
+    "avg_slippage_ticks": null
+  },
+  "markets": [],
+  "equity_unit": "R",
+  "equity": []
+}

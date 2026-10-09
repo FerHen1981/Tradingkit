@@ -1,0 +1,86 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT EMA Trend v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  The trend filter the strategy uses: longs only above the EMA, shorts only below it.
+//  Default follows EL REY MNQ PROD EOD: EMA 200 on close.
+//
+//  A second EMA is available for context only — the strategy filters on the first one.
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its calculation for inspection.
+// ============================================================================================
+indicator("MPT EMA Trend v1.0", "MPT EMA", overlay=true)
+
+// === INPUTS =================================================================
+var string GROUP_CALC = "1 · CALCULATION"
+var string GROUP_TBL  = "2 · TABLE"
+var string GROUP_THEME = "3 · THEME"
+
+emaLen  = input.int(200, "Filter EMA", minval=1, inline="e1", group=GROUP_CALC,
+     tooltip="The length the strategy filters on.")
+emaSrc  = input.source(close, "on", inline="e1", group=GROUP_CALC)
+useEma2 = input.bool(false, "Context EMA", inline="e2", group=GROUP_CALC)
+ema2Len = input.int(50, "length", minval=1, inline="e2", group=GROUP_CALC,
+     tooltip="Drawn for context only. The strategy does not read it.")
+colorBars = input.bool(false, "Colour bars by side", group=GROUP_CALC, display=display.none)
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+
+// === CALCULATION (mirrors the strategy) =====================================
+float emaVal  = ta.ema(emaSrc, emaLen)
+float ema2Val = ta.ema(emaSrc, ema2Len)
+bool  aboveEma = close > emaVal
+bool  belowEma = close < emaVal
+float distTicks = na(emaVal) ? na : (close - emaVal) / syminfo.mintick
+
+// === PLOT ===================================================================
+plot(emaVal, "Filter EMA", color=aboveEma ? POS : NEG, linewidth=2)
+plot(useEma2 ? ema2Val : na, "Context EMA", color=pMuted, linewidth=1)
+barcolor(colorBars ? (aboveEma ? POS : NEG) : na, title="Side")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 3, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "EMA " + str.tostring(emaLen), text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, na(emaVal) ? "—" : str.tostring(emaVal, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "Distance", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 1, na(distTicks) ? "—" : str.tostring(distTicks, "#") + "t", text_color=distTicks >= 0 ? POS : NEG, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Side allowed", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 2, aboveEma ? "LONG" : belowEma ? "SHORT" : "—", text_color=aboveEma or belowEma ? color.white : pText, bgcolor=aboveEma ? color.new(POS, 15) : belowEma ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)

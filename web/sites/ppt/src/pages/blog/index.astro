@@ -1,0 +1,55 @@
+---
+import Base from "../../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import PostCard from "@mex/brand/components/PostCard.astro";
+
+import { allPosts, postPath, readingTime } from "../../lib/posts";
+
+const posts = await allPosts();
+
+/** Group by year so a growing archive stays navigable without pagination. */
+const byYear = posts.reduce<Map<number, typeof posts>>((acc, post) => {
+  const year = post.data.date.getFullYear();
+  acc.set(year, [...(acc.get(year) ?? []), post]);
+  return acc;
+}, new Map());
+
+const years = [...byYear.keys()].sort((a, b) => b - a);
+---
+
+<Base
+  title="Archief"
+  description="Alle posts van Pips & Palm Trees, op datum."
+>
+  <Hero
+    eyebrow="Archief"
+    headline="Alles, op datum"
+    lead={`${posts.length} ${posts.length === 1 ? "post" : "posts"} over handelen, verhuizen en het papierwerk daartussenin.`}
+    size="md"
+  />
+
+  {years.map((year) => (
+    <Section title={String(year)} as="h2">
+      <div class="feed">
+        {byYear.get(year)!.map((post) => (
+          <PostCard
+            title={post.data.title}
+            href={postPath(post)}
+            summary={post.data.summary}
+            date={post.data.date}
+            tags={[...post.data.tags]}
+            series={post.data.series}
+            readingTime={readingTime(post.body)}
+          />
+        ))}
+      </div>
+    </Section>
+  ))}
+</Base>
+
+<style>
+  .feed {
+    border-top: 1px solid var(--line);
+  }
+</style>

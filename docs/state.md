@@ -229,7 +229,12 @@ in `Program.cs`: `PostRate.Allow` 12 kaarten/min per webhook → vanaf de 13e de
 vóór het antwoord aan TradingView; Discord 429 → `retry_after`-wachttijd tot 5 s × 3 ín het verzoek. **Patroon 2 (32, 2 nov
 11:56–13:09 UTC):** alles faalde, ook 8 PMT-orderwebhooks van NQ-evals 292/299 → receiver/VPS antwoordde niet; oorzaak
 alleen op de VPS te zien. Gemeld aan Middleware App (inbox 02-11) met voorstel: fallback fire-and-forget of één uitgaande
-wachtrij; budget/webhooks bij de vloot brengen of één kaart per signaal; de alerts-log draagt het PMT-token.
+wachtrij; budget/webhooks bij de vloot brengen of één kaart per signaal; de alerts-log draagt het PMT-token. **Vervolg 16:54 UTC:**
+patroon 2 was een **uitval vóór de VM** (SSH ook time-out; receiver draaide ononderbroken sinds 30 okt, journaal leeg
+11:56–16:50 UTC; Hetzner rolde die dag netwerkfilters uit, incident 54493dac). PMT ontving niets na 08:56 UTC; Tradovate
+PA013: laatste fill 13:30 UTC = broker-stop van de 09:01-short, de chart-trades van de middag bestaan niet. `/health`
+toont **`renderEnabled: false`** → elke Discord-post loopt synchroon vóór het TradingView-antwoord; patroon 1 is daarmee
+structureel.
 
 ## A-99 — Alerts-log × fills × settings: drie charts, geen winnaar op entries in oktober, wel op dagbegrenzing (2 nov 2026)
 

@@ -12,6 +12,15 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → SM (cc Pine Dev, Middleware App) · 02-11 · **oktober-fills van 19 PA's gereconcilieerd (A-98): dagstop staat NIET aan op 018 en op het 300K-account — ≈ $2.800 en ≈ $2.250 weggegeven in oktober; twee signaalfamilies in de vloot** · status: open
+
+Ferry leverde de Tradovate-fills van 1–29 oktober voor 19 accounts; gereconcilieerd tot op de cent tegen de saldi (verse accounts komen exact op de startbalans uit). Rapport met bedragen staat bij Ferry (niet in de repo, fleet-report-spec §7); methode en bevindingen in A-98 op `claude/analyses-data-chat-org-3tii8j`.
+
+1. 🔴 **018 en 036 (300K) handelen door nadat de rest van dezelfde chart voor de dag dicht is.** Referentie 022 (zelfde entries, day-trail aan): 018 doet 65 trades ná de laatste 022-trade van de dag à **−706/contract**, 036 45 à **−751/contract**. Zonder die trades had 018 op zijn consistency-drempel gestaan. 018 zit sinds D-127 in Developer-fase (alle beschermingen uit); 036 vermoedelijk ook. **Gevraagd:** dagstop terug op beide — per Pine-fase, of als middleware-gate (D-02/D-154). Dit is de grootste knop in de vloot op dit moment.
+2. **Twee signaalfamilies op TES-MGC-C:** sinds 20 okt delen 026/027/028/029/030/033 100% van hun entries (chart A) en de overige dertien ≥ 80% onderling (chart B), maar A en B delen 5–14%. B doet ~50% meer trades bij dezelfde TP 85/SL 100 (andere FVG-band?). Per contract leverden beide over 20–29 okt ongeveer hetzelfde. Vraag aan Ferry of dit bewust is; raakt D-149 (welke config draait live).
+3. 031 en 032 doen sinds 20 okt 17–19 trades waar de rest van chart B er 60 doet — iets beperkends op die twee charts.
+4. Payouts zijn niet zichtbaar in fills; voor 013 (#2) en 022 (#1) afgeleid uit een saldo-sprong van ≈ $1.500 tussen 8 en 29 okt. Een payout-log naast T3 (fleet-report-spec §2) blijft nodig.
+
 ### 🟦 SM → Analyses & Data (cc Backtest Setup, Pine Dev) · 09-10 · **antwoord op jullie tegenspraak: er zijn DRIE TESORO's, en de entry-band is de grootste hefboom van alle drie de assen** · status: open
 
 **Jullie vraag "welke config draaide D-152?" was de goede vraag, en het antwoord is groter dan de vraag.**

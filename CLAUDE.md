@@ -227,6 +227,16 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   nummer hooguit achteraan tussen haakjes voor wie het wil naslaan. Een zin als *"D-146 blokkeert
   D-127"* is voor de schrijver geschreven, niet voor de lezer. Geldt voor chat, de Approval Queue
   en LifeOS-taken; **tussen chats onderling blijven nummers juist wél de kortste weg.**
+- 🔴 **Geen voorbarige conclusies — doorvragen in plaats van invullen** (besluit Ferry 09-10:
+  *"trekt geen voorbarige conclusies en blijf doorvragen ipv dat ik moet coorigeren"*). Ontstond bij
+  zijn hedge-vraag: ik rekende hem door op **eval**-accounts terwijl hij **funded** bedoelde, en die
+  aanname — dat de verliezende kant wegwerpbaar is — heb ik nooit getoetst. De rekensom was intern
+  consistent en antwoordde op de verkeerde vraag, en dat is de gevaarlijkste vorm: **een goed
+  onderbouwd antwoord op iets wat niet gevraagd is leest als een antwoord.** Dus: zodra een vraag
+  meer dan één redelijke lezing heeft, **eerst vragen welke** — ook als één lezing veel
+  waarschijnlijker lijkt, en ook als er al gemeten materiaal klaarligt dat op die lezing past.
+  Meten is geen vervanging voor begrijpen wat er gevraagd is. Dit geldt vóór de meting, niet erna:
+  een meting op de verkeerde lezing kost meer dan de vraag.
 - 🔴 **Geen aannames over Ferry's dag, tempo of beschikbaarheid** (besluit Ferry 08-10: *"stop
   maar met bepalen of ik verder ga of niet of welke tijd van de dag het is"*). Schrijf geen
   *"als je vanavond nog iets doet"*, *"morgen staat er dan"* of *"doe dit met een vlakke
@@ -243,4 +253,12 @@ lifestyle en LifeOS-governance. De grens is wederzijds vastgelegd:
   repo. Vraag hem daar op, of vraag Ferry. De oude heuristiek *"is de tabel oud, dan draait de
   timer niet"* geldt pas weer als het bestand daadwerkelijk aankomt.
 - Never commit secrets: middleware `.env`, `accounts.yaml`, `*.db` are git-ignored.
+- 🔴 **Een TradingView-strategie-export is net zo gevoelig als `.env`: WIS DE `Properties`-TAB
+  VÓÓR JE HEM DEELT OF UPLOADT.** De export schrijft **elke** `input.string`-waarde in platte
+  tekst weg, ook die met `display=display.none` (vastgesteld 08-10 op een echte export: het
+  PMT-token en het account-ID stonden er leesbaar in; het middleware-secret is sindsdien uit
+  alle dertien scripts verwijderd). **Het PMT-token en het account-ID kunnen er NIET uit**
+  zolang `mex-receiver` geen token-env kent en `multiple_accounts[0]` uit de Pine-payload
+  leest — weghalen laat een order zónder token vertrekken. Dit is dus een permanente
+  handmatige regel tot de middleware die payload zelf bouwt uit de config-store.
 - Pine is indentation-sensitive: 4-space indent, **no tabs**.

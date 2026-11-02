@@ -233,12 +233,12 @@ repo** (fleet-report-spec §7), dus hier alleen methode en bevindingen.
 
 **Bevindingen.** (1) **Twee signaalfamilies op één strategie:** sinds 20 okt delen zes accounts (chart A) 100% van hun
 entries en delen de andere dertien (chart B) ≥ 80% onderling, maar A en B delen slechts 5–14%. B doet ~50% meer trades
-op dezelfde TP 85/SL 100; per contract leverden beide ~hetzelfde over 20–29 okt. (2) 🔴 **Op 018 en op het 300K-account
-staat de dagstop niet aan:** beide handelen door nadat de referentie-account (022, zelfde entries, day-trail aan) voor de
-dag dicht is. Die extra trades: 018 65 trades ná de laatste 022-trade à **−706/contract**, 300K 45 à **−751/contract** —
-in oktober ≈ $2.800 resp. ≈ $2.250. 018 staat sinds D-127 in Developer-fase (alle beschermingen uit); zonder die trades
-had 018 op de consistency-drempel gestaan. Zelfde mechanisme als A-89 (rest van de dag na een vroege plus), nu op echte
-fills. (3) Oktober was een goede maand: 68% winstdagen (engine 57% / 60%), opnieuw Asia-zwaar (028: Asia +987/ct,
+op dezelfde TP 85/SL 100; per contract leverden beide ~hetzelfde over 20–29 okt. (2) 🔴→✅ **018 en het 300K-account
+handelden van 1 t/m 19 okt door nadat de referentie-account (022, zelfde entries, day-trail aan) voor de dag dicht was**
+— 018 57 trades ná de laatste 022-trade à **−676/contract**, 300K 45 à **−751/contract**, ≈ $2.700 resp. ≈ $2.250 — en
+**sinds 20 okt niet meer** (alerts van 013/018/022 op 20 okt opnieuw gezet; 018 daarna 8 zulke trades à −30/ct, 036 nul).
+Correctie 2 nov op de eerste melding "dagstop staat niet aan": dat was waar tot 19 okt, niet meer. Zonder die trades had
+018 nu boven zijn consistency-drempel gestaan. Zelfde mechanisme als A-89 (rest van de dag na een vroege plus). (3) Oktober was een goede maand: 68% winstdagen (engine 57% / 60%), opnieuw Asia-zwaar (028: Asia +987/ct,
 US −79, 05–06 −337) — géén vensterknop (D-155/A-97). (4) 031/032 doen sinds 20 okt 17–19 trades waar de rest van B er 60
 doet: iets beperkends op die twee charts. (5) 018 draait qty 4 op ruimte < 6.000 (advies A-90/A-91: 3). (6) Payouts zijn
 niet zichtbaar in fills; voor 013 (#2) en 022 (#1) afgeleid uit een saldo-sprong van ≈ 1.500 tussen 8 en 29 okt.
@@ -251,8 +251,9 @@ helft; 018 is uitsluitend door consistency geblokkeerd (+2.504 tot de lat; daarn
 de zeven qty-1-accounts en het 300K liggen op oktober-tempo 2–7 maanden weg. Reconciliatie-scripts in de scratchpad
 (`octfills/parse_fills.py`, `recon.py`, `project.py`).
 
-**Voor SM / Pine Dev / Middleware App:** (2) is actionable — dagstop terug op 018 en 036 (Pine-fase of middleware-gate,
-D-02/D-127/D-154). (1) en (4) zijn vragen aan Ferry: bewust twee charts, en wat remt 031/032?
+**Voor SM / Pine Dev / Middleware App:** (2) is sinds 20 okt opgelost en alleen nog verklaring voor 018's achterstand.
+(1) en (4) zijn vragen aan Ferry: bewust twee charts, en wat remt 031/032? Ferry bevestigde 2 nov: 022 kreeg $1.416 op
+26 okt — exact het gat van de reconciliatie. Vervolg in A-99 (alerts-log × settings).
 
 ## A-97 — Sessievensters × dagstops samen gemeten op de doelmeetlat; trap-1-audit van de pijplijn geleverd (8 okt 2026)
 

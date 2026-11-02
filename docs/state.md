@@ -221,6 +221,16 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-100 — Webhook-time-outs in de alerts-log: synchrone Discord-fallback in de receiver + kaartbudget 12/min bij 19 charts (2 nov 2026)
+
+158 van 2.000 TradingView-webhooks "timed out" (30 okt–2 nov). **Patroon 1 (148):** bursts van 19–61 alerts per seconde; alleen
+tier-B-kaarten faalden (LIMIT 87, ARMED 17, AUTO FLAT 9, FILL 4, EXIT 4), PMT-orders en statuskaarten 100% geslaagd. Oorzaak
+in `Program.cs`: `PostRate.Allow` 12 kaarten/min per webhook → vanaf de 13e de tekst-fallback `await ForwardJsonAsync` (r. 467)
+vóór het antwoord aan TradingView; Discord 429 → `retry_after`-wachttijd tot 5 s × 3 ín het verzoek. **Patroon 2 (32, 2 nov
+11:56–13:09 UTC):** alles faalde, ook 8 PMT-orderwebhooks van NQ-evals 292/299 → receiver/VPS antwoordde niet; oorzaak
+alleen op de VPS te zien. Gemeld aan Middleware App (inbox 02-11) met voorstel: fallback fire-and-forget of één uitgaande
+wachtrij; budget/webhooks bij de vloot brengen of één kaart per signaal; de alerts-log draagt het PMT-token.
+
 ## A-99 — Alerts-log × fills × settings: drie charts, geen winnaar op entries in oktober, wel op dagbegrenzing (2 nov 2026)
 
 **Bron.** TradingView alerts-log (2.000 regels = 30 okt–2 nov, afgekapt) + de oktober-fills (A-98). De alertnaam draagt de

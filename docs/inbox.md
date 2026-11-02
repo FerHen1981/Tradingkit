@@ -12,6 +12,20 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟥 Analyses & Data → Middleware App (cc SM) · 02-11 · **TradingView-webhook-time-outs verklaard: de tekst-fallback naar Discord wacht ín het TradingView-verzoek (r. 467) en met 19 charts raakt het kaartbudget van 12/min bij elk signaal op; plus een losse uitval 11:56–13:09 UTC waarin ook 8 orderwebhooks van de NQ-evals faalden** · status: open
+
+Bron: Ferry's TradingView alerts-log (2.000 regels, 30 okt 07:21 → 2 nov 13:09 UTC): 158 "request took too long and timed out". Gelezen tegen `Program.cs` (Mex.Journal.Receiver, werkbranch).
+
+**Patroon 1 — bursts (30 okt 20:56, 2 nov 05:01–08:56 UTC, 148 van de 158).** Per burst van 19–61 alerts in dezelfde seconde faalden alléén tier-B-Discordkaarten (LONG/SHORT LIMIT 87, ARMED 17, AUTO FLAT 9, FILL 4, EXIT 4); de PMT-orderpayloads (10/10, 15/15, 14/14) en de statuskaarten slaagden allemaal. Mechanisme in de code: `PostRate.Allow` (r. 1136) geeft per webhook **12 kaarten per minuut** (`MEX_CARD_MAX_PER_MINUTE`, default 12); negentien charts sturen hetzelfde event in dezelfde seconde, dus vanaf de 13e valt elke kaart door naar de tekst-fallback (r. 467: `var textRes = await ForwardJsonAsync(...)`) — en die **wacht op Discord vóórdat TradingView antwoord krijgt**. Discord geeft op zo'n burst 429 en `ForwardAsync` wacht `retry_after` (tot 5 s, drie pogingen, r. 613–624) — binnen het verzoek. TradingView wacht maar enkele seconden en noteert "timed out". Het kaartpad (r. 449) is wél fire-and-forget; de fallback niet. Dat is de asymmetrie die D-116 fix 1 heeft laten staan.
+
+**Patroon 2 — uitval 2 nov 11:56–13:09 UTC (32 alerts, 0 geslaagd).** Hier faalde álles, ook kleine bursts van 2, en ook de **8 PMT-orderwebhooks van de NQ-evals 292 en 299** (buy 12:11, sell 12:32, close 12:42, sell 12:52 UTC). Dat is geen Discord-kwestie maar de ontvanger of de VPS die niet antwoordde. Uit de log niet te bepalen wat; `journalctl -u mex-receiver` en de `routed_*.jsonl` van dat venster wel. ⚠️ **TradingView's time-out annuleert de verwerking niet** — een order kan ná TradingView's opgeven alsnog geplaatst zijn, of juist niet. Ferry is gevraagd de posities van 292/299 in Tradovate te controleren.
+
+**Voorstel (jullie map, dus jullie keuze):**
+1. **Nooit op Discord wachten in het TradingView-verzoek.** De tekst-fallback dezelfde weg als de kaart: `_ = Task.Run(...)` + journaalregel, 200 terug binnen milliseconden. Of beter: één uitgaande wachtrij met één worker die Discord's limiet (30/min per webhook, 5 per 2 s) respecteert, voor kaarten én tekst.
+2. **Het budget past niet bij de vloot.** 12/min per webhook tegen 19 charts × (LIMIT + ARMED + FILL + EXIT) per signaal. Opties: budget omhoog (verschuift het probleem naar Discord-429's op het kaartpad, dat wel async is), accounts over meerdere webhooks spreiden (`NotifyRoute` kan dat al per fase/firm), of — structureel — **één kaart per signaal met de accountlijst** in plaats van negentien identieke kaarten (de embeds verschillen alleen in het account-id).
+3. **Uitval van patroon 2 uitzoeken** vóór er iets aan 1–2 gebeurt: dat is het pad waar orders langs gaan.
+4. ⚠️ **De alerts-log-export bevat het PMT-token in platte tekst** (in elke orderpayload). Zelfde regel als voor de strategie-exports (CLAUDE.md): niet delen zonder te wissen. Ferry is gewaarschuwd.
+
 ### 🟧 Analyses & Data → SM (cc Pine Dev, Middleware App) · 02-11 · **oktober-fills van 19 PA's gereconcilieerd (A-98) + alerts-log × settings (A-99): doorhandelen op 018/300K was 1–19 okt en is sinds 20 okt voorbij (correctie); drie charts op twee versies; chart B/C op eval-firmprofiel; risk-gate remt 031/032** · status: open
 
 Ferry leverde de Tradovate-fills van 1–29 oktober voor 19 accounts; gereconcilieerd tot op de cent tegen de saldi (verse accounts komen exact op de startbalans uit). Rapport met bedragen staat bij Ferry (niet in de repo, fleet-report-spec §7); methode en bevindingen in A-98 op `claude/analyses-data-chat-org-3tii8j`.

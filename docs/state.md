@@ -221,6 +221,35 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-99 — Alerts-log × fills × settings: drie charts, geen winnaar op entries in oktober, wel op dagbegrenzing (2 nov 2026)
+
+**Bron.** TradingView alerts-log (2.000 regels = 30 okt–2 nov, afgekapt) + de oktober-fills (A-98). De alertnaam draagt de
+inputs in declaratievolgorde; drie configuraties: **chart A** `TES-MGC-C` **v3.2.0** (026–030, 033: All sessions, FVG
+8–23, venster 4, proxy streak 5, 150/50/300 per ct, Funded, `apex_50k_legacy_pa`), **chart B** `EL TESORO v3.10` All
+sessions (013, 018, 022, 031, 032, 034, 037–041: **FVG 4–11, venster 1, TradingView-delta streak 3**, 150/50/300 per ct,
+Developer óf Funded, **`apex_50k_intraday_eval`**), **chart C** v3.10 Custom-regime (035, 036: zelfde entries als B,
+`apex_50k_eod_pa`; 036 op **100/33/200 per ct**). Alle drie TP 85/SL 100.
+
+**Bevindingen.** (1) Chart A en B leverden **2–19 okt per contract dezelfde dag-P&L** — de entry-definities liepen pas
+vanaf 20 okt uiteen (alerts 013/018/022 opnieuw gezet, accountstart `261020`). "Hele maand dezelfde settings" klopt voor
+de charts, niet voor wat de accounts kregen. (2) Over 20–30 okt (9 dagen) per contract: A +718–727 · B +640–940 · C
++868–900; verschil $5–25/dag bij een fout van ≈ $65/dag → **geen winnaar op entries**. (3) Wél meetbaar: **cap** — 036
+op 200/ct: 9/9 winstdagen, slechtste dag +67, zelfde netto/ct als de rest; **halt** — 031/032 stoppen elke dag na 1–2
+avondtrades waar 034 met dezelfde zichtbare inputs doorgaat; de onzichtbare schakelaar is de *Daily risk-gate*
+(150/10/100 staat in de naam) → kostte ≈ $400/ct t.o.v. 022; **dagstop** — 018/036 tot 19 okt (A-98, ≈ $2.700/$2.250);
+**qty** — 018 op 4 per ct minder (+640) dan 013 op 3 (+738) en 022 op 2 (+755), zelfde entries. (4) Chart B/C draaien
+op eval-/eod-firmprofiel i.p.v. legacy-PA; voor Funded-accounts rekent de accountlaag dan verkeerd. (5) 158 van 2.000
+Discord-webhooks time-out (14 fill/exit-kaarten), golven over 19 charts tegelijk — rate-limiting, geen orders.
+(6) 037 meldt "PAYOUT 1 READY" op de script-balans (start 1 jan) terwijl Apex nog +890 nodig heeft — D-146-scenario.
+
+**Oordeel.** Versie: v3.2.0 vs v3.10 op de fills niet te onderscheiden; v3.10/v3.11 dragen de payout-correcties en de
+dagstops — reden om A over te zetten, geen prestatieverschil (OOS-klok op nul). Entries: oktober beslist het niet; over
+drie jaar is alleen A's definitie gemeten (A-88, pariteit 92%), B's (4–11/1/delta) nooit. **De onderzoeksdata van de
+vorige ronde is niet meer in deze sessie (container vernieuwd)** — met het 3-jaars MGC-bestand opnieuw geüpload meet ik
+4–11/venster 1 op de doelmeetlat. Tot dan: 8–23/venster 4. Dagbegrenzing: day-trail aan, 150/50/300 per ct; voor
+dag-gelijkmatigheid 100/33/200; zodra v3.11 op de charts staat de stops uit A-92/A-97. Rapport bij Ferry:
+`alerts_vs_fills_settings_vergelijking.md`.
+
 ## A-98 — Oktober-fills (19 PA's, 1–29 okt): payout-beeld per account en twee lekken in de vloot (2 nov 2026)
 
 **Opzet.** 20 Tradovate fills-exports (4.901 fills, 19 accounts) tot round trips en dag-P&L per account (FIFO, commissie

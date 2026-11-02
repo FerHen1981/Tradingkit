@@ -234,7 +234,11 @@ patroon 2 was een **uitval vóór de VM** (SSH ook time-out; receiver draaide on
 11:56–16:50 UTC; Hetzner rolde die dag netwerkfilters uit, incident 54493dac). PMT ontving niets na 08:56 UTC; Tradovate
 PA013: laatste fill 13:30 UTC = broker-stop van de 09:01-short, de chart-trades van de middag bestaan niet. `/health`
 toont **`renderEnabled: false`** → elke Discord-post loopt synchroon vóór het TradingView-antwoord; patroon 1 is daarmee
-structureel.
+structureel. **Correctie van de data (vraag Ferry):** per account het verschil tussen chart en broker op 2 nov bepaald uit de
+alert-kaarten (fantoomtrades na 14:11 UTC: chart te hoog met $84–1.008 op MGC, te laag met $1.597/$5.540 op de NQ-evals;
+chart A draagt nog een open fantoom-long van 14:38 UTC) en het payout-beeld (A-98) bijgewerkt met de echte 2-nov-trades
+(broker-stop 13:30 UTC op de stopprijs, −100 ticks/ct, Tradovate 013 als meetpunt). Enige te corrigeren bron: de
+chart-interne balansen via de Live-sync-input; Tradovate en het receiver-journaal kloppen al.
 
 ## A-99 — Alerts-log × fills × settings: drie charts, geen winnaar op entries in oktober, wel op dagbegrenzing (2 nov 2026)
 

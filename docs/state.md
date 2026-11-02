@@ -3,7 +3,7 @@
 Read this first in every chat. Update it last. If it is stale, nothing below it
 can be trusted.
 
-_Last updated: 2026-10-08 (Analyses & Data chat)_
+_Last updated: 2026-11-02 (Analyses & Data chat)_
 
 > **Het doel (besluit Ferry 2 okt 2026):** continuïteit op dagbasis, en per account het maximum
 > van elke payout-trede in zo kort mogelijke tijd. Niet maximale winst op de strategie. Elke
@@ -220,6 +220,39 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 2.485) → 1, qty 2 pas bij 53.100 · 034/035 (vers, 2.395) → 1 · 026/027/030/031/032 (vers, 1.565–1.765) → 1 · 028/029/033
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
+
+## A-98 — Oktober-fills (19 PA's, 1–29 okt): payout-beeld per account en twee lekken in de vloot (2 nov 2026)
+
+**Opzet.** 20 Tradovate fills-exports (4.901 fills, 19 accounts) tot round trips en dag-P&L per account (FIFO, commissie
+$0,67/contract/zijde), gereconcilieerd tegen de Tradovate-saldi: de vijf verse accounts en het 300K komen exact op de
+startbalans uit (tot op de cent) en 026 op het saldo van 8 okt uit A-96 — de fills zijn compleet. Payout-regels uit de
+registry (`apex_50k_legacy_pa`: safety net 52.600 ná payout voor #1–3, min 500, max 2.000 t/m #5, vanaf #6 geen maximum
+en 100%, 8 dagen met fills + 5 dagen ≥ $50, consistency beste dag ÷ (saldo − start) — zoals Apex het op 7 okt voor 018
+toonde). Rapport met bedragen bij Ferry (`fills_oktober_2026_payout_beeld.md` + twee CSV's); **bedragen horen niet in de
+repo** (fleet-report-spec §7), dus hier alleen methode en bevindingen.
+
+**Bevindingen.** (1) **Twee signaalfamilies op één strategie:** sinds 20 okt delen zes accounts (chart A) 100% van hun
+entries en delen de andere dertien (chart B) ≥ 80% onderling, maar A en B delen slechts 5–14%. B doet ~50% meer trades
+op dezelfde TP 85/SL 100; per contract leverden beide ~hetzelfde over 20–29 okt. (2) 🔴 **Op 018 en op het 300K-account
+staat de dagstop niet aan:** beide handelen door nadat de referentie-account (022, zelfde entries, day-trail aan) voor de
+dag dicht is. Die extra trades: 018 65 trades ná de laatste 022-trade à **−706/contract**, 300K 45 à **−751/contract** —
+in oktober ≈ $2.800 resp. ≈ $2.250. 018 staat sinds D-127 in Developer-fase (alle beschermingen uit); zonder die trades
+had 018 op de consistency-drempel gestaan. Zelfde mechanisme als A-89 (rest van de dag na een vroege plus), nu op echte
+fills. (3) Oktober was een goede maand: 68% winstdagen (engine 57% / 60%), opnieuw Asia-zwaar (028: Asia +987/ct,
+US −79, 05–06 −337) — géén vensterknop (D-155/A-97). (4) 031/032 doen sinds 20 okt 17–19 trades waar de rest van B er 60
+doet: iets beperkends op die twee charts. (5) 018 draait qty 4 op ruimte < 6.000 (advies A-90/A-91: 3). (6) Payouts zijn
+niet zichtbaar in fills; voor 013 (#2) en 022 (#1) afgeleid uit een saldo-sprong van ≈ 1.500 tussen 8 en 29 okt.
+
+**Payout-beeld (methode):** per account blokkade = max(consistency-saldo, drempel safety net + bedrag, dagenteller sinds
+aanvraag); "wanneer" = nodig bedrag ÷ oktober-netto per handelsdag (gunstig scenario, boven het meerjarige tempo), met
+de engine-kans uit A-90 ernaast. Uitkomst in grote lijnen: zeven accounts halen in de eerste helft van november de
+drempel voor een minimale aanvraag (013 als eerste, alleen nog de dagenteller), de drie accounts van 20 okt in de tweede
+helft; 018 is uitsluitend door consistency geblokkeerd (+2.504 tot de lat; daarna ≈ 5.750 opvraagbaar zonder maximum);
+de zeven qty-1-accounts en het 300K liggen op oktober-tempo 2–7 maanden weg. Reconciliatie-scripts in de scratchpad
+(`octfills/parse_fills.py`, `recon.py`, `project.py`).
+
+**Voor SM / Pine Dev / Middleware App:** (2) is actionable — dagstop terug op 018 en 036 (Pine-fase of middleware-gate,
+D-02/D-127/D-154). (1) en (4) zijn vragen aan Ferry: bewust twee charts, en wat remt 031/032?
 
 ## A-97 — Sessievensters × dagstops samen gemeten op de doelmeetlat; trap-1-audit van de pijplijn geleverd (8 okt 2026)
 

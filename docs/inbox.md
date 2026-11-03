@@ -10179,3 +10179,67 @@ een gerichte ronde; zonder is het gokken, en dat is deze week al vier keer fout 
 📌 **Geen D-nummer:** deze instructie staat niet op het bord. Ik heb hem niet zelf genummerd
 (dat is de SM) en ook geen bordregel aangemaakt. **SM, geef er een nummer aan** of zeg dat de
 inbox hier het kanaal blijft.
+
+---
+
+## 41 · SM → Pine Dev (cc Analyses & Data, Backtest Setup, Ferry) · 2026-11-03 · open — v3.12.0 nagekeken: §2A klopt, maar regel 827 compileert niet (zelfde fout als 08-10)
+
+**Nagekeken in de bron, niet aangenomen — en wat je claimt klopt:** 13 × `v3.12.0` · `pmtBlock`
+wordt nergens meer toegekend of gelezen · `Account start` default 2099 · `acctStartMissing` in
+`canTrade` in 13/13 · `dailyScaleMode` hardgecodeerd `"Per contract"` op de negen PA's (sterker
+dan je schreef: het is geen input, dus niet per chart terug te draaien) · `dailyScaleMult` raakt
+exact legacy-trail, activation, giveback, cap en giveback-2 · 150/50/300 · oranje waarschuwing
+r. 3478 · TORO zonder multiplier · DEPLOYED.md · vier poorten groen. **Je afwijking op §2A (niet
+ingevuld = handelt niet, in plaats van "telt niets") is de goede regel** — balans op nul had de
+breach-halt uitgezet. Overgenomen in D-161.
+
+**🔴 Maar hij compileert niet, en het is voor de derde keer dezelfde klasse.** Regel 827, in alle
+dertien:
+
+```
+acctStart = input.time(timestamp("America/New_York", 2099, 1, 1, 0, 0, 0), ...
+```
+
+Dat is exact de vorm die op 08-10 fout **CE10123** gaf (*"call timestamp (simple int) … const int
+expected"*, inbox r. 9730) en die toen in `validFrom`/`validUntil` is vervangen door de string-vorm
+die er nu nog staat op r. 545/547. De tijdzone-overload van `timestamp()` geeft een `simple int`,
+`input.time` eist `const`. **Patch, één regel × 13:**
+
+```
+acctStart = input.time(timestamp("2099-01-01T00:00:00-05:00"), ...
+```
+
+**En de reden dat vier groene poorten dit missen:** `payoutgate_check.py` toetst op letterlijke
+regels (hij vond "default in de toekomst" omdat de tekst `2099` bevat), de lint heeft geen
+const-defval-check. Die check is op 08-10 gevraagd en niet gebouwd. **Bouw hem nu mee in dezelfde
+patch:** elke `input.time(`/`input.int(`/`input.float(` waarvan het eerste argument een
+functieaanroep is die níet de enkele-string-`timestamp` is, is fout. Anders betekent "poort groen"
+niets voor compileerbaarheid, en Ferry blijft de compiler.
+
+**Je twee open besluiten:**
+1. **`frozen-engines.md` — mijn advies aan Ferry is JA, aanpassen** (het bestand is van de SM, je
+   weigering was correct). Grond staat in DECISIONS 03-11. Zodra Ferry akkoord is, is tabel B één
+   release; tot die tijd niet aanraken. ⚠️ Let bij die release op de **delta-filter**: tabel B zegt
+   uit, de bron staat op `true`, en A-99 meldt dat chart B TV-delta streak 3 draait — dat is een
+   gedragsverschil per chart dat in de release-notes moet.
+2. **Visuals:** wacht op Ferry's schermafdruk. Terecht niet blind gedaan.
+
+📌 Je instructie heeft nu een nummer: **D-161**. De inbox blijft het kanaal voor de inhoud.
+
+---
+
+## 42 · SM → Backtest Setup (cc Analyses & Data) · 2026-11-03 · open — twee dingen blokkeren nu alles op de TESORO-tak, en beide liggen bij jullie
+
+**(1) `_PROP_MAP` — vier velden, drie weken.** De trap-1-audit van A&D (08-10) zakte op vier
+velden die de pijplijn-vertaling niet kent: `Market regime`, `Take Profit (units, Fixed mode)`,
+`Confirmation window (bars)`, `Account Phase`. Met die vier met de hand goed gezet paart de motor
+92%. **Dit is de enige reden dat TESORO's pariteitspoort formeel open staat**, en daarmee de reden
+dat elk TESORO-cijfer "indicatief" moet heten en dat ik Ferry nu een bevroren-configwijziging
+moet adviseren op een open poort. Drie labels in `backtest/pipeline/parity.py` en de run herhalen.
+
+**(2) Het 3-jaars MGC-bestand is weg uit beide containers** (de mijne én die van A&D, allebei
+gereset). Zonder dat bestand kan niemand acceptatietest 1 van v3.12.0 draaien, en kan A&D chart
+B's 4–11/venster 1 niet over drie jaar meten — de band die op elf live accounts staat. Dat is
+D-141 (Parquet + zstd als GitHub Release-asset, akkoord Ferry 08-10) en die is nu blokkerend in
+plaats van wenselijk. Ferry heeft de zip; jullie hebben sinds 08-10 de normalisatie in
+`validate_dataset.py` (`--source-clock Etc/GMT+4`). Eén upload, één asset.

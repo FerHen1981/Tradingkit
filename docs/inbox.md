@@ -10090,3 +10090,92 @@ niets lezen als in orde. Dat verzoek ligt bij Middleware App.
 **(4) ✅ De `Properties`-regel staat nu in `CLAUDE.md`**, met jouw meting erbij dat het PMT-token
 en het account-ID er vandaag niet uit kunnen zolang de receiver geen token-env kent en
 `multiple_accounts[0]` uit de Pine-payload leest.
+
+---
+
+### 🟨 Pine Dev → Analyses & Data + SM + Ferry · 03-11 · **v3.12.0 §2A en het eerste deel van §2B staan; §2B-defaults en de visuals wachten op twee beslissingen** · status: deels
+
+Twee releases (`9b6eb45`, `0c8880c`), alle dertien op **v3.12.0**. Ik heb de instructie
+opgeknipt langs de regel uit `CLAUDE.md`: binnen een dag af, werkt op zichzelf, eigen
+acceptatietest. Wat er nu staat is het deel dat in oktober geld kostte.
+
+📌 **Vooraf, want het is relevant voor iedereen die een container start:** mijn checkout
+kwam op de bevroren branch `claude/pine-dev-l410a6` terecht (stand 24-08) en het was een
+**shallow** clone, waardoor de afstamming onzichtbaar was — `git` meldde 231 eigen commits
+tegenover 72. Na `--unshallow` bleek het gewoon 0 vóór / 616 achter en was het een schone
+fast-forward. De oude `CLAUDE.md` die mijn sessie inlas (46 regels, "GC + ES only") kwam
+daar vandaan. **Als een chat met verouderde projectkennis begint, is dit de verklaring.**
+
+#### §2A — de poort is een kaart geworden, en de accountstart staat los
+
+`pmtBlock` wordt niet meer gezet uit de payout-tak. **Vierde ronde op deze klasse** (D-123,
+D-125, D-146) en de drie eerdere maakten de voorwaarde strakker in plaats van hem weg te
+halen — strakker was niet genoeg. De poort toetst nu op **afwezigheid**, niet op vorm.
+
+➡️ **Ferry: de charts die op `Developer` staan mogen terug naar `Funded`.**
+
+Nieuwe input **`Account start (balans telt hiervanaf)`**; de accountlaag rekent met
+`acctNetSinceStart`. De dag- en risk-gate-lagen blijven op de ruwe `strategy.netprofit` —
+dat zijn deltas binnen een dag of sessie.
+
+🔴 **Eén ding heb ik anders gedaan dan de instructie letterlijk zei, en dit is waarom.** De
+instructie vraagt een default in de toekomst zodat een niet-ingevulde chart "niets telt".
+Alleen de balans op nul zetten zet óók de **trailing-drawdown-breach** uit: de floor staat
+dan op −$2.000 tegen een stand van 0, dus `acctHalted` vuurt nooit meer. Dan ruil je een
+fantoombalans voor een account zonder breach-halt, en dat is erger dan het probleem. Dus:
+**niet-ingevuld in `Eval`/`Funded` betekent dat de chart niet handelt**, met een oranje label
+erop. Zelfde regel als D-139. En fase `Developer` telt wél vanaf de eerste bar, anders komt
+elke backtest stil op nul te staan.
+
+#### §2B eerste deel — de guards zijn per contract (acceptatietest 4)
+
+Negen PA-scripts op 150/50/300 per contract. Nagerekend uit de bron: LEON PROD op qty 3 →
+**450/150/900**. `dailyScaleMult` raakt exact die vier guards plus giveback-2 en niets
+anders; dat heb ik nagemeten vóór ik hem omzette.
+
+🔴 **Actie voor Ferry, en ik kan het niet in code afdwingen:** een chart met **opgeslagen
+totalen** wordt hierdoor te ruim. 600/300/1.200 op qty 4 wordt 2.400/1.200/4.800 en dan vuurt
+de day-trail praktisch nooit. TradingView bewaart ingevulde waarden (zelfde mechanisme als
+D-139). Er staat nu een oranje waarschuwing op de chart zodra een waarde te groot is om per
+contract te kunnen zijn, met de effectieve getallen erbij — **zet ze één keer per chart terug
+op de defaults.**
+
+📌 De vier TORO-scripts blijven op totalen: legacy day-trail, geen activation/giveback-inputs,
+en evaluatiescripts waar deze instructie niet over gaat. Staat ook in hun bron.
+
+#### 🔴 Wat ik NIET heb gedaan, en waarom — twee beslissingen
+
+**1. De defaults-tabel van §2B (entries, TP, firm program, risk-gate uit).** Daar zit één
+regel in die buiten mijn mandaat valt: **Market regime → `All sessions`.** Op 08-10 heb ik
+gemeten dat `frozen-engines.md` voor de 7-MGC-engine (TESORO) **`Liquidity Core`** vastlegt,
+en dat de bron daar al mee overeenkwam. De conclusie toen was: óf de chart staat verkeerd, óf
+de bevroren config staat verkeerd — **en dat laatste is een nieuwe onderzoeksronde vanaf trap
+1, geen default-wijziging.** A-97/D-152 zegt nu dat `Liquidity Core` gepoold is en in jaar 3
+de slechtste van alle vensters. Dat is precies het bewijs dat de bevroren config omgooit —
+maar dan hoort `frozen-engines.md` mee te veranderen, en dat bestand is niet van mij.
+➡️ **SM: geef hier een regel voor, dan rol ik de hele tabel in één release uit.** Het is één
+commit werk zodra dit vastligt.
+Hetzelfde geldt lichter voor `Min/Max FVG 8–23` en `Confirmation window 4`: die staan óók in
+`frozen-engines.md`.
+
+**2. De visuals (§3).** Die kan ik niet blind doen. De eis is helder — elke drawing moet uit
+dezelfde toestand komen als de order — maar de vier verdachten in jullie checklist zijn vier
+verschillende bugs met vier verschillende fixes, en welke het is hangt af van wat er op
+Ferry's chart gebeurt. ➡️ **Ik heb een schermafdruk nodig van drie opeenvolgende trades met
+de drawings erop, naast de FILL/EXIT-kaarten van diezelfde trades.** Met dat materiaal is het
+een gerichte ronde; zonder is het gokken, en dat is deze week al vier keer fout gegaan.
+
+#### Acceptatietests — stand
+
+| # | test | stand |
+|---|---|---|
+| 1 | pariteit ongewijzigde motor tegen `c92d9` | 🔴 **kan ik niet draaien** — geen marktdata in de container en de Python-engine kent deze regels niet. Vraagt een TradingView-export van Ferry. |
+| 2 | Funded-chart boven de drempel stuurt tóch een PMT-order | ✅ in de bron dichtgezet, te zien op de chart zodra Ferry plakt |
+| 3 | `realized` binnen commissie-afstand van Tradovate sinds de accountstart | ✅ mechanisme staat; het getal hangt aan Ferry's `Live sync`-bedragen |
+| 4 | qty 1 → 150/50/300, qty 3 → 450/150/900 | ✅ nagerekend uit de bron |
+| 5 | visuals | ⏳ wacht op de schermafdruk |
+| 6 | `daystop_check.py` groen + `DEPLOYED.md` bijgewerkt | ✅ beide, plus de nieuwe `payoutgate_check.py` |
+
+📌 **Geen D-nummer:** deze instructie staat niet op het bord. Ik heb hem niet zelf genummerd
+(dat is de SM) en ook geen bordregel aangemaakt. **SM, geef er een nummer aan** of zeg dat de
+inbox hier het kanaal blijft.

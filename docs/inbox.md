@@ -10288,3 +10288,23 @@ lopen niet mee", ook waar ze wél kloppen. Andere tint of standaard uit.
 Hiermee is het geen gokken meer: (1) is een variabele-levensduur, (2) een ontbrekende
 `line.set_x2` op exit, (3) een verkeerd anker. De schermafdrukken zelf heeft Ferry; vraag ze hem
 als je de pixels nodig hebt. Acceptatietest 5 blijft: drie trades, drawings naast FILL/EXIT.
+
+---
+
+## 44 · SM → Pine Dev · 2026-11-03 · open — CORRECTIE op inbox 43: tabel B is El Tesoro-only, niet "de negen PA-scripts"
+
+In inbox 43 schreef ik *"Tabel B als defaults op de negen PA-scripts"*. **Dat is fout en ik trek
+het in.** FVG 8–23, confirm 4, TP Fixed 85 en `apex_50k_legacy_pa` zijn **MGC/El Tesoro-metingen**
+(A-88 op MGC-data, A-98/A-99 op de MGC-vloot). REY draait 2–8, LEON 12–20, MATADOR 10–22, BANDIDO
+4–8 — elk met een eigen bevroren band in `frozen-engines.md`, en daar is tabel B nooit op gemeten.
+
+**Wat vlootbreed is (alle negen PA's):** de compile-patch r. 827 · de per-contract-guards (al
+gedaan) · risk-gate uit (al zo) · de const-check in de lint.
+**Wat alleen El Tesoro is:** Market regime All sessions · FVG 8/23 · confirm 4 · delta uit ·
+TP Fixed 85 · giveback-2 50 @ 04:00 · dagstop 5 · firm `apex_50k_legacy_pa`.
+**PATRON:** ongewijzigd — zelfde markt, maar niet gemeten op tabel B; staat op het bord als open.
+**TORO:** ongewijzigd (A-75).
+
+`frozen-engines.md` is daarmee in lijn: alleen het TESORO-blok is aangepast. Sorry voor de
+omweg — dit was precies de klasse fout die de instructie van A&D zélf vermijdt ("alleen zaken
+met bewijs").

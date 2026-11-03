@@ -422,6 +422,21 @@
 //   `pine/tools/payoutgate_check.py` is de poort: die toetst op de AFWEZIGHEID van de
 //   blokkade (niet op de vorm), dat de accountlaag nergens de ruwe netprofit meer leest,
 //   dat `canTrade` de accountstart eist, en dat de default in de toekomst ligt.
+//   §2B, EERSTE DEEL — DE DAY-GUARDS ZIJN PER CONTRACT. Ferry zette ze tot nu toe met de
+//   hand per chart op een totaal: 018 op qty 4 stond op 600/300/1.200, wat 150/75/300 per
+//   contract is -- de giveback zat er dus zelf naast. De negen PA-scripts staan nu op
+//   `dailyScaleMode = "Per contract"` met defaults 150/50/300, dus qty 1 geeft 150/50/300 en
+//   qty 3 geeft 450/150/900 zonder dat er iets met de hand bij hoeft. Dat is acceptatietest 4.
+//   🔴 EEN CHART MET OPGESLAGEN TOTALEN WORDT HIERDOOR TE RUIM: TradingView bewaart ingevulde
+//   waarden, dus 600/300/1.200 op qty 4 wordt 2.400/1.200/4.800 en dan vuurt de day-trail
+//   praktisch nooit. Zelfde bewaarmechanisme als bij D-139. Er staat daarom een oranje
+//   waarschuwing op de chart zodra een waarde te groot is om een bedrag per contract te
+//   kunnen zijn, met de effectieve getallen erbij. ➡️ Zet ze één keer per chart terug op de
+//   defaults.
+//   📌 De vier TORO-scripts blijven op TOTALEN. Die dragen de legacy day-trail (één waarde
+//   die zowel activeert als de teruggave is), hebben de activation/giveback-inputs niet, en
+//   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
+//   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
 var string SCRIPT_NAME = "MΞX ΞL TORO · GC SNIPER EOD"
 var string currentVersion = "v3.12.0"
@@ -652,6 +667,13 @@ dayExitMode = input.string("Off", "Day-profit exit mode", options=["Off","Day-tr
      tooltip="Off = no day-profit exit; this is the frozen EL TORO setting. Day-trail closes the day on a pullback from the intraday peak, Day-cap on a hard target, Trail + cap arms both. The MEX preset overrides the cap when it carries one.", display=display.none)
 dayTrailUSD = input.float(150.0, "Day-trail give-back ($)", minval=10, step=10, group=GROUP_DEX,
      tooltip="Legacy model: the trail arms once the day peak exceeds this value and closes the day after giving the same amount back. Only active when the mode above uses the trail.", display=display.none)
+// v3.12.0 §2B: de negen PA-scripts zijn hier op day-guards PER CONTRACT gezet
+// (`dailyScaleMode = "Per contract"`, defaults 150/50/300). Dit script heeft die constante
+// niet en blijft op TOTALEN, en dat is bewust: het draagt de legacy day-trail (één
+// `dayTrailUSD` die zowel activeert als de teruggave is), het heeft de
+// activation/giveback-inputs niet, en het is een evaluatiescript waar de instructie van
+// 03-11 niet over gaat. Omzetten zou hier ongevraagd de dagstops van een eval op qty 5-7
+// vermenigvuldigen. Zodra de fase-scripts van A-86 er zijn hoort deze vraag daarbij.
 dayCapUSD   = input.float(300.0, "Day-cap hard target ($)", minval=50, step=25, group=GROUP_DEX,
      tooltip="Day profit at which the day is closed. Only active when the mode above uses the cap.", display=display.none)
 // === D-154 — vier dagstops, ALLE VIER DEFAULT UIT ============================

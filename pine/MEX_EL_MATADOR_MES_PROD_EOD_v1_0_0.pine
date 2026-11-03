@@ -427,6 +427,21 @@
 //   `pine/tools/payoutgate_check.py` is de poort: die toetst op de AFWEZIGHEID van de
 //   blokkade (niet op de vorm), dat de accountlaag nergens de ruwe netprofit meer leest,
 //   dat `canTrade` de accountstart eist, en dat de default in de toekomst ligt.
+//   §2B, EERSTE DEEL — DE DAY-GUARDS ZIJN PER CONTRACT. Ferry zette ze tot nu toe met de
+//   hand per chart op een totaal: 018 op qty 4 stond op 600/300/1.200, wat 150/75/300 per
+//   contract is -- de giveback zat er dus zelf naast. De negen PA-scripts staan nu op
+//   `dailyScaleMode = "Per contract"` met defaults 150/50/300, dus qty 1 geeft 150/50/300 en
+//   qty 3 geeft 450/150/900 zonder dat er iets met de hand bij hoeft. Dat is acceptatietest 4.
+//   🔴 EEN CHART MET OPGESLAGEN TOTALEN WORDT HIERDOOR TE RUIM: TradingView bewaart ingevulde
+//   waarden, dus 600/300/1.200 op qty 4 wordt 2.400/1.200/4.800 en dan vuurt de day-trail
+//   praktisch nooit. Zelfde bewaarmechanisme als bij D-139. Er staat daarom een oranje
+//   waarschuwing op de chart zodra een waarde te groot is om een bedrag per contract te
+//   kunnen zijn, met de effectieve getallen erbij. ➡️ Zet ze één keer per chart terug op de
+//   defaults.
+//   📌 De vier TORO-scripts blijven op TOTALEN. Die dragen de legacy day-trail (één waarde
+//   die zowel activeert als de teruggave is), hebben de activation/giveback-inputs niet, en
+//   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
+//   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
 var string SCRIPT_NAME = "MΞX EL MATADOR · MES PROD EOD"
 var string currentVersion = "v3.12.0"
@@ -668,11 +683,11 @@ dayTrailModel = input.string("Activation + giveback", "Day-trail model", options
      tooltip="Legacy reproduces the old rule: the same USD value both arms the trail and is the allowed pullback. Activation + giveback separates those two concepts, e.g. arm after +$200 and allow only $100 giveback.")
 dayTrailUSD = input.float(200, "Legacy day-trail value ($)", minval=10, step=10, group=GROUP_DEX,
      tooltip="Used only by Legacy model: arms once peak exceeds this value and closes after the same amount of giveback.")
-dayTrailActivationUSD = input.float(500, "Day-trail activation ($)", minval=0, step=10, group=GROUP_DEX,
+dayTrailActivationUSD = input.float(150, "Day-trail activation ($ per contract)", minval=0, step=10, group=GROUP_DEX,
      tooltip="Activation + giveback model: intraday running-PnL peak required before the daily profit trail is armed.")
-dayTrailGivebackUSD = input.float(150, "Day-trail giveback ($)", minval=10, step=10, group=GROUP_DEX,
+dayTrailGivebackUSD = input.float(50, "Day-trail giveback ($ per contract)", minval=10, step=10, group=GROUP_DEX,
      tooltip="Activation + giveback model: maximum allowed pullback from the intraday running-PnL peak after activation.")
-dayCapUSD   = input.float(750, "Day-cap hard target ($)", minval=50, step=25, group=GROUP_DEX,
+dayCapUSD   = input.float(300, "Day-cap hard target ($ per contract)", minval=50, step=25, group=GROUP_DEX,
      tooltip="Hard day-profit target that closes the day (cap modes).")
 // === D-154 — vier dagstops, ALLE VIER DEFAULT UIT ============================
 // Geleverd door Analyses & Data (A-89/A-92/A-94/A-95). De slechte dagen zijn niet veel
@@ -696,7 +711,20 @@ dayTrailGiveback2USD = input.float(0, "Giveback-2 ($, 0 = de gewone giveback)", 
      tooltip="Een tweede, meestal strakkere giveback die vanaf een bepaald uur geldt. De ACTIVATIE verandert niet. 0 = gebruik de gewone giveback, dus uit.")
 dayTrail2FromHour    = input.int(0, "Giveback-2 vanaf (uur ET, 0 = uit)", minval=0, maxval=23, group=GROUP_DEX,
      tooltip="Vanaf dit uur in de handelsdag geldt giveback-2. Gemeten variant: 50 vanaf 04:00 ET. Het uur wordt gemeten BINNEN de handelsdag die om 18:00 ET begint, niet op de kalenderklok. 0 = uit.")
-string dailyScaleMode = "Fixed USD"
+// === v3.12.0 §2B — de day-exit-guards zijn PER CONTRACT ======================
+// Ferry zette ze tot nu toe met de hand per chart op een totaal: 018 op qty 4 stond op
+// 600/300/1.200, wat 150/75/300 per contract is -- de giveback zat er dus zelf naast. Het
+// script vermenigvuldigt nu met de effectieve qty, zodat één set waarden op elke chart
+// hetzelfde betekent: qty 1 -> 150/50/300 en qty 3 -> 450/150/900, zonder dat er iets met
+// de hand bij hoeft.
+// 🔴 EEN CHART MET OPGESLAGEN TOTALEN WORDT HIERDOOR TE RUIM. TradingView bewaart ingevulde
+// inputwaarden, dus een chart die nog 600/300/1.200 draagt rekent op qty 4 straks
+// 2.400/1.200/4.800 en dan vuurt de day-trail praktisch nooit. Dat is hetzelfde
+// bewaarmechanisme als bij D-139, en daarom staat er onderaan dit script een waarschuwing
+// op de chart zodra een waarde te groot is om een bedrag PER CONTRACT te kunnen zijn. Zet ze
+// één keer per chart terug op de defaults; de CONFIG-regel (`dayTrailAct=`, `dayTrailGive=`,
+// `dayScale=`) laat zien wat er werkelijk geldt.
+string dailyScaleMode = "Per contract"
 float dailyScaleMult = dailyScaleMode == "Per contract" ? math.max(contractSizeEff, 1.0) : 1.0
 float dayTrailUSDEff = dayTrailUSD * dailyScaleMult
 float dayTrailActivationUSDEff = dayTrailActivationUSD * dailyScaleMult
@@ -3432,4 +3460,18 @@ if barstate.islast
         acctStartWarnLbl := label.new(bar_index, high,
              "⛔ ACCOUNTSTART NIET INGEVULD\nGEEN ENTRIES — zet 'Account start' op de datum waarop dit account begon",
              style=label.style_label_down, color=color.new(color.orange, 0), textcolor=color.white,
+             size=size.normal, textalign=text.align_left)
+
+// === v3.12.0 §2B — waarschuwing bij een day-guard die nog een TOTAAL is ========
+// De guards zijn per contract; een waarde die daar te groot voor is, is vrijwel zeker een
+// opgeslagen totaal van vóór v3.12.0 en maakt de day-trail onbruikbaar ruim. Buiten de
+// teken-laag, om dezelfde reden als de andere twee waarschuwingen: die zit achter een
+// drawing-budget.
+var label dayGuardWarnLbl = na
+if barstate.islast
+    label.delete(dayGuardWarnLbl)
+    if dayTrailActivationUSD > 500 or dayTrailGivebackUSD > 500 or dayCapUSD > 1000
+        dayGuardWarnLbl := label.new(bar_index, low,
+             "⚠️ DAY-GUARDS LIJKEN NOG TOTALEN\nDeze zijn sinds v3.12.0 PER CONTRACT (defaults 150/50/300) — nu effectief " + str.tostring(dayTrailActivationUSDEff, "#") + "/" + str.tostring(dayTrailGivebackUSDEff, "#") + "/" + str.tostring(dayCapUSDEff, "#"),
+             style=label.style_label_up, color=color.new(color.orange, 0), textcolor=color.white,
              size=size.normal, textalign=text.align_left)

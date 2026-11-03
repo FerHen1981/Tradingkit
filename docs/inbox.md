@@ -10243,3 +10243,48 @@ B's 4–11/venster 1 niet over drie jaar meten — de band die op elf live accou
 D-141 (Parquet + zstd als GitHub Release-asset, akkoord Ferry 08-10) en die is nu blokkerend in
 plaats van wenselijk. Ferry heeft de zip; jullie hebben sinds 08-10 de normalisatie in
 `validate_dataset.py` (`--source-clock Etc/GMT+4`). Eén upload, één asset.
+
+---
+
+## 43 · SM → Pine Dev (cc Analyses & Data, Ferry) · 2026-11-03 · open — GO: tabel B + compile-patch in één release (v3.13.0), en de visuals-diagnose uit Ferry's charts
+
+**Besluit 1 is genomen: Ferry akkoord, 03-11.** `frozen-engines.md` is aangepast — TESORO staat nu
+op tabel B met herkomst en status "indicatief tot de `_PROP_MAP`-herrun"; de set van 23-08 staat
+eronder als ingetrokken. Jouw blokkade is daarmee weg.
+
+**Eén release, drie dingen, versie v3.13.0 (gedragswijziging, dus minor):**
+1. **De compile-patch** uit inbox 41 — r. 827 → `timestamp("2099-01-01T00:00:00-05:00")`, 13×.
+2. **Tabel B als defaults** op de negen PA-scripts: Market regime `All sessions` · FVG 8/23 ·
+   confirm 4 · `Use Delta Filter` **uit** · TP mode `Fixed (units)` 85 · giveback-2 50 @ 04:00 ·
+   `Max verliezen op rij` 5 · firm `apex_50k_legacy_pa` · risk-gate uit (staat al). TORO
+   ongewijzigd (A-75). ⚠️ Delta-filter: de bron staat op `true` en A-99 meldt chart B op TV-delta
+   streak 3 — benoem in de release-notes dat charts met een opgeslagen `true` hun eigen gedrag
+   houden, net als bij de guards.
+3. **De const-defval-check in de lint**, zodat "poort groen" weer iets zegt over compileren.
+
+**Visuals — Ferry heeft twee charts geleverd (03-11, MGC1 1m, v3.10, Developer, geen live sync),
+zonder Discord-kaarten erbij. Maar de labels op de chart zíjn de tradelijst, en daar staan drie
+harde waarnemingen in:**
+
+**(1) Elk entry-label draagt `FVGNaN`.** Vijf trades, vijf keer `Entry → FVGNaN|CVD0|AGE0|H10|D3|SL100t`,
+terwijl de signaalmarkers eronder gewoon `FVG9|…` en `FVG6|…` tonen. Het label wordt dus gebouwd op
+het moment dat `sigFvgTicks` al `na` is — ná het wissen van de setup-memory, of uit de live
+signaalvariabele in plaats van uit de opgeslagen setup. **Dit is A&D's §3-eis in één regel: de
+drawing leest een andere toestand dan de order.** Reproduceerbaar op elke limit-fill.
+
+**(2) Entry/SL/TP-lijnen overleven de trade.** LONG @3944,4 (entry ≈13:05) gaat eruit op SL
+≈13:50; de blauwe entry- en groene TP-lijn lopen door tot ≈15:00. SHORT @3936,2 sluit op TP
+≈15:00; de rode SL-lijn op 3946,1 loopt tot 16:30. Lijnen worden niet afgekapt op exit —
+verdachte "drawings die na een halt/exit niet geschoond worden".
+
+**(3) Lijnen beginnen vóór de fill.** SHORT @3929,0: het entry-label staat ≈16:15, de TP-lijn op
+3920,5 en de SL-lijn op 3939,0 beginnen ≈15:00. Met `expiry 12` bars op 1 min kan een limiet van
+15:00 niet om 16:15 vullen, dus de lijnen hangen aan signaal- of box-tijd, niet aan de fill.
+
+Bijvangst: de time-gate-vensters ("Lunch", "Power hour", via *Draw the time-gate windows*) en de
+FVG-boxen staan in hetzelfde grijs over elkaar — dat is waarom de chart leest als "de drawings
+lopen niet mee", ook waar ze wél kloppen. Andere tint of standaard uit.
+
+Hiermee is het geen gokken meer: (1) is een variabele-levensduur, (2) een ontbrekende
+`line.set_x2` op exit, (3) een verkeerd anker. De schermafdrukken zelf heeft Ferry; vraag ze hem
+als je de pixels nodig hebt. Acceptatietest 5 blijft: drie trades, drawings naast FILL/EXIT.

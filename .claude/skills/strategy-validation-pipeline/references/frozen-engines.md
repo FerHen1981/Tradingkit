@@ -60,9 +60,23 @@ gem. verliezer −$696,77, LONG PF 1,860, SHORT PF 1,785, max intrabar DD ≈ $5
 Tick-economie: volledige stop ≈ −$913,62; volledige TP +$1.568,88.
 
 ### EL TESORO — MGC Conservative
-7 MGC · FVG 11–16 · CVD6 · SL 140t · 2,25R · Liquidity Core · BE/trail OFF.
-Pine: ≈94 trades, +$16.286, PF 1,665, WR ≈72,3%, max intrabar DD ≈ $5.054.
+**Bevroren 03-11-2026 (akkoord Ferry, D-161) — vervangt de set van 23-08 hieronder.**
+MGC · **FVG 8–23** · confirm **4** · delta **uit** · VWAP-veto aan · limit @ 50% FVG, expiry 12 ·
+SL **100t fixed** (max 100) · TP **Fixed 85** · **All sessions** · day-exit Trail + cap,
+Activation + giveback **150 / 50 / 300 per contract × qty** · giveback-2 **50 @ 04:00 ET** ·
+dagstop **max 5 verliezen op rij** (winsten: 0, gelockt met ruimte < $3.000: 3; eerste verlies
+boven +X: 0, bij TP 120: 150) · firm `apex_50k_legacy_pa` · owner-DLL 100 × 4 × qty · risk-gate
+uit · BE/trail OFF. Qty per account via de ruimte-ladder (A-90), niet in deze definitie.
+Herkomst: A-88 (enige entry-set met 3-jaarsmeting én 92% Pine-pariteit), A-92/A-97 (dagstops,
+jaarvouwen), A-98/A-99 (oktober live), D-152/D-155 (Liquidity Core slechtste; All sessions =
+geen vensterknop). ⚠️ **Status: indicatief** tot Backtest Setup de vier `_PROP_MAP`-velden
+toevoegt en de trap-1-audit herhaalt — de motor paart 92%, de pijplijn-vertaling nog niet.
+OOS-klok: op nul met v3.12.0 (03-11).
 Rol: primaire goud-diversificatieanker.
+
+_Ingetrokken 03-11 (set 23-08, nooit gelijk aan een live chart — D-158):_
+_7 MGC · FVG 11–16 · CVD6 · SL 140t · 2,25R · Liquidity Core · BE/trail OFF._
+_Pine: ≈94 trades, +$16.286, PF 1,665, WR ≈72,3%, max intrabar DD ≈ $5.054._
 
 ### EL PATRON — MGC Aggressive EOD
 8 MGC · FVG 11–16 · CVD5 · **SL 120t** · 2,25R.

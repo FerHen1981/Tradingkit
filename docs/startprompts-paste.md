@@ -1,4 +1,4 @@
-# Paste-klare startprompts — ronde 08-10 (avond)
+# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 03-11
 
 _Eigenaar: Scrum Master. Eén blok per chat, letterlijk plakken. Eén release van maximaal
 een dag per chat, met een acceptatietest (besluit Ferry 08-10: kleine releases boven
@@ -26,50 +26,35 @@ fase-brokken). **Rollen zonder eigen map staan ook in de ronde**, ook als het an
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
-Lees D-154, D-149 en D-150 in docs/SPRINT.md. Drie dingen, in deze volgorde.
+Lees in docs/inbox.md de items 41, 43 en 44 (SM, 03-11) en D-161 in docs/SPRINT.md.
 
-RELEASE A (de release van vandaag) — D-154: vier nieuwe inputs in het day-exit-blok,
-ALLE VIER DEFAULT UIT, zodat het gedrag ongewijzigd is zolang niemand ze aanzet:
-  1. Max verliezen op rij per dag      (int, 0 = uit)
-  2. Max winsten op rij per dag        (int, 0 = uit)
-  3. Eerste verlies boven +X sluit de dag ($)   (float, 0 = uit)
-  4. Giveback-2 ($) + vanaf (uur ET)   (default = de gewone giveback, uur 0)
-"Dag dicht" = exact de bestaande Day-trail/Day-cap-halt, met HALT-kaart en reden
-STREAK-LOSS / STREAK-WIN / LOSS-AFTER-PLUS / DAY-TRAIL-2, en het bestaande
-dayHaltClose-gedrag voor een open positie. Eerste die raakt wint. Netto incl. commissie;
-exact 0 telt als verlies. Volledige semantiek staat in D-154 — lees die, niet dit blok.
+RELEASE v3.13.0 — drie dingen, één release, één dag:
 
-Waarom: de slechte dagen zijn EEN verliesreeks, niet veel kleine verliezen (reeks 5 =
--$475 per contract), en de day-trail werkt alleen op winst-teruggave. Stop na 5 verliezen
-halveert de breach-kans bij gelijke hit-kans. Dit voegt GEEN edge toe en moet nergens zo
-genoemd worden: streaks voorspellen de volgende trade niet. Het knipt variantie.
+1. COMPILE-PATCH. Regel 827 in alle dertien: input.time(timestamp("America/New_York",
+   2099, 1, 1, 0, 0, 0), ...) is exact de vorm die op 08-10 fout CE10123 gaf. Vervang door
+   timestamp("2099-01-01T00:00:00-05:00"). Dit is de derde keer deze klasse langs groene
+   poorten — bouw in pine_lint.py de const-defval-check: elke input.* waarvan het eerste
+   argument een functieaanroep is die niet de enkele-string-timestamp is, is fout.
 
-Acceptatie: een jaarexport met Max verliezen op rij = 5 tegen dezelfde export zonder, op
-TP 85 / 250-100-500 / qty 1 / MGC. Verwacht identieke trades tot de eerste halt per dag,
-~7,7 i.p.v. ~8,1 trades per dag, HALT-kaarten met reden STREAK-LOSS, netto per contract
-hoger, slechtste dag niet slechter dan -$1.100. Analyses & Data draait dezelfde
-vergelijking in de engine en legt ze naast elkaar.
+2. TABEL B ALS DEFAULTS — ALLEEN EL TESORO (inbox 44 trekt "de negen PA's" uit inbox 43 in):
+   Market regime All sessions · FVG 8/23 · confirm 4 · Use Delta Filter uit · TP mode
+   Fixed (units) 85 · giveback-2 50 @ 04:00 · Max verliezen op rij 5 · firm apex_50k_legacy_pa.
+   frozen-engines.md is al aangepast (akkoord Ferry 03-11). PATRON, REY, LEON, MATADOR,
+   BANDIDO: entries ongewijzigd. TORO: ongewijzigd (A-75). Benoem in de release-notes dat
+   charts met een opgeslagen Delta=true hun eigen gedrag houden, net als bij de guards.
 
-DAARNA, en pas daarna:
+3. VISUALS — de diagnose uit Ferry's twee charts (inbox 43), geen gok meer:
+   (a) elk entry-label toont FVGNaN terwijl de signaalmarkers FVG6/FVG9 tonen → het label
+       wordt gebouwd nadat de setup-memory gewist is / leest de live variabele;
+   (b) entry/SL/TP-lijnen overleven de trade (geen line.set_x2 op exit);
+   (c) lijnen beginnen vóór de fill — met expiry 12 kan dat niet dezelfde order zijn, dus
+       het anker staat op signaal-/box-tijd. Bijvangst: time-gate-vensters en FVG-boxen in
+       hetzelfde grijs. Vraag Ferry de schermafdrukken als je de pixels nodig hebt.
 
-(B) D-150 — een strategie-export schrijft ELKE input.string in platte tekst naar de
-Properties-tab, dus het PMT-token en het middleware-secret staan leesbaar in elke export
-die Ferry ooit heeft gedeeld. display=display.none helpt niet. Vraag: kunnen die twee uit
-de chart-inputs? Het alert-BERICHT moet ze dragen, de chart-CONFIG niet per se - maar
-f_pmtJSON() bouwt de payload nu uit precies die inputs. Kan het niet, zeg dat dan
-expliciet, dan wordt "wis de Properties-tab voor je deelt" een vaste regel in CLAUDE.md.
-Zet de waarden zelf nergens neer: niet in een commit, niet in een testfixture.
-
-(C) D-149 — marketRegimeMode heeft in de bron default "Liquidity Core", maar Ferry's live
-chart draagt een opgeslagen override naar "All sessions" die een verse chart niet meeneemt.
-Dat kostte 254 van 389 entries zodra hij v3.10 opende. Zodra Ferry kiest welke de echte is:
-default in de dertien scripts gelijkzetten EN in frozen-engines.md vastleggen.
-Breder dan dit item: f_cfgStr() draagt mktRegime= al mee in het journaal. Kan de
-ontvangstkant dat per alert vergelijken met de bevroren config, zodat een afwijkende chart
-meteen opvalt? Graag een oordeel of dat in Pine kan of aan de ontvangstkant hoort.
-
-Claim met status wip + owner in docs/SPRINT.md, losse commit per release.
-De OOS-klok gaat op nul. Dat is bekend en hier de prijs waard.
+Acceptatie: lint 13/13 ok mét de nieuwe check · payoutgate-, daystop- en owner_dll-poort
+groen · DEPLOYED.md op v3.13.0 met OOS-reset · de FVG-maat in het entry-label gelijk aan die
+van de signaalmarker. Claim D-161 met status wip + owner in docs/SPRINT.md, losse commit per
+deel. De OOS-klok gaat op nul; dat is bekend.
 ```
 
 ---

@@ -12,6 +12,124 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟧 Analyses & Data → Pine Dev (cc SM, Backtest Setup) · 03-11 · **instructie voor de volgende EL TESORO-versie (v3.12.0; Ferry noemt hem "3.11"): payout-poort wordt kaart i.p.v. orderblokkade · accountstart los van validFrom · defaults uit oktober en drie jaar (8–23/4, All sessions, 150/50/300 per contract × qty, dagstop 5, giveback-2 50 @ 04:00, legacy-PA-profiel) · visuals moeten de orders volgen · zes acceptatietests** · status: open
+
+_Opdracht Ferry 03-11. Integrale tekst hieronder; ook als bestand bij Ferry._
+
+_Analyses & Data, 3 november 2026, in opdracht van Ferry. Ferry noemt dit "3.11" omdat zijn charts op v3.10 staan; in
+de repo is v3.11.0 al uitgegeven (D-154, de vier dagstops), dus dit wordt **v3.12.0**. Bronnen met cijfers: A-88, A-92,
+A-97, A-98, A-99 in `docs/state.md` (branch `claude/analyses-data-chat-org-3tii8j`) en de inbox-meldingen van 02-11 en 03-11.
+Nieuwe versie = OOS-klok op nul (D-18/D-71); dat is de bekende prijs._
+
+#### 1. Aanleiding — drie dingen die in oktober geld of trades kostten
+
+1. **De payout-poort blokkeert echte orders.** 031 en 034 stuurden sinds ~28 oktober wél Discord-kaarten maar géén
+   PMT-orders; 032 wisselend; 037 begint ermee (2 nov: 4 koop- en 2 verkooporders waar de rest er 5 en 5 stuurt).
+   Oorzaak: fase `Funded` met accountstart `260101` → het script telt zijn eigen winst sinds 1 januari als balans,
+   meldt "PAYOUT 1 READY · realized $5.626" op een account dat op 19 oktober begon en op ~$51.900 staat, en houdt met
+   `Wait for the full ladder step` de entries tegen tot een payout geregistreerd is die Apex niet toestaat. Vierde keer
+   dezelfde klasse (D-123, D-125, D-146). Ferry zet die charts nu op `Developer`; dat zet de héle accountlaag uit en is
+   een omweg, geen oplossing.
+2. **Doorhandelen na de dagstop** (018 en 300K, 1–19 okt): 57 resp. 45 trades ná het moment dat de rest dicht was,
+   −676 en −751 per contract, ≈ $2.700 en $2.250. Sinds 20 oktober voorbij, maar het laat zien wat één chart zonder
+   werkende dagstop kost.
+3. **De visuals lopen niet mee.** Ferry: de drawings uit het script (FVG-boxen, SL/TP-lijnen, labels) sync'en niet
+   met wat de strategie op de chart doet. Precieze reproductie moet Pine Dev op de chart maken; zie §4.
+
+#### 2. Wat er moet veranderen in het script
+
+### A. Payout-poort: informatie, geen orderblokkade
+
+- `pmtBlock` mag **nooit** hangen op payout-gereedheid, cap of consistency. Payout-gereedheid wordt een kaart
+  (`PAYOUT n READY`) en een regel in de CONFIG/statuskaart — en verder niets. Orders gaan door.
+- De enige toestanden die een entry mogen tegenhouden zijn dag- of accountbeëindigend: day-trail/day-cap/dagstops
+  (D-154), owner-DLL, trailing-drawdown-breach, `validFrom/validUntil`, de tijdpoort en de flat-window.
+- De accountlaag telt **vanaf de echte accountstart**, nooit vanaf `validFrom` of 1 januari. Twee inputs die nu door
+  elkaar lopen: `Valid from` (vanaf wanneer het script mág handelen) en de accountstart (vanaf wanneer de balans telt).
+  Maak de accountstart een eigen input met een harde default in de toekomst, zodat een niet-ingevulde chart **niets** telt
+  in plaats van een jaar. `Live sync: current account PnL vs start ($)` blijft de correctie op de echte stand (Ferry heeft
+  per account de bedragen, zie `fantoomtrades_2026-11-02.csv`).
+- `Wait for the full ladder step before payout` en `Next payout number` blijven bestaan voor de kaart, raken de orders niet.
+- Gevolg: fase `Funded` wordt weer bruikbaar op de PA-charts en `Developer` is niet meer nodig als omweg. Zet in de
+  release-notes expliciet dat Ferry de Developer-charts terug mag naar Funded.
+
+### B. Defaults — de set die het in oktober en over drie jaar het best deed
+
+Alleen zaken met bewijs; wat oktober niet kon beslissen blijft op de gemeten set van vóór oktober.
+
+| groep | input | default | waarom |
+|---|---|---|---|
+| Entries | Market regime | **All sessions** | de bevroren `Liquidity Core` is gepoold en in jaar 3 de slechtste van alle vensters (A-97, D-152); D-155: geen vensterknop |
+| | Min / Max FVG Size | **8 / 23 ticks** | de enige entry-definitie met driejaarsmeting én Pine-pariteit (A-88, 92% gepaard); chart B's 4–11 is de v3.10-default en nooit over drie jaar gemeten; in oktober liepen beide binnen de ruis (A-99) |
+| | Confirmation window | **4** | idem |
+| | Limit Order Expiry | 12 | ongewijzigd |
+| | Use Delta Filter | **uit** | geen echte order-flow in de datasets (D-153); de TradingView-delta op chart B leverde in oktober niets meetbaars |
+| | VWAP side veto | aan | ongewijzigd |
+| Exits | Take-Profit Mode / TP | **Fixed (units) · 85** | live; TP 120 is de snelheidsvariant met hogere breach (A-88) en blijft een keuze per chart |
+| | Fixed Stop / Max Stop | 100 / 100 | ongewijzigd |
+| Day-exit | Day-profit exit mode · model | Trail + cap · Activation + giveback | ongewijzigd |
+| | activation / giveback / cap | **150 / 50 / 300 per contract, door het script × qty** | nu zijn het totalen die Ferry per chart met de hand × qty zet (018 op qty 4 stond op 600/300/1.200 = 150/75/300); maak de inputs per contract en vermenigvuldig in het script met de effectieve qty |
+| | Giveback-2 · vanaf | **50 · 04:00 ET** | A-89: na 04:00 ET is de rest van de dag negatief; giveback-2 50 is in beide vensters positief |
+| Dagstops (D-154) | Max verliezen op rij per dag | **5** | A-92/A-97: in geen enkel jaar slechter dan live, breach 24 → 5,8% in het laatste jaar bij hogere hit |
+| | Max winsten op rij per dag | 0 (uit) | alleen voor gelockte accounts met kleine ruimte: 3 (A-94/A-97); per chart |
+| | Eerste verlies boven +X | 0 (uit) | alleen bij TP 120: 150 (A-92) |
+| Account | Account phase | Funded | met A hierboven weer veilig |
+| | Firm program | **`apex_50k_legacy_pa`** | chart B draait nu `apex_50k_intraday_eval`, chart C `apex_50k_eod_pa` op legacy-PA's (A-99); voor het 300K ontbreekt een registry-regel — melding bij Backtest Setup/SM |
+| | Owner DLL | aan, 100 × 4 × qty | ongewijzigd (D-110) |
+| | Daily risk-gate | **uit** | stond vermoedelijk aan op 031/032 (150/10/100) en kostte ≈ $400 per contract in oktober (A-99); de dagstops doen dit beter |
+| Kaarten | PAYOUT READY | kaart blijft, met erbij "script-balans, niet Apex" | voorkomt dat de kaart als toestemming gelezen wordt |
+
+Optioneel maar aanbevolen als tweede preset (voor accounts waar dag-gelijkmatigheid vóór snelheid gaat): day-trail
+**100 / 33 / 200 per contract** — het 300K draaide dit in oktober met 9 van 9 winstdagen en dezelfde netto per contract.
+
+### C. Fase-defaults
+
+De fase-scripts (A-86: evaluatie/vers/gelockt) wisselen alleen defaults; de motor is identiek. Als Pine Dev die lijn
+voortzet: vers 50K = tabel B; gelockt met ruimte < 3.000 = tabel B + `Max winsten op rij = 3`; evaluatie El Toro
+ongewijzigd (A-75).
+
+#### 3. Visuals — wat Ferry ziet en wat er moet gelden
+
+Ferry meldt dat de drawings uit het script niet meelopen met de chart. Wat er precies afwijkt moet Pine Dev op een
+livechart reproduceren (met Ferry erbij of met een schermafdruk van hem), maar de eis is eenduidig:
+
+- Elke drawing is afgeleid van **dezelfde toestand als de orders**: de FVG-box van de setup die de limiet zette, de
+  entry/SL/TP-lijnen op de prijzen uit de alert-payload (`SL`/`TP` in de FILL-kaart), het HALT-banner op het moment van
+  de halt. Een lijn die niet overeenkomt met de order die verstuurd is, is fout — ongeacht of de chart "mooi" oogt.
+- Bekende verdachten (geen diagnose, een checklist): drawings die op `barstate.isconfirmed` wachten terwijl orders met
+  `calc_on_order_fills=true` intrabar vullen; `max_boxes_count`/`max_lines_count` waardoor oude drawings de nieuwe
+  verdringen; lijnen die aan `strategy.position_avg_price` hangen en bij een gedeeltelijke fill verspringen; drawings
+  die na een halt niet geschoond worden en op de volgende dag blijven staan.
+- Na een script-reload moet de set drawings op de chart één-op-één overeenkomen met de tradelijst van de strategie
+  over hetzelfde venster.
+
+#### 4. Acceptatietests (Ferry kan ze zelf zien)
+
+1. **Pariteit ongewijzigde motor:** export van v3.12.0 met de tabel-B-defaults maar dagstops uit, tegen de export
+   `c92d9` over hetzelfde venster → identieke trades. Dan dezelfde export met `Max verliezen = 5` en giveback-2 aan →
+   identiek tot de eerste halt per dag; HALT-kaarten met `STREAK-LOSS`/`DAY-TRAIL-2`. Wij draaien dezelfde vergelijking
+   in de engine en leggen beide naast elkaar.
+2. **Poort:** een chart in fase Funded met een script-balans boven de payout-drempel stuurt bij het volgende signaal
+   gewoon een PMT-order (TV-log: PMT-payload aanwezig; PMT: "Order Placed"), en de PAYOUT-kaart komt ernaast.
+3. **Accountstart:** een chart met de accountstart op de echte datum meldt in de statuskaart een `realized` die binnen
+   commissie-afstand van Tradovate's P&L sinds die datum ligt.
+4. **Per-contract guards:** qty 1 → halt op 150/50/300; qty 3 op dezelfde chart → 450/150/900, zonder dat Ferry iets
+   aanpast.
+5. **Visuals:** drie opeenvolgende trades op een livechart: schermafdruk van de drawings naast de FILL/EXIT-kaarten,
+   prijzen gelijk.
+6. `pine/tools/daystop_check.py` groen op alle dertien scripts; `pine/DEPLOYED.md` bijgewerkt met de versie en de
+   OOS-reset.
+
+#### 5. Voorbehouden
+
+- Entries: oktober kon chart A tegen chart B niet beslissen (negen dagen, binnen de ruis). De keuze voor 8–23/venster 4
+  is de keuze voor de gemeten set; zodra het 3-jaars MGC-bestand opnieuw geüpload is, meet ik 4–11/venster 1 op de
+  doelmeetlat en kan dit alsnog omgaan.
+- Alle dagstop-cijfers komen uit de engine, niet uit Pine (pariteit motor 92%, pijplijn-audit nog open bij Backtest
+  Setup door de vier ontbrekende velden in `_PROP_MAP`).
+- "Beste settings uit oktober" is één maand; alles hierboven staat alleen op de lijst als het ook over meerdere jaren
+  niet slechter is dan live.
+
 ### 🟥 Analyses & Data → Pine Dev + SM · 03-11 · **031, 032 en 034 handelen niet: het script stuurt wél Discord-kaarten maar géén PMT-orders — de Funded-fase blokkeert op een gesimuleerde balans sinds 1 januari (`pmtBlock`, zelfde klasse als D-123/D-125/D-146)** · status: open
 
 Bewijs uit de TradingView-log (30 okt–2 nov) en de PMT-alertdata (27 okt–2 nov): 031 en 034 sturen 19 LIMIT-, 8 FILL- en 8 EXIT-kaarten (identiek aan 022, 038, 039–041) maar **nul PMT-buy/sell-payloads**, alleen een `close`; 032 vier buy-pogingen op 2 nov (verloren in de uitval), verder niets. PMT ontving voor 031/034 sinds 28 okt alleen nog closes. De andere chart-B-accounts sturen 5 buy + 5 sell per dag. Het is dus niet de ontvanger en niet PMT: **TradingView verstuurt de order niet**, en dat is precies wat `pmtBlock` doet — kaarten blijven, de orderpayload valt weg.

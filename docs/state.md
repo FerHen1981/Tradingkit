@@ -221,6 +221,19 @@ alleen op de piek (X = 2.400) of in het laatste stuk naar de lock (F), met 2–3
 (799–1.071) → 1 + DLL 300. Evals: 276, 278, 280, 282 gepasst → verse PA's op qty 1; 281 gebreacht (47.194 < 47.500);
 279 (250K) heeft nog $244 ruimte → één verlies is het einde, laten lopen of resetten (keuze Ferry); 277 = 300K PA (A-88).
 
+## A-101 — Instructie Pine Dev voor v3.12.0: payout-poort als kaart, accountstart los van validFrom, defaults, visuals (3 nov 2026)
+
+Opdracht Ferry 03-11 na de bevinding dat 031/032/034 geen orders sturen (inbox 03-11: `pmtBlock` op een script-balans
+sinds 1 jan in fase Funded; 037 meldt "realized $5.626" op een account van 19 okt). Instructie (bij Ferry als bestand,
+integraal in de inbox op de werkbranch): (A) `pmtBlock` nooit op payout-gereedheid/cap/consistency; alleen dag- of
+accountbeëindigende toestanden blokkeren; accountstart als eigen input met default in de toekomst, los van `validFrom`;
+(B) defaults = de gemeten set: All sessions, FVG 8–23, venster 4, delta uit, TP 85/SL 100, day-trail **150/50/300 per
+contract × qty door het script**, giveback-2 50 @ 04:00 ET, dagstop 5 verliezen aan, 3 winsten/+X per chart, firm
+`apex_50k_legacy_pa`, risk-gate uit; optionele preset 100/33/200 (300K: 9/9 winstdagen in oktober); (C) visuals moeten
+de orders volgen (Ferry: drawings sync'en niet; reproductie bij Pine Dev); (D) zes acceptatietests incl. pariteit tegen
+`c92d9` en de PMT-payload-test in fase Funded. Voorbehoud: entries zijn de gemeten set, niet "beste van oktober" —
+oktober kon A/B niet beslissen (A-99). Versienummer: v3.11.0 bestaat al (D-154), dus v3.12.0.
+
 ## A-100 — Webhook-time-outs in de alerts-log: synchrone Discord-fallback in de receiver + kaartbudget 12/min bij 19 charts (2 nov 2026)
 
 158 van 2.000 TradingView-webhooks "timed out" (30 okt–2 nov). **Patroon 1 (148):** bursts van 19–61 alerts per seconde; alleen

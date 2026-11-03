@@ -2674,6 +2674,16 @@ f_markUnfilled(_fromBar, _px, _replaced) =>
 
 var int   pendDir = 0
 var int   pendBar = na
+// v3.13.0 §3a: de diagnosetekst van de SETUP, vastgelegd op het moment dat de order wordt
+// geplaatst. Het entry-label las tot nu toe `sigDiag` op de FILL-bar, en dat gaf "FVGNaN"
+// terwijl de signaalmarker netjes FVG6 of FVG9 toonde. De keten: `sigFvgTicks` komt uit
+// `sigGapTop/Bot`, en die zijn `(long0 or short0) ? fvg... : memSig...` -- dus alleen geldig
+// zolang het signaal leeft OF het setup-geheugen het nog draagt. Met een limietorder en
+// expiry 12 kan de fill twaalf bars later komen; dan is het setup-geheugen op en wordt
+// `sigFvgTicks` na, waarna `str.tostring(na, "#")` letterlijk "NaN" oplevert. Het label
+// beschreef dus niet de trade maar de leegte erna. Vastleggen bij plaatsing lost dat op en
+// werkt ook in marktmodus, waar de fill op dezelfde bar valt.
+var string pendDiag = ""
 var float pendLimit = na
 var float pendStop = na
 var float t_tpD = na
@@ -2743,6 +2753,7 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
         startNotified := true
         f_sendDiscord("🚀 " + syminfo.ticker + " ACCOUNT STARTED", jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz) + " | regime " + (useRegime ? (regimeFav ? "FAVORABLE" : "UNFAVORABLE") : "off") + " | first order: " + (longSignal ? "LONG " : "SHORT ") + str.tostring(t_qty, "#.##") + "ct @ " + str.tostring(isLimitMode ? sigEntryPx : close, format.mintick))
     pendLimit := isLimitMode ? sigEntryPx : na
+    pendDiag := sigDiag
     pendStop := sigStopPx
     if longSignal
         if isLimitMode
@@ -3199,7 +3210,7 @@ if (newLong or newShort)
         zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
         zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)
     if showTradeLabels and inTradeDrawWin
-        tradeEntryDiag := sigDiag + "|SL" + str.tostring(math.round(math.abs(entryAvg - curStop) / syminfo.mintick)) + "t"
+        tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - curStop) / syminfo.mintick)) + "t"
         tradeExitDiag  := ""
         tradeInfo := label.new(bar_index + 2, entryAvg, "", style=label.style_none, textcolor=vText, size=size.small, textalign=text.align_left)
         array.push(drawHistL, tradeInfo)
@@ -3289,7 +3300,14 @@ if showGateBoxes and barstate.isconfirmed and inDrawWin
             float _l = array.get(gwLo, i)
             int   _b0 = array.get(gwStart, i)
             if not na(_h) and not na(_b0)
-                array.push(gwBoxes, box.new(_b0, _h, bar_index - 1, _l, border_color=color.new(vText, 80), bgcolor=color.new(vText, 94)))
+                // v3.13.0 §3-bijvangst: het tijdvenster stond op `vText` (de themakleur van de tekst,
+                // #ECECEC donker / #1E222D licht) op 94% transparant, en een GETEST FVG-vak staat
+                // op `color.new(color.gray, 88)`. Op een donkere chart zijn dat twee vrijwel gelijke
+                // bleke grijzen, en dan is op de chart niet te zien of een vlak "hier mocht ik
+                // handelen" of "deze gap is al geraakt" betekent. Nu azuur -- #2F80ED is de kleur die
+                // in de indicatoren al voor vensters wordt gebruikt, dus geen nieuwe kleur, en hij is
+                // in beide thema's onmiskenbaar geen grijs.
+                array.push(gwBoxes, box.new(_b0, _h, bar_index - 1, _l, border_color=color.new(#2F80ED, 70), bgcolor=color.new(#2F80ED, 92)))
                 array.push(gwLabels, label.new(int(math.avg(_b0, bar_index - 1)), _h, f_gwName(i), style=label.style_label_down, color=color.new(vText, 100), textcolor=color.new(vText, 25), size=size.tiny))
                 while array.size(gwBoxes) > gateBoxKeep
                     box.delete(array.shift(gwBoxes))

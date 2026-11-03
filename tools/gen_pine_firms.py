@@ -106,7 +106,7 @@ PINE = os.path.join(REPO, "pine")
 # legacy = $2.500. De registry droeg 2.500 op alle Apex 50K-programma's, ook de vier 4.0-
 # programma's waar de vloot op draait; die staan nu op 2000 met lock 2100.
 STRATEGY_DEFAULT = {
-    "MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
+    "MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine":    "apex_50k_legacy_pa",
     "MEX_EL_PATRON_MGC_AGG_EOD_v1_0_0.pine":    "apex_50k_eod_pa",
     "MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine":      "apex_50k_eod_pa",
     "MEX_EL_REY_MNQ_PROD_INTRA_v1_0_0.pine":    "apex_50k_intraday_pa",

@@ -583,7 +583,7 @@ timeHour18 = input.bool(true, "18", inline="h3", group=GROUP_TIME), timeHour19 =
 // Revalidated all-24h Stability Core defaults: LONG 09/10/11/20/21/23 · SHORT 10/11/21. All 24 switches remain user-editable.
 // === MARKET REGIME GATE ======================================================
 // Research-defined structural sessions; no individual hour/day cherry-picking.
-marketRegimeMode = input.string("Liquidity Core", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
+marketRegimeMode = input.string("All sessions", "Market regime", options=["All sessions","Liquidity Core","Custom"], group=GROUP_MREG,
      tooltip="Liquidity Core = London 02:00-05:00 ET + US pre-cash/morning 07:00-12:00 ET + Globex reopen 18:00-19:00 ET. These windows were defined by market structure, not individual-hour optimization.")
 // Negen economisch vooraf gedefinieerde vensters, tijden in de referentie-timezone.
 // De eerste drie zijn samen "Liquidity Core" en zijn NIET aangepast: die definitie zit
@@ -641,11 +641,11 @@ float maxStopSizeEff = maxStopSize
 float slSizeLegacyEff = slSizeLegacy
 
 // === TRADE MANAGEMENT ========================================================
-tpMode  = input.string("R-multiple", "Take-Profit Mode", options=["R-multiple","Swing structure","Fixed (units)"], group=GROUP_RISK,
+tpMode  = input.string("Fixed (units)", "Take-Profit Mode", options=["R-multiple","Swing structure","Fixed (units)"], group=GROUP_RISK,
      tooltip="Swing structure: target = last confirmed opposite pivot. R-multiple: target = R x stop distance. Fixed: static distance in units.", display=display.none)
 rMultIn = input.float(2.25, "R-Multiple (R-multiple mode)", minval=0.1, step=0.5, group=GROUP_RISK,
      tooltip="Target as a multiple of the stop distance (R-multiple mode).")
-tpSize  = input.float(122, "Take Profit (units, Fixed mode)", minval=0.01, group=GROUP_RISK, tooltip="Static target distance (Fixed TP mode only).", display=display.none)
+tpSize  = input.float(85, "Take Profit (units, Fixed mode)", minval=0.01, group=GROUP_RISK, tooltip="Static target distance (Fixed TP mode only).", display=display.none)
 useBreakEven    = input.bool(false, "Enable Break-even", group=GROUP_RISK,
      tooltip="Default ON (v3.6). Optional with Swing TP (expectancy-neutral, lower DD); with R-multiple it is part of the exit engine. Live: server-side via broker bracket.", display=display.none)
 beTriggerSize   = input.float(15, "BE Trigger MFE (units)", minval=0.01, group=GROUP_RISK, tooltip="MFE required before the stop moves to break-even.", display=display.none)
@@ -709,15 +709,15 @@ dayCapUSD   = input.float(300, "Day-cap hard target ($ per contract)", minval=50
 // NIET. Deze stops knippen variantie, en dat is wat een account met een trailing
 // drawdown nodig heeft -- bij gelijke payout-kans halveert de breach-kans.
 // ⚠️ Alle vier staan UIT. Zolang niemand ze aanzet is het gedrag ongewijzigd.
-maxLossStreak        = input.int(0, "Max verliezen op rij per dag (0 = uit)", minval=0, maxval=50, group=GROUP_DEX,
+maxLossStreak        = input.int(5, "Max verliezen op rij per dag (0 = uit)", minval=0, maxval=50, group=GROUP_DEX,
      tooltip="Na de k-de verliezende GESLOTEN trade op rij gaat de dag dicht: geen nieuwe entries, een lopende limietorder wordt geannuleerd. Een winnaar zet de teller op 0. 5 is de gemeten waarde met de beste verhouding (gelijke payout-kans, breach-kans gehalveerd). 0 = uit.")
 maxWinStreak         = input.int(0, "Max winsten op rij per dag (0 = uit)", minval=0, maxval=50, group=GROUP_DEX,
      tooltip="Zelfde mechanisme, maar op winsten. ⚠️ Gemeten is dit DODELIJK voor een vers account (payout-kans 1,1%) en het beste wat er is voor een GELOCKT account met weinig ruimte (69% payout, 0% breach). Daarom een losse knop: de juiste waarde verschilt per accountfase. 0 = uit.")
 lossAfterPlusUSD     = input.float(0, "Eerste verlies boven +X sluit de dag ($, 0 = uit)", minval=0, step=25, group=GROUP_DEX,
      tooltip="Sluit een trade verliezend terwijl de gerealiseerde dag-P&L VÓÓR die trade al >= X stond, dan gaat de dag dicht. In dollars TOTAAL, niet per contract, dus deze schaalt mee met je qty. Gemeten gat: staat de dag om 04:00 ET op >= +$100 per contract, dan is de rest van de dag gemiddeld -$84 tot -$97. 0 = uit.")
-dayTrailGiveback2USD = input.float(0, "Giveback-2 ($, 0 = de gewone giveback)", minval=0, step=10, group=GROUP_DEX,
+dayTrailGiveback2USD = input.float(50, "Giveback-2 ($, 0 = de gewone giveback)", minval=0, step=10, group=GROUP_DEX,
      tooltip="Een tweede, meestal strakkere giveback die vanaf een bepaald uur geldt. De ACTIVATIE verandert niet. 0 = gebruik de gewone giveback, dus uit.")
-dayTrail2FromHour    = input.int(0, "Giveback-2 vanaf (uur ET, 0 = uit)", minval=0, maxval=23, group=GROUP_DEX,
+dayTrail2FromHour    = input.int(4, "Giveback-2 vanaf (uur ET, 0 = uit)", minval=0, maxval=23, group=GROUP_DEX,
      tooltip="Vanaf dit uur in de handelsdag geldt giveback-2. Gemeten variant: 50 vanaf 04:00 ET. Het uur wordt gemeten BINNEN de handelsdag die om 18:00 ET begint, niet op de kalenderklok. 0 = uit.")
 // === v3.12.0 §2B — de day-exit-guards zijn PER CONTRACT ======================
 // Ferry zette ze tot nu toe met de hand per chart op een totaal: 018 op qty 4 stond op
@@ -847,7 +847,7 @@ rgDllBasis  = input.string("Realized + open (cuts the trade)", "DLL basis", opti
 int rgRollHour = 18   // CME-roll; valt samen met het einde van de force-flat
 
 useFirmPreset = input.bool(true, "Use firm preset (fills account rules below)", group=GROUP_PHASE, tooltip="Pick a prop-firm program; the drawdown model, trailing DD, eval goal, daily-loss and consistency get set for you. Leave OFF to use the manual inputs.")
-firmPreset    = input.string("apex_50k_eod_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "fundednext_50k_rapid_eval", "fundednext_50k_rapid_pa", "mffu_50k_eval", "mffu_50k_pa", "takeprofittrader_50k_eval", "takeprofittrader_50k_pa", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_50k_growth_eval", "tradeify_50k_growth_pa", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
+firmPreset    = input.string("apex_50k_legacy_pa", "Firm program", options=["apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "fundednext_50k_rapid_eval", "fundednext_50k_rapid_pa", "mffu_50k_eval", "mffu_50k_pa", "takeprofittrader_50k_eval", "takeprofittrader_50k_pa", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_50k_growth_eval", "tradeify_50k_growth_pa", "tradeify_advanced_25k_instant"], group=GROUP_PHASE, tooltip="Auto-generated from the prop-firm registry. Only trailing-DD (futures) firms are listed here.")
 f_firmRules(string _p) =>
     string _dd = "Intraday"
     float _ml = 2500.0
@@ -1476,7 +1476,7 @@ allowScalp    = true
 vwapDistMin   = 0.05
 
 // === DELTA FILTER (vereenvoudigd) ===========================================
-useCVDFilter  = input.bool(true, "Use Delta Filter", group=GROUP_CVD,
+useCVDFilter  = input.bool(false, "Use Delta Filter", group=GROUP_CVD,
      tooltip="Default uses the deterministic OHLCV research proxy for Python/.NET/Pine parity. TradingView volume delta remains available as an optional experimental engine.")
 cvdEngine     = input.string("TradingView volume delta", "Delta engine",
      options=["Research OHLCV proxy","TradingView volume delta"], group=GROUP_CVD,
@@ -1491,11 +1491,11 @@ int cvdTrendCountEff = cvdTrendCount
 // === FVG =====================================================================
 useGapFilter = input.bool(true, "Use FVG Size Range Filter", group=GROUP_FVG,
      tooltip="Size does not predict the outcome, but the range controls trade frequency and thus cost pressure. 9-13 is the", display=display.none)
-gapMinSize   = input.float(11,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
-gapMaxSize   = input.float(16, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
+gapMinSize   = input.float(8,  "Min FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Minimum FVG size. Do not widen — smaller gaps are noise.")
+gapMaxSize   = input.float(23, "Max FVG Size (units)", minval=0.01, group=GROUP_FVG, tooltip="Maximum FVG size.")
 float gapMinSizeEff = gapMinSize
 float gapMaxSizeEff = gapMaxSize
-confirmBarsIn = input.int(0, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
+confirmBarsIn = input.int(4, "Confirmation window (bars)", minval=0, maxval=20, group=GROUP_FVG,
      tooltip="v6.1 FVG confirmation memory. 0 = OFF = exact v6.0 behaviour. With X>0, a size-passing FVG whose confirmation (delta filter, VWAP veto, bias, sweep, time gate) is not present on the gap bar itself stays valid for X bars; the signal fires on the first bar inside the window where all strategy rules pass and the account is flat. One signal per gap, newest gap first; entry limit and stop reference the stored gap. HONEST VALIDATION NOTE: walk-forward funnel simulation (Sep 2018–Jun 2026, 878 paired starts, B exit configuration only): payout/funnel $171 (0) -> $305 (3) -> $355 (5), monotone in X; paired bootstrap at X=3: +$134/funnel, z=1.86 — positive but NOT 95%-significant. Effect is throughput/tempo (+66% trades, near-equal pass rate), not signal quality. Do NOT combine with break-even exits (weaker there, and BE variants stay below B). Fleet recommendation: core stream 0, tempo stream 3, explorer stream 5.")
 
 

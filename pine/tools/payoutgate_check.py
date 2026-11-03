@@ -83,9 +83,15 @@ def main() -> int:
             if needle not in code:
                 bad.append(f"{name}: accountlaag-regel ontbreekt of wijkt af: {needle[:52]}")
 
-        m = re.search(r"^acctStart = input\.time\(timestamp\(\"[^\"]+\", (\d{4}), (\d+), (\d+),", code, re.M)
+        # De default MOET de enkele-stringvorm van timestamp zijn. De meerargument-vorm
+        # levert een simple int in plaats van een const int en geeft CE10123 -- dat is drie
+        # keer gebeurd, en deze poort las eerst juist die kapotte vorm als de goede. De
+        # const-eigenschap zelf wordt vlootbreed door pine_lint.check_input_defaults bewaakt;
+        # hier gaat het om de DATUM, en die moet in de toekomst liggen.
+        m = re.search(r"^acctStart = input\.time\(timestamp\(\"(\d{4})-(\d{2})-(\d{2})T", code, re.M)
         if m is None:
-            bad.append(f"{name}: acctStart is geen input.time met een expliciete datum")
+            bad.append(f"{name}: acctStart is geen input.time(timestamp(\"JJJJ-MM-DDThh:mm:ss±uu:mm\")) "
+                       f"-- een andere vorm is of geen const of geen leesbare datum")
         else:
             d = dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
             if d <= today:

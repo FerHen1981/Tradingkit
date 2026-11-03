@@ -89,6 +89,7 @@ def check(path):
                 findings.append(f"r{n}: input.string default {d.group(1)!r} staat niet in options")
 
     findings += check_plot_titles(path)
+    findings += check_input_defaults(path)
 
     tabs = [n for n, l in enumerate(raw, 1) if '\t' in l]
     if tabs: findings.append(f"tabs op {tabs}")
@@ -142,6 +143,50 @@ SHARED_BLOCKS = {
 # ziet het pas in TradingView. De titel is het tweede positionele argument, of title=.
 _PLOTF = ("plot", "plotshape", "plotchar", "plotcandle", "plotbar", "plotarrow", "fill", "bgcolor", "barcolor", "hline")
 
+
+def check_input_defaults(path):
+    """De DEFAULT van een `input.*` moet een CONST zijn, en dat is een echte val.
+
+    `input.time(timestamp("America/New_York", 2099, 1, 1, 0, 0, 0), ...)` ziet correct uit
+    en compileert NIET: de meerargument-vorm van `timestamp` levert een `simple int` terwijl
+    de default een `const int` moet zijn (CE10123, *"call timestamp (simple int) ... const
+    int expected"*). Alleen de vorm met ÉÉN stringliteraal -- `timestamp("2099-01-01T00:00:00-05:00")`
+    -- is const.
+
+    Dit is drie keer langs groene poorten gekomen: op 08-10 in `validFrom`/`validUntil`, een
+    tweede keer in dezelfde release, en op 03-11 opnieuw in de nieuwe `Account start`-input.
+    De poorten die er toen al waren toetsten op letterlijke regels, dus ze zagen de
+    EIGENSCHAP niet. Daarom staat de regel hier en niet als een verboden tekst.
+
+    ⚠️ Niet elke aanroep als default is fout, en dat is bewust zo gelaten:
+    `input.color(color.new(#2F80ED, 88), ...)` is geldig Pine, want `color.new` met
+    literalen is const-foldbaar. Een poort die daarop afgaat staat onterecht rood, en
+    daar went men aan -- precies hoe de gedeelde-blok-poort maanden niets meer zei.
+    Daarom: `timestamp` alleen in de enkele-stringvorm, een korte lijst bekende
+    const-foldbare aanroepen mag, en al het ONBEKENDE wordt gemeld. Zo blijft de melding
+    iets betekenen en groeit de lijst alleen met iets wat iemand heeft nagekeken.
+    """
+    CONST_FOLDABLE = ("color.new", "color.rgb")
+    raw = open(path).read().split("\n")
+    findings = []
+    for n, line in enumerate(raw, 1):
+        if line.lstrip().startswith("//"):
+            continue
+        m = re.search(r"input\.[a-z_]+\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\(", line)
+        if m is None:
+            continue
+        call = m.group(1)
+        if call == "timestamp":
+            # Alleen de vorm met precies EEN stringliteraal is const.
+            if not re.search(r'input\.[a-z_]+\(\s*timestamp\(\s*"[^"]*"\s*\)', line):
+                findings.append(f"r{n}: de default is de meerargument-vorm van timestamp() en "
+                                f"dus een simple int, geen const -- gebruik "
+                                f"timestamp(\"JJJJ-MM-DDThh:mm:ss\u00b1uu:mm\"). Dit geeft CE10123.")
+        elif call not in CONST_FOLDABLE:
+            findings.append(f"r{n}: de default van deze input is {call}(...). Dat is niet in de "
+                            f"lijst const-foldbare aanroepen ({', '.join(CONST_FOLDABLE)}), dus "
+                            f"controleer of hij compileert en zet hem er dan bij.")
+    return findings
 
 def check_plot_titles(path):
     src = open(path).read()

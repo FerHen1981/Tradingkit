@@ -818,7 +818,7 @@ acctHwmOffset = input.float(0, "Live sync: current HWM vs start ($)", group=GROU
 //      breach uitzetten (floor -$2.000, stand 0), en dan ruil je een fantoombalans voor een
 //      account zonder breach-halt. Dat is erger dan het probleem. Zelfde regel als D-139:
 //      onbekend = dicht, niet open.
-acctStart = input.time(timestamp("America/New_York", 2099, 1, 1, 0, 0, 0), "Account start (balans telt hiervanaf)", group=GROUP_PHASE,
+acctStart = input.time(timestamp("2099-01-01T00:00:00-05:00"), "Account start (balans telt hiervanaf)", group=GROUP_PHASE,
      tooltip="De datum waarop dit ACCOUNT begon -- niet te verwarren met 'Valid from', dat zegt vanaf wanneer het script mag handelen. De accountlaag (balans, buffer, payout-voortgang) telt hiervanaf. Laat hem in de toekomst staan zolang je hem niet weet: dan telt de chart niets EN handelt hij niet, in plaats van een verzonnen jaar te tellen. 'Live sync: current account PnL vs start ($)' blijft de correctie op de echte stand.")
 lastPayoutTime= input.time(timestamp("2024-01-01T00:00:00"), "Last payout (consistency anchor)", group=GROUP_PHASE, tooltip="Consistency and qualifying-day counters measure from this moment. Set to your last payout date; leave at default for a fresh account.", display=display.none)
 

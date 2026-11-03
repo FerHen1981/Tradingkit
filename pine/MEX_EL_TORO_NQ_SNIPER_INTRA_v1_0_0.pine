@@ -437,8 +437,47 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.0 (03-11): compile-patch, tabel B op EL TESORO, en de FVGNaN-visual.
+//   (1) COMPILE-PATCH. De `Account start`-input uit v3.12.0 droeg
+//   `timestamp("America/New_York", 2099, 1, 1, 0, 0, 0)`, en dat is exact de vorm die op
+//   08-10 CE10123 gaf: de meerargument-vorm levert een `simple int` waar een input-default
+//   een `const int` moet zijn. Mijn eigen vorige release bracht de kapotte vorm dus terug,
+//   en v3.12.0 compileerde nergens. Nu `timestamp("2099-01-01T00:00:00-05:00")`, gelijk aan
+//   `validFrom`/`validUntil`.
+//   🔑 En de reden dat vier groene poorten dit niet zagen: ze toetsen op letterlijke regels
+//   en zien de EIGENSCHAP niet. `pine_lint.py` heeft nu `check_input_defaults`: `timestamp`
+//   mag alleen in de enkele-stringvorm, een korte lijst bekende const-foldbare aanroepen
+//   (`color.new`, `color.rgb`) mag, en al het onbekende wordt gemeld. Die lijst is er
+//   bewust -- `input.color(color.new(#2F80ED, 88), …)` is geldig Pine, en een poort die
+//   daarop afgaat staat onterecht rood. Daar went men aan.
+//   (2) TABEL B, ALLEEN DIT MERK ALS DIT EL TESORO IS. Elf inputs, elk met een assert op de
+//   oude waarde: Market regime All sessions · FVG 8/23 · confirmation window 4 · Delta
+//   filter uit · TP Fixed (units) 85 · giveback-2 50 @ 04:00 ET · max verliezen op rij 5 ·
+//   firm program `apex_50k_legacy_pa`. De andere twaalf houden hun entry-defaults; TORO
+//   ongewijzigd (A-75). ⚠️ De `firmPreset`-default stond OOK in de generator, dus alleen de
+//   `.pine` aanpassen zou bij de eerstvolgende run zijn teruggedraaid.
+//   ⚠️ Gevolg van het legacy-profiel: trailing drawdown $2.000 -> $2.500 en consistency
+//   50% -> 30%, beide correct voor een legacy PA. En de payout-ladder wordt $2.000 voor
+//   payout 1 t/m 5 met GEEN maximum vanaf 6.
+//   ⚠️ Een chart met een opgeslagen `Use Delta Filter = true` houdt zijn eigen gedrag, net
+//   als bij de day-guards: TradingView bewaart ingevulde waarden.
+//   (3) FVGNaN IN HET ENTRY-LABEL -- opgelost, en de keten is nagemeten. Het label las
+//   `sigDiag` op de FILL-bar, en `sigFvgTicks` is alleen geldig zolang het signaal leeft of
+//   het setup-geheugen het draagt. Met een limietorder en expiry 12 kan de fill twaalf bars
+//   later vallen; dan is dat geheugen op en levert `str.tostring(na, "#")` letterlijk "NaN".
+//   Het label beschreef dus niet de trade maar de leegte erna. `pendDiag` legt de
+//   setup-tekst nu vast bij het PLAATSEN.
+//   BIJVANGST: het tijdvenster stond op de themakleur van de tekst op 94% transparant en
+//   een GETEST FVG-vak op grijs 88% -- op een donkere chart twee gelijke bleke grijzen, dus
+//   niet te zien of een vlak "hier mocht ik handelen" of "deze gap is al geraakt" betekent.
+//   Nu azuur #2F80ED.
+//   📌 De twee andere visual-punten zijn NIET aangeraakt en dat is een bevinding: er zijn
+//   geen `line`-objecten voor entry/SL/TP, dus er is ook geen ontbrekende `line.set_x2`.
+//   Het zijn twee `plot(style=plot.style_linebr)` op `curStop`/`curLimit`, gezet op de
+//   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
+//   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX ΞL TORO · NQ SNIP INTRA"
-var string currentVersion = "v3.12.0"
+var string currentVersion = "v3.13.0"
 strategy("MΞX ΞL TORO · NQ SNIP INTRA · " + currentVersion, shorttitle="TOR-NQ-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

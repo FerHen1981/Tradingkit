@@ -10308,3 +10308,99 @@ TP Fixed 85 · giveback-2 50 @ 04:00 · dagstop 5 · firm `apex_50k_legacy_pa`.
 `frozen-engines.md` is daarmee in lijn: alleen het TESORO-blok is aangepast. Sorry voor de
 omweg — dit was precies de klasse fout die de instructie van A&D zélf vermijdt ("alleen zaken
 met bewijs").
+
+---
+
+### 🟨 Pine Dev → SM + Analyses & Data + Ferry · 03-11 · **v3.13.0 staat: compile-patch, tabel B op EL TESORO, FVGNaN opgelost — en twee visual-punten blijken op een niet-bestaand mechanisme te rusten** · status: deels
+
+Vijf commits, alle dertien op **v3.13.0**. Alle vier de poorten groen, met de exitcodes
+los geprint — want twee keer deze ronde stond er een poort rood en zag ik dat bijna niet.
+
+#### 1 · Compile-patch — en het was mijn eigen regel
+
+De `Account start`-input uit v3.12.0 droeg de meerargument-`timestamp`, dus **ik heb op
+03-11 de vorm teruggebracht die op 08-10 CE10123 gaf.** Nu de stringvorm, gelijk aan
+`validFrom`.
+
+🔑 **Waarom vier groene poorten dit niet zagen: ze toetsen op letterlijke regels en zien de
+EIGENSCHAP niet.** `pine_lint.py` heeft nu `check_input_defaults`. Eén nuance die ik er
+bewust in heb gebouwd: `input.color(color.new(#2F80ED, 88), …)` is **geldig** Pine, dus een
+blanco "geen aanroepen als default" zou onterecht rood staan — en daar went men aan, precies
+hoe de gedeelde-blok-poort maanden niets meer zei. Daarom: `timestamp` alleen in de
+enkele-stringvorm, een korte lijst bekende const-foldbare aanroepen mag, en al het onbekende
+wordt gemeld met de vraag het na te kijken en toe te voegen. Getoetst door de kapotte vorm
+tijdelijk terug te zetten: hij meldt r827 en niets anders.
+
+🔴 **Twee poorten moesten mee, en dat is zelf een bevinding.** `payoutgate_check.py` las
+juist de **kapotte** vorm als de goede, dus die faalde ná de patch. En `daystop_check.py`
+eiste dat alle vijf dagstops in alle dertien op 0 staan — dat was de voorwaarde onder
+v3.11.0, en tabel B zet er drie van aan. Opgelost met een `EXPECTED_ON`-tabel: per script,
+per input, met de bron van het besluit erbij. **Dat is het verschil tussen een uitzondering
+en een verzwakte poort** — getoetst door `maxLossStreak` op REY tijdelijk op 5 te zetten,
+die wordt nog steeds gemeld.
+
+#### 2 · Tabel B — alleen EL TESORO
+
+Elf inputs, elk met een assert op de oude waarde. ⚠️ **De `firmPreset`-default stond óók in
+`tools/gen_pine_firms.py`** (r. 109); alleen de `.pine` aanpassen zou bij de eerstvolgende
+generatorrun zijn teruggedraaid. Nu op beide plekken, generator gedraaid, nagemeten dat van
+de dertien bestanden **alleen TESORO** veranderde en dat de run idempotent is.
+
+⚠️ **Twee gevolgen van het legacy-profiel die niet in de instructie stonden:** TESORO's
+trailing drawdown gaat van **$2.000 naar $2.500** en de consistency van **50% naar 30%** —
+beide correct voor een legacy PA, de eerste in Ferry's voordeel en de tweede strenger. En de
+payout-ladder wordt **$2.000 voor payout 1 t/m 5 met geen maximum vanaf 6**.
+
+⚠️ Zoals gevraagd benoemd: **een chart met een opgeslagen `Use Delta Filter = true` houdt
+zijn eigen gedrag**, net als bij de day-guards.
+
+#### 3 · De visuals — één opgelost, en twee die anders in elkaar zitten dan de diagnose zegt
+
+✅ **(a) FVGNaN is weg, en de keten klopt precies zoals jullie hem beschreven.** Het label las
+`sigDiag` op de **fill**-bar; `sigFvgTicks` komt uit `sigGapTop/Bot` en die zijn
+`(long0 or short0) ? fvg… : memSig…` — dus alleen geldig zolang het signaal leeft óf het
+setup-geheugen het draagt. Met een limietorder en expiry 12 kan de fill twaalf bars later
+vallen, is dat geheugen op, en levert `str.tostring(na, "#")` letterlijk `"NaN"`. **Het label
+beschreef niet de trade maar de leegte erna.** `pendDiag` legt de setup-tekst nu vast bij het
+**plaatsen**; werkt ook in marktmodus.
+
+✅ **Bijvangst, en die was hard na te meten:** het tijdvenster stond op `color.new(vText, 94)`
+— de themakleur van de **tekst** — en een **getest** FVG-vak op `color.new(color.gray, 88)`.
+Op een donkere chart zijn dat twee vrijwel gelijke bleke grijzen, dus op de chart is niet te
+zien of een vlak *"hier mocht ik handelen"* of *"deze gap is al geraakt"* betekent. Nu azuur
+`#2F80ED`, de kleur die de indicatoren al voor vensters gebruiken.
+
+🔴 **(b) en (c) heb ik NIET aangeraakt, en dat is geen uitstel.** Ze rusten op een mechanisme
+dat in deze bron niet bestaat:
+
+- **Er zijn geen `line`-objecten voor entry/SL/TP**, dus er is ook geen ontbrekende
+  `line.set_x2`. Het zijn twee `plot(showTradeLevels and not flatNow ? curStop : na, …,
+  style=plot.style_linebr)`.
+- `curStop`/`curLimit` worden gezet op de **fill**-bar (`if newLong or newShort`, r. 2813/2814)
+  en gewist bij `flatNow and not (newLong or newShort)` (r. 2915/2916). Ze **beginnen** dus
+  per constructie op de fill en niet op signaaltijd, en ze **stoppen** per constructie bij
+  flat.
+
+➡️ Wat dat betekent: óf ik kijk naar het verkeerde object, óf het gaat om iets anders dan de
+aangewezen oorzaak. Twee kandidaten die ik wél uit de bron kan noemen, maar **niet als
+diagnose** — de enige manier om te kiezen is de chart:
+1. een **overhang van één bar**, doordat `posSize` uit `strategy.position_size` komt en die
+   pas bijwerkt nadat de exit administratief verwerkt is;
+2. de **trade-zone-boxen** (`zoneRisk`/`zoneReward`, r. 3199/3200) — die blijven na de exit
+   met hun laatste rechterrand staan. Dat is bedoeld gedrag voor een historische trade, maar
+   het **ziet eruit** als een lijn die de trade overleeft, en op een chart met meerdere trades
+   naast elkaar is dat precies de verwarring die Ferry beschrijft.
+
+📌 **Wat ik nodig heb om dit af te maken:** de twee schermafdrukken waar jullie het over
+hebben, met voor drie opeenvolgende trades de drawings náást de FILL/EXIT-kaarten van
+diezelfde trades. Dan is het één gerichte ronde. Zonder is het gokken, en dat is deze week al
+vaker fout gegaan dan goed.
+
+#### Acceptatie — stand
+
+| eis | stand |
+|---|---|
+| lint 13/13 ok mét de nieuwe check | ✅ 13 live `ok`, 9 bevindingen (alle in `history/` en `lib/`, net als voor deze ronde) |
+| payoutgate-, daystop-, owner_dll-poort groen | ✅ alle drie exit 0, los geprint |
+| `DEPLOYED.md` op v3.13.0 met OOS-reset | ✅ |
+| FVG-maat in het entry-label gelijk aan de signaalmarker | ✅ in de bron; op de chart te zien zodra Ferry plakt |

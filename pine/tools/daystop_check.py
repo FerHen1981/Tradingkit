@@ -28,13 +28,26 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PINE = sorted((ROOT / "pine").glob("MEX_EL_*_v1_0_0.pine"))
 
-# De defaults die deze release veilig maken. Naam -> verwachte default als tekst.
+# Standaard staat elke dagstop UIT, en dat was de voorwaarde waaronder v3.11.0 mocht.
 DEFAULTS = {
     "maxLossStreak": "0",
     "maxWinStreak": "0",
     "lossAfterPlusUSD": "0",
     "dayTrailGiveback2USD": "0",
     "dayTrail2FromHour": "0",
+}
+
+# Waar een release een dagstop BEWUST heeft aangezet, staat dat hier -- per script en per
+# input, met de bron van het besluit erbij. Dat is het verschil tussen een uitzondering en
+# een verzwakte poort: een afwijking die hier niet staat, faalt nog steeds. v3.13.0 zette
+# tabel B op EL TESORO (opdracht Ferry via Analyses & Data, 03-11: A-92/A-97 voor de
+# vijf-verliezen-stop, A-89 voor giveback-2 vanaf 04:00 ET); de andere twaalf houden 0.
+EXPECTED_ON = {
+    "MEX_EL_TESORO_MGC_CON_EOD": {
+        "maxLossStreak": "5",
+        "dayTrailGiveback2USD": "50",
+        "dayTrail2FromHour": "4",
+    },
 }
 
 # Regels die de betekenis dragen. Wijkt er één af, dan is de semantiek veranderd zonder
@@ -109,13 +122,18 @@ def main() -> int:
     for path in PINE:
         src = path.read_text(encoding="utf-8")
         name = path.name.replace("_v1_0_0.pine", "")
+        on = EXPECTED_ON.get(name, {})
         for var, want in DEFAULTS.items():
+            want = on.get(var, want)
             m = re.search(rf"^{var}\s*= input\.(?:int|float)\(\s*([^,]+),", src, re.M)
             if m is None:
                 bad.append(f"{name}: input {var} ontbreekt")
             elif m.group(1).strip() != want:
-                bad.append(f"{name}: {var} heeft default {m.group(1).strip()}, moet {want} zijn "
-                           f"-- met een andere default is het gedrag NIET ongewijzigd")
+                extra = (" (deze staat in EXPECTED_ON omdat een release hem bewust aanzette)"
+                         if var in on else
+                         " -- staat hij hier bewust aan, zet hem dan in EXPECTED_ON met de bron"
+                         " van het besluit; stilzwijgend afwijken mag niet")
+                bad.append(f"{name}: {var} heeft default {m.group(1).strip()}, verwacht {want}{extra}")
         for needle, why in REQUIRED:
             if needle not in src:
                 bad.append(f"{name}: {why} -- regel niet gevonden")
@@ -141,8 +159,12 @@ def main() -> int:
         for b in bad:
             print("FOUT:", b)
         return 1
-    print("Alles klopt. Alle vier de dagstops staan in dertien scripts UIT, dus het gedrag")
-    print("is ongewijzigd tot iemand ze aanzet.")
+    n_on = sum(len(v) for v in EXPECTED_ON.values())
+    print(f"Alles klopt. De dagstops staan UIT in {len(PINE) - len(EXPECTED_ON)} van de "
+          f"{len(PINE)} scripts;")
+    for script, vals in sorted(EXPECTED_ON.items()):
+        print(f"  bewust AAN in {script}: " + " · ".join(f"{k}={v}" for k, v in vals.items()))
+    print(f"Dat zijn {n_on} aangekondigde uitzonderingen. Elke andere afwijking faalt.")
     return 0
 
 

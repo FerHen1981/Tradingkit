@@ -23,32 +23,33 @@ Ferry na het plakken). Lopen ze uit elkaar, dan is dat zichtbaar in plaats van v
 4. **Loopt de kolom achter, dan is dat het antwoord**, niet een reden om te gokken.
 
 De versie is ook live af te lezen zonder dit bestand: hij staat in de scripttitel op de chart
-(`MΞX EL MATADOR · MES PROD EOD · v3.13.0`) en in de CONFIG-kaart in Discord (`ver=v3.13.0`).
+(`MΞX EL MATADOR · MES PROD EOD · v3.13.1`) en in de CONFIG-kaart in Discord (`ver=v3.13.1`).
 
 ## Stand
 
 | Script | Shorttitle | In de repo | Sinds | Op TradingView | Geplakt op |
 |---|---|---|---|---|---|
-| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.0 | 03-11 | **compile-patch** — de `Account start`-default was de niet-const `timestamp`-vorm (CE10123), v3.12.0 compileerde nergens; de lint heeft nu een const-defval-check · **tabel B op EL TESORO** (All sessions · FVG 8/23 · confirm 4 · Delta uit · TP Fixed 85 · giveback-2 50@04:00 · dagstop 5 · `apex_50k_legacy_pa`), de andere twaalf ongewijzigd · **visuals**: FVGNaN in het entry-label opgelost en het tijdvenster is niet langer hetzelfde grijs als een getest FVG-vak | **ja, hele vloot** |
+| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.1 | 03-11 | **compileerfix** — `acctStartMissing` las `acctStarted` vóór zijn declaratie (CE10272), dus v3.12.0 én v3.13.0 compileerden niet; de lint heeft nu ook een gebruik-voor-declaratie-check | nee — het script liep nog nergens |
+| v3.13.0 | 03-11 | **compile-patch** — de `Account start`-default was de niet-const `timestamp`-vorm (CE10123), v3.12.0 compileerde nergens; de lint heeft nu een const-defval-check · **tabel B op EL TESORO** (All sessions · FVG 8/23 · confirm 4 · Delta uit · TP Fixed 85 · giveback-2 50@04:00 · dagstop 5 · `apex_50k_legacy_pa`), de andere twaalf ongewijzigd · **visuals**: FVGNaN in het entry-label opgelost en het tijdvenster is niet langer hetzelfde grijs als een getest FVG-vak | **ja, hele vloot** |
 | v3.12.0 | 03-11 | **§2A van de v3.12.0-instructie** — de payout-poort zet `pmtBlock` niet meer (payout-gereedheid is een kaart, orders gaan door) · nieuwe input **`Account start`** zodat de balans vanaf de echte accountstart telt in plaats van vanaf `validFrom`; default in de toekomst en een niet-ingevulde chart handelt niet · PAYOUT-kaart meldt "script-balans, niet Apex" · **§2B eerste deel:** de day-exit-guards zijn **per contract** (defaults 150/50/300, dus qty 3 → 450/150/900) op de negen PA-scripts, met een waarschuwing op de chart als een chart nog opgeslagen totalen draagt | **ja, hele vloot** |
 | v3.11.0 | 08-10 | **D-154** vier dagstops in groep 7, **alle vier default uit**: max verliezen op rij · max winsten op rij · eerste verlies boven +X · giveback-2 vanaf een uur. Voeden `dayHalted`, dus de bestaande HALT-machinerie blijft ongewijzigd; `dexStop=` staat in de CONFIG-regel | **ja, hele vloot** — nieuwe inputs, ook met alles uit |
 | v3.10.0 | 08-10 | **D-148** vast payout-maximum per accountgrootte en **geen** maximum vanaf payout 6 (`f_firmLadder` draagt beide registry-vormen; geen maximum = `na`, niet 0) · **D-139** een onbekende `accountPhase` blokkeert entries in plaats van alle poorten te openen, met een rood label op de chart | **ja, hele vloot** — akkoord Ferry 08-10 |
 | v3.9.0 | 06-10 | **D-126** de payout-ladder komt uit de registry (`f_ladderCap` → `f_firmLadder`) · **D-125** `pmtBlock` hangt op `payoutReady` i.p.v. op de cap alleen — deadlock weg · **D-124** `useWaitForCap` is een input, default `true` · **poort** `gen_pine_firms.py` faalt nu als een `f_firm*` geen call-site heeft, en vond meteen `f_firmMinPayout` | **ja, hele vloot** — één reset voor alle drie, want ze raken dezelfde poort |
 | v3.8.0 | 29-09 | **D-110 stap 2** — `dllHit` is weg; één dagrem over. `acctDLL` blijft als weergave (D-96). Een halt op de firmawaarde heet voortaan "Daily Loss" | **nee** — de rem is niet losser geworden, alleen de dubbele weg; de klok staat sinds v3.6.0 op nul |
 | v3.7.0 | 29-09 | **D-110 stap 1b** — de firmalimiet doet mee IN de eigen rem: `min(SL × stops × qty, firm_dll)`. Daarmee halteert de eigen rem per definitie op of vóór de firmalimiet en is `dllHit` strikt overbodig — dat opent stap 2. De derde term (ruimte × fractie) blijft een middleware-signaal | **nee** — de klok staat sinds v3.6.0 al op nul en deze versie zet hem niet opnieuw (besluit Ferry 29-09) |
-| v3.13.0 | 03-11 | — | — |
-| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.0 | 03-11 | — | — |
-| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.0 | 03-11 | — | — |
+| v3.13.1 | 03-11 | — | — |
+| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.1 | 03-11 | — | — |
+| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.1 | 03-11 | — | — |
 
 **De rechterkolom staat bewust leeg.** Ik weet niet wat er op de charts hangt en dat verzin ik
 niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevestigd", niet

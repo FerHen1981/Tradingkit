@@ -443,6 +443,17 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.1 (03-11, compileerfix): `acctStartMissing` stond bij `phaseOn` en las daarmee
+//   `acctStarted` ~25 regels vóór zijn declaratie -- CE10272, dus v3.12.0 en v3.13.0
+//   compileerden geen van beide. De regel staat nu direct na de meter die hij leest.
+//   🔑 Derde compileerfout op rij uit mijn hand, en alle drie van dezelfde soort: de poorten
+//   toetsten op AANWEZIGHEID van regels, niet op de EIGENSCHAP ervan. De const-check van
+//   v3.13.0 dekte de ene helft; de lint heeft nu ook een gebruik-voor-declaratie-check, die
+//   per naam de eerste declaratieregel bijhoudt en elk eerder gebruik meldt.
+//   ⚠️ Die check moest zelf een keer herschreven worden: de eerste versie las een NAMED
+//   ARGUMENT (`size=size.tiny`) als declaratie en meldde 36 vals-positieven met nul goede
+//   bestanden. Hij kijkt nu alleen naar declaraties aan het begin van een statement.
+//   Getoetst door Ferry's fout terug te zetten: hij meldt r1445 en niets anders.
 // v3.13.0 (03-11): compile-patch, tabel B op EL TESORO, en de FVGNaN-visual.
 //   (1) COMPILE-PATCH. De `Account start`-input uit v3.12.0 droeg
 //   `timestamp("America/New_York", 2099, 1, 1, 0, 0, 0)`, en dat is exact de vorm die op
@@ -483,7 +494,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL MATADOR · MES PROD EOD"
-var string currentVersion = "v3.13.0"
+var string currentVersion = "v3.13.1"
 strategy("MΞX EL MATADOR · MES PROD EOD · " + currentVersion, shorttitle="MAT-MES-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -1436,10 +1447,6 @@ useDDGuard = (isPA and guardPA) or (isEval and guardEval)
 // Sluiten blijft wel mogelijk: een openstaande positie moet er altijd uit kunnen.
 bool phaseUnknown = not (phaseEff == "Developer" or phaseEff == "Eval" or phaseEff == "Funded")
 bool phaseOn = isEval or isPA
-// v3.12.0 §2A: een accountlaag die niet weet wanneer het account begon, handelt niet. Zie
-// de toelichting bij `acctStart`: alleen de balans op nul zetten zou ook de breach-halt
-// uitzetten, en dat is erger dan de fantoombalans die we wegnemen.
-bool acctStartMissing = phaseOn and not acctStarted
 var bool  acctHalted = false
 var string acctHaltReason = ""
 var float acctHwm = na
@@ -1464,6 +1471,12 @@ if na(acctStartNet) and (time >= acctStart or (accountPhase == "Developer" and b
     acctStartNet := strategy.netprofit
 bool  acctStarted       = not na(acctStartNet)
 float acctNetSinceStart = acctStarted ? strategy.netprofit - acctStartNet : 0.0
+// v3.12.0 §2A: een accountlaag die niet weet wanneer het account begon, handelt niet. Zie
+// de toelichting bij `acctStart`: alleen de balans op nul zetten zou ook de breach-halt
+// uitzetten, en dat is erger dan de fantoombalans die we wegnemen.
+// 📌 Deze regel stond in v3.12.0/v3.13.0 bij `phaseOn`, dus VOOR `acctStarted` werd
+// gedeclareerd -- CE10272. Hij hoort hier, direct na de meter die hij leest.
+bool acctStartMissing = phaseOn and not acctStarted
 
 // === BIAS & VWAP =============================================================
 useSweepFilter = false

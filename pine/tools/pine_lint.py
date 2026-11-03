@@ -113,6 +113,56 @@ def check(path):
         m = re.search(r'\[([A-Za-z_0-9,\s]+)\]\s*=', l)
         if m:
             for a in m.group(1).split(','): decl.add(a.strip())
+    # Waar iets voor het EERST wordt gedeclareerd. `decl` hierboven is een verzameling over
+    # het hele bestand, dus die ziet gebruik-voor-declaratie niet -- en precies dat gaf op
+    # 03-11 CE10272 op `acctStarted`: de lint zei "ok" en TradingView weigerde het script.
+    # Dit is de derde keer dat een poort een ORDENING of EIGENSCHAP mist terwijl hij op
+    # aanwezigheid toetst. Pine leest een script van boven naar beneden, dus een naam die
+    # lager wordt gedeclareerd dan hij wordt gelezen bestaat op dat punt niet.
+    declline = {}
+    def _note(name, n):
+        if name and name not in BUILTIN:
+            declline.setdefault(name, n)
+    for n, l in enumerate(C, 1):
+        # ⚠️ ALLEEN aan het begin van een statement. De verzameling hierboven staat ook
+        # declaraties na "(" of "," toe voor tuple-destructuring, en dát matcht óók een
+        # NAMED ARGUMENT: `size=size.tiny` las `size` als declaratie. Voor een verzameling
+        # is over-verzamelen onschuldig (het onderdrukt alleen waarschuwingen), voor een
+        # ORDENINGSTEST is het fataal -- de eerste versie van deze check meldde daardoor
+        # 36 vals-positieven en nul goede bestanden.
+        m = re.match(r'\s*(?:var\s+|varip\s+)?'
+                     r'(?:(?:bool|int|float|string|color|line|label|box|table|array<[^>]*>|matrix<[^>]*>)(?:\[\])?\s+)?'
+                     r'([A-Za-z_]\w*)\s*(?::=|=(?!=))', l)
+        if m:
+            _note(m.group(1), n)
+        m = re.match(r'\s*([A-Za-z_]\w*)\s*\(([^)]*)\)\s*=>', l)
+        if m:
+            _note(m.group(1), n)
+            for a in m.group(2).split(','):
+                a = a.strip().split()[-1] if a.strip() else ''
+                if a: _note(re.sub(r'[^\w].*', '', a), n)
+        m = re.match(r'\s*for\s+(?:\[([^\]]*)\]|([A-Za-z_]\w*))', l)
+        if m:
+            for a in (m.group(1) or m.group(2) or '').split(','):
+                _note(a.strip(), n)
+        m = re.match(r'\s*\[([A-Za-z_0-9,\s]+)\]\s*=', l)
+        if m:
+            for a in m.group(1).split(','): _note(a.strip(), n)
+
+    early = {}
+    for n, l in enumerate(C, 1):
+        l2 = re.sub(r'\b[A-Za-z_]\w*\s*=(?!=)', '', l)
+        l2 = re.sub(r'\.[A-Za-z_]\w*', '', l2)
+        for m in re.finditer(r'(?<![\w.])([a-zA-Z_]\w*)', l2):
+            w = m.group(1)
+            if w.isupper() or w not in declline:
+                continue
+            if n < declline[w]:
+                early.setdefault(w, (n, declline[w]))
+    for w, (use, dec) in sorted(early.items(), key=lambda x: x[1][0]):
+        findings.append(f"r{use}: {w} wordt gelezen maar pas op r{dec} gedeclareerd "
+                        f"-- Pine leest van boven naar beneden, dit is CE10272")
+
     undecl = {}
     for n, l in enumerate(C, 1):
         l2 = re.sub(r'\b[A-Za-z_]\w*\s*=(?!=)', '', l)

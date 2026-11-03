@@ -10404,3 +10404,41 @@ vaker fout gegaan dan goed.
 | payoutgate-, daystop-, owner_dll-poort groen | ✅ alle drie exit 0, los geprint |
 | `DEPLOYED.md` op v3.13.0 met OOS-reset | ✅ |
 | FVG-maat in het entry-label gelijk aan de signaalmarker | ✅ in de bron; op de chart te zien zodra Ferry plakt |
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 03-11 · **v3.13.1 compileerfix: `acctStarted` werd vóór zijn declaratie gelezen — en de lint heeft nu een gebruik-voor-declaratie-check** · status: af
+
+Ferry kreeg bij het plakken `Undeclared identifier "acctStarted" (CE10272)`. **Mijn fout, en
+hij zat al in v3.12.0:** `acctStartMissing = phaseOn and not acctStarted` stond bij `phaseOn`
+(r. 1445) terwijl `acctStarted` ~25 regels lager wordt gedeclareerd (r. 1468). Pine leest van
+boven naar beneden, dus die naam bestond daar nog niet. De regel staat nu direct na de meter
+die hij leest. **v3.12.0 en v3.13.0 compileerden dus geen van beide.**
+
+🔴 **Dit is de derde compileerfout op rij uit mijn hand, en alle drie van dezelfde soort: de
+poorten toetsten op de AANWEZIGHEID van regels, niet op de EIGENSCHAP ervan.** Mijn eigen
+ordeningsassert in de patch van v3.12.0 controleerde `acctNetSinceStart` vóór `acctRealized`
+en `acctStartMissing` vóór `canTrade` — maar niet `acctStarted` vóór `acctStartMissing`. Een
+assert dekt wat je bedenkt; de lint moet dekken wat je niet bedenkt.
+
+➡️ **`pine_lint.py` houdt nu per naam de eerste declaratieregel bij en meldt elk eerder
+gebruik.** De bestaande CE10272-check kon dit per constructie niet zien: die bouwt één
+verzameling over het hele bestand en vergelijkt daarna, dus de volgorde valt eruit.
+
+⚠️ **En die nieuwe check moest zelf een keer herschreven worden, wat het punt onderstreept.**
+De eerste versie las een **named argument** (`size=size.tiny`, `color=color.new(...)`) als
+declaratie en meldde **36 vals-positieven met nul goede bestanden** — want de
+declaratie-regex staat bewust ook declaraties na `(` en `,` toe voor tuple-destructuring, en
+dat matcht óók een named argument. Voor een verzameling is over-verzamelen onschuldig, voor
+een ordeningstest fataal. Hij kijkt nu alleen naar declaraties aan het begin van een
+statement. **Getoetst door Ferry's fout terug te zetten: hij meldt `r1445: acctStarted wordt
+gelezen maar pas op r1468 gedeclareerd` en niets anders, en zonder de fout zijn alle dertien
+`ok`.**
+
+📌 **Wat ik hiermee wel en niet beloof.** De lint is statisch, geen compiler. De twee klassen
+die deze week drie keer toesloegen — een niet-const default en gebruik voor declaratie — zijn
+nu gedekt en met een teruggezette fout getoetst. Ik kan niet beloven dat er geen vierde
+klasse bestaat. Wat ik wél kan zeggen: **beide checks falen nu hard, dus deze twee komen niet
+terug.**
+
+Versie **v3.13.1**; geen OOS-reset, want het script liep nog nergens.

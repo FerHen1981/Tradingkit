@@ -386,8 +386,45 @@
 //   `pine/tools/daystop_check.py` is de poort: die controleert in alle dertien dat de
 //   defaults 0 zijn en dat de semantiekregels letterlijk in de bron staan.
 //   DE OOS-KLOK GAAT OP NUL -- ook met de inputs uit, want het zijn nieuwe inputs.
+// v3.12.0 (03-11, instructie Analyses & Data §2A): de payout-poort blokkeert geen
+// orders meer, en de accountlaag telt vanaf de echte accountstart.
+//   WAT ER KAPOT WAS. Fase `Funded` met een accountstart die feitelijk op 1 januari lag:
+//   het script telde tien maanden eigen winst als balans, meldde "PAYOUT 1 READY ·
+//   realized $5.626" op een account dat op 19 oktober begon en op ~$51.900 stond, en hield
+//   met `Wait for the full ladder step` de entries tegen tot een payout die Apex niet
+//   toestaat. 031 en 034 stuurden daardoor sinds ~28 oktober wél Discord-kaarten maar géén
+//   PMT-orders; 032 wisselend, 037 begon eraan. Ferry zette die charts op `Developer`, wat
+//   de héle accountlaag uitzet -- een omweg, geen oplossing.
+//   (1) DE POORT IS INFORMATIE, GEEN BLOKKADE. `pmtBlock` wordt niet meer gezet vanuit de
+//   payout-tak. Payout-gereedheid is nu een kaart en een regel in de statuskaart, en verder
+//   niets. Dit is de VIERDE ronde op deze klasse (D-123, D-125, D-146) en de drie eerdere
+//   maakten de voorwaarde strakker in plaats van hem weg te halen; strakker was niet genoeg.
+//   Wat een entry nog wél tegenhoudt is dag- of accountbeëindigend en staat elders:
+//   day-trail/day-cap/dagstops, de owner-DLL, een trailing-drawdown-breach, het
+//   geldigheidsvenster, de tijdpoort en de flat-window.
+//   ➡️ Gevolg voor Ferry: `Funded` is weer bruikbaar op de PA-charts en de charts die op
+//   `Developer` staan mogen terug naar `Funded`.
+//   (2) DE ACCOUNTSTART IS EEN EIGEN INPUT. `Valid from` zegt vanaf wanneer het script mág
+//   handelen; `Account start` zegt vanaf wanneer de BALANS telt. De accountlaag rekent nu
+//   met `acctNetSinceStart` in plaats van met de ruwe `strategy.netprofit`. De dag- en
+//   risk-gate-lagen blijven op de ruwe waarde rekenen -- dat zijn deltas binnen een dag of
+//   sessie en die hebben met de accountstand niets te maken.
+//   ⚠️ DE DEFAULT LIGT IN DE TOEKOMST, met twee uitzonderingen die ik bewust zo heb gezet:
+//     · in `Developer` is er geen echt account maar een simulatie, en die telt vanaf de
+//       eerste bar -- anders zou elke backtest stil op nul komen te staan;
+//     · in `Eval` en `Funded` betekent niet-ingevuld "nog niet begonnen", en dan handelt de
+//       chart NIET. Alleen de balans op nul zetten zou namelijk ook de trailing-drawdown-
+//       breach uitzetten (floor -$2.000 tegen stand 0), en dan ruil je een fantoombalans
+//       voor een account zonder breach-halt. Zelfde regel als D-139: onbekend = dicht.
+//       Er staat een oranje label op de chart zolang het niet is ingevuld.
+//   (3) De PAYOUT-kaart zegt er nu bij: SCRIPT-BALANS, NIET APEX. Dat voorkomt dat de kaart
+//   als toestemming gelezen wordt.
+//   `pine/tools/payoutgate_check.py` is de poort: die toetst op de AFWEZIGHEID van de
+//   blokkade (niet op de vorm), dat de accountlaag nergens de ruwe netprofit meer leest,
+//   dat `canTrade` de accountstart eist, en dat de default in de toekomst ligt.
+//   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
 var string SCRIPT_NAME = "MΞX ΞL TORO · GC SNIPER EOD"
-var string currentVersion = "v3.11.0"
+var string currentVersion = "v3.12.0"
 strategy("MΞX ΞL TORO · GC SNIPER EOD · " + currentVersion, shorttitle="TOR-GC-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -698,6 +735,27 @@ float ownerDllUSD       = ownerDllSlUSD * ownerDllStops * math.max(contractSize,
 acctPnlOffset = input.float(0, "Live sync: current account PnL vs start ($)", group=GROUP_PHASE,
      tooltip="For live use: enter the account's actual PnL so floor/goal are correct. Backtest: 0.", display=display.none)
 acctHwmOffset = input.float(0, "Live sync: current HWM vs start ($)", group=GROUP_PHASE, tooltip="For live use with EOD trailing: the account high-water mark so the floor calculates correctly. Backtest: 0.", display=display.none)
+// === v3.12.0 §2A — de ACCOUNTSTART is een eigen input, los van `validFrom` ====
+// Twee dingen liepen door elkaar: `Valid from` zegt vanaf wanneer het script mág handelen,
+// en de accountlaag telde zijn balans vanaf datzelfde moment. Op de PA-charts stond dat op
+// 1 januari, dus het script telde tien maanden eigen winst als balans, meldde "PAYOUT 1
+// READY · realized $5.626" op een account dat op 19 oktober begon en op ~$51.900 stond, en
+// hield met `Wait for the full ladder step` de entries tegen tot een payout die Apex niet
+// toestaat. 031 en 034 stuurden daardoor sinds ~28 oktober wél Discord-kaarten maar géén
+// PMT-orders.
+// ⚠️ DE DEFAULT LIGT BEWUST IN DE TOEKOMST: een chart waar dit niet is ingevuld telt NIETS
+// in plaats van een jaar.
+// 📌 Twee uitzonderingen, beide bewust en beide zichtbaar gemaakt in plaats van stil:
+//   1. In fase `Developer` is er geen echt account maar een simulatie, en die hóórt bij het
+//      begin van de reeks te beginnen. Niet-ingevuld betekent daar "vanaf de eerste bar".
+//      Zonder die uitzondering zou elke backtest stil op nul komen te staan.
+//   2. In `Eval` en `Funded` betekent niet-ingevuld "nog niet begonnen" -- en dan handelt de
+//      chart NIET. Alleen de balans op nul zetten zou namelijk ook de trailing-drawdown-
+//      breach uitzetten (floor -$2.000, stand 0), en dan ruil je een fantoombalans voor een
+//      account zonder breach-halt. Dat is erger dan het probleem. Zelfde regel als D-139:
+//      onbekend = dicht, niet open.
+acctStart = input.time(timestamp("America/New_York", 2099, 1, 1, 0, 0, 0), "Account start (balans telt hiervanaf)", group=GROUP_PHASE,
+     tooltip="De datum waarop dit ACCOUNT begon -- niet te verwarren met 'Valid from', dat zegt vanaf wanneer het script mag handelen. De accountlaag (balans, buffer, payout-voortgang) telt hiervanaf. Laat hem in de toekomst staan zolang je hem niet weet: dan telt de chart niets EN handelt hij niet, in plaats van een verzonnen jaar te tellen. 'Live sync: current account PnL vs start ($)' blijft de correctie op de echte stand.")
 lastPayoutTime= timestamp("2024-01-01T00:00:00")
 
 // === Daily risk-gate (D-45) =================================================
@@ -1293,6 +1351,10 @@ useDDGuard = (isPA and guardPA) or (isEval and guardEval)
 // Sluiten blijft wel mogelijk: een openstaande positie moet er altijd uit kunnen.
 bool phaseUnknown = not (phaseEff == "Developer" or phaseEff == "Eval" or phaseEff == "Funded")
 bool phaseOn = isEval or isPA
+// v3.12.0 §2A: een accountlaag die niet weet wanneer het account begon, handelt niet. Zie
+// de toelichting bij `acctStart`: alleen de balans op nul zetten zou ook de breach-halt
+// uitzetten, en dat is erger dan de fantoombalans die we wegnemen.
+bool acctStartMissing = phaseOn and not acctStarted
 var bool  acctHalted = false
 var string acctHaltReason = ""
 var float acctHwm = na
@@ -1307,6 +1369,16 @@ var int   paResetCount  = 0
 var float paTotalBanked = 0.0
 var int   paPayoutsThisCycle = 0
 var float paResetPnLPrev = 0.0
+// v3.12.0 §2A: de accountlaag meet vanaf de ACCOUNTSTART, niet vanaf de eerste bar van de
+// chart. `acctStartNet` legt de stand van `strategy.netprofit` vast op het moment dat de
+// accountstart gepasseerd wordt; alles in de accountlaag rekent met het verschil. De DAG-
+// en risk-gate-lagen blijven op de ruwe `strategy.netprofit` rekenen -- dat zijn deltas
+// binnen een dag of sessie en die hebben met de accountstand niets te maken.
+var float acctStartNet = na
+if na(acctStartNet) and (time >= acctStart or (accountPhase == "Developer" and barstate.isfirst))
+    acctStartNet := strategy.netprofit
+bool  acctStarted       = not na(acctStartNet)
+float acctNetSinceStart = acctStarted ? strategy.netprofit - acctStartNet : 0.0
 
 // === BIAS & VWAP =============================================================
 useSweepFilter = false
@@ -1947,7 +2019,7 @@ if isNewTradingDay
             tradedDays += 1
     tradedToday := false
     if phaseOn and ddModel == "EOD"
-        acctHwm := math.max(nz(acctHwm, math.max(acctPnlOffset, acctHwmOffset)), acctPnlOffset + strategy.netprofit - paResetPnLPrev)
+        acctHwm := math.max(nz(acctHwm, math.max(acctPnlOffset, acctHwmOffset)), acctPnlOffset + acctNetSinceStart - paResetPnLPrev)
     riskBaseNetProfit := strategy.netprofit
     riskDayPeak := 0.0
     // D-154: tellers en dag-P&L leeg op de dagroll. `dexClosedSeen` NIET -- dat is een
@@ -2058,12 +2130,12 @@ if not dayHalted and (targetHit or lossHit or drawdownHit or lockHit or dayTrail
     haltReason := rgDllHit ? "Risk-gate DLL" : rgTrailHit ? "Risk-gate trail" : dayCapHit ? "Day-cap" : dayTrailHit ? (dexTrail2Active ? "DAY-TRAIL-2" : "Day-trail") : dexStreakLossHit ? "STREAK-LOSS" : dexStreakWinHit ? "STREAK-WIN" : dexLossAfterPlus ? "LOSS-AFTER-PLUS" : targetHit ? "Daily Target" : lossHit ? "Daily Loss" : drawdownHit ? "Daily Drawdown" : "Equity Lock"
 
 // === ACCOUNT ENGINE (trailing floor / eval goal / payout) ====================
-float acctPnL      = acctPnlOffset + strategy.netprofit - paResetPnLPrev + strategy.openprofit
-float acctRealized = acctPnlOffset + strategy.netprofit - paResetPnLPrev
+float acctPnL      = acctPnlOffset + acctNetSinceStart - paResetPnLPrev + strategy.openprofit
+float acctRealized = acctPnlOffset + acctNetSinceStart - paResetPnLPrev
 
 var float maeSodProfit = na
 if isNewTradingDay or na(maeSodProfit)
-    maeSodProfit := acctPnlOffset + strategy.netprofit
+    maeSodProfit := acctPnlOffset + acctNetSinceStart
 float maeSafetyNet = acctTrailDD + 100
 float maePct = maeSodProfit >= 2 * maeSafetyNet ? maeGrownPct : maeBasePct
 float maeAllowUSD = (maePct / 100.0) * math.max(nz(maeSodProfit, 0), acctTrailDD) * (1 - maeMarginPct / 100.0)
@@ -2103,7 +2175,7 @@ if phaseOn and not acctHalted
         if isPA and paBacktestMode
             paBreachCount += 1
             paResetCount  += 1
-            paResetPnLPrev := strategy.netprofit
+            paResetPnLPrev := acctNetSinceStart
             acctHwm       := na
             profitSince   := 0.0
             bestDaySince  := 0.0
@@ -2139,7 +2211,7 @@ if isPA and paBacktestMode and payoutReady and barstate.isconfirmed
         paResetCount += 1
         paPayoutsThisCycle := 0
         acctHwm := na
-        paResetPnLPrev := strategy.netprofit
+        paResetPnLPrev := acctNetSinceStart
 
 var bool  evalStarted = false
 var float evalBal    = na
@@ -2164,7 +2236,7 @@ if not acctStartArmed
     if _dateOK and _regOK
         acctStartArmed := true
 bool preStartBlock = not acctStartArmed
-canTrade = inValidWindow and timeGatePass and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive) and not phaseUnknown
+canTrade = inValidWindow and timeGatePass and not dayHalted and not inFlatWindow and not acctHalted and not preStartBlock and polInstrOK and (not polOn or polLive) and not phaseUnknown and not acctStartMissing
 if barstate.islast and polOn and (not polInstrOK or not polLive)
     var label _polWarn = na
     label.delete(_polWarn)
@@ -2379,7 +2451,7 @@ if sendCfgOnStart and barstate.isrealtime and not cfgSent
 var bool payoutDiscordSent = false
 if payoutReady and not payoutDiscordSent
     payoutDiscordSent := true
-    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | " + (useWaitForCap ? "FULL CAP " + capStr + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
+    f_sendDiscord("💰 " + syminfo.ticker + " PAYOUT " + str.tostring(effPayoutNr) + " READY", jrnlAcct + " | SCRIPT-BALANS, NIET APEX — controleer in Tradovate | " + (useWaitForCap ? "FULL CAP " + capStr + " available | " : "") + "Withdrawable $" + str.tostring(withdrawable, "#") + " | realized $" + str.tostring(acctRealized, "#"))
 if not payoutReady
     payoutDiscordSent := false
 
@@ -3245,4 +3317,17 @@ if barstate.islast
         phaseWarnLbl := label.new(bar_index, high,
              "⛔ ONBEKENDE ACCOUNT-FASE: \"" + phaseEff + "\"\nGEEN ENTRIES — open het instellingenvenster en kies Account phase opnieuw",
              style=label.style_label_down, color=color.new(color.red, 0), textcolor=color.white,
+             size=size.normal, textalign=text.align_left)
+
+// === v3.12.0 §2A — de waarschuwing bij een niet-ingevulde accountstart =========
+// Zelfde vorm als het fase-label van D-139, en om dezelfde reden buiten de teken-laag: die
+// zit achter `inDrawWin` en achter een drawing-budget, en een melding die kan wegvallen
+// omdat het budget vol is, is geen melding.
+var label acctStartWarnLbl = na
+if barstate.islast
+    label.delete(acctStartWarnLbl)
+    if acctStartMissing
+        acctStartWarnLbl := label.new(bar_index, high,
+             "⛔ ACCOUNTSTART NIET INGEVULD\nGEEN ENTRIES — zet 'Account start' op de datum waarop dit account begon",
+             style=label.style_label_down, color=color.new(color.orange, 0), textcolor=color.white,
              size=size.normal, textalign=text.align_left)

@@ -10887,3 +10887,114 @@ config-wijzigingen. Dat is de regel uit `CLAUDE.md` toegepast, geen eigen oordee
 🔴 **En de acceptatietest van D-162 kan ik niet zelf draaien:** "evenveel FILL- als
 EXIT-regels in het journaal" vraagt een journaal van een dag met een sluit-en-open in dezelfde
 minuut. Dat komt van de VPS of van Ferry's export, niet uit deze container.
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 04-11 · **v3.13.6 — de oorzaak onder D-161, D-162 en de patch van 04-11 gevonden: de tekenlaag tekende per UITVOERING van de bar, niet per trade** · status: geleverd, poorten groen, wacht op de chart
+
+Ferry na v3.13.5: *"nog niet goed. kijk even naar de code waar het wel goed gaat"* — met de
+hele bron van EL TESORO erbij. Die aanwijzing ís de diagnose, en ik had hem drie rondes
+gemist.
+
+#### Wat het verschil was tussen de tekencode die werkt en de tekencode die stuk ging
+
+In dit script staat tekenwerk dat nooit kapot gaat: de tijdvenster-boxen, de FVG-boxen en de
+event-labels. Het enige dat die drie gemeen hebben en de trade-zones niet: ze staan achter
+`barstate.isconfirmed`. Dat is **precies één uitvoering per bar**.
+
+`calc_on_order_fills=true` laat het script binnen dezelfde bar **opnieuw** lopen zodra een
+order vult. En `drawTradeNo[1]` en `strategy.closedtrades[1]` zijn de standen van de **vorige
+bar** — dus zodra er in een bar een vulling is geweest, blijven die twee poorten waar bij elke
+vólgende uitvoering van diezelfde bar, ook bij de afsluitende uitvoering op barclose.
+
+Drie gevolgen, alle drie zichtbaar:
+
+1. **Het exit-blok tekende alles twee keer over zichzelf** — de SL-tekst, de TP-tekst én de
+   PnL/MFE/MAE-bubbel. Bij twee vullingen in één bar meer dan twee keer. Dat is de dubbele,
+   vette, net-niet-uitgelijnde tekst.
+2. **Het aanmaakblok deed `box.new` en `label.new` een tweede keer** en overschreef de handles
+   van de eerste. Die eerste twee vakken zijn daarmee **onbereikbaar**: ze worden nooit naar
+   rechts gegroeid, nooit op de gesloten trade hertekend, nooit opgeruimd, en ze komen niet in
+   `drawHistB`. Dat is het **vakje van één bar breed op de entryprijs bij élke trade** — en het
+   is een lek buiten de begroting van 500 drawings, dus na een paar honderd trades ruimt Pine
+   de **oudste** op (de echte zones) en blijven de reepjes staan. Dat is ook de "tekeningen
+   verdwijnen willekeurig" van eerder, nu met een tweede oorzaak.
+3. 🔴 **En de zelfcontrole `DRAW≠TRADE` bleef stil**, want de handle die **overblijft** is de
+   goede. Een vals sein van orde terwijl de chart zichtbaar fout stond. Dat is waarom D-161,
+   D-162 en jouw v3.13.4 alle drie "klaar" leken: ze repareerden allemaal *welke* trade een
+   handle hoorde te zijn, en geen ervan keek naar *hoe vaak* het blok draaide.
+
+#### De reparatie
+
+Het patroon dat in dit bestand al drie keer staat — `lastClosedSeen`, `dexClosedSeen`,
+`tdSeen`: een **teller-latch in een `var`** in plaats van `[1]` (`drawMadeNo`, `drawShutSeen`).
+Die rolt op een realtime bar samen met de tekeningen terug, dus de twee kunnen niet uit elkaar
+lopen. Vier poorten in de tekenlaag om; alle dertien scripts.
+
+📌 **Bewust niet meegenomen, en dat is een keuze die je moet kennen:** `newLong`/`newShort`
+blijven op de bar-detectoren staan. Het fill-blok draait dan nog steeds twee keer per bar, en
+dat is hoe het sinds v1 gaat. Twee redenen: de alerts zijn `alert.freq_once_per_bar` dus daar
+komt niets dubbel uit, en de `and not newLong`-poortjes (`posHi`/`posLo` op de entry-bar)
+zouden bij een smallere definitie **andere MFE/MAE** opleveren — dat is een meting, geen
+tekening, en die hoort niet in een visual-release te schuiven. Wil je dat alsnog, dan is het
+een eigen item met een eigen acceptatietest.
+
+#### Twee kleinere dingen, in dezelfde laag
+
+- Het tekstblok stond op `label.style_label_right`. Met de pointer **rechts** rendert de body
+  **links** van de entry-bar — over de opzet (de FVG) die je juist wilt kunnen zien. Voor een
+  body naar rechts is het `label.style_label_left`; dat staat zo in Ferry's eigen werkende
+  indicator, `indicators/MPT_SUITE.pine` r.390. Dit was jouw bedoeling in v3.13.4 met de
+  verkeerde constante — het is dus de wissel die ik in inbox 50 al als mogelijkheid noemde,
+  nu met een precedent in de repo in plaats van een gevolgtrekking.
+- De live regel mengde de **order**-ticks met de **live** stopprijs en het **live** risico: na
+  een BE-schuif las er `SL <nieuwe prijs> | 100t | -$<nieuw bedrag>`. Het vak en de SL-tekst
+  **in** het vak houden de order (die worden bij het sluiten uit de trade hertekend); deze
+  regel is de live stand en is nu overal live.
+
+#### De poort, en dat deel is zelf een bevinding
+
+`pine_lint.check_draw_guards` weigert vanaf nu een `box.new`/`label.new` onder een
+`[1]`-detector, tenzij `barstate.isconfirmed` in die conditie staat.
+
+🔴 **Mijn eerste versie van die poort pakte de fout niet die hij moet pakken.** In de echte
+fout stond `[1]` namelijk **niet in de conditie**: er stond `if drawTradeShut`, en de `[1]` zat
+in de definitie van die vlag, honderden regels eerder. Een poort die alleen de conditie leest
+was dus groen gebleven. Hij leest nu **één indirectie diep** en noemt de vlag plus de regel
+waar zijn vorige-bar-meting staat. Getoetst in beide richtingen door de reparatie terug te
+draaien: met de zelfcontrole-poort terug meldt hij r3538 en noemt `drawTradeShut` (r2991), met
+het aanmaakblok terug r3555/3556/3563 en `drawNewTrade` (r2990); na de reparatie is hij stil.
+
+📌 Hij vond de **zelfde fout in de bevroren v6.9.5-familie** (het exit-labelblok hing daar op
+`flatNow and nz(posSize[1]) != 0`) — de klasse is dus zo oud als de vloot. `pine/history/**`
+doet niet mee, om dezelfde reden als bij `check_shared`: die bestanden worden niet meer
+gewijzigd en zouden de poort permanent rood houden.
+
+#### Boekhouding
+
+`pine/DEPLOYED.md` was door elkaar geraakt en dat heb ik gerepareerd: de versiehistorie-regels
+van v3.13.4 t/m v3.7.0 stonden **in de stand-tabel**, en de v3.13.4-regel had de scriptregel van
+`MEX_EL_REY_MNQ_PROD_EOD` opgegeten — zijn eerste twee kolommen waren de scriptnaam en de
+shorttitle, dus het bestand droeg twaalf scripts plus een rij die zich als script voordeed. Er
+stond ook een lege `v3.13.5`-stub. Beide tabellen staan weer op hun plaats, historie compleet
+van v3.13.6 tot v2.3.2, v3.13.4 opnieuw geschreven omdat zijn versiekolom weg was.
+
+📌 **De OOS-klok blijft staan.** Geen input, geen default, geen orderpad — alleen de tekenlaag.
+
+#### Wat ik nog steeds niet kan, en wat ik nog steeds vraag
+
+Poorten: lint 13/13 live `ok` (de negen bevindingen zitten alle in `pine/history/**` en
+`pine/lib/`, ongewijzigd), `payoutgate_check` / `daystop_check` / `owner_dll_check` exit 0,
+geen tabs, tekenlaag onderling identiek (negen PA-scripts gelijk, de vier TORO's gelijk; het
+verschil tussen die twee groepen is de pass-lock en de eval-`pmtBlock`, niet het tekenen).
+
+Wat alleen van de chart kan komen, en het staat er voor de derde ronde:
+1. **Welke versie staat er in de scripttitel** (`TES-MGC-C · v3.13.x`), en hangt de oude
+   `EL TESORO v3.10`-instantie er nog náást? Zolang dat open is kan een deel van wat Ferry ziet
+   van een ander script komen.
+2. **Staat er een rood `DRAW≠TRADE #n`-label, en wat staat erachter?** Dat label was tot nu toe
+   per constructie blind voor de dubbele aanmaak; vanaf v3.13.6 is hij dat niet meer.
+3. Nieuw en makkelijk te zien: **staan de reepjes op de entryprijs er nog?** Die horen met deze
+   release weg te zijn, en dat is met het oog te controleren zonder iets te tellen.
+
+Eén schermafdruk van één verkeerde trade met de scripttitel in beeld is nog steeds genoeg.

@@ -23,13 +23,37 @@ Ferry na het plakken). Lopen ze uit elkaar, dan is dat zichtbaar in plaats van v
 4. **Loopt de kolom achter, dan is dat het antwoord**, niet een reden om te gokken.
 
 De versie is ook live af te lezen zonder dit bestand: hij staat in de scripttitel op de chart
-(`MΞX EL MATADOR · MES PROD EOD · v3.13.5`) en in de CONFIG-kaart in Discord (`ver=v3.13.5`).
+(`MΞX EL MATADOR · MES PROD EOD · v3.13.6`) en in de CONFIG-kaart in Discord (`ver=v3.13.6`).
 
 ## Stand
 
 | Script | Shorttitle | In de repo | Sinds | Op TradingView | Geplakt op |
 |---|---|---|---|---|---|
-| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.4 | 04-11 | **entry- en exit-markering zitten aan de prijs vast** — het PnL/exit-label stond op het MIDDEN van de trade (`_xm`) in plaats van op de exit-bar, en het tekstblok schoof elke bar mee met de laatste candle op de entryprijs en sprong bij de exit terug; nu exit-label op `exit_bar_index`, tekstblok verankerd op (entry-bar, entryprijs) met pointer · vak en SL-tekst bij de aanmaak uit de zone-prijzen van de order (D-162-geval) · gepatcht door de SM op directe opdracht van Ferry | nee — alleen tekenen |
+| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.6 | 04-11 | — | — |
+
+**De rechterkolom staat bewust leeg.** Ik weet niet wat er op de charts hangt en dat verzin ik
+niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevestigd", niet
+"oud".
+
+## Versiehistorie van de vloot
+
+| Versie | Datum | Wat er veranderde | Zet de OOS-klok op nul |
+|---|---|---|---|
+| v3.13.6 | 04-11 | **de tekenlaag tekent per TRADE in plaats van per uitvoering van de bar** — de oorzaak onder D-161, D-162 en de patch van 04-11: `calc_on_order_fills` laat het script binnen dezelfde bar opnieuw lopen, en `drawTradeNo[1]` / `strategy.closedtrades[1]` meten op de VORIGE BAR, dus bleven die poorten waar bij elke volgende uitvoering van diezelfde bar. Exit-tekst en PnL-bubbel stonden dubbel over zichzelf; het aanmaakblok deed `box.new` twee keer en de eerste twee vakken werden onbereikbaar (nooit gegroeid, nooit hertekend, nooit opgeruimd, buiten de begroting van 500) — het reepje op de entryprijs bij elke trade. De zelfcontrole zag de OVERGEBLEVEN handle en bleef daarom stil. Nu een teller-latch (`drawMadeNo`/`drawShutSeen`), het patroon dat hier al drie keer stond · tekstblok met de pointer **links** zodat de body naar rechts rendert in plaats van over de FVG · de live SL-regel is overal live (mengde eerst order-ticks met de live stopprijs) · **poort** `pine_lint.check_draw_guards` weigert een `box.new`/`label.new` onder een `[1]`-detector en leest één indirectie diep — zonder dat las hij de fout die hij moet pakken niet | nee — alleen de tekenlaag; geen input, geen default, geen orderpad |
+| v3.13.5 | 04-11 | **D-162** het fill-blok hangt op de tradeteller i.p.v. op het teken van `posSize` — bij een sluit-en-open in dezelfde minuut ontbraken de FILL-kaart en de journaalregel, en zette het `inLong`-blok `strategy.exit` opnieuw op de **stale** stop zonder `alert_message` (TradingView en broker liepen uiteen, de reconciliatie boekte dat als slippage) · **TESORO** qty 7 → 1 · **BANDIDO** dagcap 300 → 200 per contract (× 5 = $1.000, het bevroren getal) | **ja** — het fill-blok is plumbing, maar de twee defaults zijn config-wijzigingen |
+| v3.13.4 | 04-11 | **entry- en exit-markering aan de prijs vast** — het PnL/exit-label stond op het MIDDEN van de trade (`_xm`) in plaats van op de exit-bar, en het tekstblok schoof elke bar mee met de laatste candle en sprong bij de exit terug; nu exit-label op `exit_bar_index` en tekstblok verankerd op (entry-bar, entryprijs) met een pointer · vak en SL-tekst bij de aanmaak uit de zone-prijzen van de **order** (het D-162-geval) · gepatcht door de SM op directe opdracht van Ferry, nagekeken door Pine Dev | nee — alleen tekenen |
 | v3.13.3 | 04-11 | **zichtbaarheid** — op `Funded` zonder ingevulde `Account start` handelt de chart niet (poort uit v3.12.0, werkt zoals bedoeld), maar dat stond alleen in een los label; de statusregel van de tabel zegt het nu met voorrang | nee |
 | v3.13.2 | 04-11 | **tekeningen aan de trade gebonden** — tradenummer uit de tellerstand i.p.v. `posSize[1]`, handles losgelaten bij exit, gesloten trades hertekend uit `strategy.closedtrades.*`, vak op de prijzen van de **order** i.p.v. de ratchetende stop · **zelfcontrole** `DRAW≠TRADE #n` op de chart · `scale=scale.right` in alle dertien · **TESORO** SL-default 140 → 100 | nee — tekenlogica plus één SL-default |
 | v3.13.1 | 03-11 | **compileerfix** — `acctStartMissing` las `acctStarted` vóór zijn declaratie (CE10272), dus v3.12.0 én v3.13.0 compileerden niet; de lint heeft nu ook een gebruik-voor-declaratie-check | nee — het script liep nog nergens |
@@ -40,29 +64,6 @@ De versie is ook live af te lezen zonder dit bestand: hij staat in de scripttite
 | v3.9.0 | 06-10 | **D-126** de payout-ladder komt uit de registry (`f_ladderCap` → `f_firmLadder`) · **D-125** `pmtBlock` hangt op `payoutReady` i.p.v. op de cap alleen — deadlock weg · **D-124** `useWaitForCap` is een input, default `true` · **poort** `gen_pine_firms.py` faalt nu als een `f_firm*` geen call-site heeft, en vond meteen `f_firmMinPayout` | **ja, hele vloot** — één reset voor alle drie, want ze raken dezelfde poort |
 | v3.8.0 | 29-09 | **D-110 stap 2** — `dllHit` is weg; één dagrem over. `acctDLL` blijft als weergave (D-96). Een halt op de firmawaarde heet voortaan "Daily Loss" | **nee** — de rem is niet losser geworden, alleen de dubbele weg; de klok staat sinds v3.6.0 op nul |
 | v3.7.0 | 29-09 | **D-110 stap 1b** — de firmalimiet doet mee IN de eigen rem: `min(SL × stops × qty, firm_dll)`. Daarmee halteert de eigen rem per definitie op of vóór de firmalimiet en is `dllHit` strikt overbodig — dat opent stap 2. De derde term (ruimte × fractie) blijft een middleware-signaal | **nee** — de klok staat sinds v3.6.0 al op nul en deze versie zet hem niet opnieuw (besluit Ferry 29-09) |
-| v3.13.5 | 04-11 | **D-162** het fill-blok hangt op de tradeteller i.p.v. op het teken van `posSize` — bij een sluit-en-open in dezelfde minuut ontbraken de FILL-kaart en de journaalregel, en zette het `inLong`-blok `strategy.exit` opnieuw op de **stale** stop zonder `alert_message` (TradingView en broker liepen uiteen, de reconciliatie boekte dat als slippage) · **TESORO** qty 7 → 1 · **BANDIDO** dagcap 300 → 200 per contract (× 5 = $1.000, het bevroren getal) | **ja** — het fill-blok is plumbing, maar de twee defaults zijn config-wijzigingen |
-| v3.13.5 | 04-11 | — | — |
-| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.5 | 04-11 | — | — |
-| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.5 | 04-11 | — | — |
-
-**De rechterkolom staat bewust leeg.** Ik weet niet wat er op de charts hangt en dat verzin ik
-niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevestigd", niet
-"oud".
-
-## Versiehistorie van de vloot
-
-| Versie | Datum | Wat er veranderde | Zet de OOS-klok op nul |
-|---|---|---|---|
 | v3.6.0 | 29-09 | **D-110 stap 1** — Ferry's eigen dagrem staat AAN met de formule `100 × 4 × qty`, als drie inputs plus een override. De firm-rem (`dllHit`) blijft bewust staan; stap 2 wacht per script op `pine/tools/owner_dll_check.py` | **ja, hele vloot** — een rem die aan gaat is een config-wijziging, geen plumbing |
 | v3.5.0 | 29-09 | **D-108** nul betekent geen limiet (`dllHit` eist `acctDLL > 0`, `consistencyPct <= 0` is geen regel) + firmablokken hergegenereerd · **D-107** één `f_sendExec("close")` per bar en de vier halt-paden sturen de **werkelijke** positie in plaats van `t_qty` | ⚠️ **deels — beslissing SM/Ferry.** D-107 is plumbing: `strategy.close_all()` is niet aangeraakt, de backtest is bit-voor-bit gelijk. D-108 is dat **niet** voor de evaluaties: die verliezen de halt op −$1.000 |
 | v3.4.0 | 07-09 | Eén handelsvenster per script: `validFrom` + `validUntil`, vier verspreide datum-inputs eruit (item 31 / D-71) | ja, hele vloot |

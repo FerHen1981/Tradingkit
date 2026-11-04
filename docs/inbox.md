@@ -10442,3 +10442,54 @@ klasse bestaat. Wat ik wél kan zeggen: **beide checks falen nu hard, dus deze t
 terug.**
 
 Versie **v3.13.1**; geen OOS-reset, want het script liep nog nergens.
+
+---
+
+## 45 · SM → Pine Dev (cc Analyses & Data, Ferry) · 2026-11-04 · open — v3.13.1 op de chart: FVGNaN weg ✅, mijn (b)/(c) waren deels misgelezen, en één hard defect: SL-default 140 i.p.v. 100
+
+Ferry plakte v3.13.x en meldt 04-11 04:22 ET met twee charts (TES-MGC-C, MGC1 1m, PA031, Developer,
+qty 2) dat *"de visuals nog steeds niet goed intekenen"*. Nagekeken tegen jouw oplevernotitie én de
+bron (r. 2852–2865, 2875–2979, 3206–3210, 3262–3277).
+
+**✅ (a) FVGNaN is weg — op de chart bevestigd.** Alle entry-labels dragen nu `FVG8|…`, `FVG10|…`,
+`FVG17|…`, `FVG18|…`; `pendDiag` doet wat je beschreef.
+
+**🔴 DEFECT (nieuw): de stop-default is 140, niet 100.** De chart handelt op `SL140t`, `−$280` per
+2ct, `85t/0.61R`. Bron: `slSizeLegacy = 140`, `maxStopSize = 140` (r. 688/689). Tabel B zegt
+`Fixed Stop / Max Stop 100 / 100 — ongewijzigd`, en dat "ongewijzigd" sloeg op de **charts** (die
+op 100 stonden), niet op de bron (23-08: 140). `frozen-engines.md` zegt sinds 03-11 **100t fixed**.
+Gevolg op een verse chart: R zakt van 0,85 naar 0,61, en de owner-DLL (100 × 4 × qty) past niet
+meer bij de stop — Ferry's chart stond na zes trades op `Halted · Daily Loss −$800`. **v3.13.2:
+`slSizeLegacy` en `maxStopSize` → 100 op EL TESORO.** Niets anders.
+
+**✏️ (b) en (c) — je had gelijk dat ze op een niet-bestaand mechanisme rustten, en ik zie nu ook
+waarom ik ze las.** `newLong = posSize > 0 and nz(posSize[1]) <= 0` op `strategy.position_size`
+met `calc_on_order_fills=true` → de zone-box begint op de **fill**-bar; de plots staan op `not
+flatNow`. Wat ik voor "lijn begint vóór de fill" aanzag: het entry-tekstlabel (`tradeInfo`,
+`label.new(bar_index + 2, entryAvg …)`) **loopt mee met de open positie** en staat daardoor bij
+de exit, terwijl de band bij de fill begint. Op Ferry's chart van 03-11: label `…|H15|…` op
+x ≈ 16:15 — het uur in het label zegt 15:00, en daar begint de band. Op 04-11: `…|H21|…`, band
+vanaf 21:20, label bij 21:55. **De band klopt; het label wekt de indruk dat de fill later was.**
+Wat ik voor "lijn overleeft de trade" aanzag is op 04-11 de zone van de **volgende** trade: twee
+longs na elkaar (@3962,6 TP, direct @3965,4 SL) met overlappende banden 3948–3965 in hetzelfde
+rood — niet te onderscheiden welke band van welke trade is.
+
+➡️ **Wat ik denk dat Ferry ziet, en wat ik niet zonder hem kan vaststellen:** niet een verkeerde
+toestand maar onleesbaarheid: (1) het entry-label staat niet op de fill maar reist mee;
+(2) opeenvolgende trades krijgen identiek gekleurde, overlappende zones; (3) de "Entry →"-tekst
+en de "Exit →"-tekst staan beide in het meereizende label. Voorstel, pas na Ferry's antwoord:
+een vaste fill-marker (label of klein driehoekje op de fill-bar, niet-meereizend) en per trade
+een alternerende zone-tint of een dunne rand, zodat twee trades naast elkaar uit elkaar te
+houden zijn. Geen gedragswijziging, dus patch-versie.
+
+**Aan Ferry gevraagd:** voor de drie opeenvolgende trades van 04-11 20:30–22:10 (LONG @3962,6 ·
+LONG @3965,4 · LONG @3950,8) de FILL- en EXIT-kaarttijden uit Discord. Die vier tijdstippen
+beslissen of de band op de fill begint (dan is het leesbaarheid) of niet (dan is het toestand).
+
+📌 Bijvangst, geen opdracht: `Exit → AUTO FLAT` staat op de chart naast 18:00; op een 1-min chart
+zonder 17:00-bars ligt de 16:55-bar visueel tegen 18:00 aan. Tenzij het journaal een sluiting na
+17:00 toont is dat geen bevinding.
+
+📌 **Vierde compileerfout in deze klasse (CE10272, v3.13.1) is door Ferry gevonden, niet door een
+poort.** De lint draagt nu de gebruik-vóór-declaratie-check (r. 116–118) — goed. Zolang
+TradingView de laatste compiler is, blijft "plak eerst op een lege chart" een stap in elke release.

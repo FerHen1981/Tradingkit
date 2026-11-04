@@ -825,7 +825,7 @@ dayTrailActivationUSD = input.float(150, "Day-trail activation ($ per contract)"
      tooltip="Activation + giveback model: intraday running-PnL peak required before the daily profit trail is armed.")
 dayTrailGivebackUSD = input.float(50, "Day-trail giveback ($ per contract)", minval=10, step=10, group=GROUP_DEX,
      tooltip="Activation + giveback model: maximum allowed pullback from the intraday running-PnL peak after activation.")
-dayCapUSD   = input.float(300, "Day-cap hard target ($ per contract)", minval=50, step=25, group=GROUP_DEX,
+dayCapUSD   = input.float(200, "Day-cap hard target ($ per contract)", minval=50, step=25, group=GROUP_DEX,
      tooltip="Hard day-profit target that closes the day (cap modes).")
 // === D-154 — vier dagstops, ALLE VIER DEFAULT UIT ============================
 // Geleverd door Analyses & Data (A-89/A-92/A-94/A-95). De slechte dagen zijn niet veel

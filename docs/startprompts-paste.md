@@ -1,4 +1,4 @@
-# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 03-11
+# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 04-11 (v3.13.4 / D-162)
 
 _Eigenaar: Scrum Master. Eén blok per chat, letterlijk plakken. Eén release van maximaal
 een dag per chat, met een acceptatietest (besluit Ferry 08-10: kleine releases boven
@@ -26,35 +26,44 @@ fase-brokken). **Rollen zonder eigen map staan ook in de ronde**, ook als het an
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
-Lees in docs/inbox.md de items 41, 43 en 44 (SM, 03-11) en D-161 in docs/SPRINT.md.
+Lees in docs/inbox.md de items 49 en 50 (SM, 04-11) en D-161 + D-162 in docs/SPRINT.md.
 
-RELEASE v3.13.0 — drie dingen, één release, één dag:
+EERST: v3.13.4 NAKIJKEN — ik heb in jouw map gepatcht, op directe opdracht van Ferry
+("drawings staan nog steeds niet goed, fix het"). Commit 2cdf511, alle dertien. Twee
+tekendefecten die DRAW≠TRADE niet kon zien omdat die alleen vakken toetst:
+  (1) het exit-label (PnL/MFE/MAE) stond op _xm, het MIDDEN van de trade, i.p.v. op de
+      exit-bar → nu strategy.closedtrades.exit_bar_index(_ti);
+  (2) tradeInfo hing op bar_index + 2 en werd elke bar met set_xy verplaatst → schoof mee
+      met de laatste candle op de entryprijs en sprong bij de exit terug. Nu verankerd op
+      (entry-bar, entryprijs), label.style_label_right, achtergrond transparant;
+  (3) bijvangst: box.new bij de aanmaak las curStop/curLimit i.p.v. jouw zoneStopPx/
+      zoneLimitPx — in het D-162-geval de stop van de vorige trade.
+Jouw map, jouw oordeel: wil je het anders, dan wordt dat v3.13.5 van jou. Ik kan niet
+compileren en de chart niet zien; xloc/yloc als benoemde argumenten bij label.new is
+nieuw gebruik in dit script.
 
-1. COMPILE-PATCH. Regel 827 in alle dertien: input.time(timestamp("America/New_York",
-   2099, 1, 1, 0, 0, 0), ...) is exact de vorm die op 08-10 fout CE10123 gaf. Vervang door
-   timestamp("2099-01-01T00:00:00-05:00"). Dit is de derde keer deze klasse langs groene
-   poorten — bouw in pine_lint.py de const-defval-check: elke input.* waarvan het eerste
-   argument een functieaanroep is die niet de enkele-string-timestamp is, is fout.
+RELEASE v3.13.5 — D-162, één dag, op zichzelf:
+Sluit een trade en opent de volgende in dezelfde 1-minuutbar, dan vuurt
+`if newLong or newShort` niet (newLong hangt op het teken van posSize, r. ±2941). Dan
+ontbreken de FILL-kaart en de journaalregel, en houden curStop/curLimit/posHi/posLo de
+waarden van de VORIGE trade. Nuance die je note niet noemt: de placement-exit (r. ±2891)
+gaat goed naar PMT, maar het inLong-blok zet strategy.exit dezelfde bar OPNIEUW op de
+stale curStop/curLimit (r. ±3127) zonder alert_message — TradingView en broker lopen
+dan op een andere stop en TP, en de reconciliatie boekt dat als slippage.
+Fix: het fill-blok op de tradeteller (drawTradeNo verandert), zoals je bij D-161 deed.
+Acceptatie: evenveel FILL- als EXIT-regels in het journaal, geen fill zonder kaart;
+poorten groen; DEPLOYED.md op v3.13.5. Geen OOS-reset als er geen config-wijziging in zit.
 
-2. TABEL B ALS DEFAULTS — ALLEEN EL TESORO (inbox 44 trekt "de negen PA's" uit inbox 43 in):
-   Market regime All sessions · FVG 8/23 · confirm 4 · Use Delta Filter uit · TP mode
-   Fixed (units) 85 · giveback-2 50 @ 04:00 · Max verliezen op rij 5 · firm apex_50k_legacy_pa.
-   frozen-engines.md is al aangepast (akkoord Ferry 03-11). PATRON, REY, LEON, MATADOR,
-   BANDIDO: entries ongewijzigd. TORO: ongewijzigd (A-75). Benoem in de release-notes dat
-   charts met een opgeslagen Delta=true hun eigen gedrag houden, net als bij de guards.
+MEE IN DEZELFDE RELEASE (inbox 49, geen aparte bump):
+  - TESORO contractSize default 7 → 1 (de bevroren volle grootte is niet
+    fresh-account-funderbaar; de ladder zet qty per chart);
+  - BANDIDO dayCapUSD 300 → 200 per contract (× qty 5 = $1.000, het bevroren getal).
+    Wil je liever frozen-engines.md aanpassen, zeg het — dat bestand is van mij.
 
-3. VISUALS — de diagnose uit Ferry's twee charts (inbox 43), geen gok meer:
-   (a) elk entry-label toont FVGNaN terwijl de signaalmarkers FVG6/FVG9 tonen → het label
-       wordt gebouwd nadat de setup-memory gewist is / leest de live variabele;
-   (b) entry/SL/TP-lijnen overleven de trade (geen line.set_x2 op exit);
-   (c) lijnen beginnen vóór de fill — met expiry 12 kan dat niet dezelfde order zijn, dus
-       het anker staat op signaal-/box-tijd. Bijvangst: time-gate-vensters en FVG-boxen in
-       hetzelfde grijs. Vraag Ferry de schermafdrukken als je de pixels nodig hebt.
-
-Acceptatie: lint 13/13 ok mét de nieuwe check · payoutgate-, daystop- en owner_dll-poort
-groen · DEPLOYED.md op v3.13.0 met OOS-reset · de FVG-maat in het entry-label gelijk aan die
-van de signaalmarker. Claim D-161 met status wip + owner in docs/SPRINT.md, losse commit per
-deel. De OOS-klok gaat op nul; dat is bekend.
+NOG OPEN BIJ FERRY (jouw twee feiten uit de v3.13.3-note blijven staan): de versie in de
+scripttitel op de chart en of de oude v3.10-instantie er nog naast hangt; en of er een
+rood DRAW≠TRADE-label staat en wat erachter staat. Claim D-162 met status wip + owner,
+losse commit per deel.
 ```
 
 ---

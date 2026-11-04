@@ -2815,8 +2815,28 @@ var float posHi = na
 var float posLo = na
 var float curStop = na
 var float curLimit = na
-newLong  = posSize > 0 and nz(posSize[1]) <= 0
-newShort = posSize < 0 and nz(posSize[1]) >= 0
+int  drawTradeNo    = strategy.closedtrades + strategy.opentrades
+bool drawNewTrade   = strategy.opentrades > 0 and drawTradeNo > nz(drawTradeNo[1], 0)
+bool drawTradeShut  = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
+// === v3.13.5 (D-162) — "nieuwe trade" komt uit de TELLER, niet uit het teken van posSize ===
+// `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het eind
+// van de VÓRIGE bar". Sluit een trade en opent de volgende in dezelfde 1-minuutbar -- met
+// `calc_on_order_fills` op MGC gebeurt dat -- dan is `posSize` 1 én `posSize[1]` 1, dus was
+// `newLong` onwaar en vuurde het hele fill-blok niet. Gevolgen, alle vier op het live pad:
+//   · geen FILL-kaart en geen journaalregel voor die trade -- Ferry mist de melding van een
+//     trade die wél gedaan is, en de reconciliatie mist de regel;
+//   · `curStop`/`curLimit` en `posHi`/`posLo` houden de waarden van de VORIGE trade;
+//   · en dat laatste is het ergste: het `inLong`-blok zet `strategy.exit` diezelfde bar
+//     OPNIEUW op die stale stop en TP, zónder `alert_message`. De order die bij het plaatsen
+//     naar PMT ging had de juiste stop, maar TradingView rekent vanaf dat moment met een
+//     andere -- en de reconciliatie boekt dat verschil als slippage die er niet was.
+// Dezelfde fout als bij de tekeningen (D-161), en daarom dezelfde oplossing: de teller.
+// ⚠️ Bewust ÉÉN definitie veranderd in plaats van tien gebruiksplekken: `newLong` en
+// `newShort` worden op negen plekken gelezen (richting van de exit-order, van de
+// journaalregel, van de kaart, en de `and not newLong`-poorten die het fill-blok niet willen
+// overschrijven). Die erven nu allemaal het goede signaal, en er blijft één waarheid.
+newLong  = drawNewTrade and posSize > 0
+newShort = drawNewTrade and posSize < 0
 flatNow  = posSize == 0
 
 if flatNow
@@ -2864,9 +2884,8 @@ var label tradeInfo = na
 // daaraan gebonden, en de prijzen van de ORDER vastgelegd bij de aanmaak zodat vak en tekst
 // niet uiteen kunnen lopen. De live stop blijft zichtbaar via de aparte "Active Stop"-plot;
 // het vak toont de trade zoals hij besteld is, en dat is wat A&D §3 vraagt.
-int  drawTradeNo    = strategy.closedtrades + strategy.opentrades
-bool drawNewTrade   = strategy.opentrades > 0 and drawTradeNo > nz(drawTradeNo[1], 0)
-bool drawTradeShut  = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
+// v3.13.5: de drie tellers staan nu HOGER, vlak boven `newLong`/`newShort`, omdat het
+// fill-blok ze nodig heeft en dat eerder in het script staat. Zoek op `drawTradeNo`.
 var int   zoneTradeNo = na
 var float zoneEntryPx = na
 var float zoneStopPx  = na

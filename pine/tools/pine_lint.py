@@ -13,6 +13,9 @@ lint-wens. Elke check hier hoort bij een compileerfout die we al eens hebben geh
                  nadat de declaratie is verdwenen (barsSinceNotBull, skipMonEarly).
   defaults       input.string met een default die niet in options staat.
   tabs           Pine is inspringgevoelig en accepteert geen tabs.
+  tekenpoort     een box.new/label.new onder een `[1]`-edge-detector. Met
+                 calc_on_order_fills draait zo'n blok meer dan een keer per bar en
+                 staat de tekening dubbel; de eerste handle raakt onbereikbaar.
 
 Gebruik:  python3 pine/tools/pine_lint.py pine/**/*.pine
 Exitcode 1 zodra één bestand een bevinding heeft.
@@ -90,6 +93,7 @@ def check(path):
 
     findings += check_plot_titles(path)
     findings += check_input_defaults(path)
+    findings += check_draw_guards(path)
 
     tabs = [n for n, l in enumerate(raw, 1) if '\t' in l]
     if tabs: findings.append(f"tabs op {tabs}")
@@ -280,6 +284,100 @@ def check_plot_titles(path):
         if "+" in re.sub(r'"[^"]*"', "", t):
             ln = src[:m.start()].count("\n") + 1
             findings.append(f"r{ln}: {m.group(1)}() titel is samengesteld - moet een const string zijn (CE10123)")
+    return findings
+
+
+def check_draw_guards(path):
+    """Een tekening mag niet onder een edge-detector hangen die op de VORIGE BAR meet.
+
+    Dit is de poort op de fout die drie reparatierondes overleefde (D-161, D-162 en de
+    patch van 04-11, alle drie op de tekeningen van EL TESORO). Niemand keek naar HOE
+    VAAK het blok draaide.
+
+    `calc_on_order_fills=true` laat het script binnen dezelfde bar OPNIEUW lopen zodra
+    een order vult. `x[1]` is de stand van de VORIGE BAR, dus een conditie als
+    `strategy.closedtrades > nz(strategy.closedtrades[1], 0)` blijft waar bij elke
+    volgende uitvoering van diezelfde bar -- ook die op barclose. Een `box.new()` of
+    `label.new()` daaronder wordt dan twee keer uitgevoerd: de tekst staat dubbel over
+    zichzelf, en bij een aanmaak raak je de EERSTE handle kwijt -- die wordt nooit meer
+    gegroeid, nooit hertekend, nooit opgeruimd en komt niet in de tekenhistorie. Dat is
+    een lek buiten de drawing-begroting van 500, en het is onzichtbaar voor een
+    zelfcontrole die naar de overgebleven handle kijkt.
+
+    De twee vormen die WEL goed zijn, en beide staan in deze vloot:
+      · `barstate.isconfirmed` in de conditie -- precies een uitvoering per bar
+        (zo doen de tijdvenster-boxen, de FVG-boxen en de event-labels het);
+      · een teller-latch in een `var` in plaats van `[1]` (`lastClosedSeen`,
+        `dexClosedSeen`, `tdSeen`, `drawMadeNo`, `drawShutSeen`).
+
+    De check kijkt per tekening omhoog naar het dichtstbijzijnde `if` op kolom 0 en
+    beoordeelt die conditie. Een geneste `if` eronder erft de poort, dus de buitenste is
+    de juiste om te lezen; en een tekening die buiten elk `if` staat draait per definitie
+    elke uitvoering en is dus niet door een edge-detector gepoort.
+
+    EEN INDIRECTIE DIEP, en dat is geen extraatje: in de echte fout stond `[1]` NIET in de
+    conditie. Er stond `if drawTradeShut`, en de `[1]` zat in de definitie van die vlag
+    honderden regels eerder. Een poort die alleen de conditie leest had de fout die hij
+    moet pakken niet gepakt -- dat is hier eerst gebeurd en daarna gerepareerd. Dus worden
+    de vlagdefinities op kolom 0 eerst ingelezen, en geldt een conditie die zo'n vlag
+    noemt als een edge-detector op de vorige bar.
+    """
+    # `pine/history/**` doet niet mee, om dezelfde reden als bij check_shared: dat is
+    # bevroren historie die per definitie achterloopt. De v6.9.5-familie heeft deze fout
+    # OOK -- het exit-labelblok hing daar op `flatNow and nz(posSize[1]) != 0` -- en dat is
+    # het bewijs dat de klasse zo oud is als de vloot. Maar die bestanden worden niet meer
+    # gewijzigd, dus zouden ze deze poort permanent rood houden, en dan leest niemand hem.
+    if "/history/" in str(path).replace("\\", "/"):
+        return []
+    lines = open(path).read().split("\n")
+
+    # Eerste doorloop: welke vlaggen op kolom 0 zijn zelf een edge-detector op de vorige
+    # bar? `bool x = ... [1] ...` en de vorm zonder type. Een `var`-declaratie is per
+    # definitie geen edge-detector en doet niet mee.
+    edge = {}
+    for n, raw in enumerate(lines, 1):
+        if raw[:1] in (" ", "\t") or raw.lstrip().startswith("//") or raw.startswith("var"):
+            continue
+        m = re.match(r'(?:bool\s+)?([a-zA-Z_]\w*)\s*=\s*(.+)$', code(raw))
+        if m and "[1]" in m.group(2):
+            edge[m.group(1)] = n
+
+    def edge_src(cond):
+        """De regel waar deze conditie zijn vorige-bar-meting vandaan haalt, of None."""
+        if "[1]" in cond:
+            return "deze conditie"
+        for w in re.findall(r'(?<![\w.])([a-zA-Z_]\w*)', cond):
+            if w in edge:
+                return f"`{w}` (r{edge[w]})"
+        return None
+
+    findings = []
+    guard = None          # (regelnummer, conditie) van het laatste `if` op kolom 0
+    for n, raw in enumerate(lines, 1):
+        if raw.lstrip().startswith("//") or not raw.strip():
+            continue
+        if raw[:1] not in (" ", "\t"):
+            m = re.match(r'if\s+(.*)$', raw)
+            guard = (n, m.group(1)) if m else None
+            if not m:
+                continue
+        if guard is None:
+            continue
+        gn, cond = guard
+        if "barstate.isconfirmed" in cond:
+            continue
+        src = edge_src(code(cond))
+        if src is None:
+            continue
+        for fn in ("box.new", "label.new", "line.new", "polyline.new", "table.new"):
+            if fn + "(" in code(raw):
+                findings.append(
+                    f"r{n}: {fn}() hangt op de `if` van r{gn}, en die meet op de VORIGE BAR "
+                    f"via {src}. Met calc_on_order_fills draait dat blok meer dan een keer "
+                    f"per bar, dus staat de tekening dubbel en raakt de eerste handle "
+                    f"onbereikbaar -- gebruik een teller-latch in een `var`, of zet "
+                    f"`barstate.isconfirmed` in de conditie")
+                break
     return findings
 
 

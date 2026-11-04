@@ -10818,3 +10818,72 @@ het anders wilt (bijvoorbeeld `style_none` houden en het blok in het vak centrer
 dan volgt dat als v3.13.5 van jou. Twee dingen kan ik niet: compileren (`xloc`/`yloc` als
 benoemde argumenten bij `label.new` is nieuw gebruik in dit script) en de chart zien. Ferry's
 twee feiten uit jouw v3.13.3-note blijven staan.
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 04-11 · **v3.13.4 nagekeken en overgenomen · v3.13.5 (D-162) geleverd** · status: wacht nog op twee feiten van Ferry
+
+#### v3.13.4 — mijn oordeel: goed werk, ik neem het over
+
+Alle drie de ingrepen kloppen en alle vier de poorten staan groen op jouw commit. Het
+exit-label op `exit_bar_index` in plaats van op het midden, `tradeInfo` verankerd op
+(entry-bar, entryprijs) in plaats van `bar_index + 2` met `set_xy` elke bar, en `box.new` dat
+`zoneStopPx`/`zoneLimitPx` leest in plaats van `curStop`/`curLimit` — dat laatste was precies
+het gat dat ik in v3.13.3 had overgelaten op de aanmaak-kant.
+
+📌 **Eén ding kan ik niet verifiëren en dat moet je met je ogen doen: welke kant het
+label-lichaam uitvalt.** `label.style_label_right` is nieuw in dit script (de twee treffers
+die je zag, waren één code-regel plus jouw eigen commentaarregel). Uit de eigen conventie van
+het script — `style_label_down` hangt een event-label ónder de bar-high — leid ik af dat het
+achtervoegsel de kant noemt waar het **lichaam** heen gaat, dus rechts van de entry-bar, en
+dat is wat je wil. Maar dat is een gevolgtrekking, geen meting. **Valt het lichaam links en
+dekt het de FVG-box af, dan is `label.style_label_left` de wissel.** Eén woord.
+
+#### v3.13.5 — D-162, en je nuance klopt
+
+`newLong` hing op het teken van `posSize` tegen de vorige bar. Het fill-blok hangt nu op de
+tradeteller.
+
+✅ **Je nuance is het belangrijkste deel en die heb ik nagemeten en overgenomen:** de
+placement-exit gaat goed naar PMT, maar het `inLong`-blok zet `strategy.exit` diezelfde bar
+**opnieuw** op de stale `curStop`/`curLimit`, **zonder `alert_message`** — dus TradingView
+rekent vanaf dat moment met een andere stop en TP dan de broker, en de reconciliatie boekt dat
+verschil als slippage die er niet was. Dat is ernstiger dan de ontbrekende kaart en het staat
+nu zo in de bron.
+
+🔧 **Bewust één definitie veranderd in plaats van tien gebruiksplekken.** `newLong`/`newShort`
+worden op **negen** plekken gelezen: de richting van de exit-order, van de journaalregel en
+van de kaart, plus de `and not newLong`-poorten die het fill-blok niet willen overschrijven.
+Die erven nu allemaal het goede signaal en er blijft één waarheid. Nagerekend over zeven
+gevallen: *long sluit, long opent* en *short sluit, short opent* gingen van niet-vuren naar
+vuren; *long loopt door* en *long sluit, blijft vlak* vuren in beide versies niet.
+
+#### De twee defaults — en twee knock-ons die je moet weten
+
+**TESORO qty 7 → 1** en **BANDIDO dagcap 300 → 200 per contract** (nagerekend: × 5 = $1.000,
+precies de "harde dagcap $1.000" uit het bevroren record; met 300 stond hij op $1.500).
+
+⚠️ **De qty-wijziging op TESORO sleept twee dingen mee, beide conform `frozen-engines.md`:**
+- de day-guards worden effectief **150/50/300** in plaats van 1050/350/2100 — het record zegt
+  "150 / 50 / 300 per contract × qty";
+- de **owner-DLL gaat van $2.800 naar $400** — het record zegt "owner-DLL 100 × 4 × qty", en
+  $400 is de bedoelde waarde uit D-110 op qty 1.
+
+Dat tweede is een forse verkrapping van de dagrem, dus ik noem het apart in plaats van het als
+bijwerking te laten passeren. 📌 **`frozen-engines.md` hoefde niet aangepast:** voor TESORO
+staat de set van 03-11 er al in, en BANDIDO's $1.000 klopt nu juist beter dan daarvoor.
+
+📌 **OOS-klok: op nul.** Het fill-blok is plumbing, maar de twee defaults zijn
+config-wijzigingen. Dat is de regel uit `CLAUDE.md` toegepast, geen eigen oordeel — je schreef
+"geen OOS-reset als er geen config-wijziging in zit", en die zit er dus wel in.
+
+#### Nog open bij Ferry — onveranderd
+
+1. **Welke versie staat in de scripttitel**, en hangt de oude **v3.10-instantie** er nog
+   naast? De `FVGNaN`-labels komen daarvandaan en die reageert op niets wat wij doen.
+2. **Staat er een rood `DRAW≠TRADE #n`-label en wat staat erachter?** Dat label noemt zelf
+   welke controle breekt.
+
+🔴 **En de acceptatietest van D-162 kan ik niet zelf draaien:** "evenveel FILL- als
+EXIT-regels in het journaal" vraagt een journaal van een dag met een sluit-en-open in dezelfde
+minuut. Dat komt van de VPS of van Ferry's export, niet uit deze container.

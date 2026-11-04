@@ -444,6 +444,36 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.5 (04-11, D-162): het fill-blok hangt op de TRADETELLER.
+//   `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het
+//   eind van de VÓRIGE bar". Sluit een trade en opent de volgende in dezelfde 1-minuutbar --
+//   met `calc_on_order_fills` op MGC gebeurt dat -- dan is `posSize` 1 én `posSize[1]` 1, dus
+//   vuurde het hele fill-blok niet. Vier gevolgen, alle vier op het live pad:
+//     · geen FILL-kaart en geen journaalregel voor die trade;
+//     · `curStop`/`curLimit` en `posHi`/`posLo` houden de waarden van de VORIGE trade;
+//     · 🔴 en het ergste: het `inLong`-blok zet `strategy.exit` diezelfde bar OPNIEUW op die
+//       stale stop en TP, zónder `alert_message`. De order die bij het plaatsen naar PMT
+//       ging had de juiste stop, maar TradingView rekent vanaf dat moment met een andere --
+//       en de reconciliatie boekt dat verschil als slippage die er niet was.
+//   Dezelfde fout als bij de tekeningen (D-161), dus dezelfde oplossing: de teller.
+//   ⚠️ Bewust ÉÉN definitie veranderd in plaats van tien gebruiksplekken. `newLong` en
+//   `newShort` worden op negen plekken gelezen -- de richting van de exit-order, van de
+//   journaalregel en van de kaart, plus de `and not newLong`-poorten die het fill-blok niet
+//   willen overschrijven. Die erven nu allemaal het goede signaal en er blijft één waarheid.
+//   Nagerekend over zeven gevallen: "long sluit, long opent" en "short sluit, short opent"
+//   gingen van niet-vuren naar vuren; "long loopt door" en "long sluit, blijft vlak" vuren
+//   in beide versies niet.
+//   MEE IN DEZELFDE RELEASE, twee defaults uit inbox 49:
+//     · EL TESORO `contractSize` 7 -> 1. De bevroren volle grootte is niet
+//       fresh-account-funderbaar, en `frozen-engines.md` zegt sinds 03-11 expliciet dat de
+//       qty per account via de ruimte-ladder gaat en niet in de definitie zit.
+//       ⚠️ Twee knock-ons, beide conform dat record: de day-guards worden effectief
+//       150/50/300 in plaats van 1050/350/2100, en de owner-DLL $400 in plaats van $2.800.
+//     · EL BANDIDO `dayCapUSD` 300 -> 200 per contract. Nagerekend: x qty 5 = $1.000, en dat
+//       is precies de "harde dagcap $1.000" uit het bevroren record; met 300 stond hij op
+//       $1.500.
+//   DE OOS-KLOK: het fill-blok is plumbing, maar die twee defaults zijn config-wijzigingen,
+//   dus de klok gaat op nul. Dat is de regel uit CLAUDE.md toegepast, niet een eigen oordeel.
 // v3.13.4 (04-11, patch): entry- en exit-markering ZITTEN AAN DE PRIJS VAST.
 //   Ferry na v3.13.3: "drawings staan nog steeds niet goed op de chart". Twee dingen in de
 //   tekenlogica zetten een markering per constructie NAAST de candle, ook als alle vakken
@@ -575,7 +605,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL LEON · MYM CON EOD Q2"
-var string currentVersion = "v3.13.4"
+var string currentVersion = "v3.13.5"
 strategy("MΞX EL LEON · MYM CON EOD Q2 · " + currentVersion, shorttitle="LEO-YM-CE", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

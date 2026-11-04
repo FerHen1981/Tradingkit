@@ -10493,3 +10493,33 @@ zonder 17:00-bars ligt de 16:55-bar visueel tegen 18:00 aan. Tenzij het journaal
 📌 **Vierde compileerfout in deze klasse (CE10272, v3.13.1) is door Ferry gevonden, niet door een
 poort.** De lint draagt nu de gebruik-vóór-declaratie-check (r. 116–118) — goed. Zolang
 TradingView de laatste compiler is, blijft "plak eerst op een lege chart" een stap in elke release.
+
+---
+
+## 46 · SM → Pine Dev (cc Ferry) · 2026-11-04 · open — de visuals-klacht is een PRIJSSCHAAL, geen tekenlogica: zet `scale=scale.right` in `strategy()` (v3.13.2, samen met SL 100)
+
+Ferry's chart van 04-11 (MGC1 1m, 02:30–05:00 ET) maakt het zichtbaar. Het omcirkelde label zegt
+`LONG 1ct @4035.7 | SL 4025.8 | 100t`, de candles om 02:45–03:00 staan op ≈4035 — **en het vak
+met "SL 100t − $100" hangt op 4048–4054**, 60 ticks hoog in plaats van 100. De tekst klopt, de
+geometrie niet, en Ferry beschrijft precies het symptoom: *"die hoort aan de prijs vast te zitten
+en niet afzonderlijk van de candles te bewegen."* Dat is een strategie-instantie die niet op de
+rechterschaal van het symbool zit maar op een eigen schaal ("No scale" / scale A): plots, boxen
+en labels renderen dan tegen die schaal. Niets in de tekenlogica kan dat veroorzaken of oplossen.
+
+**Wat de bron zegt:** geen van de dertien `strategy()`-aanroepen draagt `scale=`. Zonder dat
+kiest TradingView de schaal bij het toevoegen — en twee scripts op één chart (zie hieronder) is
+precies de situatie waarin de tweede op een andere schaal belandt.
+
+➡️ **v3.13.2, geen gedragswijziging:** `scale=scale.right` in alle dertien `strategy()`-aanroepen,
+naast `overlay=true`. Samen met de SL-default 140 → 100 op EL TESORO (inbox 45). Ferry kan het
+intussen per chart zetten (legenda → ⋯ → *Pin to scale* → rechterschaal), maar de default hoort
+in het script, anders komt dit bij elke nieuwe chart terug.
+
+📌 **Twee dingen op dezelfde chart die niet van jou zijn maar wel verklaren wat Ferry ziet:**
+(1) er staan **twee instanties** op deze chart — `TES-MGC-C` (v3.13.x) én `EL TESORO v3.10` —
+met twee dashboards (PA041 en PA031) en twee sets drawings door elkaar; (2) de omcirkelde labels
+dragen nog `FVGNaN`, dus de verschoven drawings komen van de **v3.10**-instantie. Dat sluit niet
+uit dat v3.13.x hetzelfde doet zodra hij op een eigen schaal belandt — vandaar de default.
+
+Mijn (b)/(c) van 03-11 en de FILL/EXIT-tijden-vraag uit inbox 45 zijn hiermee overbodig: de
+"verkeerde" banden waren geometrie op een andere schaal, geen toestand. Trek die vraag in.

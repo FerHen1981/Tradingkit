@@ -444,6 +444,40 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.8 (04-11): de GEOMETRIE EXACT TERUG NAAR v3.2.0. Geen nieuwe diagnose.
+//   Ferry leverde de v3.2.0-bron (26-08) aan waarop de tekeningen volgens hem wel aan de prijs
+//   blijven zitten. Dat is de referentie die vier rondes ontbrak, en de SM heeft hem in git
+//   tegen alles erna gezet: de tekenlogica is byte-identiek van v3.2.0 t/m v3.12.0, en de hele
+//   diff met v3.13.7 is `scale=scale.right` plus de geometrie-ingrepen van v3.13.2/4 (inbox 52).
+//   Dus gaat die geometrie terug, regel voor regel:
+//     · `scale=scale.right` eruit -- het enige RENDERING-verschil met de werkende bron;
+//     · het exit-label terug op `_xm`, het midden van de trade, in plaats van op de exit-bar;
+//     · het tekstblok terug op `bar_index + 2` met `style_none` en `label.set_xy` per bar, in
+//       plaats van verankerd op de entry-bar met een pointer;
+//     · het vak terug uit `curStop`/`curLimit` met `set_top`/`set_bottom` per bar -- het volgt
+//       de live stop weer in plaats van bevroren op de orderprijzen te staan;
+//     · bij de exit alleen `box.set_right`, in plaats van hertekenen uit `closedtrades.*`.
+//   WAT BLIJFT, en dat is de helft van de release: de teller-latches (`drawMadeNo`,
+//   `drawShutSeen`), de binding op `zoneTradeNo`, het loslaten bij de exit, `DRAW!=TRADE` en de
+//   meetlaag in de tabel. Op tekenniveau is dit script nu gelijk aan de versie die werkt, met
+//   een tabel die zegt of het klopt.
+//   ⚠️ WAT DIT OVER MIJN EIGEN v3.13.6 ZEGT: de dubbele uitvoering per bar die ik daar vond
+//   staat OOK in v3.2.0 -- `newLong = posSize > 0 and nz(posSize[1]) <= 0` is hetzelfde
+//   `[1]`-patroon, het aanmaakblok draait daar ook twee keer en lekt hetzelfde reepje -- en
+//   v3.2.0 werkt voor Ferry. Die latch is dus een echte fout en hij blijft, maar hij was NIET
+//   de verklaring van de klacht. Dat is het verschil tussen "ik heb een fout gevonden" en "ik
+//   heb DE fout gevonden", en dat verschil heb ik vier rondes door elkaar gehaald.
+//   📌 Drie hulpvariabelen zijn daarmee dood en eruit: `zoneEntryPx`, `zoneStopPx`,
+//   `zoneLimitPx`, plus `pendStopAtOrder`/`pendTpAtOrder` die ze vulden. Dat gaat verder dan de
+//   letter van de opdracht; de reden is dat dode code met een nette toelichting erboven
+//   precies is wat de volgende lezer weer "repareert". Het risico dat ze afdekten is bij de
+//   bron weggehaald: sinds D-162 hangt het fill-blok op de tradeteller, dus `curStop` is op de
+//   aanmaakbar die van DEZE trade.
+//   Geen handelsgedrag geraakt, geen input, geen default. De OOS-klok blijft staan.
+//   ACCEPTATIE, zelf nagerekend: de diff van alle box.*/label.*/scale-aanroepen tussen de
+//   v3.2.0-bron en dit script is aan de v3.2.0-kant LEEG op een regel na (de vensterkleur van
+//   v3.13.0), en aan deze kant alleen zelfcontrole, meetlaag, vensterkleur en de drie
+//   waarschuwingslabels. Precies de vier categorieen die de opdracht toestaat.
 // v3.13.7 (04-11): DRAW-DIAGNOSE -- het script leest zelf terug wat het getekend heeft.
 //   Ferry na v3.13.6: "nope niet goed...... hoe kan dit nu opgelost worden?" Dat is geen
 //   vraag om een vijfde patch maar om een andere werkwijze, en hij heeft gelijk. Vier rondes
@@ -673,7 +707,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.13.7"
+var string currentVersion = "v3.13.8"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -683,11 +717,12 @@ strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ
      use_bar_magnifier=true,
      max_bars_back=500,
      max_lines_count=500, max_boxes_count=500, max_labels_count=500,
-     // v3.13.2: expliciet op de rechteras. Dit was NIET de oorzaak van de
-     // visual-klacht (die zat in de tekenlogica), maar het is de juiste default:
-     // zonder deze regel kan een plot op een eigen schaal belanden en dan staan de
-     // prijsniveaus van het script niet op dezelfde as als de candles.
-     scale=scale.right,
+     // v3.13.8: `scale=scale.right` is ERUIT. Ik heb er bij v3.13.2 zelf bijgeschreven dat
+     // het niet de oorzaak was, en dat klopte voor de klacht van 03-11 -- op v3.10 stond die
+     // regel er niet in. Voor de klacht op v3.13.2 t/m v3.13.7 is het het ENIGE
+     // rendering-verschil met de v3.2.0-bron waarop de tekeningen volgens Ferry wel aan de
+     // prijs blijven zitten. Of zijn symbool op een andere schaal hangt kan niemand van ons
+     // hier zien, dus hij gaat eruit in plaats van dat we erover blijven gissen (inbox 52).
      margin_long=0, margin_short=0,
      slippage=1,
      commission_type=strategy.commission.cash_per_contract, commission_value=0.37)
@@ -2911,11 +2946,11 @@ var string pendDiag = ""
 // `curLimit` alleen worden gezet in `if newLong or newShort`, en dat is hetzelfde defecte
 // signaal als bij de tekeningen: sluit een trade en opent de volgende in dezelfde bar, dan
 // vuurt dat blok niet en dragen `curStop`/`curLimit` nog de waarden van de VORIGE trade.
-// Het vak van v3.13.2 legde `curStop` vast en kreeg daarmee de stop van de vorige trade --
-// dus stond het vak nog steeds verkeerd. Dit zijn de waarden uit de order zelf, hetzelfde
-// als wat `f_orderMsg` en de FILL-kaart versturen.
-var float pendStopAtOrder = na
-var float pendTpAtOrder   = na
+// v3.13.8: `pendStopAtOrder`/`pendTpAtOrder` zijn WEG. Ze bestonden alleen om het vak op de
+// orderprijzen te zetten, en die geometrie is terug naar v3.2.0 (inbox 52). Het risico dat ze
+// afdekten is intussen bij de bron weggehaald: D-162 liet het fill-blok op de tradeteller
+// hangen, dus `curStop` is op de aanmaakbar die van DEZE trade. Deze toelichting blijft staan
+// omdat de reden waarom het ooit nodig leek het nalezen waard is.
 var float pendLimit = na
 var float pendStop = na
 var float t_tpD = na
@@ -2986,8 +3021,6 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
         f_sendDiscord("🚀 " + syminfo.ticker + " ACCOUNT STARTED", jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz) + " | regime " + (useRegime ? (regimeFav ? "FAVORABLE" : "UNFAVORABLE") : "off") + " | first order: " + (longSignal ? "LONG " : "SHORT ") + str.tostring(t_qty, "#.##") + "ct @ " + str.tostring(isLimitMode ? sigEntryPx : close, format.mintick))
     pendLimit := isLimitMode ? sigEntryPx : na
     pendDiag := sigDiag
-    pendStopAtOrder := sigStopPx
-    pendTpAtOrder   := t_tpPx
     pendStop := sigStopPx
     if longSignal
         if isLimitMode
@@ -3181,9 +3214,6 @@ var label tradeInfo = na
 // v3.13.5: de drie tellers staan nu HOGER, vlak boven `newLong`/`newShort`, omdat het
 // fill-blok ze nodig heeft en dat eerder in het script staat. Zoek op `drawTradeNo`.
 var int   zoneTradeNo = na
-var float zoneEntryPx = na
-var float zoneStopPx  = na
-var float zoneLimitPx = na
 // Alleen muteren als de handle van de OPEN trade is. Zonder deze test landt elke mutatie op
 // wat er toevallig nog hangt, en dat is precies defect 1.
 bool zoneIsCurrent = not na(zoneTradeNo) and zoneTradeNo == drawTradeNo and strategy.opentrades > 0
@@ -3255,9 +3285,11 @@ if showExitLabels and drawMakeShut and inTradeDrawWin
              style=label.style_none, textcolor=vPosTxt, size=size.small, textalign=text.align_center))
     float _lmfeT = (_wasLong ? nz(posHi, _xp) - nz(jEntryPx, _ep) : nz(jEntryPx, _ep) - nz(posLo, _xp)) / syminfo.mintick
     float _lmaeT = (_wasLong ? nz(jEntryPx, _ep) - nz(posLo, nz(jEntryPx, _ep)) : nz(posHi, nz(jEntryPx, _ep)) - nz(jEntryPx, _ep)) / syminfo.mintick
-    // v3.13.4: op de EXIT-BAR, niet op het midden van de trade (`_xm` is voor de SL/TP-tekst in het vak).
-    int   _x1  = strategy.closedtrades.exit_bar_index(_ti)
-    array.push(drawHistL, label.new(_x1, _xp, text=(_win ? "+$" : "-$") + str.tostring(math.abs(_pf), "#.0") +
+    // v3.13.8: terug op `_xm`, het midden van de trade, zoals in v3.2.0. v3.13.4 zette dit op
+    // de exit-bar omdat "20 bars voor de exit op een prijs waar geen candle staat" fout LEEK --
+    // maar v3.2.0 doet het zo en daar zit het volgens Ferry goed. Een verschil dat geen
+    // verschil was (inbox 52, de SM noemt het zijn eigen fout).
+    array.push(drawHistL, label.new(_xm, _xp, text=(_win ? "+$" : "-$") + str.tostring(math.abs(_pf), "#.0") +
          "\nMFE " + str.tostring(math.max(_lmfeT, 0), "#") + "t · MAE " + str.tostring(math.max(_lmaeT, 0), "#") + "t",
          style=_wasLong == _win ? label.style_label_down : label.style_label_up,
          color=_win ? color.new(color.green, 20) : color.new(color.red, 20),
@@ -3574,19 +3606,17 @@ if inDrawWin and barstate.isconfirmed
 // volgorde, want bij twee fills in een bar gebeurt beide op dezelfde bar.
 if drawMakeShut
     int _ci = strategy.closedtrades - 1
-    // Hertekenen uit de trade zelf: dan staat een gesloten trade per constructie op de
-    // juiste prijs en tijd, ongeacht wat er live is misgegaan.
+    // v3.13.8: ALLEEN de rechterrand afsluiten, zoals v3.2.0. Het hertekenen uit
+    // `strategy.closedtrades.*` (v3.13.2) en het verplaatsen van het tekstblok naar de
+    // entry-bar (v3.13.4) zijn eruit: beide zijn verschillen met de bron die volgens Ferry
+    // goed staat, en geen van beide is ooit als oorzaak aangetoond. Wat WEL blijft is het
+    // eenmalig naar de tekenhistorie duwen -- dat stond in v3.2.0 in dit blok EN in het
+    // exit-labelblok, waardoor elk vak er twee keer in kwam en de tekenbegroting dubbel zo
+    // snel volliep. Dat was een echte fout en de coordinaten worden er niet anders van.
     if not na(zoneRisk) and not na(zoneTradeNo)
-        int   _cb0 = strategy.closedtrades.entry_bar_index(_ci)
-        int   _cb1 = strategy.closedtrades.exit_bar_index(_ci)
-        float _cep = strategy.closedtrades.entry_price(_ci)
-        box.set_lefttop(zoneRisk, _cb0, math.max(_cep, nz(zoneStopPx, _cep)))
-        box.set_rightbottom(zoneRisk, _cb1, math.min(_cep, nz(zoneStopPx, _cep)))
+        box.set_right(zoneRisk, bar_index)
         if not na(zoneReward)
-            box.set_lefttop(zoneReward, _cb0, math.max(_cep, nz(zoneLimitPx, _cep)))
-            box.set_rightbottom(zoneReward, _cb1, math.min(_cep, nz(zoneLimitPx, _cep)))
-        if not na(tradeInfo)
-            label.set_xy(tradeInfo, _cb0, _cep)
+            box.set_right(zoneReward, bar_index)
         array.push(drawHistB, zoneRisk)
         if not na(zoneReward)
             array.push(drawHistB, zoneReward)
@@ -3612,9 +3642,6 @@ if drawMakeShut
     zoneReward  := na
     tradeInfo   := na
     zoneTradeNo := na
-    zoneEntryPx := na
-    zoneStopPx  := na
-    zoneLimitPx := na
 
 // === v3.13.2 — ZELFCONTROLE: tekening tegen trade ===========================
 // Acceptatietest 5 wordt hiermee zichtbaar voor Ferry in plaats van iets dat iemand met de
@@ -3646,40 +3673,45 @@ if drawMakeShut and showTradeZones and inTradeDrawWin and drawCheckHad
 
 if drawMakeNew
     zoneTradeNo := drawTradeNo
-    zoneEntryPx := entryAvg
-    // De prijzen van de ORDER, niet de live variabelen -- zie de toelichting bij
-    // `pendStopAtOrder`. `nz` houdt de oude weg open voor het geval er geen pending order was.
-    zoneStopPx  := nz(pendStopAtOrder, curStop)
-    zoneLimitPx := nz(pendTpAtOrder, curLimit)
     drawCheckHad := false
     if showTradeZones and inTradeDrawWin
-        // v3.13.4: uit de zone-prijzen (de ORDER), niet uit `curStop`/`curLimit` -- die kunnen bij
-        // een sluit-en-open in dezelfde bar nog van de vorige trade zijn (D-162).
-        zoneRisk := box.new(bar_index, math.max(entryAvg, zoneStopPx), bar_index, math.min(entryAvg, zoneStopPx), border_width=0, bgcolor=zRiskBg)
+        // v3.13.8: terug uit `curStop`/`curLimit`, zoals v3.2.0. De zone-prijzen van v3.13.3
+        // (`pendStopAtOrder`/`pendTpAtOrder` -> `zoneStopPx`/`zoneLimitPx`) zijn eruit, en
+        // daarmee ook de drie `zone*Px`-variabelen: niets leest ze nog. Het risico dat ze
+        // afdekten -- bij een sluit-en-open in dezelfde bar draagt `curStop` nog die van de
+        // vorige trade -- is nu gedekt door de teller: `drawMakeNew` vuurt pas na de
+        // fill, en het fill-blok zet `curStop` daar. Dat was de reparatie van D-162.
+        zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
         dgBoxMade := dgBoxMade + 1
         if na(dgBoxLastNo) or dgBoxLastNo != drawTradeNo
             dgBoxTrade  := dgBoxTrade + 1
             dgBoxLastNo := drawTradeNo
-        zoneReward := box.new(bar_index, math.max(entryAvg, zoneLimitPx), bar_index, math.min(entryAvg, zoneLimitPx), border_width=0, bgcolor=zRewardBg)
+        zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)
     if showTradeLabels and inTradeDrawWin
-        tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - zoneStopPx) / syminfo.mintick)) + "t"
+        tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - curStop) / syminfo.mintick)) + "t"
         tradeExitDiag  := ""
-        // v3.13.4: VERANKERD op de entry-bar en de entryprijs, met een pointer die daar naar wijst.
-        // Niet meer `bar_index + 2` en niet meer elke bar verplaatst -- dat was het label dat
-        // "afzonderlijk van de candles bewoog". Achtergrond en pointer volledig transparant.
-        tradeInfo := label.new(bar_index, entryAvg, "", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 100), textcolor=vText, size=size.small, textalign=text.align_left)
+        // v3.13.8: terug op `bar_index + 2` met `style_none`, zoals v3.2.0 -- geen pointer, geen
+        // anker op de entry-bar. v3.13.4 noemde het meeschuiven "het label dat afzonderlijk van
+        // de candles bewoog"; in v3.2.0 schuift het ook mee en daar zit het volgens Ferry goed.
+        // `pendDiag` blijft: dat is de FVGNaN-reparatie van v3.13.0, inhoud en geen geometrie.
+        tradeInfo := label.new(bar_index + 2, entryAvg, "", style=label.style_none, textcolor=vText, size=size.small, textalign=text.align_left)
         array.push(drawHistL, tradeInfo)
-// v3.13.2: `zoneIsCurrent` in plaats van `not na(...)`. Het vak groeit alleen naar rechts;
-// top en bottom blijven op de prijzen van de ORDER staan, zodat het vak en de SL-tekst niet
-// uiteen kunnen lopen als de stop ratchet. Waar de stop NU staat laat de "Active Stop"-plot zien.
+// v3.13.8: top en bottom volgen de LIVE stop weer, en het tekstblok schuift weer mee -- zoals
+// v3.2.0. Het bevriezen op de orderprijzen (v3.13.2) was mijn eigen keuze en de reden stond er
+// netjes bij: dan kan het vak niet van de SL-tekst af gaan lopen als de stop ratcht. Maar het
+// is een verschil met de bron die werkt, en dat weegt hier zwaarder dan mijn argument.
+// `zoneIsCurrent` BLIJFT: dat is de binding op het tradenummer, niet de geometrie.
 if not flatNow and posSize != 0 and zoneIsCurrent
     if showTradeZones and not na(zoneRisk)
         box.set_right(zoneRisk, bar_index)
+        box.set_top(zoneRisk, math.max(entryAvg, curStop))
+        box.set_bottom(zoneRisk, math.min(entryAvg, curStop))
         box.set_right(zoneReward, bar_index)
     if showTradeLabels and not na(tradeInfo)
         int _slT = math.round(math.abs(entryAvg - curStop) / syminfo.mintick)
         float _riskUsd = math.abs(entryAvg - curStop) * syminfo.pointvalue * math.abs(posSize)
         float _rr = math.abs(entryAvg - curStop) > syminfo.mintick / 2 ? math.abs(curLimit - entryAvg) / math.abs(entryAvg - curStop) : na
+        label.set_xy(tradeInfo, bar_index + 2, entryAvg)
         label.set_textcolor(tradeInfo, vText)
         int _tpT = na(curLimit) ? 0 : math.round(math.abs(curLimit - entryAvg) / syminfo.mintick)
         float _tpUsd = na(curLimit) ? na : math.abs(curLimit - entryAvg) * syminfo.pointvalue * math.abs(posSize)

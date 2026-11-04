@@ -2880,6 +2880,33 @@ if newLong or newShort
 var box zoneRisk = na
 var box zoneReward = na
 var label tradeInfo = na
+// === v3.13.2 — tekeningen zijn nu aan ÉÉN trade gebonden ====================
+// Tot v3.13.1 waren dit drie losse `var`-handles die alleen bij `newLong or newShort`
+// werden aangemaakt en NERGENS werden losgelaten. Drie gevolgen, alle drie zichtbaar op
+// Ferry's chart van 04-11 -- een label met de tekst van trade N op de prijzen van een
+// latere trade:
+//  1. `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het
+//     eind van de VÓRIGE bar", niet "er is een trade geopend". Sluit een trade en opent de
+//     volgende binnen dezelfde bar -- met `calc_on_order_fills` op 1-min MGC gebeurt dat --
+//     dan is `posSize` 1 én `posSize[1]` 1, dus vuurt de aanmaak niet.
+//  2. De mutatieblokken werken dan door op het vak en het label van de VORIGE trade: het vak
+//     springt naar de nieuwe prijzen, het label verhuist mee, en de tekst wordt een mengsel.
+//  3. Het vak volgde `curStop` (die ratchet via BE/trail) terwijl de tekst de SL van de
+//     aanmaak hield -- een vak van 60 ticks met "SL 100t" erin is dan per constructie mogelijk.
+// DE REPARATIE: een tradenummer uit de TELLERSTAND in plaats van uit `posSize[1]`, de handles
+// daaraan gebonden, en de prijzen van de ORDER vastgelegd bij de aanmaak zodat vak en tekst
+// niet uiteen kunnen lopen. De live stop blijft zichtbaar via de aparte "Active Stop"-plot;
+// het vak toont de trade zoals hij besteld is, en dat is wat A&D §3 vraagt.
+int  drawTradeNo    = strategy.closedtrades + strategy.opentrades
+bool drawNewTrade   = strategy.opentrades > 0 and drawTradeNo > nz(drawTradeNo[1], 0)
+bool drawTradeShut  = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
+var int   zoneTradeNo = na
+var float zoneEntryPx = na
+var float zoneStopPx  = na
+var float zoneLimitPx = na
+// Alleen muteren als de handle van de OPEN trade is. Zonder deze test landt elke mutatie op
+// wat er toevallig nog hangt, en dat is precies defect 1.
+bool zoneIsCurrent = not na(zoneTradeNo) and zoneTradeNo == drawTradeNo and strategy.opentrades > 0
 // De diagnose van de entry (FVG|CVD|AGE|H|D) en die van de exit worden vastgehouden zodat
 // het tekstblok ze allebei kan tonen; sigDiag zelf is alweer die van de volgende bar.
 var string tradeEntryDiag = ""
@@ -2902,22 +2929,26 @@ f_capDrawings() =>
         box.delete(array.shift(drawHistB))
     while array.size(drawHistL) > 480
         label.delete(array.shift(drawHistL))
-if showExitLabels and flatNow and nz(posSize[1]) != 0 and strategy.closedtrades > 0 and inTradeDrawWin
+// v3.13.2: hing op `flatNow`, en dan vuurt dit blok NIET als de volgende trade in
+// dezelfde bar opent -- juist het geval uit de acceptatietest (twee fills in een
+// minuut). `drawTradeShut` komt van de teller en mist dat geval niet.
+if showExitLabels and drawTradeShut and inTradeDrawWin
 
     int   _ti  = strategy.closedtrades - 1
     float _xp  = strategy.closedtrades.exit_price(_ti)
     float _ep  = strategy.closedtrades.entry_price(_ti)
     float _pf  = strategy.closedtrades.profit(_ti)
-    bool  _wasLong = nz(posSize[1]) > 0
+    // v3.13.2: de richting van de GESLOTEN trade komt uit de trade zelf. `posSize[1]`
+    // is de stand van de vorige bar en die kan al van de volgende trade zijn.
+    bool  _wasLong = strategy.closedtrades.size(_ti) > 0
     bool  _win = _pf >= 0
     int   _x0  = strategy.closedtrades.entry_bar_index(_ti)
     int   _xm  = math.round(math.avg(_x0, bar_index))
 
-    if not na(zoneRisk)
-        box.set_right(zoneRisk, bar_index)
-        box.set_right(zoneReward, bar_index)
-        array.push(drawHistB, zoneRisk)
-        array.push(drawHistB, zoneReward)
+    // v3.13.2: het afronden van het vak (rechterrand, hertekenen uit de trade) en het pushen
+    // naar de tekenhistorie gebeurt nu in het afmaak-blok verderop, dat op de TELLER hangt en
+    // dus ook vuurt als de volgende trade in dezelfde bar opent. Hier stond dat ook, en dan
+    // belandde elk vak twee keer in de historie -- de drawing-begroting liep zo dubbel zo snel vol.
     if not na(zoneRisk)
         float _slLvl = _wasLong ? box.get_bottom(zoneRisk) : box.get_top(zoneRisk)
         int   _slT   = math.round(math.abs(_ep - _slLvl) / syminfo.mintick)
@@ -3245,7 +3276,41 @@ if inDrawWin and barstate.isconfirmed
     if lblTrail and ((rgTrailArmed and not rgTrailArmed[1]) or (dayTrailArmed and not dayTrailArmed[1]))
         f_evtLabel("🪤 Trail armed · exit $" + str.tostring(nz(rgExitLvl, riskDayPeak - dayTrailGivebackEff), "#"), color.new(color.teal, 20))
 // === v5.5: TRADE-ZONES (licht gevulde entry<->SL en entry<->TP banden) ======
-if (newLong or newShort)
+// v3.13.2: eerst de VORIGE trade afmaken en loslaten, dan de nieuwe aanmaken. In die
+// volgorde, want bij twee fills in een bar gebeurt beide op dezelfde bar.
+if drawTradeShut
+    int _ci = strategy.closedtrades - 1
+    // Hertekenen uit de trade zelf: dan staat een gesloten trade per constructie op de
+    // juiste prijs en tijd, ongeacht wat er live is misgegaan.
+    if not na(zoneRisk) and not na(zoneTradeNo)
+        int   _cb0 = strategy.closedtrades.entry_bar_index(_ci)
+        int   _cb1 = strategy.closedtrades.exit_bar_index(_ci)
+        float _cep = strategy.closedtrades.entry_price(_ci)
+        box.set_lefttop(zoneRisk, _cb0, math.max(_cep, nz(zoneStopPx, _cep)))
+        box.set_rightbottom(zoneRisk, _cb1, math.min(_cep, nz(zoneStopPx, _cep)))
+        if not na(zoneReward)
+            box.set_lefttop(zoneReward, _cb0, math.max(_cep, nz(zoneLimitPx, _cep)))
+            box.set_rightbottom(zoneReward, _cb1, math.min(_cep, nz(zoneLimitPx, _cep)))
+        if not na(tradeInfo)
+            label.set_x(tradeInfo, _cb0)
+        array.push(drawHistB, zoneRisk)
+        if not na(zoneReward)
+            array.push(drawHistB, zoneReward)
+    // Loslaten. Zonder dit kan een latere mutatie de tekening van deze trade nog raken --
+    // defect 1.
+    zoneRisk    := na
+    zoneReward  := na
+    tradeInfo   := na
+    zoneTradeNo := na
+    zoneEntryPx := na
+    zoneStopPx  := na
+    zoneLimitPx := na
+
+if drawNewTrade
+    zoneTradeNo := drawTradeNo
+    zoneEntryPx := entryAvg
+    zoneStopPx  := curStop
+    zoneLimitPx := curLimit
     if showTradeZones and inTradeDrawWin
         zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
         zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)
@@ -3254,14 +3319,15 @@ if (newLong or newShort)
         tradeExitDiag  := ""
         tradeInfo := label.new(bar_index + 2, entryAvg, "", style=label.style_none, textcolor=vText, size=size.small, textalign=text.align_left)
         array.push(drawHistL, tradeInfo)
-if not flatNow and posSize != 0
+// v3.13.2: `zoneIsCurrent` in plaats van `not na(...)`. Het vak groeit alleen naar rechts;
+// top en bottom blijven op de prijzen van de ORDER staan, zodat het vak en de SL-tekst niet
+// uiteen kunnen lopen als de stop ratchet. Waar de stop NU staat laat de "Active Stop"-plot zien.
+if not flatNow and posSize != 0 and zoneIsCurrent
     if showTradeZones and not na(zoneRisk)
         box.set_right(zoneRisk, bar_index)
-        box.set_top(zoneRisk, math.max(entryAvg, curStop))
-        box.set_bottom(zoneRisk, math.min(entryAvg, curStop))
         box.set_right(zoneReward, bar_index)
     if showTradeLabels and not na(tradeInfo)
-        int _slT = math.round(math.abs(entryAvg - curStop) / syminfo.mintick)
+        int _slT = math.round(math.abs(nz(zoneEntryPx, entryAvg) - nz(zoneStopPx, curStop)) / syminfo.mintick)
         float _riskUsd = math.abs(entryAvg - curStop) * syminfo.pointvalue * math.abs(posSize)
         float _rr = math.abs(entryAvg - curStop) > syminfo.mintick / 2 ? math.abs(curLimit - entryAvg) / math.abs(entryAvg - curStop) : na
         label.set_xy(tradeInfo, bar_index + 2, entryAvg)

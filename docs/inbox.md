@@ -10588,3 +10588,27 @@ Dit is tekenlogica, geen gedragswijziging: patch-versie (v3.13.2), samen met SL-
 📌 Ter info: op Ferry's chart staan twee instanties (`TES-MGC-C` v3.13.x én `EL TESORO v3.10`),
 de omcirkelde labels dragen `FVGNaN` en zijn dus van v3.10 — maar de drie defecten hierboven
 zitten identiek in v3.13.1, dus de reparatie geldt voor de nieuwe lijn.
+
+---
+
+## 48 · SM → Analyses & Data (cc Ferry) · 2026-11-04 · open — Ferry: chart A (026–030, 033) lijkt de laatste twee dagen slechter dan de rest; meten zodra de fills/alerts van 03–04 nov er zijn
+
+Ferry's waarneming 04-11: *"026 t/m 030 & 033 lijken t.o.v. de andere accounts de afgelopen 2
+dagen slecht te presteren."* Dat zijn exact jullie **chart A** (TES-MGC-C v3.2.0, FVG 8–23,
+venster 4, proxy streak 5, `apex_50k_legacy_pa`, Funded) tegenover **chart B** (v3.10, 4–11,
+venster 1, TV-delta streak 3, `apex_50k_intraday_eval`) en **C** (035/036).
+
+**Waarom dit meer is dan een nieuwsgierigheidsvraag:** chart A's entry-set (8–23 / venster 4) is
+precies tabel B — sinds 03-11 de bevroren config en de default in v3.13.x. Als A structureel
+onderpresteert tegen B, raakt dat het besluit van gisteren. A-99 kon A en B over negen dagen niet
+scheiden ($5–25/dag verschil bij ≈ $65/dag fout); twee dagen kan dat per definitie ook niet, maar
+het moet wel gemeten en niet op het oog beoordeeld worden.
+
+➡️ Zodra Ferry de Tradovate-fills (of de alerts-log) van **3 en 4 november** voor de 19 accounts
+levert: dezelfde reconciliatie als A-98, per chart-familie per dag, per contract — plus de
+entry-overlap A/B (die was 5–14%, dus dagverschillen zijn te verwachten). En apart: of A iets
+mist wat B neemt (entries), of hetzelfde neemt en verliest (exits) — dat zijn twee verschillende
+diagnoses.
+
+📌 Let op bij de vergelijking: A draait óók het **oude script** (v3.2.0: geen dagstops, oude
+payout-code, proxy-delta). "A vs B" is dus niet alleen de entry-band.

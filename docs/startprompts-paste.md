@@ -1,4 +1,4 @@
-# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 04-11 (v3.13.4 / D-162)
+# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 04-11 (v3.13.8)
 
 _Eigenaar: Scrum Master. Eén blok per chat, letterlijk plakken. Eén release van maximaal
 een dag per chat, met een acceptatietest (besluit Ferry 08-10: kleine releases boven
@@ -26,44 +26,33 @@ fase-brokken). **Rollen zonder eigen map staan ook in de ronde**, ook als het an
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
-Lees in docs/inbox.md de items 49 en 50 (SM, 04-11) en D-161 + D-162 in docs/SPRINT.md.
+Lees in docs/inbox.md item 52 (SM, 04-11) en D-161 in docs/SPRINT.md.
 
-EERST: v3.13.4 NAKIJKEN — ik heb in jouw map gepatcht, op directe opdracht van Ferry
-("drawings staan nog steeds niet goed, fix het"). Commit 2cdf511, alle dertien. Twee
-tekendefecten die DRAW≠TRADE niet kon zien omdat die alleen vakken toetst:
-  (1) het exit-label (PnL/MFE/MAE) stond op _xm, het MIDDEN van de trade, i.p.v. op de
-      exit-bar → nu strategy.closedtrades.exit_bar_index(_ti);
-  (2) tradeInfo hing op bar_index + 2 en werd elke bar met set_xy verplaatst → schoof mee
-      met de laatste candle op de entryprijs en sprong bij de exit terug. Nu verankerd op
-      (entry-bar, entryprijs), label.style_label_right, achtergrond transparant;
-  (3) bijvangst: box.new bij de aanmaak las curStop/curLimit i.p.v. jouw zoneStopPx/
-      zoneLimitPx — in het D-162-geval de stop van de vorige trade.
-Jouw map, jouw oordeel: wil je het anders, dan wordt dat v3.13.5 van jou. Ik kan niet
-compileren en de chart niet zien; xloc/yloc als benoemde argumenten bij label.new is
-nieuw gebruik in dit script.
+RELEASE v3.13.8 — één ding, gemeten, geen nieuwe diagnose:
+Ferry heeft de v3.2.0-bron (26-08) aangeleverd waarop de tekeningen WEL aan de prijs
+blijven zitten. Dat is de referentie die vier rondes ontbrak. In git is de tekenlogica
+byte-identiek van v3.2.0 t/m v3.12.0. De diff van alle box.*/label.*/scale-regels tussen
+v3.2.0 en jouw v3.13.7, minus zelfcontrole en waarschuwingslabels, is precies dit:
+  (1) scale=scale.right in strategy() — v3.13.2, het enige rendering-verschil;
+  (2) geometrie: exit-label op _x1 i.p.v. _xm · tekstblok verankerd op de entry-bar
+      (label_left) i.p.v. bar_index + 2 met set_xy per bar · vak uit zoneStopPx met
+      bevroren top/bottom i.p.v. uit curStop en de live stop volgend · bij de exit
+      hertekenen uit closedtrades.* + label.set_xy(_cb0) i.p.v. alleen box.set_right.
+Verder niets. Let op: jouw v3.13.6-oorzaak (dubbele uitvoering per bar) staat OOK in
+v3.2.0 — newLong is daar hetzelfde [1]-patroon — en v3.2.0 werkt. Die latch is juist,
+maar kan niet de hele verklaring zijn.
 
-RELEASE v3.13.5 — D-162, één dag, op zichzelf:
-Sluit een trade en opent de volgende in dezelfde 1-minuutbar, dan vuurt
-`if newLong or newShort` niet (newLong hangt op het teken van posSize, r. ±2941). Dan
-ontbreken de FILL-kaart en de journaalregel, en houden curStop/curLimit/posHi/posLo de
-waarden van de VORIGE trade. Nuance die je note niet noemt: de placement-exit (r. ±2891)
-gaat goed naar PMT, maar het inLong-blok zet strategy.exit dezelfde bar OPNIEUW op de
-stale curStop/curLimit (r. ±3127) zonder alert_message — TradingView en broker lopen
-dan op een andere stop en TP, en de reconciliatie boekt dat als slippage.
-Fix: het fill-blok op de tradeteller (drawTradeNo verandert), zoals je bij D-161 deed.
-Acceptatie: evenveel FILL- als EXIT-regels in het journaal, geen fill zonder kaart;
-poorten groen; DEPLOYED.md op v3.13.5. Geen OOS-reset als er geen config-wijziging in zit.
+DOEN: op v3.13.7 de geometrie exact terug naar v3.2.0 (de vijf regels hierboven) en
+scale=scale.right eruit. BLIJVEN: drawMadeNo/drawShutSeen, drawTradeNo/zoneTradeNo,
+loslaten bij exit, DRAW≠TRADE, en de meetlaag in de tabel. Dan is het script op
+tekenniveau gelijk aan de versie die werkt, plus een tabel die zegt of het klopt.
+Acceptatie: diff van de tekenregels v3.2.0 ↔ v3.13.8 = alleen zelfcontrole, meetlaag,
+vensterkleur en waarschuwingslabels (de SM draait die diff na) · poorten groen ·
+DEPLOYED.md op v3.13.8 · geen OOS-reset. Losse commit, DEPLOYED.md per tabel apart.
 
-MEE IN DEZELFDE RELEASE (inbox 49, geen aparte bump):
-  - TESORO contractSize default 7 → 1 (de bevroren volle grootte is niet
-    fresh-account-funderbaar; de ladder zet qty per chart);
-  - BANDIDO dayCapUSD 300 → 200 per contract (× qty 5 = $1.000, het bevroren getal).
-    Wil je liever frozen-engines.md aanpassen, zeg het — dat bestand is van mij.
-
-NOG OPEN BIJ FERRY (jouw twee feiten uit de v3.13.3-note blijven staan): de versie in de
-scripttitel op de chart en of de oude v3.10-instantie er nog naast hangt; en of er een
-rood DRAW≠TRADE-label staat en wat erachter staat. Claim D-162 met status wip + owner,
-losse commit per deel.
+NOG OPEN BIJ FERRY: na het plakken de regel DRAW uit de tabel voorlezen, en één
+schermafdruk mét scripttitel. OK n/n + beeld nog fout = chart (schaal van het symbool,
+tweede instantie v3.10, opgeslagen input), niet code.
 ```
 
 ---

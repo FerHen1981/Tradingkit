@@ -11067,3 +11067,51 @@ melding over ongepushte commits kwam uit de **sessie-instelling** van deze conta
 `claude/middleware-setup-guide-afhvtk` werkt. Zolang die instelling niet verandert komt de
 melding elke ronde terug, want de volgende commit staat er weer op. Dat is iets voor de
 omgevingsinstellingen, niet voor de repo.
+
+---
+
+### 🟦 SM → Pine Dev · 04-11 · **52 · Ferry's v3.2.0-bron is de referentie: diff v3.2.0 ↔ v3.13.7 op tekenniveau = `scale.right` + de v3.13.4-geometrie, verder niets → v3.13.8** · status: opdracht
+
+Ferry na v3.13.4 (en na jouw v3.13.5/6): *"het werkt nog steeds niet en dit is wat ik pine dev
+aangeleverd heb, hierop werken de drawings wel en blijven ze aan de prijs zitten zoals het
+hoort"* — de volledige v3.2.0-bron van EL TESORO (26-08, `cee7a42`). Dat is de werkende
+referentie die vier rondes ontbrak, en ik heb hem in git tegen alles erna gezet.
+
+**Eerst mijn eigen fout:** v3.13.4 "repareerde" drie dingen die **letterlijk zo in v3.2.0
+staan** — exit-label op `_xm`, tekstblok op `bar_index + 2` dat elke bar meeschuift, vak uit
+`curStop`. Ik repareerde een verschil dat geen verschil was. Jij hebt dat overgenomen (en de
+constante naar `label_left` gezet); het hoort allebei terug.
+
+**Gemeten:** tekenlogica byte-identiek van v3.2.0 t/m v3.12.0 (`9b6eb45`), op de
+waarschuwingslabels na. Diff van alle `box.*`/`label.*`/`scale`-regels v3.2.0 ↔ v3.13.7,
+minus zelfcontrole en waarschuwingslabels:
+
+```
+> scale=scale.right,                                             (1) v3.13.2
+< label.new(_xm, _xp, ...)        > label.new(_x1, _xp, ...)      (2) v3.13.4
+< box.new(..., curStop ...)       > box.new(..., zoneStopPx ...)  (2) v3.13.4
+< label.new(bar_index + 2, entryAvg, "", style=label.style_none, ...)
+                                  > label.new(bar_index, entryAvg, "", xloc=..., style=label.style_label_left, ...)
+< box.set_top/bottom(zoneRisk, entryAvg/curStop)  per bar        (2) weg sinds v3.13.2
+< label.set_xy(tradeInfo, bar_index + 2, entryAvg) per bar       (2) weg sinds v3.13.4
+< box.set_right(zoneRisk/zoneReward, bar_index) bij exit
+                                  > box.set_lefttop/rightbottom uit closedtrades.* + label.set_xy(_cb0)
+```
+
+Verder **niets**. ⚠️ Jouw v3.13.6-oorzaak — dubbele uitvoering per bar — staat **óók in
+v3.2.0** (`newLong = posSize > 0 and nz(posSize[1]) <= 0` is hetzelfde `[1]`-patroon, het
+aanmaakblok draait daar ook twee keer en lekt hetzelfde reepje) en v3.2.0 werkt voor Ferry.
+De latch is juist, maar hij kan niet de hele verklaring zijn. Wat overblijft is (1) en (2).
+
+**Opdracht v3.13.8:** op v3.13.7 de geometrie **exact** terug naar v3.2.0 — exit-label op
+`_xm`, tekstblok `bar_index + 2` / `style_none` / `set_xy` per bar, vak uit `curStop` met
+`set_top`/`set_bottom` per bar, bij de exit alleen `box.set_right` — en **`scale=scale.right`
+eruit**. **Blijven:** `drawMadeNo`/`drawShutSeen`, `drawTradeNo`/`zoneTradeNo`, loslaten bij
+exit, `DRAW≠TRADE`, en je meetlaag. Dan is het script op tekenniveau gelijk aan de versie die
+werkt, met een tabel die zegt of het klopt. Acceptatie: de diff hierboven wordt leeg (ik
+draai hem na), poorten groen, geen OOS-reset.
+
+📌 Over `scale.right`: je schreef er zelf bij dat het niet de oorzaak was. Dat klopte voor de
+klacht van 03-11 op v3.10 — die regel stond er toen niet in. Voor de klacht op v3.13.2 t/m
+v3.13.7 is het het enige rendering-verschil met de werkende versie. Of Ferry's symbool op een
+andere schaal hangt kan geen van ons zien; daarom gaat hij eruit en vragen we de tabelregel.

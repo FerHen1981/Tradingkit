@@ -11115,3 +11115,72 @@ draai hem na), poorten groen, geen OOS-reset.
 klacht van 03-11 op v3.10 — die regel stond er toen niet in. Voor de klacht op v3.13.2 t/m
 v3.13.7 is het het enige rendering-verschil met de werkende versie. Of Ferry's symbool op een
 andere schaal hangt kan geen van ons zien; daarom gaat hij eruit en vragen we de tabelregel.
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 04-11 · **v3.13.8 geleverd — geometrie exact terug naar v3.2.0, `scale.right` eruit; acceptatie-diff zelf nagerekend en hij is leeg** · status: klaar om te plakken
+
+Inbox 52 uitgevoerd zoals geschreven. Vijf ingrepen terug, vijf dingen blijven staan.
+
+**Terug naar v3.2.0** (uit de bron op `cee7a42` gehaald, niet uit de diff-samenvatting
+gereconstrueerd): `scale=scale.right` eruit · exit-label op `_xm` i.p.v. de exit-bar ·
+tekstblok op `bar_index + 2` met `style_none` en `label.set_xy` per bar · vak uit
+`curStop`/`curLimit` met `set_top`/`set_bottom` per bar, dus het volgt de live stop weer · bij
+de exit alleen `box.set_right`.
+
+**Blijven:** `drawMadeNo`/`drawShutSeen`, de binding op `zoneTradeNo`, het loslaten bij de
+exit, `DRAW≠TRADE` en de meetlaag.
+
+#### De acceptatie-diff, zelf gedraaid
+
+Alle `box.*`/`label.*`/`scale`-aanroepen uit beide bronnen, commentaar eruit, gesorteerd en
+vergeleken. 37 aanroepen in v3.2.0, 51 in v3.13.8.
+
+- **Alleen in v3.2.0: één regel** — de tijdvenster-box in het oude grijs
+  (`color.new(vText, 80/94)`), vervangen door azuur in v3.13.0. Dat is de **vensterkleur** die
+  de opdracht expliciet toestaat.
+- **Alleen in v3.13.8: vijftien regels** — vier `box.get_*(zoneRisk)` (de meetlaag), drie
+  `box.get_*(drawCheckBox)` plus `label.new(_vb1, _vep, …)` (de zelfcontrole), de azuren
+  `box.new` van het tijdvenster, en de drie waarschuwingslabels met hun `label.delete`.
+
+Dat zijn precies de vier categorieën die de opdracht toestaat, en geen vijfde. 36 aanroepen
+staan woordelijk in beide. Draai hem gerust na; het is `sed 's#//.*##'` + `grep -oE` op
+`(box|label)\.(new|set_*|delete|get_*)\(` en `scale=scale\.`, dan `comm`.
+
+#### Wat dit over mijn v3.13.6 zegt, en dat wil ik hier opschrijven
+
+Je nuance is het belangrijkste deel van inbox 52 en hij klopt: de dubbele uitvoering per bar
+staat **ook in v3.2.0** — `newLong` is daar hetzelfde `[1]`-patroon, het aanmaakblok draait er
+ook twee keer en lekt hetzelfde reepje — en v3.2.0 werkt voor Ferry. **Die latch is dus een
+echte fout, maar hij was niet de verklaring van de klacht.** Ik heb vier rondes "ik heb een
+fout gevonden" behandeld als "ik heb dé fout gevonden". Dat is dezelfde denkfout als de poorten
+die op aanwezigheid toetsten in plaats van op eigenschap, nu op diagnoseniveau: een gevonden
+fout die écht een fout is voelt als een verklaring, en dat is het niet zolang de werkende
+referentie hem óók heeft.
+
+En dat is precies waarom jouw aanpak — Ferry's werkende bron tegen git zetten — in één ronde
+verder kwam dan ik in vier. Ik had die bron niet, maar ik heb er ook nooit expliciet om
+gevraagd; ik vroeg om een schermafdruk. **Een werkende referentie is meer waard dan een beeld
+van het defect.** Dat neem ik mee.
+
+#### Iets dat verder gaat dan de opdracht, met de reden erbij
+
+Vijf hulpvariabelen zijn door deze revert dood: `zoneEntryPx`, `zoneStopPx`, `zoneLimitPx` en de
+`pendStopAtOrder`/`pendTpAtOrder` die ze vulden. Ik heb ze **verwijderd** in plaats van laten
+staan. Dode code met een nette toelichting erboven is precies wat de volgende lezer weer
+"repareert", en het houdt de acceptatie-diff schoon. Het risico dat ze afdekten is bij de bron
+weggehaald: sinds D-162 hangt het fill-blok op de tradeteller, dus `curStop` is op de
+aanmaakbar die van **deze** trade. De toelichting waarom het ooit nodig leek staat er nog, als
+commentaar.
+
+#### Stand
+
+Vier poorten groen, dertien scripts op v3.13.8, `DEPLOYED.md` per tabel apart bijgewerkt
+(dat ging twee keer mis omdat een zoek-en-vervang op `| v3.13.x | 04-11 |` eerst een
+**scriptregel** raakt — die bevat diezelfde tekst; nu expliciet per tabel). Geen handelsgedrag
+geraakt, geen input, geen default, **geen OOS-reset**.
+
+📌 Op Ferry, onveranderd en nu klein: na het plakken de regel **`DRAW`** uit de tabel
+voorlezen, plus **`Vak / exit`**. En één schermafdruk mét scripttitel. Staat er `OK` en `n/n`
+en is het beeld nog fout, dan zit het in de chart — schaal van het symbool, een tweede
+instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.

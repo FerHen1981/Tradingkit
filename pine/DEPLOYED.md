@@ -23,25 +23,25 @@ Ferry na het plakken). Lopen ze uit elkaar, dan is dat zichtbaar in plaats van v
 4. **Loopt de kolom achter, dan is dat het antwoord**, niet een reden om te gokken.
 
 De versie is ook live af te lezen zonder dit bestand: hij staat in de scripttitel op de chart
-(`MΞX EL MATADOR · MES PROD EOD · v3.13.6`) en in de CONFIG-kaart in Discord (`ver=v3.13.6`).
+(`MΞX EL MATADOR · MES PROD EOD · v3.13.7`) en in de CONFIG-kaart in Discord (`ver=v3.13.7`).
 
 ## Stand
 
 | Script | Shorttitle | In de repo | Sinds | Op TradingView | Geplakt op |
 |---|---|---|---|---|---|
-| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.6 | 04-11 | — | — |
-| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.6 | 04-11 | — | — |
+| MEX_EL_REY_MNQ_PROD_EOD | `REY-MNQ-P` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_REY_MNQ_PROD_INTRA | `REY-NQ-PI` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_MATADOR_MES_PROD_EOD | `MAT-MES-P` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_TESORO_MGC_CON_EOD | `TES-MGC-C` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_PATRON_MGC_AGG_EOD | `PAT-MGC-A` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_PROD_EOD | `LEO-MYM-P` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_CON_EOD_Q2 | `LEO-YM-CE` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_LEON_MYM_CON_INTRA_Q2 | `LEO-YM-CI` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_BANDIDO_MYM_HF_EOD | `BAN-MYM-H` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_TORO_NQ_SNIPER_INTRA | `TOR-NQ-SN` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_TORO_NQ_HF_INTRA | `TOR-NQ-HF` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_TORO_ES_FAST_INTRA | `TOR-ES-FI` | v3.13.7 | 04-11 | — | — |
+| MEX_EL_TORO_GC_SNIPER_EOD | `TOR-GC-SN` | v3.13.7 | 04-11 | — | — |
 
 **De rechterkolom staat bewust leeg.** Ik weet niet wat er op de charts hangt en dat verzin ik
 niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevestigd", niet
@@ -51,6 +51,7 @@ niet. Vul hem bij de eerstvolgende plakronde; een streepje betekent "niet bevest
 
 | Versie | Datum | Wat er veranderde | Zet de OOS-klok op nul |
 |---|---|---|---|
+| v3.13.7 | 04-11 | **DRAW-diagnose: het script leest zelf terug wat het getekend heeft** — vier rondes reparatie gingen op een diagnose uit de bron, zonder dat iemand kon nakijken wat er op de chart stond; zonder terugkoppeling is elke reparatie een hypothese die als reparatie wordt afgeleverd. Vierde laag in de tabel: hoe vaak `box.new` en het exit-blok **werkelijk** zijn uitgevoerd tegenover het aantal **verschillende** trades (`412/206` = alles dubbel getekend), en de **werkelijke** randen van het laatste vak uit `box.get_left/right/top/bottom` naast `entry_bar_index` / `exit_bar_index` / `entry_price` van die trade. Afwijking = rode regel **mét** beide getallen. Staat náást `DRAW≠TRADE` en vervangt het niet: dat label meldt alleen een fout en was bij de dubbele aanmaak per constructie blind, want de handle die overblijft is de goede — een controle die alleen bij een fout iets zegt kan niet aantonen dat het goed gáát, en dat is wat hier ontbrak. Default aan, schakelaar in groep Visuals | nee — vier tabelregels en zes tellers |
 | v3.13.6 | 04-11 | **de tekenlaag tekent per TRADE in plaats van per uitvoering van de bar** — de oorzaak onder D-161, D-162 en de patch van 04-11: `calc_on_order_fills` laat het script binnen dezelfde bar opnieuw lopen, en `drawTradeNo[1]` / `strategy.closedtrades[1]` meten op de VORIGE BAR, dus bleven die poorten waar bij elke volgende uitvoering van diezelfde bar. Exit-tekst en PnL-bubbel stonden dubbel over zichzelf; het aanmaakblok deed `box.new` twee keer en de eerste twee vakken werden onbereikbaar (nooit gegroeid, nooit hertekend, nooit opgeruimd, buiten de begroting van 500) — het reepje op de entryprijs bij elke trade. De zelfcontrole zag de OVERGEBLEVEN handle en bleef daarom stil. Nu een teller-latch (`drawMadeNo`/`drawShutSeen`), het patroon dat hier al drie keer stond · tekstblok met de pointer **links** zodat de body naar rechts rendert in plaats van over de FVG · de live SL-regel is overal live (mengde eerst order-ticks met de live stopprijs) · **poort** `pine_lint.check_draw_guards` weigert een `box.new`/`label.new` onder een `[1]`-detector en leest één indirectie diep — zonder dat las hij de fout die hij moet pakken niet | nee — alleen de tekenlaag; geen input, geen default, geen orderpad |
 | v3.13.5 | 04-11 | **D-162** het fill-blok hangt op de tradeteller i.p.v. op het teken van `posSize` — bij een sluit-en-open in dezelfde minuut ontbraken de FILL-kaart en de journaalregel, en zette het `inLong`-blok `strategy.exit` opnieuw op de **stale** stop zonder `alert_message` (TradingView en broker liepen uiteen, de reconciliatie boekte dat als slippage) · **TESORO** qty 7 → 1 · **BANDIDO** dagcap 300 → 200 per contract (× 5 = $1.000, het bevroren getal) | **ja** — het fill-blok is plumbing, maar de twee defaults zijn config-wijzigingen |
 | v3.13.4 | 04-11 | **entry- en exit-markering aan de prijs vast** — het PnL/exit-label stond op het MIDDEN van de trade (`_xm`) in plaats van op de exit-bar, en het tekstblok schoof elke bar mee met de laatste candle en sprong bij de exit terug; nu exit-label op `exit_bar_index` en tekstblok verankerd op (entry-bar, entryprijs) met een pointer · vak en SL-tekst bij de aanmaak uit de zone-prijzen van de **order** (het D-162-geval) · gepatcht door de SM op directe opdracht van Ferry, nagekeken door Pine Dev | nee — alleen tekenen |

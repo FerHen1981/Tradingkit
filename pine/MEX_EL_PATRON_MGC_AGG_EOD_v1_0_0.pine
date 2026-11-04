@@ -451,6 +451,30 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.7 (04-11): DRAW-DIAGNOSE -- het script leest zelf terug wat het getekend heeft.
+//   Ferry na v3.13.6: "nope niet goed...... hoe kan dit nu opgelost worden?" Dat is geen
+//   vraag om een vijfde patch maar om een andere werkwijze, en hij heeft gelijk. Vier rondes
+//   reparatie gingen alle vier op een diagnose uit de BRON, zonder dat iemand kon nakijken
+//   wat er werkelijk op de chart stond. Drie van de vier waren echte fouten, en het resultaat
+//   bleef verkeerd. Dat is geen pech: zonder terugkoppeling is elke reparatie een hypothese
+//   die als reparatie wordt afgeleverd.
+//   Dit blok maakt er metingen van, in de tabel, in gewone getallen:
+//     · TELLINGEN. `dgBoxMade` is hoe vaak `box.new` werkelijk is uitgevoerd, `dgBoxTrade`
+//       voor hoeveel VERSCHILLENDE trades; idem voor de exit-labels. Die twee horen gelijk te
+//       zijn. Staat er `412/206`, dan is elke trade twee keer getekend -- precies de fout die
+//       v3.13.6 repareerde, en voortaan een getal op de chart in plaats van iets wat uit een
+//       schermafdruk moet worden afgeleid.
+//     · TERUGLEZING. Bij het sluiten worden de WERKELIJKE randen uit het box-object gelezen
+//       (`box.get_left/right/top/bottom`) en naast de velden van de gesloten trade gezet.
+//       Afwijking = rode regel MET beide getallen erin.
+//   Waarom dit naast `DRAW!=TRADE` staat en het niet vervangt: dat label meldt alleen een
+//   fout, en het was bij de dubbele aanmaak per constructie blind -- de handle die OVERBLIJFT
+//   is de goede. Een controle die alleen bij een fout iets zegt kan niet aantonen dat het
+//   goed gaat, en dat is precies wat hier ontbrak. Deze vier regels tonen de stand ook als er
+//   niets mis is, en zijn daarmee leesbaar aan de telefoon: "vak 206/206, bars kloppen".
+//   Default AAN. Zodra de tekeningen een tijd goed staan kan de schakelaar uit; hij staat in
+//   groep Visuals.
+//   Geen handelsgedrag geraakt: vier tabelregels en zes tellers. De OOS-klok blijft staan.
 // v3.13.6 (04-11): de tekenlaag tekent per TRADE, niet per UITVOERING van de bar.
 //   Ferry na v3.13.5: "nog niet goed -- kijk even naar de code waar het wel goed gaat". Die
 //   aanwijzing is de diagnose: het enige tekenwerk in dit script dat nooit stuk gaat -- de
@@ -656,7 +680,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL PATRON · MGC AGG EOD"
-var string currentVersion = "v3.13.6"
+var string currentVersion = "v3.13.7"
 strategy("MΞX EL PATRON · MGC AGG EOD · " + currentVersion, shorttitle="PAT-MGC-A", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -3069,6 +3093,37 @@ if drawMakeNew
     drawMadeNo := drawTradeNo
 if drawMakeShut
     drawShutSeen := strategy.closedtrades
+// === v3.13.7 - DRAW-diagnose: het script leest terug wat het zelf getekend heeft =====
+// Vier rondes reparatie op de tekeningen gingen op een diagnose uit de bron, zonder dat
+// iemand kon nakijken wat er werkelijk op de chart stond. Dat is de echte oorzaak dat het
+// vier rondes duurde: er was geen terugkoppeling, dus elke reparatie was een hypothese.
+// Dit blok maakt er metingen van. Twee soorten:
+//   · TELLINGEN. `dgBoxMade` is hoe vaak `box.new` echt is uitgevoerd, `dgBoxTrade` voor
+//     hoeveel VERSCHILLENDE trades. Die twee horen gelijk te zijn. Staat er 412/206, dan is
+//     elke trade twee keer getekend -- precies de fout van v3.13.6, en dan is het een getal
+//     op de chart in plaats van iets wat je uit een plaatje moet afleiden.
+//   · TERUGLEZING. Bij het sluiten worden de WERKELIJKE randen van het vak uit het
+//     box-object gelezen en naast de velden van de gesloten trade gezet. Wijkt er iets af,
+//     dan kleurt de regel rood en staan beide getallen er -- geen pass/fail die stil kan
+//     blijven, maar de ruwe cijfers.
+// Dit vervangt `DRAW!=TRADE` niet; dat label meldt een fout, dit laat de stand zien, ook als
+// er niets fout is. Een poort die alleen bij een fout iets zegt kan niet bewijzen dat het
+// goed gaat, en dat was hier precies het probleem.
+var int   dgBoxMade   = 0
+var int   dgBoxTrade  = 0
+var int   dgBoxLastNo = na
+var int   dgExitMade  = 0
+var int   dgExitTrade = 0
+var int   dgExitLastNo = na
+var int   dgTi  = na
+var int   dgB0  = na
+var int   dgB1  = na
+var int   dgBoxL = na
+var int   dgBoxR = na
+var float dgEp  = na
+var float dgTop = na
+var float dgBot = na
+var bool  dgHad = false
 // === v3.13.5 (D-162) — "nieuwe trade" komt uit de TELLER, niet uit het teken van posSize ===
 // `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het eind
 // van de VÓRIGE bar". Sluit een trade en opent de volgende in dezelfde 1-minuutbar -- met
@@ -3187,6 +3242,10 @@ if showExitLabels and drawMakeShut and inTradeDrawWin
     // is de stand van de vorige bar en die kan al van de volgende trade zijn.
     bool  _wasLong = strategy.closedtrades.size(_ti) > 0
     bool  _win = _pf >= 0
+    dgExitMade := dgExitMade + 1
+    if na(dgExitLastNo) or dgExitLastNo != _ti
+        dgExitTrade  := dgExitTrade + 1
+        dgExitLastNo := _ti
     int   _x0  = strategy.closedtrades.entry_bar_index(_ti)
     int   _xm  = math.round(math.avg(_x0, bar_index))
 
@@ -3546,6 +3605,18 @@ if drawMakeShut
     // Loslaten. Zonder dit kan een latere mutatie de tekening van deze trade nog raken --
     // defect 1.
     // v3.13.2: bewaren wat de zelfcontrole hieronder nodig heeft; de handles zelf gaan op na.
+    // v3.13.7: de werkelijke randen UIT het object, naast de velden van de trade. Na de
+    // sets hierboven, vóór het loslaten -- dit is het enige moment waarop beide bestaan.
+    dgTi  := _ci + 1
+    dgHad := not na(zoneRisk)
+    if not na(zoneRisk)
+        dgB0   := strategy.closedtrades.entry_bar_index(_ci)
+        dgB1   := strategy.closedtrades.exit_bar_index(_ci)
+        dgEp   := strategy.closedtrades.entry_price(_ci)
+        dgBoxL := box.get_left(zoneRisk)
+        dgBoxR := box.get_right(zoneRisk)
+        dgTop  := box.get_top(zoneRisk)
+        dgBot  := box.get_bottom(zoneRisk)
     drawCheckBox  := zoneRisk
     drawCheckNo   := zoneTradeNo
     drawCheckHad  := not na(zoneRisk)
@@ -3597,6 +3668,10 @@ if drawMakeNew
         // v3.13.4: uit de zone-prijzen (de ORDER), niet uit `curStop`/`curLimit` -- die kunnen bij
         // een sluit-en-open in dezelfde bar nog van de vorige trade zijn (D-162).
         zoneRisk := box.new(bar_index, math.max(entryAvg, zoneStopPx), bar_index, math.min(entryAvg, zoneStopPx), border_width=0, bgcolor=zRiskBg)
+        dgBoxMade := dgBoxMade + 1
+        if na(dgBoxLastNo) or dgBoxLastNo != drawTradeNo
+            dgBoxTrade  := dgBoxTrade + 1
+            dgBoxLastNo := drawTradeNo
         zoneReward := box.new(bar_index, math.max(entryAvg, zoneLimitPx), bar_index, math.min(entryAvg, zoneLimitPx), border_width=0, bgcolor=zRewardBg)
     if showTradeLabels and inTradeDrawWin
         tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - zoneStopPx) / syminfo.mintick)) + "t"
@@ -3635,6 +3710,8 @@ if not flatNow and posSize != 0 and zoneIsCurrent
 // erboven. WELKE vensters: bij "All sessions" alle negen, anders die je in groep 3 hebt
 // aangevinkt - ook onder Liquidity Core, want daar wil je zien wat je geselecteerd hebt
 // en niet een vaste drie (besluit Ferry 25-08).
+showDrawDiag  = input.bool(true, "DRAW-diagnose in de tabel (tellingen + teruglezing)", group=GROUP_VIS,
+     tooltip="Vier regels onderaan de tabel: hoe vaak er getekend is tegenover het aantal trades, en de werkelijke randen van het laatste vak naast de velden van die trade. Wijkt er iets af, dan kleurt de regel rood. Zet hem uit als de tekeningen een tijd goed staan.")
 showGateBoxes = input.bool(true, "Draw the time-gate windows", inline="gw", group=GROUP_VIS, display=display.none)
 gateBoxKeep   = input.int(4, "keep", minval=1, maxval=40, inline="gw", group=GROUP_VIS,
      tooltip="Box van high naar low over de duur van het venster, met de naam erbij. Het getal is hoeveel vensters er blijven staan, over alle vensters samen.")
@@ -3760,7 +3837,8 @@ int rAccHdr = rInd + nInd
 int rAcc    = rAccHdr + 1
 int rTrdHdr = rAcc + 4     // +1 t.o.v. v3.3: de ACCOUNT-laag heeft er een Window-regel bij (item 31)
 int rTrd    = rTrdHdr + 1
-int dashRows = rTrd + 4
+int rDrwHdr  = rTrd + 4
+int dashRows = rTrd + 4 + (showDrawDiag ? 4 : 0)
 
 var table dash = na
 if showDashboard and barstate.islast
@@ -3855,6 +3933,22 @@ if showDashboard and barstate.islast
     table.cell(dash, 1, rTrd + 2, not inTrade ? "—" : (posRiskOff ? "armed" : "—") + " / " + (posTrailOn ? (posRecovOn ? "recovery" : "armed") : "—"), text_color=inTrade and (posRiskOff or posTrailOn) ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
     table.cell(dash, 0, rTrd + 3, "Open PnL", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
     table.cell(dash, 1, rTrd + 3, inTrade ? (strategy.openprofit >= 0 ? "+$" : "-$") + str.tostring(math.abs(strategy.openprofit), "#.##") : "—", text_color=inTrade ? f_valCol(strategy.openprofit) : txtColor, text_size=txtSize, text_halign=text.align_right)
+
+    // ---- laag 4: DRAW-diagnose (v3.13.7) -----------------------------------
+    if showDrawDiag
+        bool _dgCntBad = dgBoxMade != dgBoxTrade or dgExitMade != dgExitTrade
+        bool _dgBarBad = dgHad and (dgBoxL != dgB0 or dgBoxR != dgB1)
+        bool _dgPxBad  = dgHad and math.min(math.abs(dgTop - dgEp), math.abs(dgBot - dgEp)) > syminfo.mintick / 2
+        table.cell(dash, 0, rDrwHdr, "DRAW", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, rDrwHdr, _dgCntBad or _dgBarBad or _dgPxBad ? "AFWIJKING" : dgHad ? "OK" : "nog niets getekend", text_color=hdrTxt, bgcolor=hdrBg, text_size=txtSize, text_halign=text.align_right)
+        // Hoe vaak is er getekend tegenover hoeveel trades. Ongelijk = dubbel getekend.
+        table.cell(dash, 0, rDrwHdr + 1, "Vak / exit", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, rDrwHdr + 1, str.tostring(dgBoxMade) + "/" + str.tostring(dgBoxTrade) + " · " + str.tostring(dgExitMade) + "/" + str.tostring(dgExitTrade), text_color=_dgCntBad ? vNegTxt : vPosTxt, text_size=txtSize, text_halign=text.align_right)
+        // De werkelijke randen van het laatste vak naast de bars van die trade.
+        table.cell(dash, 0, rDrwHdr + 2, "Bars", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, rDrwHdr + 2, not dgHad ? "—" : "#" + str.tostring(dgTi) + " " + str.tostring(dgB0) + "→" + str.tostring(dgB1) + " | vak " + str.tostring(dgBoxL) + "→" + str.tostring(dgBoxR), text_color=_dgBarBad ? vNegTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
+        table.cell(dash, 0, rDrwHdr + 3, "Prijs", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
+        table.cell(dash, 1, rDrwHdr + 3, not dgHad ? "—" : str.tostring(dgEp, format.mintick) + " | vak " + str.tostring(dgTop, format.mintick) + "/" + str.tostring(dgBot, format.mintick), text_color=_dgPxBad ? vNegTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
 
 // === D-139 — de waarschuwing bij een onbekende account-fase =====================
 // Deze hangt bewust NIET in de teken-laag hierboven. Die zit achter `inDrawWin` EN achter

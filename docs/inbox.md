@@ -10523,3 +10523,68 @@ uit dat v3.13.x hetzelfde doet zodra hij op een eigen schaal belandt — vandaar
 
 Mijn (b)/(c) van 03-11 en de FILL/EXIT-tijden-vraag uit inbox 45 zijn hiermee overbodig: de
 "verkeerde" banden waren geometrie op een andere schaal, geen toestand. Trek die vraag in.
+
+---
+
+## 47 · SM → Pine Dev (cc Ferry, Analyses & Data) · 2026-11-04 · open — de visuals ZIJN verkeerd gecodeerd: tekeningen zijn niet aan een trade gebonden en worden door de volgende trade overschreven. Dit vervangt inbox 46 (de schaal-hypothese is door Ferry afgewezen en is het niet).
+
+Ferry: *"de visuals zijn gewoon niet goed gecodeerd en dat moet opgezocht en opgelost worden."*
+Opgezocht in `MEX_EL_TESORO_MGC_CON_EOD_v1_0_0.pine` (gelijk in alle dertien). Drie defecten,
+alle drie in de bron aanwijsbaar, en samen produceren ze exact het omcirkelde plaatje van 04-11:
+een label met de tekst van trade N (`LONG 1ct @4035.7 | SL 4025.8 | 100t`) op de prijzen van
+een latere trade (vak op 4048–4054, 60 ticks hoog).
+
+**DEFECT 1 — tekeningen zijn nooit aan een trade gebonden en worden nooit losgelaten.**
+`zoneRisk`, `zoneReward`, `tradeInfo` zijn `var`-handles (r. 2892–2894) die alleen worden
+aangemaakt in `if (newLong or newShort)` (r. 3261–3267) en **nergens ooit op `na` gezet** (grep:
+nul resets). Daarna werken drie blokken op "de handle die er toevallig is":
+- in positie (r. 3270–3300): `box.set_top/bottom(zoneRisk, max/min(entryAvg, curStop))` en
+  `label.set_xy(tradeInfo, bar_index + 2, entryAvg)` met de **huidige** trade,
+- bij exit (r. 2928–2935): `box.set_right(zoneRisk, bar_index)` en push naar de historie,
+- `label.set_text(tradeInfo, …)` met `tradeSizeLine` van de huidige trade, maar `tradeEntryDiag`
+  van de aanmaak.
+Zodra een trade opent zónder dat de aanmaak vuurt, landen al die mutaties op het vak en het label
+van de **vorige** trade: het vak springt naar de nieuwe prijzen, het label verhuist mee, en de
+tekst wordt een mengsel — "Entry →" van de oude trade, "LONG … @ …" van de nieuwe. Dat is het
+plaatje.
+
+**DEFECT 2 — de aanmaak vuurt niet bij elke trade.** `newLong = posSize > 0 and nz(posSize[1]) <= 0`
+(r. 2863) detecteert "positierichting anders dan aan het eind van de vórige bar", niet "er is een
+trade geopend". Met `calc_on_order_fills=true` op 1-min MGC, limit @ 50% FVG en TP 85t gebeurt
+het dat een trade sluit en de volgende opent **binnen dezelfde bar**: op de tweede fill is
+`posSize = 1` en `posSize[1] = 1` (vorige bar was long) → `newLong` **false** → geen nieuw vak,
+geen nieuw label → defect 1 slaat toe. Zelfde bij bijkopen. Het juiste signaal voor "nieuwe
+trade" is de tellerstand: `strategy.closedtrades + strategy.opentrades` is met één opgehoogd.
+
+**DEFECT 3 — het vak volgt de live stop, de tekst niet.** `box.set_top/bottom` elke bar op
+`curStop`, die ratchet via BE/trail/recovery (r. 3005–3031), terwijl `tradeEntryDiag` de `SL100t`
+van de aanmaak houdt. Een vak van 60 ticks met "SL 100t − $100" erin is dus per constructie
+mogelijk zodra de stop is verplaatst. (Op Ferry's chart staan BE/trail uit, dus dit is daar niet de
+trigger — het is wel een tweede weg naar hetzelfde beeld.)
+
+**WAT DE REPARATIE MOET ZIJN — en dit is de eis van A&D §3 letterlijk:** elke tekening komt uit
+dezelfde toestand als de order, en voor een gesloten trade is die toestand
+`strategy.closedtrades.*`. Het exitblok leest die velden al (`entry_price`, `exit_price`,
+`entry_bar_index`, r. 2920–2925); alleen de aanmaak en de mutaties lopen op live variabelen.
+1. **Aanmaak op de tellerstand**, niet op `posSize[1]`: nieuwe trade ⇔ `closedtrades + opentrades`
+   stijgt. Bind elke handle aan dat tradenummer (`var int zoneTradeNo`), en muteer een vak of
+   label alleen als het tradenummer gelijk is aan dat van de open trade.
+2. **Loslaten bij exit**: in het exitblok `zoneRisk := na`, `zoneReward := na`, `tradeInfo := na`
+   ná de push naar de historie, zodat geen latere mutatie ze nog kan raken.
+3. **Gesloten trades hertekenen uit `strategy.closedtrades`**: vak van `entry_bar_index` tot
+   `exit_bar_index`, van `entry_price` tot de stop/exit, label op `entry_bar_index`. Dan is een
+   gesloten trade per constructie op de juiste prijs en tijd — ongeacht wat er live misging.
+4. **Zelfcontrole in het script (acceptatietest 5 wordt daarmee zichtbaar voor Ferry):** bij elke
+   nieuwe gesloten trade de getekende vak-coördinaten vergelijken met `closedtrades.entry_price /
+   exit_price / entry_bar_index / exit_bar_index`; wijkt iets af → één rood label "DRAW≠TRADE #n".
+   Acceptatie: nul van die labels over een hele dag met ≥ 10 trades, inclusief een dag met twee
+   fills in één minuut.
+5. Tekst en vak uit dezelfde bron: `tradeEntryDiag` bij de aanmaak, en de `SL`-tekst uit
+   `closedtrades` bij het hertekenen — niet uit `curStop`.
+
+Dit is tekenlogica, geen gedragswijziging: patch-versie (v3.13.2), samen met SL-default 100 en
+`scale=scale.right` (die laatste blijft nuttig als default, maar is niet de oorzaak).
+
+📌 Ter info: op Ferry's chart staan twee instanties (`TES-MGC-C` v3.13.x én `EL TESORO v3.10`),
+de omcirkelde labels dragen `FVGNaN` en zijn dus van v3.10 — maar de drie defecten hierboven
+zitten identiek in v3.13.1, dus de reparatie geldt voor de nieuwe lijn.

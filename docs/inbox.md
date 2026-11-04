@@ -10998,3 +10998,72 @@ Wat alleen van de chart kan komen, en het staat er voor de derde ronde:
    release weg te zijn, en dat is met het oog te controleren zonder iets te tellen.
 
 Eén schermafdruk van één verkeerde trade met de scripttitel in beeld is nog steeds genoeg.
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 04-11 · **v3.13.7 — ik stop met blind patchen: het script leest nu zelf terug wat het getekend heeft** · status: geleverd, poorten groen
+
+Ferry na v3.13.6: *"nope niet goed...... hoe kan dit nu opgelost worden?"*
+
+Dat is geen vraag om een vijfde patch, en ik behandel hem ook niet zo. **Vier rondes reparatie
+op de tekeningen gingen alle vier op een diagnose uit de bron, zonder dat iemand kon nakijken
+wat er werkelijk op de chart stond.** Drie van de vier waren echte fouten — en het resultaat
+bleef verkeerd. Dat is geen pech: zonder terugkoppeling is elke reparatie een hypothese die als
+reparatie wordt afgeleverd, en dat is wat ik vier keer heb gedaan.
+
+#### Wat er nu in zit
+
+Een vierde laag in de tabel, **default aan**, met twee soorten meting in gewone getallen:
+
+- **Tellingen** — hoe vaak `box.new` en het exit-labelblok **werkelijk** zijn uitgevoerd,
+  tegenover het aantal **verschillende** trades. Die twee horen gelijk te zijn. Staat er
+  `412/206`, dan is elke trade twee keer getekend; dat was de fout van v3.13.6, en het is nu
+  een getal in plaats van iets wat uit een schermafdruk moet worden afgeleid.
+- **Terugleezing** — bij het sluiten worden de **werkelijke** randen uit het box-object
+  gelezen (`box.get_left/right/top/bottom`) en naast `entry_bar_index`, `exit_bar_index` en
+  `entry_price` van de gesloten trade gezet. Wijkt er iets af, dan kleurt de regel rood **met
+  beide getallen erin**.
+
+De kopregel zegt `OK` of `AFWIJKING`. Drie regels eronder staan de cijfers. Dat is voor te
+lezen aan de telefoon — *"vak 206/206, bars 4821→4847 en het vak ook"* — en daarmee heb ik de
+terugkoppeling die ik vier rondes niet had.
+
+🔴 **Waarom dit náást `DRAW≠TRADE` staat en het niet vervangt.** Dat label meldt alleen een
+**fout**, en het was bij de dubbele aanmaak per constructie blind: de handle die **overblijft**
+is de goede, dus het zweeg terwijl de chart zichtbaar fout stond. **Een controle die alleen bij
+een fout iets zegt kan niet aantonen dat het goed gáát.** Dat is de les van deze vier rondes en
+ze geldt breder dan de tekeningen — het is dezelfde klasse als de poorten die op aanwezigheid
+toetsten in plaats van op eigenschap (03-11).
+
+#### Wat dit niet is
+
+Geen handelsgedrag geraakt: vier tabelregels en zes tellers. **De OOS-klok blijft staan.**
+
+En het repareert niets. Het **meet**, zodat de volgende ingreep — of de conclusie dat er niets
+meer te repareren is omdat de chart een ander script draait — op een cijfer rust in plaats van
+op mijn lezing van de bron.
+
+#### Wat ik nog steeds vraag, en nu is het klein
+
+Eén regel voorlezen uit de tabel na het plakken: **wat staat er achter `DRAW` en achter
+`Vak / exit`?** Als daar `OK` en `n/n` staat, dan tekent het script correct en zit wat Ferry
+ziet elders — en dan is de eerstvolgende vraag weer die van de scripttitel en de oude
+`EL TESORO v3.10`-instantie. Staat er `AFWIJKING`, dan staan de getallen erbij en weet ik
+binnen één ronde welke van de twee het is.
+
+#### Boekhouding
+
+📌 `pine/DEPLOYED.md` ging bij het bijwerken **opnieuw** door elkaar — mijn vervanging raakte
+de eerste scriptregel in plaats van de historie-regel, precies de vervuiling die ik een uur
+eerder had opgeruimd. Teruggedraaid en per tabel apart gedaan; nu dertien scriptregels op
+v3.13.7 en de historie beginnend bij v3.13.7. Reden dat ik het noem: het is twee keer
+achter elkaar op dezelfde manier misgegaan en dat bestand verdient op termijn een generator
+in plaats van zoek-en-vervang.
+
+📌 `claude/pine-dev-l410a6` is op opdracht van Ferry fast-forward gezet naar de werkbranch
+(`dc567e8` → `6db6dd2`, schone fast-forward, nul commits die alleen daar stonden). De
+melding over ongepushte commits kwam uit de **sessie-instelling** van deze container, die
+`claude/pine-dev-l410a6` als werkbranch heeft terwijl het project op
+`claude/middleware-setup-guide-afhvtk` werkt. Zolang die instelling niet verandert komt de
+melding elke ronde terug, want de volgende commit staat er weer op. Dat is iets voor de
+omgevingsinstellingen, niet voor de repo.

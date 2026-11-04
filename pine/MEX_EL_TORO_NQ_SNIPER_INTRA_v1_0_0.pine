@@ -437,6 +437,24 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.4 (04-11, patch): entry- en exit-markering ZITTEN AAN DE PRIJS VAST.
+//   Ferry na v3.13.3: "drawings staan nog steeds niet goed op de chart". Twee dingen in de
+//   tekenlogica zetten een markering per constructie NAAST de candle, ook als alle vakken
+//   kloppen -- en de zelfcontrole DRAW≠TRADE kijkt alleen naar de vakken, dus die zag het niet:
+//   1. Het EXIT-label (PnL/MFE/MAE) stond op `_xm`, het MIDDEN van de trade, op de exitprijs.
+//      Bij een trade van 40 bars hing het dus 20 bars vóór de exit, op een prijs waar op dat
+//      moment geen candle stond. Nu op `strategy.closedtrades.exit_bar_index`, de exit-bar.
+//   2. Het tekstblok (`tradeInfo`) hing op `bar_index + 2, entryAvg` en werd ELKE bar
+//      verplaatst: het schoof mee met de laatste candle, op de entryprijs -- zodra de prijs
+//      van de entry wegliep hing het los in de lucht en bewoog het "afzonderlijk van de
+//      candles". Bij het sluiten sprong het terug naar de entry-bar. Nu vanaf de aanmaak
+//      verankerd op (entry-bar, entryprijs) met een echte pointer (`label.style_label_right`),
+//      en het beweegt niet meer.
+//   3. Bijvangst: het vak werd bij de aanmaak nog op `curStop`/`curLimit` gezet terwijl de
+//      vastgelegde zone-prijzen (`pendStopAtOrder`/`pendTpAtOrder`, v3.13.3) ernaast stonden;
+//      bij een sluit-en-open in dezelfde bar (D-162) was dat de stop van de VORIGE trade tot
+//      het hertekenen bij de exit. Vak en SL-tekst komen nu allebei uit de zone-prijzen.
+//   Geen gedragswijziging in de handel: alleen tekenen. Geen OOS-reset.
 // v3.13.3 (04-11): de reden staat nu ook in de STATUSREGEL van de tabel.
 //   Ferry: op `Funded` werden geen trades genomen, op `Developer` wel. Dat is mijn poort uit
 //   v3.12.0 die werkt zoals bedoeld -- `phaseOn` is waar op Funded en Eval, en met
@@ -550,7 +568,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX ΞL TORO · NQ SNIP INTRA"
-var string currentVersion = "v3.13.3"
+var string currentVersion = "v3.13.4"
 strategy("MΞX ΞL TORO · NQ SNIP INTRA · " + currentVersion, shorttitle="TOR-NQ-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -2920,7 +2938,9 @@ if showExitLabels and drawTradeShut and inTradeDrawWin
              style=label.style_none, textcolor=vPosTxt, size=size.small, textalign=text.align_center))
     float _lmfeT = (_wasLong ? nz(posHi, _xp) - nz(jEntryPx, _ep) : nz(jEntryPx, _ep) - nz(posLo, _xp)) / syminfo.mintick
     float _lmaeT = (_wasLong ? nz(jEntryPx, _ep) - nz(posLo, nz(jEntryPx, _ep)) : nz(posHi, nz(jEntryPx, _ep)) - nz(jEntryPx, _ep)) / syminfo.mintick
-    array.push(drawHistL, label.new(_xm, _xp, text=(_win ? "+$" : "-$") + str.tostring(math.abs(_pf), "#.0") +
+    // v3.13.4: op de EXIT-BAR, niet op het midden van de trade (`_xm` is voor de SL/TP-tekst in het vak).
+    int   _x1  = strategy.closedtrades.exit_bar_index(_ti)
+    array.push(drawHistL, label.new(_x1, _xp, text=(_win ? "+$" : "-$") + str.tostring(math.abs(_pf), "#.0") +
          "\nMFE " + str.tostring(math.max(_lmfeT, 0), "#") + "t · MAE " + str.tostring(math.max(_lmaeT, 0), "#") + "t",
          style=_wasLong == _win ? label.style_label_down : label.style_label_up,
          color=_win ? color.new(color.green, 20) : color.new(color.red, 20),
@@ -3269,7 +3289,7 @@ if drawTradeShut
             box.set_lefttop(zoneReward, _cb0, math.max(_cep, nz(zoneLimitPx, _cep)))
             box.set_rightbottom(zoneReward, _cb1, math.min(_cep, nz(zoneLimitPx, _cep)))
         if not na(tradeInfo)
-            label.set_x(tradeInfo, _cb0)
+            label.set_xy(tradeInfo, _cb0, _cep)
         array.push(drawHistB, zoneRisk)
         if not na(zoneReward)
             array.push(drawHistB, zoneReward)
@@ -3324,12 +3344,17 @@ if drawNewTrade
     zoneLimitPx := nz(pendTpAtOrder, curLimit)
     drawCheckHad := false
     if showTradeZones and inTradeDrawWin
-        zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
-        zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)
+        // v3.13.4: uit de zone-prijzen (de ORDER), niet uit `curStop`/`curLimit` -- die kunnen bij
+        // een sluit-en-open in dezelfde bar nog van de vorige trade zijn (D-162).
+        zoneRisk := box.new(bar_index, math.max(entryAvg, zoneStopPx), bar_index, math.min(entryAvg, zoneStopPx), border_width=0, bgcolor=zRiskBg)
+        zoneReward := box.new(bar_index, math.max(entryAvg, zoneLimitPx), bar_index, math.min(entryAvg, zoneLimitPx), border_width=0, bgcolor=zRewardBg)
     if showTradeLabels and inTradeDrawWin
-        tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - curStop) / syminfo.mintick)) + "t"
+        tradeEntryDiag := (pendDiag == "" ? sigDiag : pendDiag) + "|SL" + str.tostring(math.round(math.abs(entryAvg - zoneStopPx) / syminfo.mintick)) + "t"
         tradeExitDiag  := ""
-        tradeInfo := label.new(bar_index + 2, entryAvg, "", style=label.style_none, textcolor=vText, size=size.small, textalign=text.align_left)
+        // v3.13.4: VERANKERD op de entry-bar en de entryprijs, met een pointer die daar naar wijst.
+        // Niet meer `bar_index + 2` en niet meer elke bar verplaatst -- dat was het label dat
+        // "afzonderlijk van de candles bewoog". Achtergrond en pointer volledig transparant.
+        tradeInfo := label.new(bar_index, entryAvg, "", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, color=color.new(color.black, 100), textcolor=vText, size=size.small, textalign=text.align_left)
         array.push(drawHistL, tradeInfo)
 // v3.13.2: `zoneIsCurrent` in plaats van `not na(...)`. Het vak groeit alleen naar rechts;
 // top en bottom blijven op de prijzen van de ORDER staan, zodat het vak en de SL-tekst niet
@@ -3342,7 +3367,6 @@ if not flatNow and posSize != 0 and zoneIsCurrent
         int _slT = math.round(math.abs(nz(zoneEntryPx, entryAvg) - nz(zoneStopPx, curStop)) / syminfo.mintick)
         float _riskUsd = math.abs(entryAvg - curStop) * syminfo.pointvalue * math.abs(posSize)
         float _rr = math.abs(entryAvg - curStop) > syminfo.mintick / 2 ? math.abs(curLimit - entryAvg) / math.abs(entryAvg - curStop) : na
-        label.set_xy(tradeInfo, bar_index + 2, entryAvg)
         label.set_textcolor(tradeInfo, vText)
         int _tpT = na(curLimit) ? 0 : math.round(math.abs(curLimit - entryAvg) / syminfo.mintick)
         float _tpUsd = na(curLimit) ? na : math.abs(curLimit - entryAvg) * syminfo.pointvalue * math.abs(posSize)

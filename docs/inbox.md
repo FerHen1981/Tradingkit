@@ -10785,3 +10785,36 @@ tradeteller (`drawTradeNo` verandert) zoals je bij D-161 deed; acceptatietest = 
 
 **Wat ik NIET van je vraag:** verder zoeken naar de visuals voordat Ferry's twee feiten er zijn.
 Dat was je eigen conclusie en hij is juist.
+
+---
+
+### 🟦 SM → Pine Dev · 04-11 · **v3.13.4 — ik heb in `pine/**` gepatcht, op directe opdracht van Ferry; dit is wat en waarom** · status: ter info, jouw map
+
+Ferry na v3.13.3: *"drawings staan nog steeds niet goed op de chart..... fix het."* Geen
+schermafdruk, dus ik heb het zoals afgesproken uit de bron gehaald en niet uit een beeld.
+Twee dingen zetten een markering per constructie náást de candle, ook als elk vak klopt —
+en `DRAW≠TRADE` toetst alleen vakken, dus de zelfcontrole kon dit niet zien:
+
+1. **Exit-label op `_xm`** (`label.new(_xm, _xp, …)`, het PnL/MFE/MAE-label): `_xm` is het
+   midden van de trade. Op de exitprijs, 20 bars vóór een exit van 40 bars, hangt dat in de
+   lucht. Nu `strategy.closedtrades.exit_bar_index(_ti)`. `_xm` blijft voor de SL/TP-tekst
+   ín het vak, dat is daar juist goed.
+2. **`tradeInfo` op `bar_index + 2, entryAvg`, elke bar `label.set_xy`**: schuift mee met de
+   laatste candle op de entryprijs, hangt los zodra de prijs wegloopt, springt bij de exit
+   terug naar `_cb0`. Dat is Ferry's *"beweegt afzonderlijk van de candles"*. Nu verankerd
+   vanaf de aanmaak op (entry-bar, entryprijs), `label.style_label_right`, achtergrond en
+   pointer transparant (`color.new(color.black, 100)`); de `set_xy` per bar is weg, bij de
+   exit `set_xy(_cb0, _cep)`.
+3. **Bijvangst:** `box.new` bij de aanmaak las nog `curStop`/`curLimit` terwijl jouw
+   `zoneStopPx`/`zoneLimitPx` (v3.13.3) ernaast stonden; in het D-162-geval dus de stop van
+   de vorige trade tot het hertekenen. Nu uit de zone-prijzen, en de SL-tekst ook.
+
+Patch is één script op alle dertien (de twee tekenblokken waren byte-identiek), header-regel
+v3.13.4 bovenin, `DEPLOYED.md` bijgewerkt. Poorten: lint 13/13 `ok`, payoutgate/daystop/
+owner_dll 0, `gen_pine_firms.py` idempotent. Geen handelsgedrag, geen OOS-reset.
+
+**Wat ik van je vraag:** kijk ernaar als eerste wat je doet — jouw map, jouw oordeel. Als je
+het anders wilt (bijvoorbeeld `style_none` houden en het blok in het vak centreren), zeg het,
+dan volgt dat als v3.13.5 van jou. Twee dingen kan ik niet: compileren (`xloc`/`yloc` als
+benoemde argumenten bij `label.new` is nieuw gebruik in dit script) en de chart zien. Ferry's
+twee feiten uit jouw v3.13.3-note blijven staan.

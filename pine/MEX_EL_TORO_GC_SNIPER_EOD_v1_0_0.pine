@@ -438,6 +438,50 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.6 (04-11): de tekenlaag tekent per TRADE, niet per UITVOERING van de bar.
+//   Ferry na v3.13.5: "nog niet goed -- kijk even naar de code waar het wel goed gaat". Die
+//   aanwijzing is de diagnose: het enige tekenwerk in dit script dat nooit stuk gaat -- de
+//   tijdvenster-boxen, de FVG-boxen en de event-labels -- staat achter `barstate.isconfirmed`,
+//   en dat is precies EEN uitvoering per bar. De trade-zones stonden daar niet achter.
+//   `calc_on_order_fills=true` laat het script binnen dezelfde bar OPNIEUW lopen zodra een
+//   order vult. `drawTradeNo[1]` en `strategy.closedtrades[1]` zijn de standen van de VORIGE
+//   BAR, dus na een vulling bleven die twee edge-detectoren waar bij elke volgende uitvoering
+//   van diezelfde bar -- ook bij de afsluitende uitvoering op barclose. Drie gevolgen:
+//   1. Het exit-blok tekende de SL-tekst, de TP-tekst en de PnL-bubbel TWEE KEER over elkaar
+//      (meer bij twee vullingen in een bar). Dubbele, vette, iets verschoven tekst.
+//   2. Het aanmaakblok deed `box.new` en `label.new` een tweede keer en overschreef de handles
+//      van de eerste. Die eerste twee vakken zijn daarmee ONBEREIKBAAR: nooit naar rechts
+//      gegroeid, nooit op de gesloten trade hertekend, nooit opgeruimd, en ze komen niet in
+//      `drawHistB`. Dat is het vakje van een bar breed op de entryprijs bij ELKE trade -- en
+//      het is een lek buiten de begroting van 500 drawings, dus na een paar honderd trades
+//      ruimt Pine de OUDSTE op (de echte zones) en blijven de reepjes staan.
+//   3. En de zelfcontrole `DRAW≠TRADE` bleef stil, want de handle die OVERBLIJFT is de goede.
+//      Een vals sein van orde terwijl de chart zichtbaar fout stond -- dat is waarom D-161,
+//      D-162 en de patch van 04-11 alle drie "klaar" leken.
+//   DE REPARATIE is het patroon dat in dit bestand al drie keer staat (`lastClosedSeen`,
+//   `dexClosedSeen`, `tdSeen`): een teller-latch in een `var` in plaats van `[1]`. Die rolt op
+//   een realtime bar samen met de tekeningen terug, dus de twee kunnen niet uit elkaar lopen.
+//   BEWUST NIET MEEGENOMEN: `newLong`/`newShort` blijven op de bar-detectoren staan. Het
+//   fill-blok draait dan nog steeds twee keer per bar, en dat is hoe het sinds v1 gaat -- de
+//   alerts zijn `alert.freq_once_per_bar` dus daar komt niets dubbel uit, en de `and not
+//   newLong`-poortjes (posHi/posLo op de entry-bar) zouden bij een smallere definitie ANDERE
+//   MFE/MAE opleveren. Dat is een meting, geen tekening, en die hoort niet in een
+//   visual-release te schuiven.
+//   TWEE KLEINERE DINGEN, in dezelfde laag:
+//     · Het tekstblok stond op `label.style_label_right`. Met de pointer RECHTS rendert de
+//       body LINKS van de entry-bar -- over de opzet (de FVG) die je juist wilt zien. Voor een
+//       body naar rechts is het `label.style_label_left`, zoals in `indicators/MPT_SUITE.pine`
+//       r.390. Dit was v3.13.4's bedoeling, met de verkeerde constante.
+//     · De live regel mengde de ORDER-ticks met de LIVE stopprijs en het LIVE risico: na een
+//       BE-schuif las er "SL <nieuwe prijs> | 100t | -$<nieuw bedrag>". Het vak en de SL-tekst
+//       IN het vak houden de order (die worden bij het sluiten uit de trade hertekend); deze
+//       regel is de live stand en is nu overal live.
+//   DE OOS-KLOK BLIJFT STAAN: geen input, geen default, geen orderpad. Alleen de tekenlaag.
+//   POORT: `pine_lint.check_draw_guards` weigert vanaf nu een `box.new`/`label.new` onder een
+//   `[1]`-detector. Hij leest EEN INDIRECTIE DIEP, en dat is geen extraatje -- in de echte
+//   fout stond `[1]` niet in de conditie maar in de definitie van de vlag, honderden regels
+//   eerder. De eerste versie van die poort las alleen de conditie en liet de fout die hij moet
+//   pakken dus glippen; dat is gemeten door hem terug te draaien, niet aangenomen.
 // v3.13.5 (04-11, D-162): het fill-blok hangt op de TRADETELLER.
 //   `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het
 //   eind van de VÓRIGE bar". Sluit een trade en opent de volgende in dezelfde 1-minuutbar --
@@ -599,7 +643,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX ΞL TORO · GC SNIPER EOD"
-var string currentVersion = "v3.13.5"
+var string currentVersion = "v3.13.6"
 strategy("MΞX ΞL TORO · GC SNIPER EOD · " + currentVersion, shorttitle="TOR-GC-SN", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -2849,6 +2893,42 @@ var float curLimit = na
 int  drawTradeNo    = strategy.closedtrades + strategy.opentrades
 bool drawNewTrade   = strategy.opentrades > 0 and drawTradeNo > nz(drawTradeNo[1], 0)
 bool drawTradeShut  = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
+// === v3.13.6 - de tekenlaag tekent per TRADE, niet per uitvoering van de bar ===
+// Hier zat de oorzaak die D-161, D-162 en de patch van 04-11 alle drie hebben overleefd. Die
+// drie repareerden WELKE trade een handle hoorde te zijn; geen ervan keek naar HOE VAAK het
+// blok per bar draait.
+// `calc_on_order_fills=true` laat het script binnen dezelfde bar OPNIEUW lopen zodra een order
+// vult. `drawTradeNo[1]` en `strategy.closedtrades[1]` zijn de standen van de VORIGE BAR, dus
+// na een vulling blijven die twee edge-detectoren waar bij elke volgende uitvoering van
+// diezelfde bar -- ook bij de afsluitende uitvoering op barclose. Gevolg op de chart:
+//  · het exit-blok tekent de SL-tekst, de TP-tekst en de PnL-bubbel TWEE KEER over elkaar
+//    (meer bij twee vullingen in een bar) -- vandaar de dubbele, vette, iets verschoven tekst;
+//  · het aanmaak-blok doet `box.new` en `label.new` een tweede keer en overschrijft de handles
+//    van de eerste. Die eerste twee vakken zijn daarmee ONBEREIKBAAR: ze worden nooit naar
+//    rechts gegroeid, nooit op de gesloten trade hertekend, nooit opgeruimd, en komen ook niet
+//    in `drawHistB`. Dat is het reepje van een bar breed op de entryprijs bij ELKE trade, en
+//    het is een lek: twee vakken per trade buiten de begroting van 500, dus na een paar honderd
+//    trades ruimt Pine de OUDSTE op -- de echte zones -- en blijven de reepjes staan.
+//  · en de zelfcontrole bleef stil, want de handle die OVERBLIJFT is de goede. `DRAW!=TRADE`
+//    gaf dus een vals sein van orde terwijl de chart zichtbaar fout stond.
+// Waarom de rest van de tekenlaag dit nooit had: de tijdvenster-boxen, de FVG-boxen en de
+// event-labels staan allemaal achter `barstate.isconfirmed` -- precies een uitvoering per bar.
+// DE REPARATIE is het patroon dat in dit bestand al drie keer staat (`lastClosedSeen`,
+// `dexClosedSeen`, `tdSeen`): een teller-latch in plaats van `[1]`. Die rolt op een realtime
+// bar samen met de tekeningen terug, dus de twee kunnen niet uit elkaar lopen.
+// BEWUST NIET: `newLong`/`newShort` blijven op de bar-detectoren staan. Het fill-blok draait
+// dan nog steeds twee keer per bar, en dat is hoe het sinds v1 gaat -- de alerts zijn
+// `alert.freq_once_per_bar` dus daar komt niets dubbel uit, en `and not newLong` poortjes
+// (posHi/posLo op de entry-bar) zouden bij een smallere definitie ANDERE MFE/MAE opleveren.
+// Dat is geen tekening maar een meting, en die hoort niet in een visual-release te schuiven.
+var int drawMadeNo    = 0
+var int drawShutSeen  = 0
+bool drawMakeNew  = strategy.opentrades > 0 and drawTradeNo > drawMadeNo
+bool drawMakeShut = strategy.closedtrades > drawShutSeen
+if drawMakeNew
+    drawMadeNo := drawTradeNo
+if drawMakeShut
+    drawShutSeen := strategy.closedtrades
 // === v3.13.5 (D-162) — "nieuwe trade" komt uit de TELLER, niet uit het teken van posSize ===
 // `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het eind
 // van de VÓRIGE bar". Sluit een trade en opent de volgende in dezelfde 1-minuutbar -- met
@@ -2957,7 +3037,7 @@ f_capDrawings() =>
 // v3.13.2: hing op `flatNow`, en dan vuurt dit blok NIET als de volgende trade in
 // dezelfde bar opent -- juist het geval uit de acceptatietest (twee fills in een
 // minuut). `drawTradeShut` komt van de teller en mist dat geval niet.
-if showExitLabels and drawTradeShut and inTradeDrawWin
+if showExitLabels and drawMakeShut and inTradeDrawWin
 
     int   _ti  = strategy.closedtrades - 1
     float _xp  = strategy.closedtrades.exit_price(_ti)
@@ -3325,7 +3405,7 @@ if inDrawWin and barstate.isconfirmed
 // === v5.5: TRADE-ZONES (licht gevulde entry<->SL en entry<->TP banden) ======
 // v3.13.2: eerst de VORIGE trade afmaken en loslaten, dan de nieuwe aanmaken. In die
 // volgorde, want bij twee fills in een bar gebeurt beide op dezelfde bar.
-if drawTradeShut
+if drawMakeShut
     int _ci = strategy.closedtrades - 1
     // Hertekenen uit de trade zelf: dan staat een gesloten trade per constructie op de
     // juiste prijs en tijd, ongeacht wat er live is misgegaan.
@@ -3365,7 +3445,7 @@ if drawTradeShut
 // De vergelijking draait om de twee dingen die werkelijk fout kunnen gaan: er is GEEN vak
 // voor deze trade (handle los of nooit aangemaakt), of het vak hoort bij een ANDER
 // tradenummer. De prijs vergelijken we op een halve tick, want de box slaat floats op.
-if drawTradeShut and showTradeZones and inTradeDrawWin and drawCheckHad
+if drawMakeShut and showTradeZones and inTradeDrawWin and drawCheckHad
     int   _vi  = strategy.closedtrades - 1
     int   _vb0 = strategy.closedtrades.entry_bar_index(_vi)
     int   _vb1 = strategy.closedtrades.exit_bar_index(_vi)
@@ -3385,7 +3465,7 @@ if drawTradeShut and showTradeZones and inTradeDrawWin and drawCheckHad
              size=size.small, textalign=text.align_left))
         f_capDrawings()
 
-if drawNewTrade
+if drawMakeNew
     zoneTradeNo := drawTradeNo
     zoneEntryPx := entryAvg
     // De prijzen van de ORDER, niet de live variabelen -- zie de toelichting bij
@@ -3404,7 +3484,7 @@ if drawNewTrade
         // v3.13.4: VERANKERD op de entry-bar en de entryprijs, met een pointer die daar naar wijst.
         // Niet meer `bar_index + 2` en niet meer elke bar verplaatst -- dat was het label dat
         // "afzonderlijk van de candles bewoog". Achtergrond en pointer volledig transparant.
-        tradeInfo := label.new(bar_index, entryAvg, "", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_right, color=color.new(color.black, 100), textcolor=vText, size=size.small, textalign=text.align_left)
+        tradeInfo := label.new(bar_index, entryAvg, "", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 100), textcolor=vText, size=size.small, textalign=text.align_left)
         array.push(drawHistL, tradeInfo)
 // v3.13.2: `zoneIsCurrent` in plaats van `not na(...)`. Het vak groeit alleen naar rechts;
 // top en bottom blijven op de prijzen van de ORDER staan, zodat het vak en de SL-tekst niet
@@ -3414,7 +3494,7 @@ if not flatNow and posSize != 0 and zoneIsCurrent
         box.set_right(zoneRisk, bar_index)
         box.set_right(zoneReward, bar_index)
     if showTradeLabels and not na(tradeInfo)
-        int _slT = math.round(math.abs(nz(zoneEntryPx, entryAvg) - nz(zoneStopPx, curStop)) / syminfo.mintick)
+        int _slT = math.round(math.abs(entryAvg - curStop) / syminfo.mintick)
         float _riskUsd = math.abs(entryAvg - curStop) * syminfo.pointvalue * math.abs(posSize)
         float _rr = math.abs(entryAvg - curStop) > syminfo.mintick / 2 ? math.abs(curLimit - entryAvg) / math.abs(entryAvg - curStop) : na
         label.set_textcolor(tradeInfo, vText)

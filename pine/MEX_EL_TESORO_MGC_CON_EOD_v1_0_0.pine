@@ -2919,6 +2919,14 @@ var float zoneLimitPx = na
 // Alleen muteren als de handle van de OPEN trade is. Zonder deze test landt elke mutatie op
 // wat er toevallig nog hangt, en dat is precies defect 1.
 bool zoneIsCurrent = not na(zoneTradeNo) and zoneTradeNo == drawTradeNo and strategy.opentrades > 0
+// v3.13.2: wat de zelfcontrole na het loslaten nog moet kunnen lezen.
+var box  drawCheckBox = na
+var int  drawCheckNo  = na
+// Is er voor DEZE trade werkelijk getekend? `inTradeDrawWin` dekt alleen de laatste N bars,
+// dus een trade die daarvoor opende heeft geen vak -- en zonder deze vlag zou de
+// zelfcontrole daar "geen vak" melden terwijl er niets mis is. Een poort die op zoiets
+// afgaat leert je hem te negeren.
+var bool drawCheckHad = false
 // De diagnose van de entry (FVG|CVD|AGE|H|D) en die van de exit worden vastgehouden zodat
 // het tekstblok ze allebei kan tonen; sigDiag zelf is alweer die van de volgende bar.
 var string tradeEntryDiag = ""
@@ -3310,6 +3318,10 @@ if drawTradeShut
             array.push(drawHistB, zoneReward)
     // Loslaten. Zonder dit kan een latere mutatie de tekening van deze trade nog raken --
     // defect 1.
+    // v3.13.2: bewaren wat de zelfcontrole hieronder nodig heeft; de handles zelf gaan op na.
+    drawCheckBox  := zoneRisk
+    drawCheckNo   := zoneTradeNo
+    drawCheckHad  := not na(zoneRisk)
     zoneRisk    := na
     zoneReward  := na
     tradeInfo   := na
@@ -3318,11 +3330,40 @@ if drawTradeShut
     zoneStopPx  := na
     zoneLimitPx := na
 
+// === v3.13.2 — ZELFCONTROLE: tekening tegen trade ===========================
+// Acceptatietest 5 wordt hiermee zichtbaar voor Ferry in plaats van iets dat iemand met de
+// hand moet nakijken. Na het hertekenen vergelijken we de vak-coördinaten met de velden van
+// de gesloten trade; wijkt er iets af, dan komt er één rood label. De test is: NUL van deze
+// labels over een dag met minstens tien trades, inclusief twee fills in één minuut.
+// De vergelijking draait om de twee dingen die werkelijk fout kunnen gaan: er is GEEN vak
+// voor deze trade (handle los of nooit aangemaakt), of het vak hoort bij een ANDER
+// tradenummer. De prijs vergelijken we op een halve tick, want de box slaat floats op.
+if drawTradeShut and showTradeZones and inTradeDrawWin and drawCheckHad
+    int   _vi  = strategy.closedtrades - 1
+    int   _vb0 = strategy.closedtrades.entry_bar_index(_vi)
+    int   _vb1 = strategy.closedtrades.exit_bar_index(_vi)
+    float _vep = strategy.closedtrades.entry_price(_vi)
+    // `drawCheckHad` sluit "nooit getekend" al uit, dus na() hier betekent: de handle is
+    // kwijtgeraakt tussen aanmaak en sluiting, en dat is wel degelijk een defect.
+    string _why = na(drawCheckBox) ? "vak kwijtgeraakt tussen aanmaak en sluiting" :
+         box.get_left(drawCheckBox) != _vb0 ? "entry-bar " + str.tostring(box.get_left(drawCheckBox)) + " != " + str.tostring(_vb0) :
+         box.get_right(drawCheckBox) != _vb1 ? "exit-bar " + str.tostring(box.get_right(drawCheckBox)) + " != " + str.tostring(_vb1) :
+         (math.min(math.abs(box.get_top(drawCheckBox) - _vep), math.abs(box.get_bottom(drawCheckBox) - _vep)) > syminfo.mintick / 2) ?
+             "entry-prijs niet op een rand van het vak" :
+         drawCheckNo != _vi + 1 ? "vak hoort bij trade " + str.tostring(drawCheckNo) : ""
+    if _why != ""
+        array.push(drawHistL, label.new(_vb1, _vep,
+             "DRAW≠TRADE #" + str.tostring(_vi + 1) + "\n" + _why,
+             style=label.style_label_up, color=color.new(color.red, 0), textcolor=color.white,
+             size=size.small, textalign=text.align_left))
+        f_capDrawings()
+
 if drawNewTrade
     zoneTradeNo := drawTradeNo
     zoneEntryPx := entryAvg
     zoneStopPx  := curStop
     zoneLimitPx := curLimit
+    drawCheckHad := false
     if showTradeZones and inTradeDrawWin
         zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)
         zoneReward := box.new(bar_index, math.max(entryAvg, curLimit), bar_index, math.min(entryAvg, curLimit), border_width=0, bgcolor=zRewardBg)

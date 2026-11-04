@@ -10676,3 +10676,18 @@ diagnoses.
 
 📌 Let op bij de vergelijking: A draait óók het **oude script** (v3.2.0: geen dagstops, oude
 payout-code, proxy-delta). "A vs B" is dus niet alleen de entry-band.
+
+**Aanvulling 48b (SM, 04-11) — Ferry's hypothese: twee entry-definities in de vloot kan een
+gezonde spreiding zijn.** Dat is toetsbaar en jullie hebben de helft van de data al:
+1. **Correlatie A↔B uit de oktober-fills (A-98):** dag-P&L per account, 20–29 okt, chart A tegen
+   chart B per dag. Entry-overlap was 5–14%, dus lage correlatie is te verwachten — maar
+   `CLAUDE.md` eist 20–30 actieve dagen gemeten P&L-correlatie vóór iemand "decorrelatie" zegt.
+   Negen dagen is een eerste cijfer, geen claim.
+2. **De voorwaarde die spreiding zinvol maakt is dat beide benen over drie jaar positief zijn.**
+   8–23/4 is dat (A-88). 4–11/venster 1 is nooit over drie jaar gemeten; het dichtstbijzijnde
+   cijfer is D-152 (4–10/venster 1/delta uit, Ferry's chart van 08-10): **−$9.126 per contract**
+   over drie jaar. Spreiden naar een negatief been is geen spreiding maar ballast. Daarom is jullie
+   3-jaarsmeting van 4–11/1 op de doelmeetlat nu de beslissende meting — en die hangt op het
+   MGC-bestand als release-asset (D-141, Backtest Setup).
+3. Noteer bij de uitkomst: **de huidige verdeling is omgekeerd aan het bewijs** — elf accounts op
+   de ongemeten band (B), zes op de gemeten (A).

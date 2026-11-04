@@ -449,6 +449,20 @@
 //   ⚠️ De poort zelf blijft. Alleen de balans op nul zetten zou ook de
 //   trailing-drawdown-breach uitzetten (floor -$2.500 tegen stand 0), en dan handelt het
 //   account door zonder breach-halt. Dat is erger dan niet handelen.
+//   TWEEDE PUNT in v3.13.3, en dit was een gat in mijn eigen v3.13.2: het vak legde
+//   `curStop` vast, maar `curStop` en `curLimit` worden alleen gezet in
+//   `if newLong or newShort` -- hetzelfde defecte signaal als bij de tekeningen. Sluit een
+//   trade en opent de volgende in dezelfde bar, dan vuurt dat blok niet en dragen die twee
+//   nog de waarden van de VORIGE trade; het vak kreeg dus de stop van de vorige trade en
+//   stond nog steeds verkeerd. Nu worden de stop en de TP vastgelegd op het moment van
+//   PLAATSEN (`pendStopAtOrder`/`pendTpAtOrder`), dezelfde waarden die `f_orderMsg` en de
+//   FILL-kaart versturen.
+//   📌 NAGEMETEN EN GEEN PROBLEEM: de beschermende stop-order zelf mist niet. Die wordt
+//   samen met de entry geplaatst (`strategy.exit` naast `strategy.entry`, r. ±2866/2877) en
+//   elke bar opnieuw gezet in het `inLong`/`inShort`-blok, dus een trade is nooit zonder
+//   stop. Wat op zo'n bar WEL ontbreekt is de FILL-kaart en de journaalregel, en `curStop`
+//   ratchet verder vanaf de stale waarde -- dat laatste maakt de stop krapper, niet ruimer.
+//   Dat is bestaand gedrag en geen onderdeel van deze patch; het staat in `docs/inbox.md`.
 // v3.13.2 (04-11, patch): de tekeningen zijn aan een TRADE gebonden.
 //   Ferry zag een label met de tekst van trade N op de prijzen van een latere trade. Drie
 //   defecten, alle drie in de bron teruggevonden (inbox 47):
@@ -2639,6 +2653,15 @@ var int   pendBar = na
 // beschreef dus niet de trade maar de leegte erna. Vastleggen bij plaatsing lost dat op en
 // werkt ook in marktmodus, waar de fill op dezelfde bar valt.
 var string pendDiag = ""
+// v3.13.3: de STOP en de TP zoals ze met de order zijn meegegeven. Nodig omdat `curStop` en
+// `curLimit` alleen worden gezet in `if newLong or newShort`, en dat is hetzelfde defecte
+// signaal als bij de tekeningen: sluit een trade en opent de volgende in dezelfde bar, dan
+// vuurt dat blok niet en dragen `curStop`/`curLimit` nog de waarden van de VORIGE trade.
+// Het vak van v3.13.2 legde `curStop` vast en kreeg daarmee de stop van de vorige trade --
+// dus stond het vak nog steeds verkeerd. Dit zijn de waarden uit de order zelf, hetzelfde
+// als wat `f_orderMsg` en de FILL-kaart versturen.
+var float pendStopAtOrder = na
+var float pendTpAtOrder   = na
 var float pendLimit = na
 var float pendStop = na
 var float t_tpD = na
@@ -2709,6 +2732,8 @@ if (longSignal or shortSignal) and gateOK and stopValid and tpValid and qtyOk an
         f_sendDiscord("🚀 " + syminfo.ticker + " ACCOUNT STARTED", jrnlAcct + " | " + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", activeTz) + " | regime " + (useRegime ? (regimeFav ? "FAVORABLE" : "UNFAVORABLE") : "off") + " | first order: " + (longSignal ? "LONG " : "SHORT ") + str.tostring(t_qty, "#.##") + "ct @ " + str.tostring(isLimitMode ? sigEntryPx : close, format.mintick))
     pendLimit := isLimitMode ? sigEntryPx : na
     pendDiag := sigDiag
+    pendStopAtOrder := sigStopPx
+    pendTpAtOrder   := t_tpPx
     pendStop := sigStopPx
     if longSignal
         if isLimitMode
@@ -3294,8 +3319,10 @@ if drawTradeShut and showTradeZones and inTradeDrawWin and drawCheckHad
 if drawNewTrade
     zoneTradeNo := drawTradeNo
     zoneEntryPx := entryAvg
-    zoneStopPx  := curStop
-    zoneLimitPx := curLimit
+    // De prijzen van de ORDER, niet de live variabelen -- zie de toelichting bij
+    // `pendStopAtOrder`. `nz` houdt de oude weg open voor het geval er geen pending order was.
+    zoneStopPx  := nz(pendStopAtOrder, curStop)
+    zoneLimitPx := nz(pendTpAtOrder, curLimit)
     drawCheckHad := false
     if showTradeZones and inTradeDrawWin
         zoneRisk := box.new(bar_index, math.max(entryAvg, curStop), bar_index, math.min(entryAvg, curStop), border_width=0, bgcolor=zRiskBg)

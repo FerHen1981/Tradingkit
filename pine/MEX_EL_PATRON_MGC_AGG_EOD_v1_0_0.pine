@@ -451,6 +451,17 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.3 (04-11): de reden staat nu ook in de STATUSREGEL van de tabel.
+//   Ferry: op `Funded` werden geen trades genomen, op `Developer` wel. Dat is mijn poort uit
+//   v3.12.0 die werkt zoals bedoeld -- `phaseOn` is waar op Funded en Eval, en met
+//   `Account start` nog op de default in 2099 is `acctStartMissing` waar, dus `canTrade`
+//   dicht. Er stond al een oranje label op de chart, maar niet in de regel die je leest als
+//   je je afvraagt waarom er niets gebeurt. Een stop die eruitziet als een defect is een
+//   slechte stop, ook als hij klopt: de statusregel zegt nu "GEEN ACCOUNTSTART -- vul
+//   'Account start' in" en krijgt dat voorrang boven Flat window, Halted en Open.
+//   ⚠️ De poort zelf blijft. Alleen de balans op nul zetten zou ook de
+//   trailing-drawdown-breach uitzetten (floor -$2.500 tegen stand 0), en dan handelt het
+//   account door zonder breach-halt. Dat is erger dan niet handelen.
 // v3.13.2 (04-11, patch): de tekeningen zijn aan een TRADE gebonden.
 //   Ferry zag een label met de tekst van trade N op de prijzen van een latere trade. Drie
 //   defecten, alle drie in de bron teruggevonden (inbox 47):
@@ -539,7 +550,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL PATRON · MGC AGG EOD"
-var string currentVersion = "v3.13.2"
+var string currentVersion = "v3.13.3"
 strategy("MΞX EL PATRON · MGC AGG EOD · " + currentVersion, shorttitle="PAT-MGC-A", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,
@@ -3612,7 +3623,7 @@ if showDashboard and barstate.islast
         table.cell(dash, 1, _r, na(mfiVal) ? "—" : str.tostring(mfiVal, "#.#") + f_arrow(mfiVal > 0 ? 1 : -1), text_color=na(mfiVal) ? txtColor : mfiVal > 0 ? vPosTxt : vNegTxt, text_size=txtSize, text_halign=text.align_right)
         _r := _r + 1
     table.cell(dash, 0, _r, "Gate", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
-    table.cell(dash, 1, _r, inFlatWindow ? "Flat window" : dayHalted ? "Halted · " + haltReason : timeGatePass ? "Open · " + activeWindowName : "Closed", text_color=inFlatWindow or dayHalted ? vNegTxt : timeGatePass ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
+    table.cell(dash, 1, _r, acctStartMissing ? "GEEN ACCOUNTSTART — vul 'Account start' in" : inFlatWindow ? "Flat window" : dayHalted ? "Halted · " + haltReason : timeGatePass ? "Open · " + activeWindowName : "Closed", text_color=acctStartMissing or inFlatWindow or dayHalted ? vNegTxt : timeGatePass ? vPosTxt : txtColor, text_size=txtSize, text_halign=text.align_right)
     _r := _r + 1
     table.cell(dash, 0, _r, "Filters", text_color=txtColor, text_size=txtSize, text_halign=text.align_left)
     table.cell(dash, 1, _r, sigLongOK and sigShortOK ? "valid ▲▼" : sigLongOK ? "valid ▲" : sigShortOK ? "valid ▼" : "blocked", text_color=sigLongOK or sigShortOK ? vPosTxt : vNegTxt, text_size=txtSize, text_halign=text.align_right)

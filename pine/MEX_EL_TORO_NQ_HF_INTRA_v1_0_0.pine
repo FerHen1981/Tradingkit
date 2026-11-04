@@ -495,6 +495,11 @@ strategy("MΞX ΞL TORO · NQ HF INTRA · " + currentVersion, shorttitle="TOR-NQ
      calc_on_every_tick=false,
      max_bars_back=500,
      max_lines_count=500, max_boxes_count=500, max_labels_count=500,
+     // v3.13.2: expliciet op de rechteras. Dit was NIET de oorzaak van de
+     // visual-klacht (die zat in de tekenlogica), maar het is de juiste default:
+     // zonder deze regel kan een plot op een eigen schaal belanden en dan staan de
+     // prijsniveaus van het script niet op dezelfde as als de candles.
+     scale=scale.right,
      margin_long=0, margin_short=0,
      slippage=1,
      commission_type=strategy.commission.cash_per_contract, commission_value=1.55)

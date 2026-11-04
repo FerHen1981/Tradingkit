@@ -10691,3 +10691,57 @@ gezonde spreiding zijn.** Dat is toetsbaar en jullie hebben de helft van de data
    MGC-bestand als release-asset (D-141, Backtest Setup).
 3. Noteer bij de uitkomst: **de huidige verdeling is omgekeerd aan het bewijs** — elf accounts op
    de ongemeten band (B), zes op de gemeten (A).
+
+---
+
+### 🟨 Pine Dev → SM + Ferry · 04-11 · **v3.13.3 — twee gaten, één in mijn eigen v3.13.2; plus een bestaande bevinding bij `newLong`** · status: wacht op twee feiten van Ferry
+
+**1 · Op `Funded` werden geen trades genomen, op `Developer` wel.** Dat is mijn poort uit
+v3.12.0 die werkt zoals bedoeld: `phaseOn` is waar op Funded én Eval, en met `Account start`
+nog op de default in 2099 is `acctStartMissing` waar, dus `canTrade` dicht. Er stond al een
+oranje label, maar **niet in de statusregel die je leest als je je afvraagt waarom er niets
+gebeurt.** Een stop die eruitziet als een defect is een slechte stop, ook als hij klopt. De
+statusregel zegt nu `GEEN ACCOUNTSTART — vul 'Account start' in`, met voorrang boven Flat
+window, Halted en Open. De poort zelf blijft — zie v3.12.0 voor waarom alleen-de-balans-op-nul
+erger is.
+
+**2 · 🔴 Een gat in mijn eigen v3.13.2.** Het vak legde `curStop` vast bij de aanmaak. Maar
+`curStop` en `curLimit` worden **alleen** gezet in `if newLong or newShort` — exact hetzelfde
+defecte signaal als bij de tekeningen. Sluit een trade en opent de volgende in dezelfde bar,
+dan vuurt dat blok niet en dragen die twee nog de waarden van de **vorige** trade: het vak
+kreeg de goede entry-prijs met de **verkeerde stop**, en stond dus nog steeds verkeerd. Stop
+en TP worden nu vastgelegd bij het **plaatsen** (`pendStopAtOrder`/`pendTpAtOrder`), naast
+`pendDiag` en uit dezelfde bron als wat `f_orderMsg` en de FILL-kaart versturen.
+
+**3 · ✅ Nagemeten en géén probleem, want ik dacht eerst van wél.** Toen ik zag dat
+`if newLong or newShort` óók `strategy.exit` bevat, dacht ik even dat zo'n trade zonder
+beschermende stop zou lopen. **Dat is niet zo:** de stop/TP-order wordt samen met de entry
+geplaatst (`strategy.exit` naast `strategy.entry`, r. ±2866/2877) en elke bar opnieuw gezet
+in het `inLong`/`inShort`-blok. Een trade is dus nooit zonder stop. Ik meld het omdat ik het
+bijna verkeerd had opgeschreven.
+
+**4 · ⚠️ Wat er op zo'n bar wél ontbreekt, en dat is bestaand gedrag, geen onderdeel van deze
+patch** — voor het bord, niet voor mij deze ronde:
+- **geen FILL-kaart en geen journaalregel** voor die trade (beide zitten in dat blok). Ferry
+  mist dus een notificatie van een trade die wél gedaan is, en de journaalregel ontbreekt in
+  de reconciliatie;
+- `curStop := math.max(nz(curStop, cand), cand)` **ratchet verder vanaf de stale waarde**. Dat
+  maakt de stop **krapper**, niet ruimer — geen risico-vergroting, maar wel een andere stop
+  dan bedoeld. Of dat ooit is voorgekomen is te zien in het journaal: een FILL zonder
+  bijbehorende EXIT-regel, of twee fills in één minuut met één FILL-kaart.
+
+#### 🔴 Wat ik van Ferry nodig heb voordat ik verder zoek
+
+Ik weet niet wat er op je chart staat, en doorbouwen op een aanname is deze week al vaker
+fout gegaan dan goed. **Twee feiten:**
+
+1. **Welke versie staat er in de scripttitel?** (`TES-MGC-C · v3.13.x`) De SM meldde dat er
+   **twee instanties** op je chart hangen — `TES-MGC-C` én een oude `EL TESORO v3.10`. De
+   labels met `FVGNaN` komen van die v3.10; die reageert op niets wat ik hier doe. Als de
+   verkeerde tekeningen van die instantie komen, is de oplossing hem weghalen.
+2. **Staat er een rood label `DRAW≠TRADE #n` op de chart, en wat staat erachter?** Dat label
+   is precies hiervoor gebouwd: het noemt zelf wélke invariant breekt (geen vak · entry-bar ·
+   exit-bar · entry-prijs · ander tradenummer). Met die regel weet ik het in één keer in
+   plaats van door te raden.
+
+Een schermafdruk van één verkeerde trade met de scripttitel erop in beeld is genoeg.

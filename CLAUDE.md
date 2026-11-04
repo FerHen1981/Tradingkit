@@ -110,6 +110,15 @@ firm/asset/volume/channel; not identical mirroring. Channels:
   Zie D-03 (de reconciliatie-timer) en D-74.
 ### Rolstructuur — CLO, SM, en de ChatGPT CoS (25-08)
 
+🔴 **Sinds 04-11 is `🛠️ MEX — Dagstand` (Notion, onder 🎩 El Presidente) de enige bron voor de
+MEX-stand** (besluit Ferry, optie B, D-164): ochtend dagstart en avond dagafsluiting door een
+geplande Claude-taak onder beheer van de SM; de Chief of Staff neemt het MEX-blok daaruit over
+en rekent MEX-cijfers niet meer zelf uit. **Boekingen in WealthOS gaan altijd eerst als voorstel
+in de Approval Queue** (`🛠️ MEX — Boeking: …`) en pas na Ferry's akkoord; nooit direct. Outlook
+en Recap gaan als tekst-draft (zonder screenshots) naar de Content Hub. Cijfers zonder bron
+worden niet opgeschreven: zolang D-163 open is staat er "geen fills-bron" bij de P&L.
+Prompts en instellingen van de taken: `docs/dagstand-taak.md`.
+
 Sinds 25-08 zit er boven de MEX Scrum Master een overkoepelende Claude-rol:
 de **Chief LifeOS Officer (CLO)** — zie `.claude/skills/chief-lifeos-officer/SKILL.md`.
 Opstelling:

@@ -1,4 +1,4 @@
-# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok vervangen 04-11 (v3.13.8)
+# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok (v3.13.8) en Middleware-blok (D-163) vervangen 04-11
 
 _Eigenaar: Scrum Master. Eén blok per chat, letterlijk plakken. Eén release van maximaal
 een dag per chat, met een acceptatietest (besluit Ferry 08-10: kleine releases boven
@@ -144,28 +144,30 @@ DAARNA release 3b (tailor-scoring als job) en dan D-130. Die staan ongewijzigd.
 
 ```
 git pull origin claude/middleware-setup-guide-afhvtk
+Lees D-163 in docs/SPRINT.md en inbox 54 (SM, 04-11).
 
-RELEASE 3a staat ongewijzigd: het playbook toont de invoer van de fleet-berekening en de
-hardgecodeerde doctrine gaat eruit. Spec in docs/inbox.md onder "het playbook krijgt de
-logica van het fleet-doc". Acceptatie: de Playbook-tab toont per account ruimte /
-gelockt-of-vers / beste dag sinds laatste payout / eerstvolgende cap / kwalificatiedagen /
-consistency-ruimte, en er staat nergens meer een markt- of strategieregel die niet uit een
-bestand komt.
+RELEASE — D-163, één dag, op zichzelf: de Notion-schrijfkant van de middleware laten
+draaien. Fleet Performance (ae5105393828447e84a1a87d31562d7d) en Trade Journal
+(c3e9d05525404849ad484b648c82fd59) hebben nul rijen sinds ze bestaan (D-20); de poller en
+de journal-writer in middleware/app/ zijn nooit als service op de VPS gezet. Besluit Ferry
+04-11: één MEX-dagstand uit Notion (D-164), dus dit is de enige blokkade voor echte P&L.
 
-DRIE BLOKKERS DAARVOOR, en ze zijn er alle drie nog:
- - _APEX_FALLBACK draagt nog APEX_LADDER_50K = [1500,1500,2000,2500,2500,3000] met
-   "verified": True. Die ladder BESTAAT NIET (D-148): de cap is vast $2.000 en vervalt
-   vanaf de zesde payout.
- - payout_cap_uncapped_from wordt in geen enkel bestand in middleware/app/ gelezen.
- - payout_terms_verified: false moet WEIGEREN, niet stilzwijgend iets anders invullen.
-Deploy niet vóór die drie dicht zijn - anders rekent het playbook met een plafond dat
-alleen in onze code bestaat, en 018 zit precies in die fase.
-
-Eén nieuwe vraag uit D-149, los van 3a: f_cfgStr() draagt mktRegime= mee in elk
-journaalbericht. Ferry's live chart bleek maanden een andere vensterinstelling te hebben
-dan de bevroren config, en niets zag dat. Kan de ontvangstkant die string per alert
-vergelijken met de bevroren config en afwijking melden? Geen bouwopdracht - een oordeel of
-dit hier hoort of in Pine. Antwoord in docs/inbox.md.
+DOEN:
+1. Dagelijkse timer (systemd, naast mex-runtime-snapshot.timer) die per actief account per
+   handelsdag naar Fleet Performance schrijft: bruto P&L, commissies UIT DE CASH HISTORY
+   (echt bedrag; niet $0, niet het Pine-tarief), netto, aantal trades, contracten. Trade
+   Journal: één rij per gesloten trade, gededupliceerd op trade key (dashboard_state.py
+   doet dat al voor de cockpit — hergebruik).
+2. Uit dezelfde Cash History de niet-trading-mutaties herkennen (payout, reset, activatie,
+   data fee) en als aparte rij schrijven, zodat de Dagstand-taak er een boekingsvoorstel
+   van kan maken.
+3. Alleen lezen uit Tradovate, alleen schrijven naar Notion. GEEN raakpunt met mex-receiver,
+   orders of PMT. Notion-token blijft in .env; geen saldi of accountnummers in de repo.
+4. D-137 in dezelfde release: de commit-poort `git diff --quiet` op een niet-getrackt
+   bestand kan nooit open; fix hem, want dezelfde fout zit anders in de nieuwe timer.
+Acceptatie (Ferry kan het zien): morgenochtend één rij per actief account voor vandaag in
+Fleet Performance met een commissiebedrag dat niet nul is. Claim D-163 met wip + owner,
+losse commit, meld in docs/inbox.md wat er op de VPS is gezet (systemctl cat als bewijs).
 ```
 
 ---

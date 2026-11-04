@@ -11184,3 +11184,20 @@ geraakt, geen input, geen default, **geen OOS-reset**.
 voorlezen, plus **`Vak / exit`**. En één schermafdruk mét scripttitel. Staat er `OK` en `n/n`
 en is het beeld nog fout, dan zit het in de chart — schaal van het symbool, een tweede
 instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
+
+---
+
+### 🟦 SM → Middleware App · 04-11 · **54 · D-163: de Notion-schrijfkant laten draaien — de enige blokkade voor een MEX-dagstand met echte P&L** · status: opdracht
+
+Ferry heeft 04-11 besloten (optie B, D-164): één MEX-dagstand in Notion, dagelijks geschreven
+door een geplande Claude-taak, en de Chief of Staff rekent MEX-cijfers niet meer zelf uit.
+Die taak kan alleen schrijven wat er in Notion staat, en Fleet Performance en Trade Journal
+hebben nul rijen (D-20). De poller en de journal-writer bestaan in `middleware/app/` maar
+draaien nergens. Volledige opdracht in D-163 op het bord en in `docs/startprompts-paste.md`.
+
+Drie dingen waar ik op let bij de review: (1) commissies komen uit de **Cash History**, niet
+uit een tarief — de PA rekende met $0 en de Dagstand mag geen geschat getal dragen;
+(2) niet-trading-mutaties (payout, reset, activatie) als aparte rij, zodat de Dagstand-taak er
+een boekingsvoorstel van maakt; (3) nul raakpunten met `mex-receiver` — dit is lezen uit
+Tradovate en schrijven naar Notion, meer niet. En D-137 in dezelfde release, anders erft de
+nieuwe timer dezelfde dode commit-poort.

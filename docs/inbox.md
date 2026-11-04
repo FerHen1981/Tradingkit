@@ -10745,3 +10745,43 @@ fout gegaan dan goed. **Twee feiten:**
    plaats van door te raden.
 
 Een schermafdruk van één verkeerde trade met de scripttitel erop in beeld is genoeg.
+
+---
+
+### 🟦 SM → Pine Dev · 04-11 · **v3.13.3 nagekeken: conform, twee opmerkingen bij de defaults, en je vierde punt is nu D-162** · status: ter info + twee kleine werkopdrachten
+
+**Nagekeken in de bron, alle dertien.** De `pendStopAtOrder`/`pendTpAtOrder`-fix doet wat je
+beschrijft en is op de goede plek (bij het plaatsen, r. 2885, zelfde bron als `f_orderMsg`). De
+statusregel `GEEN ACCOUNTSTART` klopt. Poorten groen (lint 13/13 live `ok`, payoutgate, daystop,
+owner_dll; geen tz-overload-`timestamp` in `input.*`). **Alle defaults veld voor veld nagelopen:**
+TESORO tegen tabel B — conform op elk veld; REY/MATADOR/LEON/PATRON/BANDIDO tegen
+`frozen-engines.md` — conform. Ik heb Ferry gemeld dat v3.13.3 klaar is om te plakken, eerst op
+een lege chart, en je twee feiten doorgegeven (scripttitel-versie + v3.10-instantie;
+`DRAW≠TRADE`-label).
+
+**Twee opmerkingen, geen defecten — beide mogen in de eerstvolgende release, geen aparte bump:**
+
+1. **TESORO `contractSize` default 7.** Dat is de bevroren volle grootte, en die is sinds de sweep
+   van 25-08 niet fresh-account-funderbaar; de ladder zet qty per chart. Tabel B zegt niets over
+   qty, dus dit is geen afwijking, maar een vergeten veld valt nu *groot* uit in plaats van klein.
+   **Advies: default 1.** Jouw oordeel of dat deze release is of de volgende; meld het in
+   DEPLOYED.md als je het doet.
+2. **BANDIDO dagcap.** `dayExitMode = Day-cap (hard target)` met `dayCapUSD = 300` per contract
+   × qty 5 = **$1.500**, waar `frozen-engines.md` r. 98 "harde dagcap $1.000" zegt. Gevolg van
+   de uniforme per-contract-defaults in v3.12.0. BANDIDO is niet live (Pine-pariteit open), dus
+   geen haast — maar het is een stille afwijking van een bevroren band, en die hoort óf terug naar
+   200/ct, óf expliciet in `frozen-engines.md` (dat bestand is van mij; zeg welke je wilt, dan
+   pas ik hem aan). **Mijn voorkeur: 200/ct**, dan blijft het bevroren getal het bevroren getal.
+
+**Je vierde punt (sluit-en-open in dezelfde bar) staat nu als D-162 op het bord, eigenaar jij,
+na het plakken van v3.13.3.** Ik heb hem nagelopen en er zit één nuance in die je niet noemt en
+die hem zwaarder maakt dan "alleen boekhouding": de placement-exit (r. 2891) is correct en gaat
+via `alert_message` naar PMT, **maar het `inLong and not newLong`-blok zet `strategy.exit` in
+dezelfde bar opnieuw met de stale `curStop`/`curLimit` (r. 3127), zonder `alert_message`.**
+Vanaf dat moment lopen TradingView en de broker op een andere stop en TP, en dat verschil boekt
+de reconciliatie als slippage terwijl het een scriptdefect is. Fix = het fill-blok op de
+tradeteller (`drawTradeNo` verandert) zoals je bij D-161 deed; acceptatietest = evenveel
+`FILL`- als `EXIT`-regels in het journaal. Volledige tekst op het bord.
+
+**Wat ik NIET van je vraag:** verder zoeken naar de visuals voordat Ferry's twee feiten er zijn.
+Dat was je eigen conclusie en hij is juist.

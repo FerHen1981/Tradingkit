@@ -444,6 +444,43 @@
 //   zijn evaluatiescripts waar deze instructie niet over gaat; omzetten zou daar ongevraagd
 //   de dagstops van een eval op qty 5-7 vermenigvuldigen.
 //   DE OOS-KLOK GAAT OP NUL (D-18/D-71) -- de bekende prijs.
+// v3.13.2 (04-11, patch): de tekeningen zijn aan een TRADE gebonden.
+//   Ferry zag een label met de tekst van trade N op de prijzen van een latere trade. Drie
+//   defecten, alle drie in de bron teruggevonden (inbox 47):
+//   1. `zoneRisk`, `zoneReward` en `tradeInfo` waren `var`-handles die alleen bij
+//      `newLong or newShort` werden aangemaakt en NERGENS werden losgelaten. En
+//      `newLong = posSize > 0 and nz(posSize[1]) <= 0` betekent "richting anders dan aan het
+//      eind van de VÓRIGE bar", niet "er is een trade geopend": sluit een trade en opent de
+//      volgende in dezelfde bar -- met `calc_on_order_fills` op 1-min gebeurt dat -- dan is
+//      `posSize` 1 én `posSize[1]` 1 en vuurt de aanmaak niet. Daarna werkten alle mutaties
+//      door op het vak en het label van de VORIGE trade: het vak sprong naar de nieuwe
+//      prijzen, het label verhuisde mee, en de tekst werd een mengsel van twee trades.
+//   2. Het vak volgde `curStop` (die ratchet) terwijl de tekst de SL van de aanmaak hield.
+//   DE REPARATIE: het tradenummer komt uit de TELLERSTAND
+//   (`strategy.closedtrades + strategy.opentrades`), de handles zijn eraan gebonden via
+//   `zoneTradeNo`, en er wordt alleen gemuteerd als de handle van de OPEN trade is. Bij het
+//   sluiten wordt het vak HERTEKEND uit de trade zelf (`entry_bar_index`, `exit_bar_index`,
+//   `entry_price`) en daarna worden alle handles op `na` gezet, zodat geen latere mutatie ze
+//   nog kan raken. Het vak groeit alleen naar rechts; top en bottom blijven op de prijzen van
+//   de ORDER, zodat vak en SL-tekst niet uiteen kunnen lopen. Waar de stop NU staat laat de
+//   bestaande "Active Stop"-plot zien. Dat is wat A&D §3 vraagt: elke tekening uit dezelfde
+//   toestand als de order.
+//   TWEE DINGEN DIE NIET IN DE DIAGNOSE STONDEN maar de acceptatietest wel raken:
+//   · het exitlabel-blok hing ÓÓK op `flatNow`, dus bij twee fills in één minuut vuurde het
+//     niet -- juist het geval uit de test; het hangt nu op de teller, en de richting van een
+//     gesloten trade komt uit `strategy.closedtrades.size()` in plaats van uit `posSize[1]`;
+//   · dat blok pushte de vakken óók naar de tekenhistorie, dus elk vak zou er twee keer in
+//     belanden en de drawing-begroting dubbel zo snel vollopen. Die push staat nu op één plek.
+//   ZELFCONTROLE: bij elke gesloten trade worden de vak-coördinaten vergeleken met de velden
+//   van die trade; wijkt er iets af, dan komt er één rood label `DRAW≠TRADE #n` met de reden.
+//   Acceptatie: NUL van die labels over een dag met >= 10 trades, inclusief twee fills in één
+//   minuut. Twee vals-positieven zijn er vooraf uitgehaald -- een trade die buiten het
+//   tekenvenster opende heeft geen vak (dat is geen defect), en pyramiding kan hier niet
+//   optreden omdat `pyramiding` niet in de `strategy()`-aanroep staat en de default 1 is.
+//   VERDER: `scale=scale.right` expliciet in alle dertien -- NIET de oorzaak van de klacht,
+//   maar wel de juiste default. En op EL TESORO gaan `maxStopSize` en `slSizeLegacy` van 140
+//   naar 100 units (tabel B / frozen-engines.md).
+//   GEEN OOS-reset: dit is tekenlogica plus één SL-default op één script.
 // v3.13.1 (03-11, compileerfix): `acctStartMissing` stond bij `phaseOn` en las daarmee
 //   `acctStarted` ~25 regels vóór zijn declaratie -- CE10272, dus v3.12.0 en v3.13.0
 //   compileerden geen van beide. De regel staat nu direct na de meter die hij leest.
@@ -495,7 +532,7 @@
 //   fill-bar en gewist bij flat. Wat er dan wel speelt staat in `docs/inbox.md`.
 //   DE OOS-KLOK GAAT OP NUL.
 var string SCRIPT_NAME = "MΞX EL REY · MNQ PROD EOD"
-var string currentVersion = "v3.13.1"
+var string currentVersion = "v3.13.2"
 strategy("MΞX EL REY · MNQ PROD EOD · " + currentVersion, shorttitle="REY-MNQ-P", overlay=true,
      initial_capital=50000,
      default_qty_type=strategy.fixed, default_qty_value=1,

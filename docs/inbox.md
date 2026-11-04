@@ -10588,3 +10588,70 @@ Dit is tekenlogica, geen gedragswijziging: patch-versie (v3.13.2), samen met SL-
 📌 Ter info: op Ferry's chart staan twee instanties (`TES-MGC-C` v3.13.x én `EL TESORO v3.10`),
 de omcirkelde labels dragen `FVGNaN` en zijn dus van v3.10 — maar de drie defecten hierboven
 zitten identiek in v3.13.1, dus de reparatie geldt voor de nieuwe lijn.
+
+---
+
+### 🟨 Pine Dev → SM + Ferry + Analyses & Data · 04-11 · **v3.13.2: de tekeningen zijn aan een trade gebonden, met zelfcontrole op de chart** · status: klaar om te plakken
+
+Vier commits. **Jullie diagnose in inbox 47 klopt op alle drie de punten** — ik heb ze alle
+drie in de bron teruggevonden op de genoemde regels, en de reparatie is precies de vijf
+stappen die jullie voorschreven. Twee dingen die er niet in stonden en die de acceptatietest
+wél raken, staan hieronder.
+
+#### Wat er nu gebeurt
+
+Het tradenummer komt uit de **tellerstand** (`closedtrades + opentrades`), de handles zijn
+eraan gebonden via `zoneTradeNo`, en er wordt alleen gemuteerd als de handle van de **open**
+trade is. Bij het sluiten wordt het vak **hertekend uit de trade zelf** en gaan alle handles
+op `na`. Het vak groeit alleen naar rechts; top en bottom blijven op de prijzen van de
+**order**, zodat vak en SL-tekst niet uiteen kunnen lopen — waar de stop nú staat laat de
+bestaande "Active Stop"-plot zien.
+
+#### 🔴 Twee dingen die niet in de diagnose stonden maar de acceptatietest raken
+
+1. **Het exitlabel-blok hing óók op `flatNow`** (r. 2917), dus bij **twee fills in één
+   minuut** vuurde het niet — en dat is precies het geval uit jullie acceptatietest. Het
+   hangt nu op de teller. Daarbij komt de richting van een gesloten trade nu uit
+   `strategy.closedtrades.size()` in plaats van uit `posSize[1]`, want die kan al van de
+   volgende trade zijn.
+2. **Datzelfde blok pushte de vakken óók naar de tekenhistorie.** Met het nieuwe afmaak-blok
+   zou elk vak er **twee keer** in belanden en liep de drawing-begroting dubbel zo snel vol —
+   wat oude tekeningen vroeger laat verdwijnen en er dus uitziet als "tekeningen verdwijnen
+   willekeurig". Die push staat nu op één plek.
+
+#### De zelfcontrole, en twee vals-positieven die ik er eerst uit heb gehaald
+
+`DRAW≠TRADE #n` komt met de reden erin: *geen vak* · *entry-bar x != y* · *exit-bar x != y* ·
+*entry-prijs niet op een rand van het vak* · *vak hoort bij trade m*.
+
+⚠️ **Een poort die onterecht rood staat leert je hem te negeren, dus:**
+- `inTradeDrawWin` dekt alleen de laatste N bars, dus een trade die daarvóór opende heeft
+  geen vak. Zonder vlag zou de controle daar "geen vak" melden terwijl er niets mis is.
+  `drawCheckHad` onderscheidt **"nooit getekend"** (geen defect) van **"vak kwijtgeraakt
+  tussen aanmaak en sluiting"** (wél een defect).
+- Bij pyramiding zou `closedtrades + opentrades` uit de pas lopen met het nummer van de
+  sluitende trade. **Nagemeten: `pyramiding` staat niet in de `strategy()`-aanroep, dus de
+  default 1 geldt en `opentrades` is nooit 2.** Kan hier dus niet optreden — en als iemand
+  later pyramiding aanzet, meldt de controle het meteen.
+
+#### Verder in deze release
+
+`scale=scale.right` in alle dertien. 📌 **Ik heb in de bron opgeschreven dat dit NIET de
+oorzaak was**, zodat niemand later denkt dat hiermee de visuals gerepareerd zijn. En op EL
+TESORO gaan `maxStopSize` en `slSizeLegacy` van 140 naar 100 units.
+
+#### Acceptatie — stand
+
+| eis | stand |
+|---|---|
+| nul `DRAW≠TRADE`-labels over een dag met ≥ 10 trades, incl. twee fills in één minuut | ⏳ **alleen Ferry kan dit zien** — de controle zit erin, de uitslag komt van de chart |
+| lint 13/13 ok | ✅ 9 bevindingen, alle in `history/` en `lib/`, net als voor deze ronde |
+| payoutgate-, daystop-, owner_dll-poort groen | ✅ alle drie exit 0, los geprint |
+| `DEPLOYED.md` op v3.13.2 | ✅ |
+| eerst op een lege chart plakken vóór oplevering | 🔴 **dat kan ik niet** — ik heb geen TradingView. Wat ik wél heb gedaan: de twee compileerklassen die deze week drie keer toesloegen zijn nu lint-checks (niet-const default, gebruik voor declaratie) en die zijn groen. Een derde klasse kan ik niet uitsluiten; krijg je een fout, stuur de regel. |
+
+📌 **Over `box.set_lefttop` / `box.set_rightbottom` / `strategy.closedtrades.exit_bar_index` /
+`strategy.closedtrades.size`:** die gebruikte dit script nog niet. Ze bestaan in Pine v6,
+maar het is nieuw gebruik en dus precies het soort plek waar een vierde compileerklasse kan
+zitten. Dát is de reden dat "eerst op een lege chart" in jullie acceptatielijst staat, en ik
+kan die stap niet voor je doen.

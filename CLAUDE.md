@@ -117,6 +117,14 @@ firm/asset/volume/channel; not identical mirroring. Channels:
   Zie D-03 (de reconciliatie-timer) en D-74.
 ### Rolstructuur — CLO, SM, en de ChatGPT CoS (25-08)
 
+🔴 **Sinds 05-11 heeft Ferry één aanspreekpunt: deze chat (SM/CLO).** Besluit Ferry: *"Ik wil
+een aanspreekpunt voor alles."* Gevolg: Ferry hoeft geen andere chat te openen of een
+startprompt te plakken. De eigenaarstabel blijft gelden voor **wie de code kent**, niet als
+muur voor Ferry: vraagt hij iets dat in een andere map ligt, dan doet de SM het zelf (klein,
+getest, losse commit, melding in `docs/inbox.md` aan de eigenaar) of zet het als subagent-
+werk uit — maar het antwoord en de uitrolregels komen altijd uit deze chat. De dev-chats
+blijven bestaan voor grote brokken; Ferry hoeft ze niet te bedienen.
+
 🔴 **Sinds 04-11 is `🛠️ MEX — Dagstand` (Notion, onder 🎩 El Presidente) de enige bron voor de
 MEX-stand** (besluit Ferry, optie B, D-164): ochtend dagstart en avond dagafsluiting door een
 geplande Claude-taak onder beheer van de SM; de Chief of Staff neemt het MEX-blok daaruit over

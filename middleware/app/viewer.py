@@ -55,6 +55,80 @@ _STALE_OPEN_H = float(os.environ.get("STALE_OPEN_HOURS", "18"))   # hide "open" 
 _PUBLIC_STATS_PATH = os.environ.get("PUBLIC_STATS_PATH", "/root/public-stats.json")
 _STARTED = time.monotonic()                                        # for the system-status uptime
 
+# ---- account roster: fase uit de Accounts-DB, niet uit de naam (besluit Ferry 05-11) ----
+# "Evals zijn geen winst." De live-tab telt alleen funded accounts als geld; evaluaties
+# komen apart, gearchiveerde accounts komen niet in beeld. De Accounts-DB (D-165) is de bron;
+# het naam-voorvoegsel is alleen een fallback en wordt dan als zodanig gemarkeerd.
+_ACCOUNTS_DB = os.environ.get("NOTION_ACCOUNTS_DB", "1ddb61ea444d8119aea2fd0d11de4493")
+_ROSTER_TTL = float(os.environ.get("ROSTER_TTL_SECONDS", "600"))
+_FUNDED_STATUSES = {"funded account", "milking", "milked", "actief"}
+_EVAL_STATUSES = {"active eval", "eval to start", "auto sim"}
+_roster_cache: dict = {"at": 0.0, "data": None}
+
+
+def _fetch_roster(token: str) -> dict:
+    """Account ID -> {"status", "archived"} uit de Notion Accounts-DB (alle rijen, ook de
+    kale pagina's die de journaalschrijver aanmaakt — die hebben geen saldo maar wél een status)."""
+    import httpx
+    from .dashboard_state import _headers, _title, _sel, _checkbox, _API
+    out: dict = {}
+    with httpx.Client(timeout=15.0) as client:
+        cursor = None
+        while True:
+            body: dict = {"page_size": 100}
+            if cursor:
+                body["start_cursor"] = cursor
+            r = client.post(f"{_API}/databases/{_ACCOUNTS_DB}/query", headers=_headers(token), json=body)
+            r.raise_for_status()
+            data = r.json()
+            for page in data.get("results", []):
+                p = page.get("properties", {})
+                acct_id = _title(p.get("Account ID")).strip()
+                if acct_id:
+                    out[acct_id.upper()] = {"status": _sel(p.get("Status")) or "",
+                                            "archived": _checkbox(p.get("Archived"))}
+            if not data.get("has_more"):
+                break
+            cursor = data.get("next_cursor")
+    return out
+
+
+def account_roster() -> dict:
+    """Gecachte roster; leeg dict als er geen token is of Notion niet antwoordt (dan valt
+    classify_account terug op het voorvoegsel en zegt dat erbij)."""
+    now = time.monotonic()
+    if _roster_cache["data"] is not None and now - _roster_cache["at"] < _ROSTER_TTL:
+        return _roster_cache["data"]
+    token = os.environ.get("NOTION_TOKEN", "")
+    data: dict = {}
+    if token:
+        try:
+            data = _fetch_roster(token)
+        except Exception as e:  # noqa: BLE001 — de live-tab mag nooit omvallen op Notion
+            log.warning("account roster: Notion niet bereikbaar (%s); val terug op voorvoegsel", e)
+            data = _roster_cache["data"] or {}
+    _roster_cache.update(at=now, data=data)
+    return data
+
+
+def classify_account(account: str, roster: dict) -> tuple[str, str, bool]:
+    """-> (phase, source, hidden). phase ∈ funded / eval / breached / unknown.
+    Bron is de Accounts-DB; staat het account daar niet in, dan het voorvoegsel (source
+    "prefix"). Gearchiveerd = hidden: niet in de live-lijst, nergens in de totalen."""
+    rec = roster.get(account.upper()) if roster else None
+    if rec is not None:
+        st = (rec.get("status") or "").strip().lower()
+        if rec.get("archived"):
+            return ("breached" if st == "breached" else "unknown"), "accounts-db", True
+        if st in _FUNDED_STATUSES:
+            return "funded", "accounts-db", False
+        if st in _EVAL_STATUSES:
+            return "eval", "accounts-db", False
+        if st == "breached":
+            return "breached", "accounts-db", False
+        # pagina bestaat maar zonder (bekende) status → voorvoegsel, gemarkeerd
+    return _phase(account), "prefix", False
+
 
 # ---- funded verification (D-74 §3.1) ------------------------------------------------
 #
@@ -130,13 +204,17 @@ def build_state() -> dict:
                 last_close[t.account] = t.exit_ts
 
     accounts: dict[str, dict] = {}
+    roster = account_roster()
 
     def acct(a: str) -> dict:
-        return accounts.setdefault(a, {
-            "account": a, "phase": _phase(a),
-            "realized_today": 0.0, "wins": 0, "losses": 0,
-            "open": [], "closed_today": [], "last_ts": None,
-        })
+        if a not in accounts:
+            phase, source, hidden = classify_account(a, roster)
+            accounts[a] = {
+                "account": a, "phase": phase, "phase_source": source, "hidden": hidden,
+                "realized_today": 0.0, "wins": 0, "losses": 0,
+                "open": [], "closed_today": [], "last_ts": None,
+            }
+        return accounts[a]
 
     for t in trades:
         product = _sym_root(t.symbol)
@@ -171,30 +249,45 @@ def build_state() -> dict:
             })
 
     rows = []
+    hidden_n = 0
     for a in accounts.values():
+        if a.pop("hidden", False):
+            hidden_n += 1          # gearchiveerd in de Accounts-DB: niet tonen, niet tellen
+            continue
         a["closed_today"].sort(key=lambda x: x["exit_ts"], reverse=True)
         a["status"] = "In trade" if a["open"] else "Flat"
         a["realized_today"] = round(a["realized_today"], 2)
         a["last_ts"] = a["last_ts"].isoformat() if a["last_ts"] else None
         rows.append(a)
-    rows.sort(key=lambda r: (r["phase"] != "funded", -r["realized_today"]))
+    _order = {"funded": 0, "eval": 1, "unknown": 2, "breached": 3}
+    rows.sort(key=lambda r: (_order.get(r["phase"], 2), -r["realized_today"]))
 
-    wins = sum(r["wins"] for r in rows)
-    losses = sum(r["losses"] for r in rows)
-    gross_win = sum(c["pnl"] for r in rows for c in r["closed_today"] if c["pnl"] >= 0)
-    gross_loss = -sum(c["pnl"] for r in rows for c in r["closed_today"] if c["pnl"] < 0)
-    fleet = {
-        "realized_today": round(sum(r["realized_today"] for r in rows), 2),
-        "open_positions": sum(len(r["open"]) for r in rows),
-        "accounts": len(rows),
-        "trades_today": wins + losses,
-        "win_rate": round(100 * wins / (wins + losses), 1) if (wins + losses) else None,
-        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else (None if not gross_win else 99.99),
-    }
+    def _totals(sel: list[dict]) -> dict:
+        wins = sum(r["wins"] for r in sel)
+        losses = sum(r["losses"] for r in sel)
+        gross_win = sum(c["pnl"] for r in sel for c in r["closed_today"] if c["pnl"] >= 0)
+        gross_loss = -sum(c["pnl"] for r in sel for c in r["closed_today"] if c["pnl"] < 0)
+        return {
+            "realized_today": round(sum(r["realized_today"] for r in sel), 2),
+            "open_positions": sum(len(r["open"]) for r in sel),
+            "accounts": len(sel),
+            "trades_today": wins + losses,
+            "win_rate": round(100 * wins / (wins + losses), 1) if (wins + losses) else None,
+            "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else (None if not gross_win else 99.99),
+        }
+
+    # Geld = alleen funded. Evaluaties apart ("geen geld"); breached/unknown tellen nergens mee.
+    fleet = _totals([r for r in rows if r["phase"] == "funded"])
+    fleet["money_scope"] = "funded"
+    fleet["prefix_fallback"] = sum(1 for r in rows if r["phase_source"] == "prefix")
+    fleet["hidden_archived"] = hidden_n
+    evals = _totals([r for r in rows if r["phase"] == "eval"])
+    evals["note"] = "evaluaties — geen geld"
     return {
         "as_of": as_of.isoformat() if as_of else None,
         "today": today.isoformat() if today else None,
         "fleet": fleet,
+        "evals": evals,
         "accounts": rows,
     }
 
@@ -1400,13 +1493,19 @@ async function loadLive(){
     `<div class=card><div class=ey>Realized today</div><div class="big ${cls(f.realized_today||0)}">${money(f.realized_today||0)}</div>
       <div class=row><span>Open positions</span><b>${f.open_positions||0}</b></div>
       <div class=row><span>Trades today</span><b>${f.trades_today||0}</b></div></div>`+
-    `<div class=card><div class=ey>Fleet today</div>
+    `<div class=card><div class=ey>Funded today (geld)</div>
       <div class=row><span>Win rate</span><b>${f.win_rate==null?"—":f.win_rate+"%"}</b></div>
       <div class=row><span>Profit factor</span><b>${f.profit_factor==null?"—":f.profit_factor}</b></div>
-      <div class=row><span>Accounts active</span><b>${f.accounts||0}</b></div></div>`;
+      <div class=row><span>Funded accounts active</span><b>${f.accounts||0}</b></div>
+      ${f.prefix_fallback?`<div class=row><span class=calc>fase uit naam (niet in Accounts-DB)</span><b class=calc>${f.prefix_fallback}</b></div>`:""}</div>`+
+    `<div class=card><div class=ey>Evaluaties — geen geld</div><div class="big calc">${money((s.evals||{}).realized_today||0)}</div>
+      <div class=row><span>Eval accounts active</span><b>${(s.evals||{}).accounts||0}</b></div>
+      <div class=row><span>Trades today</span><b>${(s.evals||{}).trades_today||0}</b></div>
+      <div class=row><span class=calc>telt niet mee in Realized today</span><b></b></div></div>`;
   const rows=s.accounts||[];
+  const PH={funded:"Funded",eval:"Eval (geen geld)",breached:"Breached",unknown:"?"};
   $("#liveTable tbody").innerHTML=rows.map(a=>`<tr><td class=acct>${a.account}</td>
-    <td>${a.phase==="funded"?"Funded":"Eval"}</td>
+    <td>${PH[a.phase]||a.phase}${a.phase_source==="prefix"?' <span class=calc title="niet in Accounts-DB; fase uit naam">*</span>':""}</td>
     <td><span class="pill ${a.open.length?'h-ok':'h-idle'}">${a.status}</span></td>
     <td class=num>${a.open.length||"—"}</td><td class=num>${(a.wins+a.losses)||"—"}</td>
     <td class="num ${cls(a.realized_today)}">${a.realized_today?money(a.realized_today):"—"}</td></tr>`).join("")||'<tr><td colspan=6 class=calc>no activity today</td></tr>';

@@ -11228,7 +11228,7 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
-### 🟦 SM → Middleware App · 05-11 · **57 · Evals tellen in de live app mee als winst — scheiden, en de fase uit de Accounts-DB halen** · status: opdracht, klein
+### 🟦 SM → Middleware App · 05-11 · **57 · Evals tellen in de live app mee als winst — scheiden, en de fase uit de Accounts-DB halen** · status: **geleverd door de SM 05-11 (Ferry wil één aanspreekpunt); Middleware App reviewt achteraf**
 
 **Wat Ferry meldt (05-11):** *"in live in de app worden de evals nog meegerekend als winst terwijl het dat niet is."* Een eval-account kan +$36.414 op een dag laten zien (299 op 02-11, 60 contracten) en dat is geen geld — het is voortgang naar een PA. Alleen funded (PA) accounts leveren geld, en dan nog pas bij uitbetaling.
 
@@ -11236,6 +11236,8 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 **Opdracht.** (1) In de live/dag-weergave van de viewer: totalen, beste/slechtste account en win/loss-tellers **alleen over funded**; evals in een apart blok "Evaluaties — geen geld" met aantal accounts en netto, nooit opgeteld bij het geldcijfer. (2) Gearchiveerde accounts (Accounts-DB `Archived = YES`) niet tonen in de live-lijst. (3) Fase/archief uit de Accounts-DB lezen (cache per run), prefix alleen als fallback mét markering. (4) Dezelfde scheiding in `public_stats.py`/widget is er al (D-74 §3: geen bedragen op evals) — niet aanraken, alleen controleren dat de nieuwe funded-totalen daar niet doorlekken als "all".
 **Acceptatietest:** op een dag met eval-trades (02-11) toont de viewer het funded-totaal zonder 299/292/293 erin, en het eval-blok apart; `pytest middleware/tests` groen. Raakt het live executiepad niet (viewer leest alleen).
+
+**Geleverd (SM, 05-11):** `app/viewer.py` — `account_roster()` leest Account ID/Status/Archived uit de Accounts-DB (NOTION_TOKEN, cache 10 min, nooit fataal), `classify_account()` → funded/eval/breached/unknown + bron (`accounts-db` of `prefix`) + hidden (archived); `build_state()` telt `fleet` alleen over funded (`money_scope: funded`), levert `evals` apart (`note: evaluaties — geen geld`), laat gearchiveerde accounts weg en telt `prefix_fallback`. LIVE-tab: kaart "Funded today (geld)", kaart "Evaluaties — geen geld", fase-label met `*` bij prefix-fallback. Tests: `tests/test_viewer_live.py` (3). Uitrol: `git pull` + `systemctl restart mex-viewer`; de service heeft `NOTION_TOKEN` nodig in zijn EnvironmentFile, anders valt hij op het voorvoegsel terug en zegt dat in de kaart. Review door Middleware App welkom; geen raakpunt met mex-receiver.
 
 ### 🟦 SM → Backtest Setup (cc Analyses & Data) · 05-11 · **56 · D-07 heropend: de registry-commissies zijn ~30% te laag — gemeten op Ferry's eigen fills** · status: opdracht, klein
 

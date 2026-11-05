@@ -12,6 +12,47 @@ uit en zet status op `done` met de commit-hash. Niemand bouwt buiten de eigen ma
 
 ## OPEN
 
+### 🟦 Middleware App → SM · 05-11 · **D-163 + D-137 opgeleverd — Fleet-daily writer staat, commit-poort opengebroken; STAAT IN DE REPO, uitrol op de VPS wacht op Ferry**
+
+**Wat er klaarstaat.**
+
+**(1) Fleet-daily writer (D-163, Fleet Performance).** `middleware/app/fleet_daily.py` leest `EXPORTS_DIR/*Cash_History*.csv` en schrijft per account per handelsdag één rij naar `NOTION_FLEET_DB`: **bruto P&L** (= Σ Trade Paired), **commissies** (= −Σ Commission; de **echte** post, niet $0, niet het Pine-tarief), **netto** (= bruto − commissie + eventuele trading-fees), **aantal trades** en **contracten** (= Σ qty uit `*_Fills.csv`, `null` als die niet beschikbaar zijn). Upsert keyed op `Account + Date` zodat herrunnen idempotent is.
+
+**(2) Niet-trading-mutaties.** Payout, Fund Transaction (initial + reset/activation), Data Fee en soortgelijke events gaan als aparte rijen met `Kind = mutation`, naast de trade-day-rijen in dezelfde database. De Dagstand-taak maakt er een boekingsvoorstel van — wij raden niet welke "Fund Transaction" een reset is en welke een activatie, dat is menselijke interpretatie.
+
+**(3) `cash_ledger.AccountLedger` draagt nu per-dag velden** (`daily_gross`, `daily_commission`, `daily_trade_count`, `mutations`) zonder bestaand gedrag te breken. Alle 5 cash_ledger-tests + 18 payout_rules + 33 playbook + 192 totaal slagen.
+
+**(4) Systemd-units** `middleware/deploy/mex-fleet-daily.service` en `.timer` — dagelijks om 06:00 UTC, ná de CME-settlement (17:00 CT). Zelfde patroon als `mex-runtime-snapshot.timer` en `mex-journal-sync.timer`.
+
+**(5) D-137 dicht — `mex-runtime-snapshot.sh` commit-poort fix.** De oude poort was `git diff --quiet -- docs/runtime-snapshot.md`; die negeert niet-getrackte bestanden, dus zonder eerste commit was er geen diff, dus geen eerste commit (deadlock). Nieuwe poort doet onvoorwaardelijk `git add` en toetst `git diff --cached --quiet`. Nagespeeld in een wegwerp-repo: open op een nieuw bestand ✓, stil op onveranderd ✓, open op wijziging ✓.
+
+**🔴 STAAT IN DE REPO, NOG NIET UITGEROLD.** Dit is leeskant (Tradovate CSV → Notion), geen enkel raakpunt met `mex-receiver`, orders of PMT.
+
+**Nodig op de VPS, als lijst:**
+
+- `cd /root/mex-journal && git pull`
+- In `middleware/.env` toevoegen: `NOTION_FLEET_DB=ae5105393828447e84a1a87d31562d7d`
+  (de token `NOTION_TOKEN` staat er al voor de Trade Journal)
+- `sudo cp middleware/deploy/mex-fleet-daily.{service,timer} /etc/systemd/system/`
+- `sudo systemctl daemon-reload && sudo systemctl enable --now mex-fleet-daily.timer`
+- Voor D-137: `install -m755 /root/mex-journal/middleware/deploy/mex-runtime-snapshot.sh /usr/local/bin/ && systemctl start mex-runtime-snapshot` (de install-stap die op 06-10 overgeslagen is; nu met de werkende commit-poort)
+
+**Als bewijs na installatie (handelingen voor Ferry, geen planning):**
+
+- `systemctl cat mex-fleet-daily.timer mex-fleet-daily.service` — unit-bestanden en pad
+- `systemctl status mex-fleet-daily.timer` — timer actief, volgende OnCalendar
+- `systemctl start mex-fleet-daily.service` — één handmatige run
+- `journalctl -u mex-fleet-daily --since '5 min ago' --no-pager` — ingelezen exports, aantal upserts
+- In Notion: één rij per actief account per dag voor de dagen waar een Cash_History-rij Trade Paired draagt, met een commissiebedrag ≠ 0
+
+**Verwacht gedrag op dag 1 (vandaag).** Als er vandaag al een Cash_History-export in `EXPORTS_DIR` zit met trades van vandaag, schrijft hij één rij per actief account voor vandaag. Als die export er niet is (of pas na de settlement komt), backfill hij alle handelsdagen die wél in de exports staan — Notion dedupeert op `Account + Date`, dus de volgende run schrijft alleen nieuwe dagen.
+
+**Niet in deze release, bewust binnen de kaders:**
+- Trade Journal (`c3e9d05525404849ad484b648c82fd59`): de writer bestaat al in `journal_sync.py` en de timer `mex-journal-sync.timer` ook. Als hij nooit gedraaid heeft is dat dezelfde installatie-stap — meegenomen in de lijst hierboven voor zover dat nog nodig is; de code is onaangeraakt.
+- Tradovate live-P&L-snapshot naar Fleet Performance (`notion_sync.NotionSync.upsert_fleet()`): dat is een ander verhaal dan de dagelijkse rij-per-dag die hier gevraagd werd. Als Ferry er later een wil, is dat een losse release.
+
+---
+
 ### 🟧 Analyses & Data → Pine Dev (cc SM, Backtest Setup) · 03-11 · **instructie voor de volgende EL TESORO-versie (v3.12.0; Ferry noemt hem "3.11"): payout-poort wordt kaart i.p.v. orderblokkade · accountstart los van validFrom · defaults uit oktober en drie jaar (8–23/4, All sessions, 150/50/300 per contract × qty, dagstop 5, giveback-2 50 @ 04:00, legacy-PA-profiel) · visuals moeten de orders volgen · zes acceptatietests** · status: open
 
 _Opdracht Ferry 03-11. Integrale tekst hieronder; ook als bestand bij Ferry._

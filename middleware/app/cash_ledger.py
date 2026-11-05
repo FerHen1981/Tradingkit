@@ -52,6 +52,14 @@ class AccountLedger:
     # net realized per calendar date (Trade Paired + Commission + fees; NOT funding/payouts) —
     # the exact daily P&L the consistency / profit-day rules run on, straight from the broker ledger.
     daily_realized: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    # D-163 — per-dag opsplitsingen voor de Fleet Performance writer. `daily_gross` en
+    # `daily_commission` samen moeten optellen tot `daily_realized`; dat is per constructie zo.
+    daily_gross: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    daily_commission: dict[str, float] = field(default_factory=lambda: defaultdict(float))
+    daily_trade_count: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    # Niet-trading-mutaties (payout, reset, activation, data fee, …) — één dict per event,
+    # door de Dagstand-taak omgezet naar een boekingsvoorstel.
+    mutations: list[dict] = field(default_factory=list)
 
     @property
     def commissions(self) -> float:
@@ -74,6 +82,23 @@ class AccountLedger:
     def daily(self) -> dict[str, float]:
         return {d: round(v, 2) for d, v in self.daily_realized.items()}
 
+    def daily_rows(self) -> list[dict]:
+        """Eén rij per handelsdag voor Fleet Performance — bruto, commissie, netto, trades.
+        Alleen dagen waarop er daadwerkelijk iets getraded is (`trade_count > 0`)."""
+        rows = []
+        for d in sorted(self.daily_trade_count):
+            if self.daily_trade_count[d] <= 0:
+                continue
+            rows.append({
+                "account": self.account,
+                "date": d,
+                "gross_pnl": round(self.daily_gross.get(d, 0.0), 2),
+                "commissions": round(-self.daily_commission.get(d, 0.0), 2),   # positive cost
+                "net_pnl": round(self.daily_realized.get(d, 0.0), 2),
+                "trade_count": int(self.daily_trade_count[d]),
+            })
+        return rows
+
 
 def parse_cash_history(path: str) -> dict[str, AccountLedger]:
     """Aggregate a Cash_History CSV into per-account ledgers (keeps the last running balance)."""
@@ -86,13 +111,39 @@ def parse_cash_history(path: str) -> dict[str, AccountLedger]:
             led = out.setdefault(acct, AccountLedger(account=acct))
             typ = (row.get("Cash Change Type") or "").strip()
             delta = _money(row.get("Delta"))
+            date = (row.get("Date") or "").strip()[:10]
             led.by_type[typ] += delta
             if _is_payout(typ):
                 led.n_payouts += 1
-            elif not _is_funding(typ):                # trading deltas (Trade Paired, Commission, fees)
-                date = (row.get("Date") or "").strip()
+                # D-163 — payout/withdrawal gaat als aparte mutation-rij door; de Dagstand
+                # maakt er een boekingsvoorstel van.
+                led.mutations.append({"account": acct, "date": date, "type": typ,
+                                      "delta": round(delta, 2),
+                                      "txid": (row.get("Transaction ID") or "").strip()})
+            elif _is_funding(typ):
+                # Fund Transaction = initial fund of een reset/activation. Niet trading →
+                # aparte rij in de Dagstand (reset vs activatie is pas na mens-interpretatie
+                # te onderscheiden; type-naam blijft ruw doorgaan).
+                led.mutations.append({"account": acct, "date": date, "type": typ,
+                                      "delta": round(delta, 2),
+                                      "txid": (row.get("Transaction ID") or "").strip()})
+            else:
+                # Trading deltas (Trade Paired, Commission, Data Fee, etc.).
                 if date:
                     led.daily_realized[date] += delta
+                    tlow = typ.lower()
+                    if tlow == "trade paired":
+                        led.daily_gross[date] += delta
+                        led.daily_trade_count[date] += 1
+                    elif tlow == "commission":
+                        led.daily_commission[date] += delta   # negative = cost
+                    else:
+                        # Data fee, overnight fee, andere trading-gerelateerde kosten: ze
+                        # tellen mee in netto (daily_realized) maar niet in bruto of
+                        # commissies — zet ze als mutation zodat ze toch zichtbaar zijn.
+                        led.mutations.append({"account": acct, "date": date, "type": typ,
+                                              "delta": round(delta, 2),
+                                              "txid": (row.get("Transaction ID") or "").strip()})
             amt = _money(row.get("Amount"))
             if amt:
                 led.balance = amt          # rows are chronological → last wins

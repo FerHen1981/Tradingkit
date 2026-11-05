@@ -85,9 +85,16 @@ mv "$OUT.tmp" "$OUT"
 cat "$OUT"
 
 # Committen mag mislukken — het bestand staat er dan nog steeds en journalctl toont het.
+#
+# D-137 — poort op de INDEX, niet op het werkboomdiff. `git diff --quiet` negeert
+# niet-getrackte bestanden: op de eerste run bestaat er geen diff, dus zonder
+# `git add` vooraf blijft de poort permanent dicht ("deadlock: zonder commit geen
+# diff, zonder diff geen commit"). We `git add` het bestand onvoorwaardelijk en
+# controleren `git diff --cached --quiet`; die opent wél op een nieuw bestand én
+# blijft stil als niets wijzigt sinds de vorige ronde.
 if git -C "$REPO" rev-parse --git-dir >/dev/null 2>&1; then
-  if ! git -C "$REPO" diff --quiet -- docs/runtime-snapshot.md 2>/dev/null; then
-    git -C "$REPO" add docs/runtime-snapshot.md
+  git -C "$REPO" add docs/runtime-snapshot.md
+  if ! git -C "$REPO" diff --cached --quiet -- docs/runtime-snapshot.md 2>/dev/null; then
     git -C "$REPO" -c user.name="mex-mw-01" -c user.email="ops@mex-traders.com" \
         commit -q -m "runtime-snapshot: $(date -u '+%Y-%m-%d %H:%M UTC')" \
       && git -C "$REPO" push -q origin HEAD 2>/dev/null \

@@ -1,4 +1,4 @@
-# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok (v3.13.8) en Middleware-blok (D-163) vervangen 04-11
+# Paste-klare startprompts — ronde 08-10 (avond) · Pine Dev-blok (v3.13.8) en Middleware-blok (D-163) vervangen 04-11 · D-165 toegevoegd 05-11
 
 _Eigenaar: Scrum Master. Eén blok per chat, letterlijk plakken. Eén release van maximaal
 een dag per chat, met een acceptatietest (besluit Ferry 08-10: kleine releases boven
@@ -156,6 +156,15 @@ systemctl-bewijs er is. Twee dingen intussen, allebei klein:
 2. Na Ferry's uitrol: journalctl + Notion-rijen nalopen en melden; dan pas ik de PA-taken aan
    zodat ze Fleet Performance lezen en de eigen commissieberekening laten vallen.
 Geen raakpunt met mex-receiver, orders of PMT. Geen saldi of accountnummers in de repo.
+
+NIEUW 05-11 — D-165 (inbox 55, lees die eerst): het Trade Journal boekt PA/eval op het
+account-voorvoegsel en '(Intraday)' staat hardcoded; Ferry heeft besloten dat de
+Accounts-DB de waarheid is, maar die is leeg voor alle 32 live accountpagina's.
+Volgorde: (1) accounts_fill.py --dry-run met een voorstel per lege accountpagina,
+lijst gaat via de SM in het Approval-item; schrijven pas na Ferry's bevestiging;
+(2) writer leest Account Type van de accountpagina en gokt niet meer (leeg + notitie
+als het ontbreekt); (3) journal_retag.py, dry-run met telling per type vóór/ná.
+Stap 1 nu; 2 en 3 bouwen mag, draaien niet vóór de lijst bevestigd is.
 ```
 
 ---

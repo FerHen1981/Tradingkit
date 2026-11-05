@@ -11228,6 +11228,15 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Middleware App · 05-11 · **57 · Evals tellen in de live app mee als winst — scheiden, en de fase uit de Accounts-DB halen** · status: opdracht, klein
+
+**Wat Ferry meldt (05-11):** *"in live in de app worden de evals nog meegerekend als winst terwijl het dat niet is."* Een eval-account kan +$36.414 op een dag laten zien (299 op 02-11, 60 contracten) en dat is geen geld — het is voortgang naar een PA. Alleen funded (PA) accounts leveren geld, en dan nog pas bij uitbetaling.
+
+**Waar het zit (gelezen, niet gedraaid):** `middleware/app/viewer.py` r. 160–185: `realized_today`, `wins/losses`, `gross_win`/`gross_loss` sommeren over álle rijen; de sortering zet funded vooraan maar de totalen mengen. `dashboard_state.py` kent al `stacks: all/funded/eval` en `_account_type()` op prefix (D-74), maar het live-blok gebruikt dat niet. Fase komt uit `_phase()` = prefix `PA`/`PAAPEX` — na D-165 is de **Accounts-DB** de bron (Status `Funded Account` / `Active Eval`, `Archived`), niet de naam.
+
+**Opdracht.** (1) In de live/dag-weergave van de viewer: totalen, beste/slechtste account en win/loss-tellers **alleen over funded**; evals in een apart blok "Evaluaties — geen geld" met aantal accounts en netto, nooit opgeteld bij het geldcijfer. (2) Gearchiveerde accounts (Accounts-DB `Archived = YES`) niet tonen in de live-lijst. (3) Fase/archief uit de Accounts-DB lezen (cache per run), prefix alleen als fallback mét markering. (4) Dezelfde scheiding in `public_stats.py`/widget is er al (D-74 §3: geen bedragen op evals) — niet aanraken, alleen controleren dat de nieuwe funded-totalen daar niet doorlekken als "all".
+**Acceptatietest:** op een dag met eval-trades (02-11) toont de viewer het funded-totaal zonder 299/292/293 erin, en het eval-blok apart; `pytest middleware/tests` groen. Raakt het live executiepad niet (viewer leest alleen).
+
 ### 🟦 SM → Backtest Setup (cc Analyses & Data) · 05-11 · **56 · D-07 heropend: de registry-commissies zijn ~30% te laag — gemeten op Ferry's eigen fills** · status: opdracht, klein
 
 `backtest/config.py` `CONTRACTS` draagt MGC 0,52 en MES/MNQ/MYM/M2K 0,37 per kant. Het Trade Journal bevat 520 rijen uit Ferry's Tradovate-export (aug 2026) mét echte commissies: MGC 1.312 contracten → $1.758,08 = **$1,34 round-turn ($0,67 per kant)**; MES 130 contracten → $135,20 = **$1,04 ($0,52 per kant)**; NQ/ES $3,10 ($1,55); GC $3,54 ($1,77). Dat is ook exact de Apex-helpcenter-tabel voor Tradovate. D-07 zei al: 'de FLEET-validatie mat 0,67'. Opdracht: (1) registry op de gemeten waarden (MGC 0,67 · micro-index 0,52 · ES/NQ 1,55 · GC 1,77), met de bron in de docstring; (2) meld in je antwoord welke sweep-/validatiecijfers hiermee verschuiven (PF en payout-$ per account-dag dalen); (3) **niet** opnieuw sweepen zonder opdracht — eerst de lijst. Pine Dev: `commission_value` in de 13 scripts draagt 0,51/0,52 — dat is een aparte beslissing van Ferry (freeze-klok), dus alleen melden.

@@ -11245,6 +11245,12 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 **Acceptatietest.** Een eval-trade van vandaag staat na de run op Eval, een PA-trade op PA; de twee tellingen staan in het inbox-item; `pytest middleware/tests` groen.
 
+**Aanvulling 05-11 (na Ferry's antwoord).** De bron is besloten: **de Accounts-DB** (`collection://1ddb61ea-444d-8129-bb50-000b8e13e812`, relatie `Account Type` → Account Types, select `Status`). Maar: alle 32 automatisch aangemaakte accountpagina's zijn leeg (geen type, geen status, geen strategy) — jouw `_resolve_relation` maakt ze met alleen de titel. Daarom drie stappen, in deze volgorde:
+1. `middleware/app/accounts_fill.py --dry-run`: lees alle accountpagina's zonder `Account Type`; print per account een voorstel (stage uit de per-account config van `mex-receiver` als die dat kent, anders uit het voorvoegsel; EOD/Intraday idem; bij twijfel `onbekend`). Ik zet die lijst in het Approval-item; Ferry bevestigt of corrigeert; daarna `--apply` schrijft `Account Type` (relatie) + `Status` (`Active Eval` / `Funded Account`). Nooit schrijven zonder bevestigde lijst.
+2. Writer: `to_record` haalt `Account Types` uit de accountpagina (één fetch per account per run, cachen). Ontbreekt het type: `Account Types` leeg laten, Framework leeg laten, en in Notes `type ontbreekt in Accounts-DB` toevoegen. Geen voorvoegsel-fallback meer.
+3. `journal_retag.py` zoals hierboven, pas na stap 1.
+Start met stap 1 nu; stap 2 en 3 kunnen parallel gebouwd maar niet gedraaid worden vóór de lijst bevestigd is.
+
 ### 🟦 SM → Middleware App · 04-11 · **54 · D-163: de Notion-schrijfkant laten draaien — de enige blokkade voor een MEX-dagstand met echte P&L** · status: opdracht
 
 Ferry heeft 04-11 besloten (optie B, D-164): één MEX-dagstand in Notion, dagelijks geschreven

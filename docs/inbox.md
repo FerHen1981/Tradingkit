@@ -11228,6 +11228,10 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Backtest Setup (cc Analyses & Data) · 05-11 · **56 · D-07 heropend: de registry-commissies zijn ~30% te laag — gemeten op Ferry's eigen fills** · status: opdracht, klein
+
+`backtest/config.py` `CONTRACTS` draagt MGC 0,52 en MES/MNQ/MYM/M2K 0,37 per kant. Het Trade Journal bevat 520 rijen uit Ferry's Tradovate-export (aug 2026) mét echte commissies: MGC 1.312 contracten → $1.758,08 = **$1,34 round-turn ($0,67 per kant)**; MES 130 contracten → $135,20 = **$1,04 ($0,52 per kant)**; NQ/ES $3,10 ($1,55); GC $3,54 ($1,77). Dat is ook exact de Apex-helpcenter-tabel voor Tradovate. D-07 zei al: 'de FLEET-validatie mat 0,67'. Opdracht: (1) registry op de gemeten waarden (MGC 0,67 · micro-index 0,52 · ES/NQ 1,55 · GC 1,77), met de bron in de docstring; (2) meld in je antwoord welke sweep-/validatiecijfers hiermee verschuiven (PF en payout-$ per account-dag dalen); (3) **niet** opnieuw sweepen zonder opdracht — eerst de lijst. Pine Dev: `commission_value` in de 13 scripts draagt 0,51/0,52 — dat is een aparte beslissing van Ferry (freeze-klok), dus alleen melden.
+
 ### 🟦 SM → Middleware App · 05-11 · **55 · D-165: PA/eval-markering in het Trade Journal — logica uit één bron, plus correctiescript; wacht op één voorbeeld van Ferry** · status: opdracht, start pas na het voorbeeld
 
 **Wat Ferry meldt.** "Iedere trade wordt als PA-trade geboekt, ook de eval-trades." Hij wil (a) de logica aangepast en (b) de bestaande data gecorrigeerd.
@@ -11250,6 +11254,8 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 2. Writer: `to_record` haalt `Account Types` uit de accountpagina (één fetch per account per run, cachen). Ontbreekt het type: `Account Types` leeg laten, Framework leeg laten, en in Notes `type ontbreekt in Accounts-DB` toevoegen. Geen voorvoegsel-fallback meer.
 3. `journal_retag.py` zoals hierboven, pas na stap 1.
 Start met stap 1 nu; stap 2 en 3 kunnen parallel gebouwd maar niet gedraaid worden vóór de lijst bevestigd is.
+
+**Aanvulling 2 (05-11, na Ferry):** 'het zijn allemaal intraday legacy accounts' → typepagina's 'Apex 50k Eval (Legacy)' / 'Apex 50k PA (Legacy)' (plus 250k/25k Eval (Legacy) voor 7 evals; welke nummers vraag ik Ferry). **Stap 1 doet de SM zelf** zodra Ferry de twee open feiten geeft; jouw `accounts_fill.py` vervalt. Jouw script wordt `journal_retag.py` met twee taken: (a) `Account Types` + `Framework` uit de accountpagina; (b) **Commissions vullen** op elke rij met Commissions = 0 of leeg: PositionSize × round-turn-tarief per contract-root — MGC $1,34 · MES/MNQ/MYM/M2K $1,04 · ES/NQ $3,10 · GC $3,54 (gemeten op de CSV-import-rijen in hetzelfde journaal; D-163's Cash_History-commissies overschrijven dit later per dag). Dry-run print per contract-root: rijen, contracten, som commissie. Zelfde rate-limit-discipline als notion_prune.py.
 
 ### 🟦 SM → Middleware App · 04-11 · **54 · D-163: de Notion-schrijfkant laten draaien — de enige blokkade voor een MEX-dagstand met echte P&L** · status: opdracht
 

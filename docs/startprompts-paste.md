@@ -157,14 +157,23 @@ systemctl-bewijs er is. Twee dingen intussen, allebei klein:
    zodat ze Fleet Performance lezen en de eigen commissieberekening laten vallen.
 Geen raakpunt met mex-receiver, orders of PMT. Geen saldi of accountnummers in de repo.
 
-NIEUW 05-11 — D-165 (inbox 55, lees die eerst): het Trade Journal boekt PA/eval op het
-account-voorvoegsel en '(Intraday)' staat hardcoded; Ferry heeft besloten dat de
-Accounts-DB de waarheid is, maar die is leeg voor alle 32 live accountpagina's.
-Volgorde: (1) accounts_fill.py --dry-run met een voorstel per lege accountpagina,
-lijst gaat via de SM in het Approval-item; schrijven pas na Ferry's bevestiging;
-(2) writer leest Account Type van de accountpagina en gokt niet meer (leeg + notitie
-als het ontbreekt); (3) journal_retag.py, dry-run met telling per type vóór/ná.
-Stap 1 nu; 2 en 3 bouwen mag, draaien niet vóór de lijst bevestigd is.
+NIEUW 05-11 — drie opdrachten, lees inbox 55 (met aanvullingen 3 en 4) en inbox 57 eerst.
+A. Inbox 57 (klein, EERST): de live weergave van de viewer telt evals mee als winst.
+   viewer.py r. 160–185 sommeert over alle rijen. Totalen, beste/slechtste en win/loss alleen
+   over funded; evals in een apart blok "Evaluaties — geen geld"; gearchiveerde accounts weg;
+   fase en archief uit de Accounts-DB (collection 1ddb61ea-444d-8129-bb50-000b8e13e812,
+   Status Funded Account / Active Eval, Archived), prefix alleen als fallback mét markering.
+   Lever als losse commit + de twee regels voor de VPS (git pull + systemctl restart
+   mex-viewer). Raakt het executiepad niet.
+B. Inbox 55, stap 2: de writer leest Account Type/Stage van de accountpagina (stap 1 is
+   gedaan door de SM op 05-11: alle 101 pagina's hebben een type; de 8 breaches staan erop).
+   Nieuwe pagina's die de writer aanmaakt krijgen een type of leeg + notitie, nooit een gok.
+C. Inbox 55, stap 3 + aanvulling 4: journal_retag.py. Let op: op Custom-Executor-rijen is
+   Gross PnL al netto van $1,04 per contract (Pine-commissie 0,52/kant). De retag zet
+   Gross PnL terug naar bruto (+ qty × 2 × 0,52) én vult Commissions op het Apex-tarief
+   (MGC 0,67 · micro-index 0,52 · ES/NQ 1,55 · GC 1,77 per kant). Alleen Commissions vullen
+   is fout: dan trekt de Net-formule het dubbel af. Dry-run met tellingen per Source eerst.
+Geen raakpunt met mex-receiver, orders of PMT. Geen saldi of accountnummers in de repo.
 ```
 
 ---

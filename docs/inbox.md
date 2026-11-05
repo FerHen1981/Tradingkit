@@ -11228,6 +11228,23 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Middleware App · 05-11 · **55 · D-165: PA/eval-markering in het Trade Journal — logica uit één bron, plus correctiescript; wacht op één voorbeeld van Ferry** · status: opdracht, start pas na het voorbeeld
+
+**Wat Ferry meldt.** "Iedere trade wordt als PA-trade geboekt, ook de eval-trades." Hij wil (a) de logica aangepast en (b) de bestaande data gecorrigeerd.
+
+**Wat ik vond (lees het Trade Journal niet opnieuw uit, de SQL-quota is tot ~06:30Z op):**
+- Writer: `middleware/app/routed_journal.py` via `mex-routed-journal.timer` (`Source = Custom Executor`). Fase = `_phase(account)` op voorvoegsel `PAAPEX`/`APEX`; type = f"Apex 50k {'PA'|'Eval'} (Intraday)" (regel ~366), Framework uit `FRAMEWORK[(asset, phase)]`.
+- Trade Journal nu: 5.399 Custom-Executor-rijen → `Account Types` = 'Apex 50k PA (Intraday)' (`3b6b61ea444d80eba728d1bf81fc65c7`, Stage funded, Firm Program `apex_intraday_pa`), 363 → 'Apex 50k Eval (Intraday)' (`3b6b61ea444d8038b417e9f60a91aa7c`, Stage eval), 5 rijen zonder `acct=` in Notes. CSV-import (NotionSync.cs): 520 PA / 2 eval, t/m 14-08.
+- Dus: het veld `Account Types` onderscheidt al. Welk veld Ferry als 'alles PA' ziet weet ik nog niet; ik heb hem om één voorbeeld-trade-ID gevraagd. **Niet raden** — wacht op dat voorbeeld voor je de rule kiest.
+
+**Wat zeker fout is, ongeacht het voorbeeld.**
+1. `(Intraday)` is hardcoded; de PA-accounts zijn EOD-PA's (D-66: Apex 4.0 $2.000 trailing). De typenaam en daarmee de relatie klopt dus niet voor de PA-rijen.
+2. De fase is een naam-gok. Eén bron kiezen: de Accounts-DB (`collection://1ddb61ea-444d-8129-bb50-000b8e13e812`, `Account Type` limit 1, `Status` Active Eval/Funded Account/Milking) of de per-account config in `mex-receiver` (`Config.cs` account-id → config). Mijn voorkeur: de Accounts-DB, want die is wat Ferry ziet en bijhoudt; val terug op het voorvoegsel alleen als de account-pagina geen type heeft, en log dat.
+
+**Opdracht (na het voorbeeld).** (1) `routed_journal.to_record` en `journal_sync` halen fase + Account Types uit die ene bron; (2) een correctiescript `middleware/app/journal_retag.py`: leest alle rijen met `Source = Custom Executor`, bepaalt het juiste type, `--dry-run` print de telling per (huidig type → nieuw type), zonder flag schrijft hij alleen de relatie `Account Types` (en `Framework` als die van fase afhangt), niets anders; (3) telling vóór/ná in je inbox-antwoord. ⛔ Geen raakpunt met orders/PMT; `NOTION_TOKEN` blijft in `.env`; geen accountnummers in de repo (in Notes staan ze al, dat is Notion).
+
+**Acceptatietest.** Een eval-trade van vandaag staat na de run op Eval, een PA-trade op PA; de twee tellingen staan in het inbox-item; `pytest middleware/tests` groen.
+
 ### 🟦 SM → Middleware App · 04-11 · **54 · D-163: de Notion-schrijfkant laten draaien — de enige blokkade voor een MEX-dagstand met echte P&L** · status: opdracht
 
 Ferry heeft 04-11 besloten (optie B, D-164): één MEX-dagstand in Notion, dagelijks geschreven

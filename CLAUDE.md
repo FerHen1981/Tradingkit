@@ -105,6 +105,13 @@ firm/asset/volume/channel; not identical mirroring. Channels:
   18-09, D-20): *Fleet Performance* **0 rijen** · *Trade Journal* **0 rijen** ·
   *Reconciliation* 334 rijen die **alle van 19-08** zijn, één handmatige schrijfactie en
   daarna niets. **De LifeOS-schrijfkant heeft nooit automatisch gedraaid.**
+  ✏️ **Gecorrigeerd 05-11 (D-163):** er is inmiddels een Trade Journal dat wél automatisch
+  gevuld wordt — `collection://1ddb61ea-444d-8136-8cd1-000b89919d64` (`Sync Status = Auto`,
+  `Source = Custom Executor`), met Gross PnL, slippage, MFE/MAE en het account in Notes. Wat nog
+  ontbreekt: `Commissions` (overal 0), de Dagbalans (`353af0a8-…`, leeg) en payout/reset-
+  herkenning; `fleet_daily.py` (Middleware App, 05-11) vult dat zodra hij op de VPS staat. Tot
+  die tijd rekenen de dagtaken de commissie zelf (MGC $0,52 · MES/MNQ/MYM $0,37 per contract per
+  kant) en noemen dat "berekend, niet afgerekend".
   Gevolg: er is **geen geautomatiseerde saldobron** — dat funded-saldo in D-74 een
   handmatige `verified_amount` is, volgt hieruit en is geen tijdelijke noodgreep.
   Zie D-03 (de reconciliatie-timer) en D-74.
@@ -117,7 +124,11 @@ en rekent MEX-cijfers niet meer zelf uit. **Boekingen in WealthOS gaan altijd ee
 in de Approval Queue** (`🛠️ MEX — Boeking: …`) en pas na Ferry's akkoord; nooit direct. Outlook
 en Recap gaan als tekst-draft (zonder screenshots) naar de Content Hub. Cijfers zonder bron
 worden niet opgeschreven: zolang D-163 open is staat er "geen fills-bron" bij de P&L.
-Prompts en instellingen van de taken: `docs/dagstand-taak.md`.
+De pagina wordt gevuld door de **bestaande** geplande Chat-taken *PA · Dagstart* (06:17) en
+*PA · Dagafsluiting* (21:11); Outlook en Recap door *Daily Outlook 07:00* en *Daily Recap 22:00*.
+Register en originele prompts: `docs/scheduled-tasks/`. ⚠️ De PA in die taken is **Claude**
+("Chief of Staff (Claude, Ferry's enige AI-spreekbuis)"); of de CoS nog op ChatGPT draait zoals
+hieronder staat (spec 21-08) is sinds 05-11 onzeker en nog niet door Ferry bevestigd.
 
 Sinds 25-08 zit er boven de MEX Scrum Master een overkoepelende Claude-rol:
 de **Chief LifeOS Officer (CLO)** — zie `.claude/skills/chief-lifeos-officer/SKILL.md`.

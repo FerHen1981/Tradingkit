@@ -1,0 +1,18 @@
+{
+  "_comment": "Live Tradovate accounts to export Fills CSVs for. Edit this list as the fleet changes; MEX_ACCOUNTS env overrides it. Eval = APEX...; Funded PA = PAAPEX...",
+  "accounts": [
+    "APEX27002500000205",
+    "APEX27002500000207",
+    "APEX27002500000208",
+    "APEX27002500000209",
+    "APEX27002500000210",
+    "APEX27002500000211",
+    "PAAPEX2700250000013",
+    "PAAPEX2700250000015",
+    "PAAPEX2700250000016",
+    "PAAPEX2700250000017",
+    "PAAPEX2700250000018",
+    "PAAPEX2700250000019",
+    "PAAPEX2700250000020"
+  ]
+}

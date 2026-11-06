@@ -1,0 +1,11 @@
+# Framework demo · variant 4 — SILVER BULLET confluence (Level C).
+# FVG primary inside ICT kill-zones, requiring a prior liquidity sweep + VWAP
+# bias. A fundamentally different, multi-gate thesis from v1-v3.
+name: v4_silver_bullet
+base_asset: NQ
+base_preset: EL_SILVER
+setup_class: confluence
+groups:
+  silver_bullet: {}
+  fvg: {}
+  swing_stops: {}

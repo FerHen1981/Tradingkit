@@ -1,0 +1,13 @@
+# Runs the Trade Journal sync every 5 minutes → near-real-time journalling.
+# Enable with: sudo systemctl enable --now mex-journal-sync.timer
+[Unit]
+Description=Run MEX Trade Journal sync every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=mex-journal-sync.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Doelconfiguratie — v3.13.0</title><style>
+body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#111;margin:18px}
+h1{font-size:18px;margin:0 0 4px} h2{font-size:13px;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:2px}
+h3{font-size:11px;margin:10px 0 4px} p{margin:4px 0} .sub{color:#555;font-size:9.5px}
+table{border-collapse:collapse;width:100%;margin:4px 0 8px} th,td{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+th{background:#eee} .k{background:#fff7d6} .r{color:#a00;font-weight:bold} .g{color:#070;font-weight:bold} .m{color:#777}
+.box{border:1px solid #999;padding:6px 8px;margin:6px 0;background:#fafafa}
+@media print{h2{page-break-after:avoid} table{page-break-inside:auto} tr{page-break-inside:avoid}}
+</style></head><body>
+<h1>MEX Traders — doelconfiguratie op het nieuwe script (v3.13.0)</h1>
+<p class="sub">Bron: instructie Analyses & Data 03-11 (A-101, tabel B), bevroren config El Tesoro na jouw akkoord 03-11 (frozen-engines.md), ruimte-ladder A-90, SM-besluiten D-161. Status van de getallen: <b>indicatief</b> tot Backtest Setup de vier ontbrekende velden in de pijplijn-vertaling toevoegt en de pariteitsaudit herhaalt (motor paart 92%, de vertaling nog niet). Elke nieuwe versie zet de out-of-sample-klok op nul.</p>
+
+<h2>1. Vóór je iets plakt — wat Pine Dev nog levert (v3.13.0)</h2>
+<div class="box">v3.12.0 compileert niet (regel 827). v3.13.0 = dezelfde inhoud + de compile-patch + tabel B als defaults op <b>El Tesoro</b> + een const-check in de lint. <b>Plak pas v3.13.0.</b> De vier TORO-evalscripts veranderen niet.</div>
+
+<h2>2. El Tesoro — de ene config voor alle 19 MGC-accounts (chart A, B en C worden één)</h2>
+<table><tr><th>Groep</th><th>Input</th><th>Doel</th><th>Nu op de charts</th><th>Waarom</th></tr>
+<tr><td rowspan="5">Entries</td><td>Market regime</td><td class="g">All sessions</td><td>A/B: All sessions · C: Custom</td><td>Liquidity Core is over drie jaar de slechtste set; "All sessions" is geen vensterknop maar de afwezigheid ervan (D-152/D-155)</td></tr>
+<tr><td>Min / Max FVG Size</td><td class="g">8 / 23</td><td>A: 8–23 · B/C: 4–11</td><td>enige entry-set met driejaarsmeting én 92% Pine-pariteit (A-88); 4–11 nooit over drie jaar gemeten</td></tr>
+<tr><td>Confirmation window</td><td class="g">4</td><td>A: 4 · B/C: 1</td><td>idem</td></tr>
+<tr><td>Use Delta Filter</td><td class="g">uit</td><td>A: proxy · B/C: TV-delta streak 3</td><td>geen echte order-flow in de datasets; TV-delta leverde in oktober niets meetbaars</td></tr>
+<tr><td>Limit expiry · VWAP veto</td><td>12 · aan</td><td>ongewijzigd</td><td></td></tr>
+<tr><td rowspan="2">Exits</td><td>Take-Profit Mode / TP</td><td class="g">Fixed (units) · 85</td><td>85 (al zo op alle charts)</td><td>TP 120 = snelheidsvariant met hogere breach; blijft een keuze per chart</td></tr>
+<tr><td>Fixed Stop / Max Stop</td><td>100 / 100</td><td>ongewijzigd</td><td></td></tr>
+<tr><td rowspan="3">Dagguards</td><td>Day-profit exit · model</td><td>Trail + cap · Activation + giveback</td><td>ongewijzigd</td><td></td></tr>
+<tr><td>activation / giveback / cap</td><td class="g">150 / 50 / 300 <b>per contract</b> — script × qty</td><td>per ct ingevuld als totalen (018: 600/300/1.200)</td><td>v3.12.0 rekent zelf × qty. <span class="r">Opgeslagen totalen worden daardoor ×qty te ruim — één keer terugzetten per chart; de chart waarschuwt in oranje.</span></td></tr>
+<tr><td>Giveback-2 · vanaf</td><td class="g">50 · 04:00 ET</td><td>uit</td><td>na 04:00 ET is de rest van de dag negatief; in beide meetvensters positief (A-89)</td></tr>
+<tr><td rowspan="3">Dagstops</td><td>Max verliezen op rij per dag</td><td class="g">5</td><td>uit (v3.10 heeft ze niet)</td><td>in geen enkel jaar slechter dan nu; breach 24 → 5,8% in het laatste jaar bij hogere hit (A-92/A-97)</td></tr>
+<tr><td>Max winsten op rij per dag</td><td>0 · <b>gelockt met ruimte &lt; $3.000: 3</b></td><td>—</td><td>dodelijk voor verse accounts, het beste voor gelockte met weinig ruimte (A-94)</td></tr>
+<tr><td>Eerste verlies boven +X</td><td>0 · bij TP 120: 150</td><td>—</td><td>A-92</td></tr>
+<tr><td rowspan="5">Account</td><td>Account phase</td><td class="g">Funded</td><td>Developer op 018/031/032/034/037</td><td>de payout-poort blokkeert geen orders meer, dus Developer is niet meer nodig als omweg — en Developer zet álle remmen uit</td></tr>
+<tr><td><b>Account start</b> (nieuw)</td><td class="g">de échte startdatum van het account</td><td>bestaat niet (telde sinds 1 jan / validFrom)</td><td>niet ingevuld = de chart handelt niet, met oranje label</td></tr>
+<tr><td>Firm program</td><td class="g">apex_50k_legacy_pa</td><td>B: intraday_eval · C: eod_pa</td><td>legacy-PA-regels (cap $2.000 t/m #5, vanaf #6 geen cap). <span class="r">036/300K: wacht op een registry-regel voor 300K</span></td></tr>
+<tr><td>Owner DLL</td><td>aan, 100 × 4 × qty</td><td>ongewijzigd</td><td></td></tr>
+<tr><td>Daily risk-gate</td><td class="g">uit</td><td class="r">AAN op 031/032</td><td>kostte ≈ $400/ct in oktober; de dagstops doen dit beter</td></tr>
+<tr><td>Kaart</td><td>PAYOUT READY</td><td>kaart + "script-balans, niet Apex"</td><td>werd als toestemming gelezen</td><td></td></tr></table>
+<p class="sub">Tweede preset voor accounts waar dag-gelijkmatigheid vóór snelheid gaat: day-trail <b>100 / 33 / 200 per contract</b> — 036 draaide dit in oktober met 9 van 9 winstdagen bij dezelfde netto per contract. Per chart te kiezen, geen default.</p>
+
+<h2>3. Qty per account — uit de ruimte, niet uit de balans (A-90)</h2>
+<table><tr><th>Drawdown-ruimte tot liquidatie</th><th>Qty</th><th>Extra</th></tr>
+<tr><td>≥ $4.500</td><td>3</td><td></td></tr><tr><td>≥ $3.000</td><td>2</td><td>gelockt: winsten-stop 3</td></tr><tr><td>$1.300 – $3.000</td><td>1</td><td></td></tr><tr><td>&lt; $1.300</td><td>1</td><td>+ dagstop</td></tr></table>
+<p>Gevolg nu: <b>018 van 4 naar 3</b> (ruimte &lt; 6.000). Ruimte = balans − liquidatieniveau; vóór de lock trailt het niveau de piek, ná de lock is het start + $100.</p>
+
+<h2>4. Per chart — de handelingen, in afhankelijkheidsvolgorde</h2>
+<table><tr><th>#</th><th>Handeling</th><th>Geldt voor</th></tr>
+<tr><td>1</td><td>v3.13.0 plakken (niet v3.12.0)</td><td>alle 19 MGC-charts</td></tr>
+<tr><td>2</td><td><b>Account start</b> invullen met de echte startdatum</td><td>alle 19 — 013/018/022: 20-10-2026 · 031/034: 19-10-2026 · rest: jouw datum</td></tr>
+<tr><td>3</td><td>Dagguards terug op de defaults (150/50/300) — opgeslagen totalen weghalen</td><td>018 zeker; elke chart die ooit met de hand ×qty is gezet</td></tr>
+<tr><td>4</td><td>Market regime → All sessions · FVG 8/23 · venster 4 · Delta uit</td><td>B en C (013, 018, 022, 031, 032, 034, 035, 036, 037–041); A staat al zo</td></tr>
+<tr><td>5</td><td>Firm program → apex_50k_legacy_pa</td><td>B en C; <b>036 niet</b> tot de 300K-regel in de registry staat</td></tr>
+<tr><td>6</td><td>Daily risk-gate uit</td><td>031 · 032</td></tr>
+<tr><td>7</td><td>Qty volgens de ruimte-ladder</td><td>018 → 3; overige: zie jouw ruimte per account</td></tr>
+<tr><td>8</td><td>Account phase → Funded</td><td>018 · 031 · 032 · 034 · 037 en elke andere Developer-chart</td></tr>
+<tr><td>9</td><td>Controle: statuskaart meldt <i>realized</i> binnen commissie-afstand van Tradovate sinds de startdatum; volgende signaal stuurt een PMT-order ("Order Placed") ook als er "PAYOUT READY" naast staat</td><td>één chart in Funded boven de drempel</td></tr></table>
+
+<h2>5. Wat niet verandert</h2>
+<p>De vier EL TORO-evalscripts (A-75). PATRON, MATADOR, REY, LEON, BANDIDO houden hun eigen bevroren entry-banden — tabel B is een <b>El Tesoro/MGC</b>-meting; alleen de per-contract-guards en de compile-patch zijn vlootbreed.</p>
+
+<h2>6. Voorbehouden</h2>
+<p>• "Indicatief" tot de pariteitsaudit van de pijplijn gesloten is (vier velden in <code>_PROP_MAP</code>, Backtest Setup). • Chart B's 4–11/venster 1 is nooit over drie jaar gemeten; oktober kon A en B niet scheiden (negen dagen, binnen de ruis). Analyses & Data meet 4–11 zodra het 3-jaars MGC-bestand als release-asset beschikbaar is. • Dagstop-cijfers komen uit de engine, niet uit Pine. • Jaar 1 is voor élke set dood: geen verse payout binnen 60 dagen — de verse-accounteconomie rust op jaar 2–3.</p>
+</body></html>

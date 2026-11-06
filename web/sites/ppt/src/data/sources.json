@@ -1,0 +1,119 @@
+{
+  "_comment": "Bronregister voor de begrippenlijst. Elke bron staat hier één keer; een begrip verwijst er met een id naar. Zo blijft een citatie consistent over alle pagina's en is een dode link op één plek te repareren. `retrieved` is de datum waarop de inhoud daadwerkelijk is nagelopen — niet de datum waarop de bron is gepubliceerd.",
+  "sources": {
+    "cme-rulebook-gold": {
+      "title": "COMEX Rulebook, Chapter 113 — Gold Futures",
+      "publisher": "CME Group",
+      "url": "https://www.cmegroup.com/rulebook/COMEX/1a/113.pdf",
+      "kind": "reglement",
+      "retrieved": "2026-08-15",
+      "note": "Artikel 113102.B en 113102.C: contractomvang 100 troy ounce, minimum prijsfluctuatie $0,10 per troy ounce."
+    },
+    "cme-ticks": {
+      "title": "Tick Movements: Understanding How They Work",
+      "publisher": "CME Group",
+      "url": "https://www.cmegroup.com/education/courses/introduction-to-futures/tick-movements-understanding-how-they-work",
+      "kind": "beurs",
+      "retrieved": "2026-08-15",
+      "note": "Definitie van tick en tick size, met de rekenvoorbeelden voor E-mini S&P 500 ($12,50) en WTI ruwe olie ($10)."
+    },
+    "cme-emini-sp": {
+      "title": "E-mini S&P 500 Futures — Contract Specifications",
+      "publisher": "CME Group",
+      "url": "https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.contractSpecs.html",
+      "kind": "beurs",
+      "retrieved": "2026-08-15"
+    },
+    "cftc-glossary": {
+      "title": "CFTC Glossary — A Guide to the Language of the Futures Industry",
+      "publisher": "U.S. Commodity Futures Trading Commission",
+      "url": "https://www.cftc.gov/LearnAndProtect/AdvisoriesAndArticles/CFTCGlossary/index.htm",
+      "kind": "toezichthouder",
+      "retrieved": "2026-08-15",
+      "note": "Officieel begrippenkader van de Amerikaanse toezichthouder op de derivatenmarkten."
+    },
+    "sharpe-1994": {
+      "title": "The Sharpe Ratio",
+      "publisher": "William F. Sharpe, The Journal of Portfolio Management (1994)",
+      "url": "https://web.stanford.edu/~wfsharpe/art/sr/sr.htm",
+      "kind": "wetenschappelijk",
+      "retrieved": "2026-08-15",
+      "note": "De herziening waarin Sharpe zelf de ratio definieert en de beperkingen ervan benoemt."
+    },
+    "mifid2": {
+      "title": "Richtlijn 2014/65/EU (MiFID II)",
+      "publisher": "Europese Unie — EUR-Lex",
+      "url": "https://eur-lex.europa.eu/legal-content/NL/ALL/?uri=celex%3A32014L0065",
+      "kind": "wetgeving",
+      "retrieved": "2026-08-15"
+    },
+    "afm-vergunningplicht": {
+      "title": "Marktpartijen met een vergunningplicht onder MiFID II",
+      "publisher": "Autoriteit Financiële Markten (AFM)",
+      "url": "https://www.afm.nl/en/sector/themas/belangrijke-europese-wet--en-regelgeving/mifid-ii/vergunningen/vergunningplichtigen",
+      "kind": "toezichthouder",
+      "retrieved": "2026-08-15",
+      "note": "Beschrijft welke partijen onder MiFID II vergunningplichtig werden, waaronder handelaren voor eigen rekening die algoritmisch handelen of orders van cliënten uitvoeren."
+    },
+    "cbcs-toezicht": {
+      "title": "Beleggingsinstellingen, administrateurs en trustwezen — wet- en regelgeving",
+      "publisher": "Centrale Bank van Curaçao en Sint Maarten (CBCS)",
+      "url": "https://www.centralbank.cw/legislation-guidelines/cbcs-legislation/inhoudsopgave",
+      "kind": "toezichthouder",
+      "retrieved": "2026-08-15",
+      "note": "Onder meer de Landsverordening toezicht beleggingsinstellingen en administrateurs (P.B. 2002, no. 137)."
+    },
+    "cw-winstbelasting-lv": {
+      "title": "Landsverordening op de winstbelasting 1940",
+      "publisher": "Lokale wet- en regelgeving Curaçao (CVDR)",
+      "url": "https://lokaleregelgeving.overheid.nl/CVDR142553",
+      "kind": "wetgeving",
+      "retrieved": "2026-08-15"
+    },
+    "cw-belastingdienst": {
+      "title": "Winstbelasting — informatie voor ondernemers",
+      "publisher": "Belastingdienst Curaçao",
+      "url": "https://belastingdienst.cw/ondernemer/themas/winstbelasting/",
+      "kind": "belastingdienst",
+      "retrieved": "2026-08-15",
+      "note": "Tarieven veranderen; raadpleeg altijd de actuele pagina van de Belastingdienst."
+    },
+    "cw-inkomstenbelasting-lv": {
+      "title": "Landsverordening op de inkomstenbelasting",
+      "publisher": "Lokale wet- en regelgeving Curaçao (CVDR)",
+      "url": "https://lokaleregelgeving.overheid.nl/CVDR142584/2",
+      "kind": "wetgeving",
+      "retrieved": "2026-08-15"
+    },
+    "brnc": {
+      "title": "Belastingregeling Nederland Curaçao (BRNC)",
+      "publisher": "Overheid.nl — wetten.nl",
+      "url": "https://wetten.overheid.nl/BWBR0037077",
+      "kind": "wetgeving",
+      "retrieved": "2026-08-15",
+      "note": "Regelt onder meer welk land mag heffen en hoe dubbele belasting tussen Nederland en Curaçao wordt vermeden."
+    },
+    "bd-woonland": {
+      "title": "Welke regels gelden voor het bepalen van het fiscale woon- of vestigingsland?",
+      "publisher": "Belastingdienst (Nederland)",
+      "url": "https://www.belastingdienst.nl/wps/wcm/connect/bldcontentnl/belastingdienst/zakelijk/internationaal/vermogen/common_reporting_standard/regels",
+      "kind": "belastingdienst",
+      "retrieved": "2026-08-15"
+    },
+    "apex-intraday-dd": {
+      "title": "Intraday Trailing Drawdown Explained",
+      "publisher": "Apex Trader Funding",
+      "url": "https://apextraderfunding.com/help-center/intraday-trailing-drawdown-accounts/intraday-trailing-drawdown-explained/",
+      "kind": "aanbieder",
+      "retrieved": "2026-08-15",
+      "note": "Voorwaarden van prop-firms veranderen regelmatig. Controleer altijd de actuele regels van je eigen programma."
+    },
+    "apex-eod-dd": {
+      "title": "EOD Drawdown Explained",
+      "publisher": "Apex Trader Funding",
+      "url": "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-drawdown-explained/",
+      "kind": "aanbieder",
+      "retrieved": "2026-08-15"
+    }
+  }
+}

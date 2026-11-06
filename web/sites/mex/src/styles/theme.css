@@ -1,0 +1,13 @@
+/* --------------------------------------------------------------------------
+   mex-traders.com — site theme
+   The corporate site runs the canonical huisstijl unchanged: gold as the
+   authoritative accent on the petrol ground. Nothing is overridden here; the
+   file exists so the second site's overrides have an obvious counterpart, and
+   so site-specific tweaks land in one predictable place instead of leaking
+   into the shared package.
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Corporate copy runs a touch tighter than editorial. */
+  --measure: 66ch;
+}

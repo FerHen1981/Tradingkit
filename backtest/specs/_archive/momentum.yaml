@@ -1,0 +1,19 @@
+# Momentum / displacement bar — momentum entry (Level B).
+# Enter WITH a bar whose body >= body_atr*ATR (an opening-drive / impulse). Trend
+# filters (CVD streak + VWAP veto) keep it with the flow.
+name: Momentum_Impulse
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: true
+  max_active_groups: 4
+groups:
+  momentum:
+    body_atr: 1.0
+  cvd_delta:
+    cvd_trend_count: 3
+  vwap:
+    vwap_veto: true
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

@@ -1,0 +1,75 @@
+---
+title: "Prop firm of eigen kapitaal: de rekensom"
+summary: >-
+  Wat een evaluatie werkelijk van je strategie vraagt, uitgedrukt in R — en wanneer eigen kapitaal simpelweg goedkoper is.
+topic: trading
+level: start
+order: 40
+updated: 2026-08-15
+takeaways:
+  - Hoe je een evaluatie omrekent naar een eis aan je verwachting
+  - Waarom de verhouding doel/terugval meer zegt dan beide getallen apart
+  - Wanneer een prop firm rationeel is en wanneer niet
+  - Welke risico's niet in de marktcijfers zitten
+sources:
+  - apex-intraday-dd
+  - apex-eod-dd
+draft: false
+---
+
+De vraag wordt meestal gesteld als een geloofskwestie. Het is een rekensom.
+
+## Zet de regels om naar R
+
+Neem een evaluatie met een winstdoel van drieduizend en een terugvalruimte van
+tweeënhalfduizend. Op zichzelf zeggen die bedragen niets. Reken ze om naar
+[R-multiples](/begrippen/r-multiple).
+
+Stel dat je risico per trade 250 is. Dan vraagt de evaluatie: haal +12R netto,
+zonder onderweg 10R terug te vallen. Dat is een compleet ander verhaal dan
+"verdien zesduizend op honderdduizend", en het is meteen toetsbaar tegen je
+eigen historie: hoe vaak haalde je systeem +12R vóór een terugval van 10R?
+
+Dat is precies de vraag die een Monte-Carlo-analyse over je eigen trades kan
+beantwoorden. Niet met een percentage uit een brochure, maar met jouw
+verdeling.
+
+## De verhouding is bepalender dan de bedragen
+
+Twee programma's met hetzelfde winstdoel kunnen enorm verschillen. Wat telt is
+doel gedeeld door ruimte. Een verhouding rond 1,2 is streng; rond 0,6 is ruim.
+
+Even bepalend is het *soort* terugvalgrens. Een
+[meelopende drawdown op intraday-basis](/begrippen/trailing-drawdown) telt ook
+niet-gerealiseerde winst mee en schuift je grens omhoog zodra een positie in de
+plus loopt — ook als je die winst weer teruggeeft. Een
+[EOD-variant](/begrippen/eod-drawdown) doet dat niet. Voor een strategie die
+posities laat ademen scheelt dat wezenlijk meer dan een procentje winstdoel.
+
+## Wanneer een prop firm rationeel is
+
+- Je hebt een gevalideerde edge maar niet het kapitaal om er zinvol risico mee
+  te nemen.
+- Je wilt meerdere onafhankelijke rekeningen naast elkaar draaien om spreiding
+  over uitkomsten te krijgen.
+- De evaluatiekosten zijn klein ten opzichte van wat je met eigen kapitaal aan
+  risico zou moeten nemen voor hetzelfde resultaat.
+
+## Wanneer niet
+
+- Je hebt nog geen edge. Een evaluatie is dan een dure manier om dat te
+  ontdekken.
+- Je hebt genoeg kapitaal om zelf te handelen. Dan betaal je voor een beperking
+  die je zelf niet nodig hebt.
+- Je verwacht compounding. Op een gefinancierde rekening handel je binnen
+  andermans regels, met plafonds en voorwaarden die kunnen wijzigen.
+
+## De risico's die niet in de koersen zitten
+
+Marktrisico is niet je enige risico. Er is tegenpartijrisico — voorwaarden die
+veranderen, uitbetalingen die worden geweigerd, aanbieders die verdwijnen. Dat
+soort risico staat in geen enkele backtest.
+
+Praktische maatregel: vraag vroeg een eerste, kleine uitbetaling aan. Niet om
+het geld, maar om te weten dat de keten werkt voordat er een groot bedrag van
+afhangt.

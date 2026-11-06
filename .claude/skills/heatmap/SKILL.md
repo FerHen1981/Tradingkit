@@ -1,9 +1,18 @@
 ---
 name: heatmap
-description: Generate a time-of-day × day-of-week performance heatmap for a MEX strategy on a given asset. Use when the user wants a heatmap / hourly / weekday breakdown of a strategy's edge (expectancy, PF, win%, net, count, hold time) for a specific preset (EL_TORO, EL_MATADOR, EL_DORADO, EL_PATRON, *_TUNED) and dataset. Invoke with /heatmap <preset> <data.csv> [symbol]. Runs the backtester and publishes an interactive heatmap artifact — one per strategy+asset.
+description: Diagnostic time-of-day × day-of-week heatmap for a MEX strategy on a given asset (expectancy, PF, win%, net, count, hold time). Use when the user explicitly wants to SEE where in the week an edge sits — a heatmap, hourly or weekday breakdown. Invoke with /heatmap <preset> <data.csv> [symbol]. Do NOT use to decide what to run: "which config passes evals fastest" is /eval-throughput and "how much does a funded account pay out" is /payout-throughput.
 ---
 
 # Strategy performance heatmap
+
+> **Diagnostic, not a decision instrument.** This shows where an edge sits in the
+> week. Neither goal asks that. An hour with a high profit factor and three trades
+> a month is excellent here and useless for passing an eval quickly. Use
+> `/eval-throughput` (Goal A) and `/payout-throughput` (Goal B) to choose what to
+> run; use this to understand *why* one of them behaves the way it does.
+>
+> Fine-grained day×hour cherry-picking has already been disproven out-of-sample
+> (`CLAUDE.md`). Treat every bright cell as a hypothesis, not a filter.
 
 Produces an interactive ET-hour × weekday heatmap for one **strategy preset** on
 one **asset dataset**, coloured by a switchable metric (expectancy / PF / win% /

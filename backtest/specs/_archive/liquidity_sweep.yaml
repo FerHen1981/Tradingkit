@@ -1,0 +1,16 @@
+# Liquidity sweep + reclaim — reversal / stop-run entry (Level B).
+# Long when the bar takes out the last confirmed swing low (sweeps resting stops)
+# but the close reclaims back above it; short mirror. Reversal, so no trend
+# filters. Swing stop just beyond the swept extreme.
+name: Liquidity_Sweep
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: true
+  max_active_groups: 3
+groups:
+  liquidity_eqhl:
+    eqhl_tolerance_ticks: 2
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

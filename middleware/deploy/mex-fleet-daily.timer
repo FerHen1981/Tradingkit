@@ -1,0 +1,16 @@
+# Dagelijks om 06:00 UTC — ná de Tradovate end-of-day settlement (17:00 CT ≈ 22:00
+# UTC vóór DST, 23:00 UTC in DST). 06:00 UTC geeft ruim marge voor exports die na
+# de settlement in `EXPORTS_DIR` landen.
+#
+# Enable met: sudo systemctl enable --now mex-fleet-daily.timer
+
+[Unit]
+Description=Dagelijkse Fleet-performance schrijfbeurt naar Notion
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+Unit=mex-fleet-daily.service
+
+[Install]
+WantedBy=timers.target

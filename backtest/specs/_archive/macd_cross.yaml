@@ -1,0 +1,21 @@
+# MACD line/signal cross — momentum entry (Level B, classic).
+# Long when the MACD line crosses above its signal; short mirror. Classic
+# indicator (not price-action), so price_action_only:false. Trend filters on.
+name: MACD_Cross
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: false
+  max_active_groups: 4
+groups:
+  macd:
+    fast: 12
+    slow: 26
+    signal: 9
+  cvd_delta:
+    cvd_trend_count: 3
+  vwap:
+    vwap_veto: true
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

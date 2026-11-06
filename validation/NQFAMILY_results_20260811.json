@@ -1,0 +1,1179 @@
+{
+ "_meta": {
+  "prereg": "NQFAMILY_stage1-2_preregistration_20260811.md",
+  "generated": "2026-08-11",
+  "slots": [
+   "NQ",
+   "MNQ",
+   "ES",
+   "GC",
+   "YM"
+  ]
+ },
+ "EL_PATRON|NQ": {
+  "taint": true,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 1219,
+   "pf": 0.96,
+   "win": 68.1,
+   "net": -5775
+  },
+  "recent12m": {
+   "trades": 435,
+   "pf": 1.14,
+   "win": 69.9,
+   "net": 7143
+  },
+  "years": {
+   "Y1": {
+    "trades": 507,
+    "pf": 0.83,
+    "win": 66.7,
+    "net": -10798
+   },
+   "Y2": {
+    "trades": 455,
+    "pf": 1.0,
+    "win": 67.9,
+    "net": 174
+   },
+   "Y3": {
+    "trades": 365,
+    "pf": 1.09,
+    "win": 69.6,
+    "net": 4007
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": 1115,
+   "banked": 14500.0,
+   "breaches": 13
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": 2500,
+   "banked": 7500.0,
+   "breaches": 3
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 3
+  },
+  "oos_research": {
+   "trades": 166,
+   "pf": 0.95,
+   "win": 65.1,
+   "net": -1162
+  },
+  "mc_p95_maxdd_oos": 11532,
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 4
+  }
+ },
+ "EL_PATRON|MNQ": {
+  "taint": true,
+  "qty": 20,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 1219,
+   "pf": 0.81,
+   "win": 68.1,
+   "net": -30887
+  },
+  "recent12m": {
+   "trades": 435,
+   "pf": 0.97,
+   "win": 69.9,
+   "net": -1818
+  },
+  "years": {
+   "Y1": {
+    "trades": 507,
+    "pf": 0.69,
+    "win": 66.7,
+    "net": -21243
+   },
+   "Y2": {
+    "trades": 455,
+    "pf": 0.85,
+    "win": 67.9,
+    "net": -9199
+   },
+   "Y3": {
+    "trades": 365,
+    "pf": 0.93,
+    "win": 69.6,
+    "net": -3512
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": 395,
+   "banked": 7500.0,
+   "breaches": 19
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": 500,
+   "banked": 3000.0,
+   "breaches": 6
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 5
+  },
+  "oos_research": {
+   "trades": 166,
+   "pf": 0.82,
+   "win": 65.1,
+   "net": -4581
+  },
+  "mc_p95_maxdd_oos": 14427,
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 6
+  }
+ },
+ "EL_PATRON|ES": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_PATRON|GC": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "Intraday",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_PATRON|YM": {
+  "taint": false,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_DORADO|NQ": {
+  "taint": true,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 1214,
+   "pf": 0.91,
+   "win": 63.3,
+   "net": -15432
+  },
+  "recent12m": {
+   "trades": 434,
+   "pf": 1.1,
+   "win": 66.6,
+   "net": 5854
+  },
+  "years": {
+   "Y1": {
+    "trades": 505,
+    "pf": 0.78,
+    "win": 61.4,
+    "net": -16614
+   },
+   "Y2": {
+    "trades": 452,
+    "pf": 0.95,
+    "win": 63.5,
+    "net": -3405
+   },
+   "Y3": {
+    "trades": 364,
+    "pf": 1.1,
+    "win": 66.8,
+    "net": 5053
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": 722,
+   "banked": 13000.0,
+   "breaches": 18
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": 1667,
+   "banked": 5000.0,
+   "breaches": 3
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 3
+  },
+  "oos_research": {
+   "trades": 165,
+   "pf": 1.01,
+   "win": 63.6,
+   "net": 204
+  },
+  "mc_p95_maxdd_oos": 10529,
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 5
+  }
+ },
+ "EL_DORADO|MNQ": {
+  "taint": true,
+  "qty": 20,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 1214,
+   "pf": 0.78,
+   "win": 63.3,
+   "net": -40440
+  },
+  "recent12m": {
+   "trades": 434,
+   "pf": 0.95,
+   "win": 66.6,
+   "net": -3086
+  },
+  "years": {
+   "Y1": {
+    "trades": 505,
+    "pf": 0.66,
+    "win": 61.4,
+    "net": -27016
+   },
+   "Y2": {
+    "trades": 452,
+    "pf": 0.82,
+    "win": 63.5,
+    "net": -12716
+   },
+   "Y3": {
+    "trades": 364,
+    "pf": 0.95,
+    "win": 66.8,
+    "net": -2445
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": 300,
+   "banked": 7500.0,
+   "breaches": 25
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": 562,
+   "banked": 4500.0,
+   "breaches": 8
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 5
+  },
+  "oos_research": {
+   "trades": 165,
+   "pf": 0.88,
+   "win": 63.6,
+   "net": -3194
+  },
+  "mc_p95_maxdd_oos": 13260,
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": 0,
+   "banked": 0.0,
+   "breaches": 6
+  }
+ },
+ "EL_DORADO|ES": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_DORADO|GC": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "Intraday",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_DORADO|YM": {
+  "taint": false,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "recent12m": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "years": {
+   "Y1": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y2": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   },
+   "Y3": {
+    "trades": 0,
+    "pf": 0,
+    "win": 0,
+    "net": 0
+   }
+  },
+  "obj_is": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_r12": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "obj_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "oos_research": {
+   "trades": 0,
+   "pf": 0,
+   "win": 0,
+   "net": 0
+  },
+  "stress_oos": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  }
+ },
+ "EL_MATADOR|NQ": {
+  "taint": true,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 5710,
+   "pf": 0.94,
+   "win": 60.1,
+   "net": -47570
+  },
+  "recent12m": {
+   "trades": 2284,
+   "pf": 0.99,
+   "win": 60.6,
+   "net": -2321
+  },
+  "years": {
+   "Y1": {
+    "trades": 2227,
+    "pf": 0.89,
+    "win": 59.7,
+    "net": -31625
+   },
+   "Y2": {
+    "trades": 2286,
+    "pf": 0.97,
+    "win": 59.9,
+    "net": -8021
+   },
+   "Y3": {
+    "trades": 1955,
+    "pf": 0.98,
+    "win": 60.3,
+    "net": -6454
+   }
+  },
+  "obj_is": {
+   "metric": "pass_rate_pct",
+   "value": 21.4,
+   "starts": 126,
+   "breach_pct": 77.0
+  },
+  "obj_r12": {
+   "metric": "pass_rate_pct",
+   "value": 35.4,
+   "starts": 48,
+   "breach_pct": 60.4
+  },
+  "obj_oos": {
+   "metric": "pass_rate_pct",
+   "value": 54.5,
+   "starts": 22,
+   "breach_pct": 45.5
+  },
+  "oos_research": {
+   "trades": 1031,
+   "pf": 0.99,
+   "win": 59.6,
+   "net": -1985
+  },
+  "mc_p95_maxdd_oos": 27515,
+  "stress_oos": {
+   "metric": "pass_rate_pct",
+   "value": 22.7,
+   "starts": 22,
+   "breach_pct": 77.3
+  }
+ },
+ "EL_MATADOR|MNQ": {
+  "taint": true,
+  "qty": 20,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 5710,
+   "pf": 0.8,
+   "win": 60.0,
+   "net": -165196
+  },
+  "recent12m": {
+   "trades": 2284,
+   "pf": 0.85,
+   "win": 60.5,
+   "net": -49371
+  },
+  "years": {
+   "Y1": {
+    "trades": 2227,
+    "pf": 0.75,
+    "win": 59.6,
+    "net": -77501
+   },
+   "Y2": {
+    "trades": 2286,
+    "pf": 0.83,
+    "win": 59.9,
+    "net": -55112
+   },
+   "Y3": {
+    "trades": 1955,
+    "pf": 0.84,
+    "win": 60.2,
+    "net": -46726
+   }
+  },
+  "obj_is": {
+   "metric": "pass_rate_pct",
+   "value": 11.1,
+   "starts": 126,
+   "breach_pct": 88.9
+  },
+  "obj_r12": {
+   "metric": "pass_rate_pct",
+   "value": 22.9,
+   "starts": 48,
+   "breach_pct": 77.1
+  },
+  "obj_oos": {
+   "metric": "pass_rate_pct",
+   "value": 22.7,
+   "starts": 22,
+   "breach_pct": 77.3
+  },
+  "oos_research": {
+   "trades": 1031,
+   "pf": 0.85,
+   "win": 59.5,
+   "net": -23223
+  },
+  "mc_p95_maxdd_oos": 46304,
+  "stress_oos": {
+   "metric": "pass_rate_pct",
+   "value": 9.1,
+   "starts": 22,
+   "breach_pct": 90.9
+  }
+ },
+ "EL_MATADOR|ES": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 1620,
+   "pf": 0.87,
+   "win": 56.7,
+   "net": -32591
+  },
+  "recent12m": {
+   "trades": 1004,
+   "pf": 0.9,
+   "win": 57.7,
+   "net": -15525
+  },
+  "years": {
+   "Y1": {
+    "trades": 360,
+    "pf": 0.82,
+    "win": 54.2,
+    "net": -10104
+   },
+   "Y2": {
+    "trades": 867,
+    "pf": 0.86,
+    "win": 58.1,
+    "net": -18522
+   },
+   "Y3": {
+    "trades": 998,
+    "pf": 0.9,
+    "win": 57.7,
+    "net": -15994
+   }
+  },
+  "obj_is": {
+   "metric": "pass_rate_pct",
+   "value": 12.9,
+   "starts": 124,
+   "breach_pct": 46.8
+  },
+  "obj_r12": {
+   "metric": "pass_rate_pct",
+   "value": 12.5,
+   "starts": 48,
+   "breach_pct": 60.4
+  },
+  "obj_oos": {
+   "metric": "pass_rate_pct",
+   "value": 0.0,
+   "starts": 22,
+   "breach_pct": 63.6
+  },
+  "oos_research": {
+   "trades": 605,
+   "pf": 0.87,
+   "win": 58.8,
+   "net": -12029
+  },
+  "mc_p95_maxdd_oos": 30206,
+  "stress_oos": {
+   "metric": "pass_rate_pct",
+   "value": 0.0,
+   "starts": 22,
+   "breach_pct": 95.5
+  }
+ },
+ "EL_MATADOR|GC": {
+  "taint": false,
+  "qty": 1,
+  "dd_model": "Intraday",
+  "is_research": {
+   "trades": 3298,
+   "pf": 0.91,
+   "win": 57.5,
+   "net": -35090
+  },
+  "recent12m": {
+   "trades": 2449,
+   "pf": 0.93,
+   "win": 59.3,
+   "net": -21776
+  },
+  "years": {
+   "Y1": {
+    "trades": 593,
+    "pf": 1.02,
+    "win": 57.2,
+    "net": 1064
+   },
+   "Y2": {
+    "trades": 1628,
+    "pf": 0.9,
+    "win": 56.6,
+    "net": -19646
+   },
+   "Y3": {
+    "trades": 2445,
+    "pf": 0.93,
+    "win": 59.3,
+    "net": -21188
+   }
+  },
+  "obj_is": {
+   "metric": "pass_rate_pct",
+   "value": 12.0,
+   "starts": 125,
+   "breach_pct": 59.2
+  },
+  "obj_r12": {
+   "metric": "pass_rate_pct",
+   "value": 22.9,
+   "starts": 48,
+   "breach_pct": 77.1
+  },
+  "obj_oos": {
+   "metric": "pass_rate_pct",
+   "value": 27.3,
+   "starts": 22,
+   "breach_pct": 72.7
+  },
+  "oos_research": {
+   "trades": 1368,
+   "pf": 0.97,
+   "win": 59.6,
+   "net": -4678
+  },
+  "mc_p95_maxdd_oos": 31445,
+  "stress_oos": {
+   "metric": "pass_rate_pct",
+   "value": 22.7,
+   "starts": 22,
+   "breach_pct": 77.3
+  }
+ },
+ "EL_MATADOR|YM": {
+  "taint": false,
+  "qty": 2,
+  "dd_model": "EOD",
+  "is_research": {
+   "trades": 4385,
+   "pf": 0.89,
+   "win": 55.2,
+   "net": -56127
+  },
+  "recent12m": {
+   "trades": 2633,
+   "pf": 0.9,
+   "win": 54.5,
+   "net": -33672
+  },
+  "years": {
+   "Y1": {
+    "trades": 1129,
+    "pf": 0.97,
+    "win": 56.8,
+    "net": -3870
+   },
+   "Y2": {
+    "trades": 2171,
+    "pf": 0.84,
+    "win": 54.8,
+    "net": -45985
+   },
+   "Y3": {
+    "trades": 2623,
+    "pf": 0.9,
+    "win": 54.5,
+    "net": -32075
+   }
+  },
+  "obj_is": {
+   "metric": "pass_rate_pct",
+   "value": 21.6,
+   "starts": 125,
+   "breach_pct": 61.6
+  },
+  "obj_r12": {
+   "metric": "pass_rate_pct",
+   "value": 14.6,
+   "starts": 48,
+   "breach_pct": 81.2
+  },
+  "obj_oos": {
+   "metric": "pass_rate_pct",
+   "value": 18.2,
+   "starts": 22,
+   "breach_pct": 81.8
+  },
+  "oos_research": {
+   "trades": 1539,
+   "pf": 0.88,
+   "win": 54.6,
+   "net": -25497
+  },
+  "mc_p95_maxdd_oos": 49760,
+  "stress_oos": {
+   "metric": "pass_rate_pct",
+   "value": 4.5,
+   "starts": 22,
+   "breach_pct": 95.5
+  }
+ },
+ "pert_YM_IS": {
+  "EL_PATRON|basis": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_PATRON|gap_-20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_PATRON|gap_+20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_PATRON|stop_-20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_PATRON|stop_+20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_PATRON|cvd_flip": {
+   "metric": "banked_per_breach",
+   "value": 290,
+   "banked": 9000.0,
+   "breaches": 31
+  },
+  "EL_DORADO|basis": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_DORADO|gap_-20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_DORADO|gap_+20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_DORADO|stop_-20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_DORADO|stop_+20%": {
+   "metric": "banked_per_breach",
+   "value": null,
+   "banked": 0.0,
+   "breaches": 0
+  },
+  "EL_DORADO|cvd_flip": {
+   "metric": "banked_per_breach",
+   "value": 181,
+   "banked": 6500.0,
+   "breaches": 36
+  },
+  "EL_MATADOR|basis": {
+   "metric": "pass_rate_pct",
+   "value": 21.6,
+   "starts": 125,
+   "breach_pct": 61.6
+  },
+  "EL_MATADOR|gap_-20%": {
+   "metric": "pass_rate_pct",
+   "value": 16.8,
+   "starts": 125,
+   "breach_pct": 64.8
+  },
+  "EL_MATADOR|gap_+20%": {
+   "metric": "pass_rate_pct",
+   "value": 4.8,
+   "starts": 125,
+   "breach_pct": 61.6
+  },
+  "EL_MATADOR|stop_-20%": {
+   "metric": "pass_rate_pct",
+   "value": 13.6,
+   "starts": 125,
+   "breach_pct": 62.4
+  },
+  "EL_MATADOR|stop_+20%": {
+   "metric": "pass_rate_pct",
+   "value": 19.2,
+   "starts": 125,
+   "breach_pct": 70.4
+  },
+  "EL_MATADOR|cvd_flip": {
+   "metric": "pass_rate_pct",
+   "value": 0.0,
+   "starts": 125,
+   "breach_pct": 0.0
+  }
+ },
+ "corr": {
+  "YM": {
+   "overlap_days": 0,
+   "matrix": {
+    "EL_PATRON": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    },
+    "EL_DORADO": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    },
+    "EL_MATADOR": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    }
+   }
+  },
+  "GC": {
+   "overlap_days": 0,
+   "matrix": {
+    "EL_PATRON": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    },
+    "EL_DORADO": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    },
+    "EL_MATADOR": {
+     "EL_PATRON": NaN,
+     "EL_DORADO": NaN,
+     "EL_MATADOR": NaN
+    }
+   }
+  }
+ }
+}

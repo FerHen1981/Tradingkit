@@ -1,0 +1,73 @@
+---
+title: "Je uitvoering meten: van signaal tot fill"
+summary: >-
+  Hoe je vaststelt wat er werkelijk gebeurde in plaats van wat je dacht dat er gebeurde — en waarom dat het enige deel van je resultaat is dat je direct kunt verbeteren.
+topic: trading
+level: gevorderd
+order: 50
+updated: 2026-08-15
+takeaways:
+  - Welke velden je per trade moet vastleggen
+  - Hoe je bedoelde en werkelijke uitvoering aan elkaar koppelt
+  - Waarom je op spreiding stuurt en niet op het gemiddelde
+  - Wat je met de uitkomst doet
+sources:
+  - cme-ticks
+  - cftc-glossary
+draft: false
+---
+
+Een backtest gaat ervan uit dat je krijgt wat je vraagt. De werkelijkheid rekent
+per order af in [ticks](/begrippen/tick), en over duizenden orders wordt dat een
+bedrag dat groter is dan het verschil tussen twee redelijke strategieën.
+
+## Wat je vastlegt
+
+Bij elk signaal, op het moment dat het ontstaat:
+
+- tijdstip, instrument, richting, aantal
+- de bedoelde prijs
+- de bedoelde stop en het bijbehorende risico in geld — je 1R
+
+Bij elke uitvoering, zoals de broker hem rapporteert:
+
+- tijdstip, werkelijke prijs, werkelijk aantal
+- de tegenpartij of het uitvoerende platform
+
+Die twee zijn losse werelden. De eerste komt uit je eigen systeem, de tweede uit
+het rapport van je broker. Ze worden pas informatief als je ze koppelt.
+
+## De koppeling
+
+Match op instrument, richting en tijd, met een venster dat ruim genoeg is voor
+vertraging maar krap genoeg om trades niet te verwisselen. Wat je overhoudt per
+trade:
+
+- **verschil in prijs**, omgerekend naar ticks — je
+  [slippage](/begrippen/slippage)
+- **verschil in tijd** — je [latency](/begrippen/latency)
+- **verschil in aantal** — gedeeltelijke fills
+
+Bewaar dat als eigen regels, niet als een gemiddelde. Het gemiddelde gooi je
+later wel weg; de losse waarnemingen kun je niet terughalen.
+
+## Stuur op de spreiding, niet op het gemiddelde
+
+Hier zit de eigenlijke opbrengst. Het gemiddelde is meestal saai en stabiel. De
+verdeling niet: bepaalde momenten van de dag, bepaalde tegenpartijen en bepaalde
+marktomstandigheden zijn structureel duurder.
+
+Splits daarom altijd uit naar minstens drie assen: per markt, per tegenpartij en
+per uur van de dag. Een gemiddelde over alles heen verbergt precies de
+uitschieters waar het geld verdwijnt.
+
+## Wat je ermee doet
+
+Drie soorten ingrepen volgen er meestal uit: ordertype (waar een
+[limietorder](/begrippen/limietorder) realistisch is, scheelt hij structureel
+ticks), handelsvenster (de duurste uren uitsluiten kost weinig trades en veel
+minder slippage), en tegenpartijkeuze.
+
+De les erachter is algemener. Als je uitvoering niet meet, weet je niet of je een
+edge hebt of een rapportagefout — en uitvoering is het enige deel van je
+resultaat dat je kunt verbeteren zonder je strategie aan te raken.

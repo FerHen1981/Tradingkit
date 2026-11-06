@@ -1,0 +1,340 @@
+"""The fleet mirror must equal the released .pine sources, input for input.
+
+`backtest/pipeline/fleet.py` is a hand transcription of `pine/v1_0_0/*.pine`.
+A silent drift there would poison stage 1 for the whole fleet: the harness would
+report parity against a config that no released script actually runs. So the
+transcription is not trusted — it is re-derived from the sources on every test
+run and compared field by field.
+
+Skips (does not fail) when the Pine sources are absent, so the backtest suite
+still runs in a checkout without `pine/**`.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+from backtest.pipeline import fleet
+
+_ROOT = Path(__file__).resolve().parents[2]
+# De vloot verhuist van pine/v1_0_0/ naar pine/ (D-42). Zoek beide, zodat deze poort
+# voor en na die verhuizing werkt en de volgorde niet uitmaakt.
+PINE_DIR = next(
+    (d for d in (_ROOT / "pine" / "v1_0_0", _ROOT / "pine")
+     if (d / "MEX_EL_REY_MNQ_PROD_EOD_v1_0_0.pine").exists()),
+    _ROOT / "pine" / "v1_0_0",
+)
+
+# EL TORO is de eval-lijn en heeft geen mirror in fleet.py; die scripts horen niet in
+# deze vergelijking. Zodra ze een mirror krijgen mag deze filter weg.
+_NO_MIRROR = ("MEX_EL_TORO_",)
+
+# Pine input title -> (getter on Config, kind). None getter = compared against _SPEC.
+FIELDS = [
+    ("Fixed Qty",                                 lambda c: c.contract_size,            float),
+    ("Min FVG Size (units)",                      lambda c: c.gap_min_ticks,            float),
+    ("Max FVG Size (units)",                      lambda c: c.gap_max_ticks,            float),
+    ("Count",                                     lambda c: c.cvd_trend_count,          float),
+    ("Fixed Stop (units, legacy mode)",           lambda c: c.fixed_stop_ticks,         float),
+    ("Max Stop Distance (units) — else no trade", lambda c: c.max_stop_ticks,           float),
+    ("R-Multiple (R-multiple mode)",              lambda c: c.r_multiple,               float),
+    ("Limit Order Expiry (bars)",                 lambda c: c.expiry_bars,              float),
+    ("Day-trail activation ($)",                  lambda c: c.day_trail_activation_usd, float),
+    ("Day-trail giveback ($)",                    lambda c: c.day_trail_giveback_usd,   float),
+    ("Day-cap hard target ($)",                   lambda c: c.day_cap_usd,              float),
+    ("Pivot Strength (bars links/rechts)",        lambda c: c.pivot_k,                  float),
+    ("Stop Buffer beyond swing (units)",          lambda c: c.swing_buf_ticks,          float),
+    ("Day-profit exit mode",                      lambda c: c.day_exit_mode,            str),
+    ("Day-trail model",                           lambda c: c.day_trail_model,          str),
+    ("Take-Profit Mode",                          lambda c: c.tp_mode,                  str),
+    ("Account Phase",                             lambda c: c.phase,                    str),
+    ("Use Delta Filter",                          lambda c: c.use_cvd_filter,           bool),
+    ("Use FVG Size Range Filter",                 lambda c: c.use_gap_filter,           bool),
+    ("Enable Break-even",                         lambda c: c.use_breakeven,            bool),
+    ("Enable Trailing",                           lambda c: c.use_trail,                bool),
+    ("FVG fill check (gap invalid once mid is touched)", lambda c: c.use_fill_check,    bool),
+]
+
+_INPUT = re.compile(
+    # first arg is either a quoted string (which may itself contain parentheses,
+    # e.g. "Day-cap (hard target)") or a bare token (500, true, MY_CONST)
+    r'input\.(?:int|float|bool|string)\(\s*("[^"]*"|[^,()]+?)\s*,\s*(?:title\s*=\s*)?"([^"]+)"')
+
+
+def _pine_inputs(path: Path) -> dict[str, str]:
+    txt = path.read_text(encoding="utf-8", errors="replace")
+    return {m.group(2): m.group(1).strip() for m in _INPUT.finditer(txt)}
+
+
+_CONST = re.compile(r'^\s*(?:int|float)\s+(\w+)\s*=\s*(-?\d+(?:\.\d+)?)', re.M)
+
+
+def _pine_constants(path: Path) -> dict[str, float]:
+    """Bare numeric constant assignments (`int x = 3` / `float y = 2.0`). The v2
+    line demotes inputs that are inert in the frozen config (pivotK/swingBufSize
+    are only live in Swing-stop mode; EL_REY runs Fixed) to fixed constants. Parity
+    still verifies the value — it just reads it from the constant, not a widget."""
+    txt = path.read_text(encoding="utf-8", errors="replace")
+    return {m.group(1): float(m.group(2)) for m in _CONST.finditer(txt)}
+
+
+# Inputs the v2 script demoted to fixed constants: mirror field title -> source
+# constant name. When the input title is absent, parity reads the constant instead.
+_DEMOTED_CONST = {
+    "Pivot Strength (bars links/rechts)": "pivotK",
+    "Stop Buffer beyond swing (units)":   "swingBufSize",
+}
+
+
+def _force_flat_raw(ins: dict[str, str]):
+    """The v2 line renamed 'Force Flat Window' to 'Force flat 16:55 – 18:00'
+    (title only; still input.bool(true)). Match either by prefix so the en-dash
+    spelling does not matter."""
+    return next((v for k, v in ins.items()
+                 if k == "Force Flat Window" or k.lower().startswith("force flat")), None)
+
+
+def _coerce(raw: str, kind):
+    if kind is bool:
+        return raw == "true"
+    if kind is float:
+        return float(raw)
+    return raw.strip('"')
+
+
+def _engine_name(path: Path) -> str:
+    return path.name.replace("MEX_", "").replace("_v1_0_0.pine", "")
+
+
+def _sources() -> list[Path]:
+    if not PINE_DIR.is_dir():
+        return []
+    return sorted(p for p in PINE_DIR.glob("*.pine")
+                  if not p.name.startswith(_NO_MIRROR))
+
+
+def test_pine_sources_are_findable():
+    """Een lege bronmap mag deze poort niet stilzetten. Met alleen skipif() maakt een
+    verplaatste map er 49 groene skips van: de suite blijft groen en bewaakt niets."""
+    assert _sources(), f"geen .pine-bronnen gevonden onder {PINE_DIR}"
+
+
+needs_pine = pytest.mark.skipif(not _sources(), reason=f"geen .pine-bronnen onder {PINE_DIR}")
+
+
+@needs_pine
+def test_every_released_script_has_a_mirror():
+    assert {_engine_name(p) for p in _sources()} == set(fleet.names())
+
+
+# The account-phase vocabulary was relabelled in the v2 script line (EL_REY):
+# Developer/Eval/Funded are the same three phases as Research/Apex Eval/Apex PA.
+# Parity is about the strategy the script runs, so the phase input is compared on
+# its MEANING, not its label — the same principle as the firm-program check (D-20).
+_PHASE_ALIASES = {
+    "developer": "research", "research (none)": "research", "research": "research",
+    "eval": "apex eval", "apex eval": "apex eval",
+    "funded": "apex pa", "apex pa": "apex pa",
+    "ftmo funded": "ftmo funded", "ftmo challenge": "ftmo challenge",
+}
+
+
+def _norm_phase(v) -> str:
+    s = str(v).strip().lower()
+    return _PHASE_ALIASES.get(s, s)
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_mirror_matches_source(path):
+    name = _engine_name(path)
+    ins, cfg = _pine_inputs(path), fleet.engine_config(name)
+    consts = _pine_constants(path)
+    diffs = []
+    for title, get, kind in FIELDS:
+        if title == "Account Phase":
+            # accept either capitalisation (v1 "Account Phase" / v2 "Account phase")
+            raw = ins.get("Account Phase", ins.get("Account phase"))
+            if raw is None:
+                diffs.append("Account Phase: ontbreekt in de .pine")
+            elif _norm_phase(_coerce(raw, str)) != _norm_phase(get(cfg)):
+                diffs.append(f"Account Phase: pine={raw!r} mirror={get(cfg)!r}")
+            continue
+        if title not in ins:
+            # v2 may have demoted this input to a fixed constant — still verify it.
+            const = consts.get(_DEMOTED_CONST.get(title, ""))
+            if const is not None:
+                if float(const) != float(get(cfg)):
+                    diffs.append(f"{title}: pine-const={const!r} mirror={get(cfg)!r}")
+                continue
+            diffs.append(f"{title}: ontbreekt in de .pine")
+            continue
+        pine, ours = _coerce(ins[title], kind), get(cfg)
+        if kind is float:
+            ours = float(ours)
+        if pine != ours:
+            # A documented source defect is allowed to differ, nothing else.
+            if title == "Day-profit exit mode" and name in fleet.PINE_DEFECTS:
+                continue
+            diffs.append(f"{title}: pine={pine!r} mirror={ours!r}")
+    assert not diffs, f"{name} wijkt af van de bron:\n  " + "\n  ".join(diffs)
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_string_inputs_have_a_valid_default(path):
+    """A Pine v6 input.string whose defval is outside its own options list does
+    not compile. Any script that trips this is unbuildable as shipped and must be
+    listed in PINE_DEFECTS, so no engine can quietly claim stage-1 parity."""
+    txt = path.read_text(encoding="utf-8", errors="replace")
+    broken = []
+    for m in re.finditer(r'input\.string\(\s*"([^"]*)"\s*,\s*"([^"]+)"[^\n]*?options=\[([^\]]*)\]', txt):
+        default, title, opts = m.group(1), m.group(2), m.group(3)
+        allowed = re.findall(r'"([^"]*)"', opts)
+        if default not in allowed:
+            broken.append(f"{title}: default {default!r} niet in {allowed}")
+    if broken:
+        assert _engine_name(path) in fleet.PINE_DEFECTS, (
+            f"{path.name} heeft een niet-compilerende input.string en staat niet in "
+            f"PINE_DEFECTS:\n  " + "\n  ".join(broken))
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_drawdown_model_comes_from_the_firm_program(path):
+    """All nine scripts ship with the firm preset ON, so the loose "Drawdown
+    Model" input is overwritten at runtime (D-20). The mirror must therefore
+    follow the firm program, not the input — reading the input would put every
+    engine on Intraday and silently mis-model the seven EOD ones."""
+    name = _engine_name(path)
+    ins = _pine_inputs(path)
+    assert _coerce(ins["Use firm preset (fills account rules below)"], bool) is True, (
+        f"{name}: firm preset staat UIT — dan is de losse input wel leidend en "
+        f"klopt de afleiding in fleet.drawdown_model() niet meer")
+    program = _coerce(ins["Firm program"], str)
+    assert program == fleet.firm_program(name), (
+        f"{name}: firm program pine={program!r} mirror={fleet.firm_program(name)!r}")
+    cfg = fleet.engine_config(name)
+    assert cfg.dd_model == fleet.drawdown_model(program), name
+    assert cfg.dd_model == ("Intraday" if "intraday" in program else "EOD"), (
+        f"{name}: {program} zou {cfg.dd_model} moeten geven")
+
+
+@needs_pine
+def test_the_registry_actually_defines_every_firm_program_used():
+    """fleet.drawdown_model() falls back to a key-name guess when the registry
+    lacks the program. That fallback must never be what we actually rely on."""
+    from backtest.firms import raw_programs
+    known = {p.get("key") for p in raw_programs()}
+    used = {fleet.firm_program(n) for n in fleet.names()}
+    assert used <= known, f"niet in data/propfirms.json: {sorted(used - known)}"
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_session_window_matches_the_source(path):
+    """Day and hour toggles are trading filters, not cosmetics: inheriting
+    Config's Mon-Fri default silently drops every Sunday-Globex entry, and that
+    showed up as a 10.7% trade-count gap on MATADOR's first parity run."""
+    name, ins = _engine_name(path), _pine_inputs(path)
+    cfg = fleet.engine_config(name)
+
+    days = {"Sun": 6, "Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4}
+    want = {wd for label, wd in days.items()
+            if _coerce(ins[label], bool)}
+    assert set(cfg.trade_days) == want, (
+        f"{name}: pine handelt {sorted(want)}, mirror {sorted(cfg.trade_days)}")
+    assert _coerce(ins["Sat (crypto)"], bool) is False, f"{name}: zaterdag staat aan"
+    assert fleet.trades_sunday(name) == (6 in want)
+
+    off = {int(h) for h in (f"{i:02d}" for i in range(24))
+           if h in ins and not _coerce(ins[h], bool)}
+    assert set(range(24)) - set(cfg.enabled_hours) == off, (
+        f"{name}: pine zet uren {sorted(off)} uit, mirror "
+        f"{sorted(set(range(24)) - set(cfg.enabled_hours))}")
+
+    flat_raw = _force_flat_raw(ins)
+    assert flat_raw is not None, f"{name}: force-flat input ontbreekt in de .pine"
+    assert _coerce(flat_raw, bool) == cfg.use_auto_flat, name
+
+
+@needs_pine
+def test_not_every_engine_trades_sunday():
+    """A guard that the transcription is real and not a blanket value: PATRON and
+    TESORO (both MGC) sit out the Sunday open, the other seven do not."""
+    sundays = {n: fleet.trades_sunday(n) for n in fleet.names()}
+    assert any(sundays.values()) and not all(sundays.values()), sundays
+    assert sundays["EL_PATRON_MGC_AGG_EOD"] is False
+    assert sundays["EL_TESORO_MGC_CON_EOD"] is False
+    assert sundays["EL_MATADOR_MES_PROD_EOD"] is True
+
+
+@needs_pine
+def test_regime_and_market_match_the_source():
+    for path in _sources():
+        name = _engine_name(path)
+        ins = _pine_inputs(path)
+        assert _coerce(ins["Market regime"], str) == fleet._SPEC[name][12], name
+        assert fleet.market(name) in path.name, name
+
+
+@needs_pine
+@pytest.mark.parametrize("path", _sources(), ids=_engine_name)
+def test_our_fvg_detection_equals_the_pine_formula(path, tmp_path):
+    """The measurement that settled where MATADOR's parity gap comes from.
+
+    All 35 unexplained missed signals had no FVG of that direction in our window.
+    That is only evidence about the DATA if our detection is provably identical
+    to Pine's — otherwise it is evidence about our code. So the Pine expression
+    is transcribed literally here and compared bar for bar."""
+    import numpy as np
+
+    from backtest import indicators as im
+    from backtest.pipeline import fleet
+
+    name = _engine_name(path)
+    cfg = fleet.engine_config(name)
+    rng = np.random.default_rng(19)
+    n = 8_000
+    px = 6000 + np.cumsum(rng.normal(0, 6.0, n))
+    high = px + np.abs(rng.normal(0, 9.0, n))
+    low = px - np.abs(rng.normal(0, 9.0, n))
+    tick = cfg.contract.mintick
+    high = np.round(high / tick) * tick
+    low = np.round(low / tick) * tick
+    close = np.clip(px, low, high)
+    open_ = np.clip(px + rng.normal(0, 2.0, n), low, high)
+
+    import pandas as pd
+
+    from backtest import data as dm
+    idx = pd.date_range("2025-09-02", periods=n, freq="1min", tz="America/New_York")
+    raw = pd.DataFrame({"DateTime": idx.strftime("%d-%m-%Y %H:%M:%S %z"),
+                        "Open": open_, "High": high, "Low": low, "Close": close,
+                        "Volume": np.full(n, 100.0), "Delta": np.zeros(n)})
+    csv = tmp_path / "fvg.csv"
+    raw.to_csv(csv, index=False)
+    df = dm.load(str(csv), cache=False)
+    high, low = df["High"].to_numpy(), df["Low"].to_numpy()
+    ind = im.compute(df, cfg)
+
+    # literal transcription of the Pine source (fvgDirection / top / bottom)
+    d = np.zeros(n, int)
+    top = np.full(n, np.nan)
+    bot = np.full(n, np.nan)
+    for i in range(2, n):
+        if low[i - 2] >= high[i]:
+            d[i], top[i], bot[i] = -1, low[i - 2], high[i]
+        elif low[i] >= high[i - 2]:
+            d[i], top[i], bot[i] = 1, low[i], high[i - 2]
+    size = np.abs(top - bot)
+    ok = (~np.isnan(size) & (size >= cfg.gap_min_ticks * tick)
+          & (size <= cfg.gap_max_ticks * tick) & (size > 0))
+
+    assert np.array_equal(np.asarray(ind["fvg_dir"]), d), f"{name}: richting wijkt af"
+    assert np.allclose(np.nan_to_num(np.asarray(ind["fvg_size"]), nan=-1),
+                       np.nan_to_num(size, nan=-1)), f"{name}: grootte wijkt af"
+    assert np.array_equal(np.asarray(ind["fvg_pass"]), ok), f"{name}: band-pass wijkt af"
+    assert ok.sum() > 20, "te weinig gaps — de vergelijking bewijst niets"

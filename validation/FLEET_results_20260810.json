@@ -1,0 +1,616 @@
+{
+ "GC_EVAL": {
+  "is_research": {
+   "trades": 2630,
+   "pf": 1.07,
+   "win": 44.2,
+   "net": 96115
+  },
+  "years": {
+   "Y1": {
+    "trades": 437,
+    "pf": 1.17,
+    "win": 48.1,
+    "net": 29886
+   },
+   "Y2": {
+    "trades": 1077,
+    "pf": 1.15,
+    "win": 45.8,
+    "net": 81080
+   },
+   "Y3": {
+    "trades": 2898,
+    "pf": 1.01,
+    "win": 41.4,
+    "net": 20852
+   }
+  },
+  "recent12m": {
+   "trades": 2899,
+   "pf": 1.01,
+   "win": 41.4,
+   "net": 19838
+  },
+  "obj_is": {
+   "starts": 125,
+   "passr": 40.0,
+   "breach": 56.0,
+   "timeout": 4.0
+  },
+  "obj_r12": {
+   "starts": 48,
+   "passr": 35.4,
+   "breach": 64.6,
+   "timeout": 0.0
+  },
+  "obj_oos": {
+   "starts": 22,
+   "passr": 40.9,
+   "breach": 59.1,
+   "timeout": 0.0
+  },
+  "oos_research": {
+   "trades": 1778,
+   "pf": 1.03,
+   "win": 41.7,
+   "net": 35737
+  },
+  "mc_p5_maxdd_oos": 87562,
+  "stress_oos": {
+   "starts": 22,
+   "passr": 40.9,
+   "breach": 59.1,
+   "timeout": 0.0
+  }
+ },
+ "GC_FUNDED": {
+  "is_research": {
+   "trades": 5001,
+   "pf": 1.06,
+   "win": 83.0,
+   "net": 94523
+  },
+  "years": {
+   "Y1": {
+    "trades": 770,
+    "pf": 1.11,
+    "win": 81.9,
+    "net": 26800
+   },
+   "Y2": {
+    "trades": 2218,
+    "pf": 1.05,
+    "win": 83.4,
+    "net": 34374
+   },
+   "Y3": {
+    "trades": 5078,
+    "pf": 1.09,
+    "win": 82.6,
+    "net": 154744
+   }
+  },
+  "recent12m": {
+   "trades": 5086,
+   "pf": 1.09,
+   "win": 82.5,
+   "net": 153568
+  },
+  "obj_is": {
+   "banked": 11500.0,
+   "breaches": 3,
+   "milk": 0,
+   "bpb": 3833
+  },
+  "obj_r12": {
+   "banked": 6500.0,
+   "breaches": 2,
+   "milk": 0,
+   "bpb": 3250
+  },
+  "obj_oos": {
+   "banked": 1500.0,
+   "breaches": 1,
+   "milk": 0,
+   "bpb": 1500
+  },
+  "oos_research": {
+   "trades": 3065,
+   "pf": 1.11,
+   "win": 82.3,
+   "net": 122285
+  },
+  "mc_p5_maxdd_oos": 67589,
+  "stress_oos": {
+   "banked": 0.0,
+   "breaches": 2,
+   "milk": 0,
+   "bpb": 0
+  }
+ },
+ "ES_EVAL": {
+  "is_research": {
+   "trades": 1317,
+   "pf": 1.11,
+   "win": 45.7,
+   "net": 82567
+  },
+  "years": {
+   "Y1": {
+    "trades": 299,
+    "pf": 1.08,
+    "win": 47.2,
+    "net": 10698
+   },
+   "Y2": {
+    "trades": 730,
+    "pf": 1.13,
+    "win": 45.2,
+    "net": 57487
+   },
+   "Y3": {
+    "trades": 736,
+    "pf": 1.06,
+    "win": 44.4,
+    "net": 27068
+   }
+  },
+  "recent12m": {
+   "trades": 739,
+   "pf": 1.05,
+   "win": 44.2,
+   "net": 23272
+  },
+  "obj_is": {
+   "starts": 124,
+   "passr": 41.1,
+   "breach": 58.1,
+   "timeout": 0.8
+  },
+  "obj_r12": {
+   "starts": 48,
+   "passr": 45.8,
+   "breach": 54.2,
+   "timeout": 0.0
+  },
+  "obj_oos": {
+   "starts": 22,
+   "passr": 54.5,
+   "breach": 45.5,
+   "timeout": 0.0
+  },
+  "oos_research": {
+   "trades": 445,
+   "pf": 1.04,
+   "win": 43.6,
+   "net": 11233
+  },
+  "mc_p5_maxdd_oos": 57544,
+  "stress_oos": {
+   "starts": 22,
+   "passr": 50.0,
+   "breach": 50.0,
+   "timeout": 0.0
+  }
+ },
+ "ES_FUNDED": {
+  "is_research": {
+   "trades": 2640,
+   "pf": 0.95,
+   "win": 81.0,
+   "net": -56356
+  },
+  "years": {
+   "Y1": {
+    "trades": 533,
+    "pf": 0.87,
+    "win": 78.4,
+    "net": -27542
+   },
+   "Y2": {
+    "trades": 1501,
+    "pf": 0.96,
+    "win": 81.7,
+    "net": -27569
+   },
+   "Y3": {
+    "trades": 1672,
+    "pf": 1.06,
+    "win": 82.9,
+    "net": 34834
+   }
+  },
+  "recent12m": {
+   "trades": 1677,
+   "pf": 1.07,
+   "win": 82.9,
+   "net": 41040
+  },
+  "obj_is": {
+   "banked": 0.0,
+   "breaches": 9,
+   "milk": 0,
+   "bpb": 0
+  },
+  "obj_r12": {
+   "banked": 0.0,
+   "breaches": 3,
+   "milk": 0,
+   "bpb": 0
+  },
+  "obj_oos": {
+   "banked": 0.0,
+   "breaches": 2,
+   "milk": 0,
+   "bpb": 0
+  },
+  "oos_research": {
+   "trades": 1066,
+   "pf": 1.1,
+   "win": 83.7,
+   "net": 37366
+  },
+  "mc_p5_maxdd_oos": 59346,
+  "stress_oos": {
+   "banked": 0.0,
+   "breaches": 2,
+   "milk": 0,
+   "bpb": 0
+  }
+ },
+ "MGC_EVAL": {
+  "is_research": {
+   "trades": 2630,
+   "pf": 1.05,
+   "win": 44.0,
+   "net": 70078
+  },
+  "years": {
+   "Y1": {
+    "trades": 437,
+    "pf": 1.14,
+    "win": 47.8,
+    "net": 25559
+   },
+   "Y2": {
+    "trades": 1077,
+    "pf": 1.13,
+    "win": 45.7,
+    "net": 70418
+   },
+   "Y3": {
+    "trades": 2898,
+    "pf": 1.0,
+    "win": 41.4,
+    "net": -7838
+   }
+  },
+  "recent12m": {
+   "trades": 2899,
+   "pf": 0.99,
+   "win": 41.4,
+   "net": -8862
+  },
+  "obj_is": {
+   "starts": 125,
+   "passr": 39.2,
+   "breach": 57.6,
+   "timeout": 3.2
+  },
+  "obj_r12": {
+   "starts": 48,
+   "passr": 35.4,
+   "breach": 64.6,
+   "timeout": 0.0
+  },
+  "obj_oos": {
+   "starts": 22,
+   "passr": 40.9,
+   "breach": 59.1,
+   "timeout": 0.0
+  },
+  "oos_research": {
+   "trades": 1778,
+   "pf": 1.02,
+   "win": 41.7,
+   "net": 18135
+  },
+  "mc_p5_maxdd_oos": 96529,
+  "stress_oos": {
+   "starts": 22,
+   "passr": 40.9,
+   "breach": 59.1,
+   "timeout": 0.0
+  }
+ },
+ "MGC_FUNDED": {
+  "is_research": {
+   "trades": 5001,
+   "pf": 1.0,
+   "win": 82.9,
+   "net": -1799
+  },
+  "years": {
+   "Y1": {
+    "trades": 770,
+    "pf": 1.05,
+    "win": 81.7,
+    "net": 4622
+   },
+   "Y2": {
+    "trades": 2218,
+    "pf": 0.99,
+    "win": 83.3,
+    "net": -3817
+   },
+   "Y3": {
+    "trades": 5078,
+    "pf": 1.03,
+    "win": 82.5,
+    "net": 21680
+   }
+  },
+  "recent12m": {
+   "trades": 5086,
+   "pf": 1.03,
+   "win": 82.5,
+   "net": 21146
+  },
+  "obj_is": {
+   "banked": 17500.0,
+   "breaches": 16,
+   "milk": 1,
+   "bpb": 1094
+  },
+  "obj_r12": {
+   "banked": 7500.0,
+   "breaches": 13,
+   "milk": 0,
+   "bpb": 577
+  },
+  "obj_oos": {
+   "banked": 4500.0,
+   "breaches": 6,
+   "milk": 0,
+   "bpb": 750
+  },
+  "oos_research": {
+   "trades": 3065,
+   "pf": 1.06,
+   "win": 82.3,
+   "net": 24639
+  },
+  "mc_p5_maxdd_oos": 35873,
+  "stress_oos": {
+   "banked": 1500.0,
+   "breaches": 11,
+   "milk": 0,
+   "bpb": 136
+  }
+ },
+ "MES_EVAL": {
+  "is_research": {
+   "trades": 1317,
+   "pf": 1.09,
+   "win": 45.6,
+   "net": 69002
+  },
+  "years": {
+   "Y1": {
+    "trades": 299,
+    "pf": 1.05,
+    "win": 47.2,
+    "net": 7618
+   },
+   "Y2": {
+    "trades": 730,
+    "pf": 1.11,
+    "win": 45.2,
+    "net": 49968
+   },
+   "Y3": {
+    "trades": 736,
+    "pf": 1.04,
+    "win": 44.2,
+    "net": 19488
+   }
+  },
+  "recent12m": {
+   "trades": 739,
+   "pf": 1.03,
+   "win": 44.0,
+   "net": 15660
+  },
+  "obj_is": {
+   "starts": 124,
+   "passr": 41.1,
+   "breach": 58.1,
+   "timeout": 0.8
+  },
+  "obj_r12": {
+   "starts": 48,
+   "passr": 45.8,
+   "breach": 54.2,
+   "timeout": 0.0
+  },
+  "obj_oos": {
+   "starts": 22,
+   "passr": 50.0,
+   "breach": 50.0,
+   "timeout": 0.0
+  },
+  "oos_research": {
+   "trades": 445,
+   "pf": 1.02,
+   "win": 43.4,
+   "net": 6650
+  },
+  "mc_p5_maxdd_oos": 60706,
+  "stress_oos": {
+   "starts": 22,
+   "passr": 50.0,
+   "breach": 50.0,
+   "timeout": 0.0
+  }
+ },
+ "MES_FUNDED": {
+  "is_research": {
+   "trades": 2640,
+   "pf": 0.9,
+   "win": 81.0,
+   "net": -27685
+  },
+  "years": {
+   "Y1": {
+    "trades": 533,
+    "pf": 0.82,
+    "win": 78.2,
+    "net": -9630
+   },
+   "Y2": {
+    "trades": 1501,
+    "pf": 0.91,
+    "win": 81.7,
+    "net": -14622
+   },
+   "Y3": {
+    "trades": 1672,
+    "pf": 1.0,
+    "win": 82.9,
+    "net": 98
+   }
+  },
+  "recent12m": {
+   "trades": 1677,
+   "pf": 1.01,
+   "win": 82.9,
+   "net": 1623
+  },
+  "obj_is": {
+   "banked": 1500.0,
+   "breaches": 26,
+   "milk": 0,
+   "bpb": 58
+  },
+  "obj_r12": {
+   "banked": 4500.0,
+   "breaches": 9,
+   "milk": 0,
+   "bpb": 500
+  },
+  "obj_oos": {
+   "banked": 3000.0,
+   "breaches": 3,
+   "milk": 0,
+   "bpb": 1000
+  },
+  "oos_research": {
+   "trades": 1066,
+   "pf": 1.04,
+   "win": 83.7,
+   "net": 3852
+  },
+  "mc_p5_maxdd_oos": 18128,
+  "stress_oos": {
+   "banked": 0.0,
+   "breaches": 7,
+   "milk": 0,
+   "bpb": 0
+  }
+ },
+ "pert_GC_IS": {
+  "gap_6_15": {
+   "starts": 125,
+   "passr": 38.4,
+   "breach": 61.6,
+   "timeout": 0.0
+  },
+  "gap_12_21": {
+   "starts": 125,
+   "passr": 34.4,
+   "breach": 59.2,
+   "timeout": 6.4
+  },
+  "stop_80": {
+   "starts": 125,
+   "passr": 45.6,
+   "breach": 52.8,
+   "timeout": 1.6
+  },
+  "stop_120": {
+   "starts": 125,
+   "passr": 40.0,
+   "breach": 57.6,
+   "timeout": 2.4
+  },
+  "confirm_2": {
+   "starts": 125,
+   "passr": 40.0,
+   "breach": 56.0,
+   "timeout": 4.0
+  }
+ },
+ "pert_ES_IS": {
+  "gap_6_12": {
+   "starts": 124,
+   "passr": 30.6,
+   "breach": 69.4,
+   "timeout": 0.0
+  },
+  "gap_12_18": {
+   "starts": 124,
+   "passr": 35.5,
+   "breach": 62.1,
+   "timeout": 2.4
+  },
+  "stop_80": {
+   "starts": 124,
+   "passr": 41.1,
+   "breach": 58.9,
+   "timeout": 0.0
+  },
+  "stop_120": {
+   "starts": 124,
+   "passr": 38.7,
+   "breach": 60.5,
+   "timeout": 0.8
+  },
+  "confirm_0": {
+   "starts": 124,
+   "passr": 40.3,
+   "breach": 58.9,
+   "timeout": 0.8
+  }
+ },
+ "qty_sens_IS": {
+  "MGC_FUNDED_q6": {
+   "banked": 9500.0,
+   "breaches": 17,
+   "milk": 0,
+   "bpb": 559
+  },
+  "MGC_FUNDED_q10": {
+   "banked": 12000.0,
+   "breaches": 18,
+   "milk": 0,
+   "bpb": 667
+  },
+  "MES_FUNDED_q3": {
+   "banked": 0.0,
+   "breaches": 15,
+   "milk": 0,
+   "bpb": 0
+  },
+  "MES_FUNDED_q6": {
+   "banked": 1500.0,
+   "breaches": 26,
+   "milk": 0,
+   "bpb": 58
+  }
+ },
+ "corr_GC_ES": {
+  "corr": 0.024,
+  "overlap_days": 656
+ }
+}

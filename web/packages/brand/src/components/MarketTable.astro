@@ -1,0 +1,139 @@
+---
+/**
+ * Per-market breakdown in units. Net result is shown in that market's own
+ * unit (ticks / points / pips) and never totalled across rows, because a GC
+ * tick and an ES tick are different amounts of money — summing them would be
+ * a category error dressed up as a total. The cross-market total belongs in
+ * R, and lives in the KPI strip above this table.
+ */
+import { formatUnits, formatPercent, formatRatio, formatCount, formatR, formatSlippage, tone } from "../units.js";
+
+interface Market {
+  symbol: string;
+  label: string;
+  unit: string;
+  net_units: number;
+  trades: number;
+  win_rate: number;
+  /** Null until the snapshot job can derive it — rendered as an em dash. */
+  r_total: number | null;
+  profit_factor: number | null;
+  slippage_ticks?: number | null;
+  status?: string;
+}
+
+interface Props {
+  markets: Market[];
+  caption?: string;
+}
+
+const { markets, caption } = Astro.props;
+---
+
+<div class="tablewrap">
+  <table>
+    {caption && <caption>{caption}</caption>}
+    <thead>
+      <tr>
+        <th scope="col">Markt</th>
+        <th scope="col">Engine</th>
+        <th scope="col" class="r">Trades</th>
+        <th scope="col" class="r">Win&nbsp;%</th>
+        <th scope="col" class="r">Netto</th>
+        <th scope="col" class="r">R totaal</th>
+        <th scope="col" class="r">PF</th>
+        <th scope="col" class="r">Slippage</th>
+      </tr>
+    </thead>
+    <tbody>
+      {markets.map((m) => (
+        <tr>
+          <th scope="row">
+            <span class="sym">{m.symbol}</span>
+            <span class="lbl">{m.label}</span>
+          </th>
+          <td class="status">{m.status ?? "—"}</td>
+          <td class="r num">{formatCount(m.trades)}</td>
+          <td class="r num">{formatPercent(m.win_rate)}</td>
+          <td class:list={["r", "num", tone(m.net_units)]}>
+            {formatUnits(m.net_units, m.unit)}
+          </td>
+          <td class:list={["r", "num", tone(m.r_total)]}>{formatR(m.r_total)}</td>
+          <td class="r num">{formatRatio(m.profit_factor)}</td>
+          <td class="r num slip">
+            {m.slippage_ticks === null || m.slippage_ticks === undefined
+              ? "—"
+              : formatSlippage(m.slippage_ticks)}
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  table {
+    min-width: 760px;
+    font-family: var(--mono);
+    font-size: var(--t-small);
+  }
+
+  caption {
+    caption-side: bottom;
+    text-align: left;
+    padding: var(--sp-3) var(--sp-4);
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 0.6875rem;
+    line-height: 1.6;
+  }
+
+  thead th {
+    background: var(--surface-2);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: var(--t-eyebrow);
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  tbody th,
+  tbody td {
+    padding: var(--sp-3) var(--sp-4);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    white-space: nowrap;
+    font-weight: 400;
+    text-align: left;
+  }
+
+  tbody tr:last-child th,
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+
+  .r { text-align: right; }
+
+  .sym {
+    color: var(--accent);
+    font-weight: 700;
+    margin-right: var(--sp-2);
+  }
+
+  .lbl { color: var(--muted); }
+  .status { color: var(--dim); }
+  .slip { color: var(--accent-2); }
+
+  .pos { color: var(--pos); }
+  .neg { color: var(--neg); }
+</style>

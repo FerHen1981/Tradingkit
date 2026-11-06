@@ -1,0 +1,30 @@
+---
+term: Overfitting
+short: "Het zo nauw op historische data afstemmen van een model dat het het toeval in die data beschrijft in plaats van een patroon."
+category: risico
+aliases:
+  - curve fitting
+  - overpassing
+authority: false
+sources: []
+related:
+  - out-of-sample
+  - walk-forward
+  - backtest
+  - monte-carlo
+updated: 2026-08-15
+draft: false
+---
+
+Elke dataset bevat structuur die er toevallig in zit. Voeg genoeg regels en filters
+toe en je kunt elke historie perfect verklaren — inclusief de ruis, die zich niet
+herhaalt.
+
+Waarschuwingssignalen: veel parameters op weinig trades, regels die precies één
+slechte periode uitsluiten, resultaten die instorten bij een kleine wijziging van
+een instelling, en filters waar geen mechanisme achter zit dat je in gewone taal
+kunt uitleggen.
+
+Die laatste is de bruikbaarste toets. Een filter dat je kunt onderbouwen —
+bijvoorbeeld dat rond expiratie de liquiditeit verandert — overleeft vaker dan een
+filter dat alleen in de cijfers werd gevonden.

@@ -1,0 +1,10 @@
+# Oneshot healthcheck — gestart door mex-healthcheck.timer.
+#   sudo cp mex-healthcheck.* /etc/systemd/system/ (of pad in ExecStart aanpassen)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mex-healthcheck.timer
+[Unit]
+Description=MEX middleware healthcheck (curl /health, herstart bij falen)
+After=mex-middleware.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/mex-middleware/deploy/mex-healthcheck.sh

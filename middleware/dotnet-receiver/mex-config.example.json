@@ -1,0 +1,27 @@
+{
+  "//": "D-79 voorbeeld — subset van schema-config.md dat de fase-1-provider vandaag consumeert. Kopieer naar /root/mex-config/mex.json en pas aan.",
+  "version": 1,
+  "updated": "2026-09-28T00:00:00Z",
+  "updated_by": "example",
+  "defaults": {
+    "caps": { "entries_per_day": 8 }
+  },
+  "accounts": {
+    "PAAPEX2700250000013": {
+      "channel": "apex_50k_legacy_pa",
+      "strategy": "MAT-MES-P",
+      "status": "active",
+      "caps": { "daily_loss": 1200, "entries_per_day": 8 },
+      "contracts": 1,
+      "publish": true
+    },
+    "APEX27002500000205": {
+      "channel": "apex_50k_intraday_eval",
+      "strategy": "TES-MGC-C",
+      "status": "halted",
+      "caps": { "entries_per_day": 4 },
+      "contracts": 1,
+      "publish": false
+    }
+  }
+}

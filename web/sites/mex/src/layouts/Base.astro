@@ -1,0 +1,83 @@
+---
+import "@mex/brand/styles/fonts.css";
+import "@mex/brand/styles/tokens.css";
+import "@mex/brand/styles/base.css";
+import "../styles/theme.css";
+
+import BaseHead from "@mex/brand/components/BaseHead.astro";
+import SiteHeader from "@mex/brand/components/SiteHeader.astro";
+import SiteFooter from "@mex/brand/components/SiteFooter.astro";
+import Logo from "@mex/brand/components/Logo.astro";
+
+import { site } from "../site.config";
+
+interface Props {
+  title: string;
+  description?: string;
+  image?: string;
+  type?: "website" | "article";
+  publishedAt?: Date;
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description = site.description,
+  image,
+  type = "website",
+  publishedAt,
+  noindex = false,
+} = Astro.props;
+
+const path = Astro.url.pathname;
+---
+
+<!doctype html>
+<html lang="nl">
+  <head>
+    <BaseHead
+      title={title}
+      description={description}
+      siteName={site.name}
+      origin={site.origin}
+      path={path}
+      image={image}
+      faviconHref="/favicon.svg"
+      appleIcon="/appicon.png"
+      locale={site.ogLocale}
+      type={type}
+      publishedAt={publishedAt}
+      noindex={noindex}
+    />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Naar de inhoud</a>
+
+    <SiteHeader
+      mark={site.brand.mark}
+      word={site.brand.word}
+      tag={site.brand.tag}
+      nav={[...site.nav]}
+      cta={site.cta}
+      path={path}
+    >
+      <Logo slot="brand" size={26} />
+    </SiteHeader>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <SiteFooter
+      mark={site.brand.mark}
+      word={site.brand.word}
+      tagline={site.brand.tagline}
+      columns={site.footer.columns.map((c) => ({ ...c, items: [...c.items] }))}
+      entity={site.entity}
+      registration={site.registration}
+      legal={[...site.footer.legal]}
+    >
+      <Logo slot="brand" size={24} />
+    </SiteFooter>
+  </body>
+</html>

@@ -134,7 +134,10 @@ en Recap gaan als tekst-draft (zonder screenshots) naar de Content Hub. Cijfers 
 worden niet opgeschreven: zolang D-163 open is staat er "geen fills-bron" bij de P&L.
 De pagina wordt gevuld door de **bestaande** geplande Chat-taken *PA · Dagstart* (06:17) en
 *PA · Dagafsluiting* (21:11); Outlook en Recap door *Daily Outlook 07:00* en *Daily Recap 22:00*.
-Register en originele prompts: `docs/scheduled-tasks/`. ⚠️ De PA in die taken is **Claude**
+Register en originele prompts: `docs/scheduled-tasks/`. 🔴 **Sinds 06-11 vallen álle geplande taken onder beheer van de SM**
+(besluit Ferry) — ook Outlook, Recap en de Discord-autopost; elke prompt-wijziging loopt via deze chat en
+wordt in dat register bijgeschreven. Koppelingen (connectors) aan een taak kan alleen Ferry zetten, in de
+taakinstellingen op claude.ai; via de API lukt dat niet. ⚠️ De PA in die taken is **Claude**
 ("Chief of Staff (Claude, Ferry's enige AI-spreekbuis)"); of de CoS nog op ChatGPT draait zoals
 hieronder staat (spec 21-08) is sinds 05-11 onzeker en nog niet door Ferry bevestigd.
 

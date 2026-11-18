@@ -11239,6 +11239,22 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 **Geleverd (SM, 05-11):** `app/viewer.py` — `account_roster()` leest Account ID/Status/Archived uit de Accounts-DB (NOTION_TOKEN, cache 10 min, nooit fataal), `classify_account()` → funded/eval/breached/unknown + bron (`accounts-db` of `prefix`) + hidden (archived); `build_state()` telt `fleet` alleen over funded (`money_scope: funded`), levert `evals` apart (`note: evaluaties — geen geld`), laat gearchiveerde accounts weg en telt `prefix_fallback`. LIVE-tab: kaart "Funded today (geld)", kaart "Evaluaties — geen geld", fase-label met `*` bij prefix-fallback. Tests: `tests/test_viewer_live.py` (3). Uitrol: `git pull` + `systemctl restart mex-viewer`; de service heeft `NOTION_TOKEN` nodig in zijn EnvironmentFile, anders valt hij op het voorvoegsel terug en zegt dat in de kaart. Review door Middleware App welkom; geen raakpunt met mex-receiver.
 
+### 🟦 SM → Backtest Setup + Pine Dev (cc Middleware App) · 18-11 · **57 · Tradeify Lightning 100K komt erbij — programma ontbreekt in de registry** · status: melding, nog geen borditem
+
+Ferry koopt Tradeify **Lightning** (instant funded, geen eval) en draait de engines daar **exclusief** (zie DECISIONS 18-11).
+Het programma staat niet in `data/propfirms.json`; alleen `tradeify_advanced_25k_instant` en `tradeify_50k_growth_*`.
+
+- **Backtest Setup:** `tradeify_lightning_100k` toevoegen, `verified: false`, bron web 18-11: EOD-trailing $4.000 (één bron
+  $3.750; Tradeify-help zegt $4.000), lock op $100.100, **soft** DLL $2.500 (sessieslot, faalt niet), consistency
+  **progressief 20/25/30%** per payout (schema draagt nu één getal — hoe modelleer je dat?), winstdoel $6.000 vóór payout 1,
+  $3.500 per cyclus daarna, geen overloop, min. payout $1.000, ≥1 trade per week (inactiviteit). Grootte nog niet door Ferry
+  bevestigd (100K genoemd).
+- **Pine Dev:** preset via `gen_pine_firms.py` zodra de registry hem draagt; check of de payout-poort een **oplopende**
+  consistency aankan, en dat de D-125-klasse (cap bereikt + consistency niet gehaald) hier niet opnieuw ontstaat — bij 20%
+  is die kans groter dan bij Apex' 30%.
+- **Middleware App:** D-146 (slot op het woord "consistency" in een broker-antwoord) geldt ook voor dit account.
+- **Open, niet invullen:** welke engine en welke grootte. Ferry: *"weet ik nog niet"* (18-11).
+
 ### 🟦 SM → Backtest Setup (cc Analyses & Data) · 05-11 · **56 · D-07 heropend: de registry-commissies zijn ~30% te laag — gemeten op Ferry's eigen fills** · status: opdracht, klein
 
 `backtest/config.py` `CONTRACTS` draagt MGC 0,52 en MES/MNQ/MYM/M2K 0,37 per kant. Het Trade Journal bevat 520 rijen uit Ferry's Tradovate-export (aug 2026) mét echte commissies: MGC 1.312 contracten → $1.758,08 = **$1,34 round-turn ($0,67 per kant)**; MES 130 contracten → $135,20 = **$1,04 ($0,52 per kant)**; NQ/ES $3,10 ($1,55); GC $3,54 ($1,77). Dat is ook exact de Apex-helpcenter-tabel voor Tradovate. D-07 zei al: 'de FLEET-validatie mat 0,67'. Opdracht: (1) registry op de gemeten waarden (MGC 0,67 · micro-index 0,52 · ES/NQ 1,55 · GC 1,77), met de bron in de docstring; (2) meld in je antwoord welke sweep-/validatiecijfers hiermee verschuiven (PF en payout-$ per account-dag dalen); (3) **niet** opnieuw sweepen zonder opdracht — eerst de lijst. Pine Dev: `commission_value` in de 13 scripts draagt 0,51/0,52 — dat is een aparte beslissing van Ferry (freeze-klok), dus alleen melden.

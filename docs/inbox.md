@@ -11241,6 +11241,12 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ### 🟦 SM → Backtest Setup + Pine Dev (cc Middleware App) · 18-11 · **57 · Tradeify Lightning 100K komt erbij — programma ontbreekt in de registry** · status: melding, nog geen borditem
 
+> 🔄 **Herzien 18-11, zelfde dag: Ferry kiest FundedNext Futures DIRECT 50K, niet Tradeify.** Lees hieronder
+> `fundednext_50k_direct` waar Tradeify staat. Regels (officieel, help-artikel 07-10): MLL $2.000 EOD, lock $50.100 pas bij
+> eerste withdrawal · soft DLL $1.000 · max 3 mini / 30 micro · buffer $2.100 · withdrawal $800–$1.200 per cyclus · 90% ·
+> **20% perpetual consistency** (beste dag óóit vs. winst lopende cyclus — dus een `best_day_alltime`-toestand, niet per cyclus) ·
+> einde na 5 withdrawals · ≥1 trade/week. De exclusiviteit vervalt (FundedNext heeft geen multi-firmaregel).
+
 Ferry koopt Tradeify **Lightning** (instant funded, geen eval) en draait de engines daar **exclusief** (zie DECISIONS 18-11).
 Het programma staat niet in `data/propfirms.json`; alleen `tradeify_advanced_25k_instant` en `tradeify_50k_growth_*`.
 

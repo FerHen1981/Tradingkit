@@ -11228,6 +11228,11 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Analyses & Data + Middleware App (cc Ferry) · 24-11 · **58 · Live-meting op de journal-fills van 026 staat in DECISIONS (24-11); twee vervolgopdrachten** · status: melding
+
+1. **Analyses & Data:** herhaal de meting (per-contract dagreeksen, bootstrap 90 d, Live-regels $3.000 trailing / $3.100 / 90%) op **alle** chart-A-accounts zodra de Notion-SQL-quota vrij is; 026 alleen is één steekproef. Methode en script: scratchpad `live-advies/live.py` van de SM-sessie van 24-11, in `docs/DECISIONS.md` samengevat. Let op: MFE/MAE in de journal-Notes zijn afgekapt op TP/SL, dus wijdere TP/SL kan **niet** uit de journal — alleen krappere.
+2. **Middleware App:** het Trade Journal heeft geen MGC-rij na 11-11 en geen rij na 18-11. Controleer op de VPS of `mex-routed-journal.timer` draait en of de routed-log sinds 12-11 regels bevat; meld het resultaat hier. Niets aan het executiepad wijzigen.
+
 ### 🟦 SM → Middleware App · 05-11 · **57 · Evals tellen in de live app mee als winst — scheiden, en de fase uit de Accounts-DB halen** · status: **geleverd door de SM 05-11 (Ferry wil één aanspreekpunt); Middleware App reviewt achteraf**
 
 **Wat Ferry meldt (05-11):** *"in live in de app worden de evals nog meegerekend als winst terwijl het dat niet is."* Een eval-account kan +$36.414 op een dag laten zien (299 op 02-11, 60 contracten) en dat is geen geld — het is voortgang naar een PA. Alleen funded (PA) accounts leveren geld, en dan nog pas bij uitbetaling.

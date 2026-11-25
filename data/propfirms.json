@@ -1,6 +1,6 @@
 {
   "version": "0.4.0",
-  "updated": "2026-09-29",
+  "updated": "2026-11-25",
   "value_unit_note": "Rule values carry a unit ('usd' or 'pct'). % is of account size unless noted. VERIFY all — rules change; verified=false means Claude-drafted, not human-confirmed.",
   "programs": [
     {
@@ -733,7 +733,7 @@
     {
       "key": "topstep_50k_eval",
       "firm": "Topstep",
-      "display_name": "Topstep 50K — Combine",
+      "display_name": "Topstep 50K — Trading Combine (EOD)",
       "status": "active",
       "asset_class": "futures",
       "stage": "eval",
@@ -743,17 +743,15 @@
         "currency": "USD",
         "fee": 49,
         "fee_refundable": false,
-        "reset_fee": null
+        "reset_fee": 49,
+        "fee_note": "$49 per maand (standaardpad, activatie XFA $149) of $95 per maand (pad zonder activatiefee); reset $49 resp. $95; pad vast bij aankoop"
       },
       "targets_limits": {
         "profit_target": {
           "value": 3000,
           "unit": "usd"
         },
-        "max_daily_loss": {
-          "value": 1000,
-          "unit": "usd"
-        },
+        "max_daily_loss": null,
         "max_overall_loss": {
           "value": 2000,
           "unit": "usd"
@@ -763,20 +761,29 @@
         "trailing_locks_at": {
           "value": 2000,
           "unit": "usd"
-        }
+        },
+        "max_daily_loss_note": "DLL $1.000 is OPTIONEEL (vast bij aankoop): posities worden geflattend en de dag gaat dicht tot 17:00 CT, geen overtreding",
+        "trailing_lock_note": "trailt op dagslot, lockt permanent op het startsaldo; liquidatie bij aanraken, ook op open P&L"
       },
       "trading_rules": {
         "min_trading_days": 2,
         "max_trading_days": null,
-        "consistency": null,
+        "consistency": {
+          "type": "best_day_pct_of_target",
+          "value": 55,
+          "note": "beste dag < 55% van het winstdoel ($1.650); erboven stijgt het doel (beste dag ÷ 0,55); beste dag lockt om 15:10 CT"
+        },
         "overnight_allowed": false,
         "weekend_allowed": false,
         "news_allowed": true,
         "max_position": {
           "value": 5,
-          "unit": "contracts"
+          "unit": "contracts",
+          "note": "5 mini of 50 micro, 10:1 gedeeld"
         },
-        "scaling_plan": null
+        "scaling_plan": null,
+        "trading_day": "17:00 CT – 15:10 CT, alles plat om 15:10 CT",
+        "time_limit": null
       },
       "funded": {
         "profit_split": 0.9,
@@ -789,20 +796,19 @@
       },
       "execution": {
         "platforms": [
-          "Rithmic",
-          "Tradovate",
-          "Quantower"
+          "TopstepX"
         ],
         "data_feed": "CME",
         "sizing_unit": "contracts",
         "default_symbol": "NQ",
-        "symbol_map": {}
+        "symbol_map": {},
+        "automation": "automatische strategieën toegestaan onder voorwaarden; trade copiers toegestaan; webhooks niet genoemd"
       },
       "meta": {
-        "source": "phidias/velotrade 2026",
-        "as_of": "2026-07",
-        "verified": false,
-        "notes": "EOD trailing, floor locks at start balance. 90/10 split, weekly payouts. VERIFY 100k/150k sizes."
+        "source": "topstep.com/pricing, help.topstep.com: Trading Combine parameters, DLL-artikel, XFA parameters, payout policy, pricing questions; gelezen 2026-11-25 door de SM",
+        "as_of": "2026-11-25",
+        "verified": true,
+        "notes": "Maandabonnement. Harde DLL bestaat niet: de optionele DLL liquideert maar breacht niet."
       },
       "converts_to": null
     },
@@ -1892,7 +1898,7 @@
     {
       "key": "fundednext_50k_rapid_eval",
       "firm": "FundedNext",
-      "display_name": "FundedNext Futures 50K — Rapid Eval (EOD)",
+      "display_name": "FundedNext Futures 50K — Rapid Pro Challenge (EOD)",
       "status": "active",
       "asset_class": "futures",
       "stage": "eval",
@@ -1900,9 +1906,12 @@
       "account": {
         "size": 50000,
         "currency": "USD",
-        "fee": null,
-        "fee_refundable": null,
-        "reset_fee": null
+        "fee": 149.99,
+        "fee_refundable": false,
+        "reset_fee": 172.99,
+        "fee_recurring": 174.99,
+        "fee_list": 299.99,
+        "fee_note": "eerste aankoop $149,99 (code RAPID, 47% van $299,99); herhaalde aankoop $174,99; reset $172,99 (alleen in de challenge); DLL-add-on $109,99/$134,99 met reset $132,99"
       },
       "targets_limits": {
         "profit_target": {
@@ -1919,17 +1928,24 @@
         "trailing_locks_at": {
           "value": 2100,
           "unit": "usd"
-        }
+        },
+        "trailing_lock_note": "floor lockt op $50.100 zodra de piek $52.100 haalt (+$2.100)"
       },
       "trading_rules": {
-        "min_trading_days": 1,
+        "min_trading_days": 0,
         "max_trading_days": null,
         "consistency": null,
         "overnight_allowed": false,
         "weekend_allowed": false,
         "news_allowed": true,
-        "max_position": null,
-        "scaling_plan": null
+        "max_position": {
+          "value": 4,
+          "unit": "contracts",
+          "note": "4 e-mini of 40 micro"
+        },
+        "scaling_plan": null,
+        "micro_scalping_rule": "trades ≤ 10 s ≥ 40% van de trades/winst zet het doel on hold",
+        "time_limit": null
       },
       "funded": {
         "profit_split": null,
@@ -1944,26 +1960,28 @@
       },
       "execution": {
         "platforms": [
-          "Rithmic",
-          "Tradovate"
+          "Tradovate",
+          "NinjaTrader",
+          "TradingView (via Tradovate)"
         ],
         "data_feed": "CME",
         "sizing_unit": "contracts",
         "default_symbol": null,
-        "symbol_map": {}
+        "symbol_map": {},
+        "automation": "EAs/bots toegestaan; kopiëren tussen eigen accounts toegestaan; reverse hedge over accounts verboden"
       },
       "meta": {
-        "source": "helpfutures.fundednext.com / thetraderstack / damnpropfirms (web, 2026-09-29); plan per Ferry-rule 29-09",
-        "as_of": "2026-09",
-        "verified": false,
-        "notes": "Plan closest to the Apex rules (Ferry 29-09). Rapid = FundedNext Futures' EOD-trailing 50K (replaced the retired Bolt/Rapid July 2026). DD $2000 EOD, locks at $50,100. No eval consistency, no firm DLL (Bolt's $1000 soft was retired). WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+        "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
+        "as_of": "2026-11-25",
+        "verified": true,
+        "notes": "Geen DLL (optionele add-on $1.000 soft breach), geen minimum dagen, geen tijdslimiet, geen consistentie in de challenge. Rapid Daily-variant: DLL $1.000, geen consistentie in beide fasen."
       },
       "converts_to": "fundednext_50k_rapid_pa"
     },
     {
       "key": "fundednext_50k_rapid_pa",
       "firm": "FundedNext",
-      "display_name": "FundedNext Futures 50K — Rapid Funded (EOD)",
+      "display_name": "FundedNext Futures 50K — Rapid Pro FundedNext Account",
       "status": "active",
       "asset_class": "futures",
       "stage": "funded",
@@ -1971,9 +1989,10 @@
       "account": {
         "size": 50000,
         "currency": "USD",
-        "fee": null,
-        "fee_refundable": null,
-        "reset_fee": null
+        "fee": 0,
+        "fee_refundable": false,
+        "reset_fee": null,
+        "fee_note": "geen activatiefee"
       },
       "targets_limits": {
         "profit_target": null,
@@ -1987,33 +2006,53 @@
         "trailing_locks_at": {
           "value": 2100,
           "unit": "usd"
-        }
+        },
+        "trailing_lock_note": "floor lockt op $50.100 zodra de piek $52.100 haalt (+$2.100)"
       },
       "trading_rules": {
         "min_trading_days": null,
         "max_trading_days": null,
-        "consistency": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 40,
+          "note": "beste dag ÷ totale winst van de cyclus ≤ 40%, dus ≥ 3 winstdagen"
+        },
         "overnight_allowed": false,
         "weekend_allowed": false,
         "news_allowed": true,
-        "max_position": null,
+        "max_position": {
+          "value": 4,
+          "unit": "contracts",
+          "note": "4 e-mini of 40 micro"
+        },
         "scaling_plan": null
       },
       "funded": {
         "profit_split": 0.9,
         "split_scaling": null,
-        "payout_cadence": "on_demand",
+        "payout_cadence": "elke 3 dagen",
         "first_payout_wait_days": null,
-        "min_payout": null,
+        "min_payout": 250,
         "payout_cap": null,
-        "payout_ladder": null,
+        "payout_ladder": [
+          1000,
+          1000,
+          1000,
+          1250,
+          1250
+        ],
         "safety_net_payouts": null,
-        "in_eval_profit_share": null
+        "in_eval_profit_share": null,
+        "min_cycle_profit": 500,
+        "max_payouts": 5,
+        "account_ends_after_max_payouts": true,
+        "activation_fee": 0
       },
       "execution": {
         "platforms": [
-          "Rithmic",
-          "Tradovate"
+          "Tradovate",
+          "NinjaTrader",
+          "TradingView (via Tradovate)"
         ],
         "data_feed": "CME",
         "sizing_unit": "contracts",
@@ -2021,10 +2060,10 @@
         "symbol_map": {}
       },
       "meta": {
-        "source": "helpfutures.fundednext.com / thetraderstack / damnpropfirms (web, 2026-09-29); plan per Ferry-rule 29-09",
-        "as_of": "2026-09",
-        "verified": false,
-        "notes": "Plan closest to the Apex rules (Ferry 29-09). EOD trailing $2000, no firm DLL, 90/10 split, payouts daily/every 3 days. Funded consistency not confirmed (left null). WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+        "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
+        "as_of": "2026-11-25",
+        "verified": true,
+        "notes": "Ladder van vijf: $1.000 ×3, $1.250 ×2, daarna eindigt het account (max $5.500 bruto). 40% consistentie, min $500 per cyclus, geen activatiefee."
       },
       "converts_to": null
     },
@@ -2315,6 +2354,181 @@
         "as_of": "2026-09",
         "verified": false,
         "notes": "Plan closest to the Apex rules (Ferry 29-09). Growth EOD funded. DD $2000 EOD, $1250 soft DLL (session lock, no fail), 35% funded consistency, 90/10, payout cap $3000 from the 4th payout. WEB-SOURCED 2026-09-29, not owner-verified — confirm before D-96 relies on it."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "fundednext_50k_direct_pa",
+      "firm": "FundedNext",
+      "display_name": "FundedNext Futures 50K — Direct (instant funded)",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": 0,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": 149.99,
+        "fee_refundable": false,
+        "reset_fee": null,
+        "fee_note": "productpagina $149,99 (code FNDIRECT, 47% van $284,99), help-artikel: eerste aankoop $144,99 / herhaald $169,99 — tegenstrijdig; geen reset mogelijk",
+        "fee_recurring": 169.99,
+        "fee_list": 284.99
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": {
+          "value": 1000,
+          "unit": "usd"
+        },
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2100,
+          "unit": "usd"
+        },
+        "max_daily_loss_note": "soft breach: handel dicht voor de rest van de dag",
+        "trailing_lock_note": "floor lockt op $50.100 zodra de piek $52.100 haalt (+$2.100)"
+      },
+      "trading_rules": {
+        "min_trading_days": 0,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "max_day_pct_of_total",
+          "value": 20,
+          "note": "perpetueel: beste dag ooit ÷ winst van de lopende cyclus ≤ 20%; de beste dag loopt mee over cycli"
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": {
+          "value": 3,
+          "unit": "contracts",
+          "note": "3 e-mini of 30 micro, vast bij aanmaak"
+        },
+        "scaling_plan": null,
+        "min_activity": "minimaal één trade per week, anders breach"
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "per cyclus zodra buffer en consistentie staan ('in 5 dagen')",
+        "first_payout_wait_days": null,
+        "min_payout": 800,
+        "payout_cap": 1200,
+        "payout_ladder": null,
+        "safety_net_payouts": null,
+        "in_eval_profit_share": null,
+        "min_cycle_profit": null,
+        "max_payouts": 5,
+        "account_ends_after_max_payouts": true,
+        "activation_fee": 0,
+        "buffer_before_first_payout": 2100
+      },
+      "execution": {
+        "platforms": [
+          "Tradovate",
+          "NinjaTrader",
+          "TradingView (via Tradovate)"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": null,
+        "symbol_map": {}
+      },
+      "meta": {
+        "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
+        "as_of": "2026-11-25",
+        "verified": true,
+        "notes": "Instant funded, geen challenge. Vijf uitbetalingen van max $1.200 (max $6.000 bruto), dan eindigt het account. 20% perpetuele consistentie maakt elke cyclus ≥ 5× de beste dag."
+      },
+      "converts_to": null
+    },
+    {
+      "key": "topstep_50k_xfa",
+      "firm": "Topstep",
+      "display_name": "Topstep 50K — Express Funded Account",
+      "status": "active",
+      "asset_class": "futures",
+      "stage": "funded",
+      "eval_steps": 1,
+      "account": {
+        "size": 50000,
+        "currency": "USD",
+        "fee": 149,
+        "fee_refundable": false,
+        "reset_fee": null,
+        "fee_note": "activatie $149 per XFA op het standaardpad, $0 op het $95-pad; Back2Funded: max 2 heractiveringen"
+      },
+      "targets_limits": {
+        "profit_target": null,
+        "max_daily_loss": null,
+        "max_overall_loss": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "drawdown_type": "eod_trailing",
+        "drawdown_basis": "balance",
+        "trailing_locks_at": {
+          "value": 2000,
+          "unit": "usd"
+        },
+        "max_daily_loss_note": "DLL $1.000 is OPTIONEEL (vast bij aankoop): posities worden geflattend en de dag gaat dicht tot 17:00 CT, geen overtreding",
+        "trailing_lock_note": "MLL $2.000 EOD; na de eerste uitbetaling reset de MLL naar $0 (vloer = startsaldo); breach = liquidatie en sluiting op dagslot"
+      },
+      "trading_rules": {
+        "min_trading_days": null,
+        "max_trading_days": null,
+        "consistency": {
+          "type": "best_day_pct_of_total",
+          "value": 40,
+          "note": "alleen op het consistentiepad: 3 handelsdagen, beste dag ≤ 40% van de netto winst; standaardpad: geen consistentie"
+        },
+        "overnight_allowed": false,
+        "weekend_allowed": false,
+        "news_allowed": true,
+        "max_position": {
+          "value": 5,
+          "unit": "contracts",
+          "note": "5 mini of 50 micro, 10:1 gedeeld"
+        },
+        "scaling_plan": null,
+        "trading_day": "17:00 CT – 15:10 CT, alles plat om 15:10 CT",
+        "time_limit": null
+      },
+      "funded": {
+        "profit_split": 0.9,
+        "split_scaling": null,
+        "payout_cadence": "op aanvraag tijdens CME-uren; per aanvraag opnieuw aan de padregels voldoen",
+        "min_payout": 125,
+        "payout_cap": 2000,
+        "payout_ladder": null,
+        "in_eval_profit_share": null,
+        "payout_cap_note": "standaardpad: 5 winstdagen ≥ $150, max 50% van het saldo tot $2.000; consistentiepad: 3 dagen, beste dag ≤ 40%, max 50% tot $3.000; actie met DLL: $4.000/$6.000",
+        "max_payouts": null,
+        "activation_fee": 149,
+        "max_active_accounts": 5,
+        "live_transition": "Live Funded Account na XFA; LFA: 5 winstdagen ≥ $150 per cyclus, tot 50% zonder cap, dagelijkse payouts na 30 winstdagen"
+      },
+      "execution": {
+        "platforms": [
+          "TopstepX"
+        ],
+        "data_feed": "CME",
+        "sizing_unit": "contracts",
+        "default_symbol": "NQ",
+        "symbol_map": {},
+        "automation": "automatische strategieën toegestaan onder voorwaarden; trade copiers toegestaan; webhooks niet genoemd"
+      },
+      "meta": {
+        "source": "topstep.com/pricing, help.topstep.com: Trading Combine parameters, DLL-artikel, XFA parameters, payout policy, pricing questions; gelezen 2026-11-25 door de SM",
+        "as_of": "2026-11-25",
+        "verified": true,
+        "notes": "Geen plafond op het aantal uitbetalingen; inactief > 30 dagen kan sluiten."
       },
       "converts_to": null
     }

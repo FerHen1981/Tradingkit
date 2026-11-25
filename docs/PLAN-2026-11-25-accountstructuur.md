@@ -18,6 +18,20 @@ reviews, hun sites weigeren automatische lezers). In-sample; OOS-regel D-18 blij
 per persoon), DayTraders (live 1 contract, sim-kant 15 maar regels onvolledig), Lucid tot de regels officieel
 nagelezen zijn (mogelijk tweede FundedNext: 5 funded, 10 totaal).
 
+## Gelijke maat: het hele pad vanaf aankoop (toegevoegd 25-11, avond)
+
+Per slot, 120 handelsdagen, opnamebeleid $1.000 boven de floor overal, herkopen na breach of einde:
+
+| Route | Netto gem. | Netto mediaan | Slots met uitbetaling | Mediaan dag 1e uitbetaling | Evals per 120 d |
+|---|---|---|---|---|---|
+| FundedNext Rapid Pro (Toro 4 NQ TP 155 → Tesoro) | $2.269 | $2.203 | 91% | 25 | 7,2 |
+| Topstep (Combine 4 NQ → XFA) | $1.999 | $1.568 | 92% | 30 | 7,3 |
+| Apex legacy (Toro 5 NQ → PA) | $813 | −$232 | 65% | 67 | 4,2 |
+| FundedNext Direct (Tesoro vanaf dag 1) | $393 | $274 | 61% | 65 | 0 |
+
+Direct hoort in het plaatje als cashflow-kandidaat, maar verliest ook op gelijke maat: zijn ene hobbel
+($2.100 buffer plus de 20%-regel) duurt langer dan eval én buffer bij Rapid Pro samen.
+
 ## Hoe de drie rollen samenhangen
 
 1. **Instroom** loopt via El Toro-evals: FundedNext Rapid Pro (1 dag), Topstep Combine (4 NQ, 1 hit per

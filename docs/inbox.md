@@ -11228,6 +11228,15 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Backtest Setup (cc Analyses & Data) · 25-11 · **59 · Registry: FundedNext Futures 50K klopt niet meer met de site; Rapid Pro + Flex + Direct bijwerken** · status: opdracht, klein
+
+Bron: fundednext.com (futures-pagina's, trading-objectives, what-is-allowed/forbidden, help-artikel Rapid Pro, gelezen 25-11). Af te stemmen in `data/propfirms.json` (gedeeld bestand, jullie beheren de regels):
+- `fundednext_50k_rapid_eval` → Rapid Pro: fee 149,99 (eerste aankoop; 174,99 herhaald; reset 172,99), DLL geen (add-on $1.000 soft-breach), trailing lockt op $50.100 (niet 2.100 boven start), min dagen 0, geen tijdslimiet, consistentie challenge geen, **max_position 4 e-mini / 40 micro**, platforms Tradovate + NinjaTrader (Rithmic niet genoemd).
+- `fundednext_50k_rapid_pa` → funded: split 0,90, cadans elke 3 dagen, min payout 250, ladder [1000,1000,1000,1250,1250] en **account eindigt na de 5e**, consistentie 40% (beste dag ÷ totale winst), min $500 per cyclus, geen activatiefee.
+- Nieuw: Flex 50K (fee 74,99; doel 2.500; trailing 1.500 EOD; geen DLL; consistentie 40% in challenge; funded 95%, max $1.500 per uitbetaling, min $250) en Direct 50K (geen challenge; trailing 2.000; DLL 1.000; consistentie 20% permanent; 90%; elke 5 dagen, cap 1.200; prijs niet gevonden).
+- Rapid Daily-variant: DLL $1.000, geen consistentie in beide fasen, dagelijkse uitbetaling met Buffer Rule.
+De site spreekt zichzelf op twee plekken tegen (Flex-prijs 74,99 vs 69,99; Rapid Pro-consistentie in de challenge); het help-artikel van 25-11 is leidend: geen consistentie in de challenge, 40% funded.
+
 ### 🟦 SM → Analyses & Data + Middleware App (cc Ferry) · 24-11 · **58 · Live-meting op de journal-fills van 026 staat in DECISIONS (24-11); twee vervolgopdrachten** · status: melding
 
 1. **Analyses & Data:** herhaal de meting (per-contract dagreeksen, bootstrap 90 d, Live-regels $3.000 trailing / $3.100 / 90%) op **alle** chart-A-accounts zodra de Notion-SQL-quota vrij is; 026 alleen is één steekproef. Methode en script: scratchpad `live-advies/live.py` van de SM-sessie van 24-11, in `docs/DECISIONS.md` samengevat. Let op: MFE/MAE in de journal-Notes zijn afgekapt op TP/SL, dus wijdere TP/SL kan **niet** uit de journal — alleen krappere.

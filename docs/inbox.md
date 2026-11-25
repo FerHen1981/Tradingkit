@@ -11237,6 +11237,9 @@ Bron: fundednext.com (futures-pagina's, trading-objectives, what-is-allowed/forb
 - Rapid Daily-variant: DLL $1.000, geen consistentie in beide fasen, dagelijkse uitbetaling met Buffer Rule.
 De site spreekt zichzelf op twee plekken tegen (Flex-prijs 74,99 vs 69,99; Rapid Pro-consistentie in de challenge); het help-artikel van 25-11 is leidend: geen consistentie in de challenge, 40% funded.
 
+
+Aanvulling 25-11 (zelfde opdracht): **MFFU Builder 50K** (officiële planpagina): $92 promo / $153 lijst, eenmalig; doel 3.000; EOD-trailing 2.000, floor 48.000, lock-level $100; DLL $1.000 **zachte pauze**; min dagen 1 (planheader zegt 2, regeltabel 1); eval-consistentie geen; 4 mini / 40 micro; funded 80/20, elke 48 u, min $500, max $2.000 per cyclus, 2 kwalificatiedagen per cyclus, 50% consistentie, buffer $2.100, max 5 sim-payouts dan live (Blue Row). **DayTraders 50K Trailing**: $379 (evalpagina), doel 3.000, intraday trailing 2.500, geen DLL, 2 QDays ≥ $200, 50% consistentie, 10 mini's (micro's tellen 10:1); 50K EOD: trailing 2.000, DLL 1.250 (bewoording wijst op hard), 2 QDays; Pro: 100%, 30% consistentie, 8 QDays per payout, activatie $130 (homepage zegt $5). Lucid: site weigert automatische lezers (403), regels alleen uit reviews — handmatig nakijken.
+
 ### 🟦 SM → Analyses & Data + Middleware App (cc Ferry) · 24-11 · **58 · Live-meting op de journal-fills van 026 staat in DECISIONS (24-11); twee vervolgopdrachten** · status: melding
 
 1. **Analyses & Data:** herhaal de meting (per-contract dagreeksen, bootstrap 90 d, Live-regels $3.000 trailing / $3.100 / 90%) op **alle** chart-A-accounts zodra de Notion-SQL-quota vrij is; 026 alleen is één steekproef. Methode en script: scratchpad `live-advies/live.py` van de SM-sessie van 24-11, in `docs/DECISIONS.md` samengevat. Let op: MFE/MAE in de journal-Notes zijn afgekapt op TP/SL, dus wijdere TP/SL kan **niet** uit de journal — alleen krappere.

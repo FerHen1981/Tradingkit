@@ -85,3 +85,60 @@ accounts is bij FundedNext en Topstep toegestaan.
 3. Bevestiging van Apex Live: platform, datafeed, bots toegestaan.
 4. Keuze: FundedNext-evals starten met El Toro 4 NQ TP 155 (nieuwe set → nieuwe meting en OOS-klok), of
    met TP 122 (57%, bestaande set).
+
+## Totaalplaatje v2 (25-11, avond): terug naar $3.500 per maand, plus 50 Apex Live-accounts, zonder vastzittend geld
+
+**Uitgangspunten van Ferry:** Apex heeft 19 × 50K PA's afgenomen (cashflow ≈ $3.500 per maand); hij krijgt
+50 Apex Live-accounts; bij Apex bleef ≈ $50.000 in de bonus vault staan door te laat uitbetalen. Dat mag
+niet opnieuw gebeuren.
+
+### Laag 1 · sim-funded cashflow (doel ≥ $3.500 per maand ≈ $175 per handelsdag)
+
+| Firma | Slots | Netto per slot per handelsdag (3 j, buffer $1.000) | Teller waarna de firma sluit | Bijdrage |
+|---|---|---|---|---|
+| FundedNext Rapid Pro | 5 | ≈ $19 | 15 rewards per profiel (≈ 3 volle ladders) → reviewpool, sluiting bij selectie | ≈ $95/dag, eindig: ≈ $16k bruto per profiel |
+| Topstep XFA | 5 | ≈ $17 | geen teller, oproep op discretie, niet te weigeren | ≈ $85/dag |
+| Lucid Pro/Flex | 5 | ≈ $17–19 (geschat, niet gemeten) | Payout 5 op één account → pool, 24 uur, alles dicht | ≈ $85/dag, eindig |
+| **Totaal** | **15** | | | **≈ $265/dag ≈ $5.300/maand** (3-jaarsgemiddelde; oktober-achtige maanden het dubbele) |
+
+Instroom: El Toro 4 NQ (FundedNext/Lucid 1 dag, Topstep 3 dagen). Funded: El Tesoro 2 MGC + dagregels.
+Elke firma is een eindig programma: FundedNext en Lucid lopen per profiel leeg; daarna nieuwe firma's uit de
+lijst (DayTraders 15 sim, Alpha, BluSky) of de live-laag.
+
+### Laag 2 · 50 Apex Live-accounts
+
+Regels zoals bekend (review 15-10, niet door Apex bevestigd): $0 start, $3.000 EOD-trailing, 3 mini / 30 micro,
+geen DLL, 90%, dagelijkse uitbetaling van alles boven $3.100 vanaf $500. Gemeten op die lijn (3 j, 1 tick):
+
+| Engine | Afgaan ≤ 250 d | Kans op uitbetaling | Gem. uitbetaald per account per 250 d |
+|---|---|---|---|
+| El Rey 2 MNQ (Pine-defaults) | 0% | 92% | $2.390 |
+| El Tesoro 1 MGC TP 120 | 14% | 54% | $700 |
+| El Tesoro 1 MGC TP 85 | 58% | 39% | $566 |
+| El Tesoro 2 MGC | ≥ 98% | — | — |
+
+50 identieke accounts zijn één weddenschap × 50, niet vijftig onafhankelijke: ze winnen en verliezen op
+dezelfde dag. Spreiden over twee engines (El Rey MNQ en El Tesoro 1 MGC TP 120) is de enige spreiding die
+beschikbaar is, en de correlatie MGC–MNQ is nog niet gemeten. Indicatief: 50 × El Rey 2 MNQ ≈ $120k per 250
+handelsdagen (≈ $10k per maand) bij 0% gemeten breach; 50 × El Tesoro 1 MGC TP 120 ≈ $35k. Voorwaarden: platform,
+datafeed en bot-toestemming van Apex Live, en de pariteitspoort van El Rey.
+
+### Laag 3 · regels tegen vastzittend geld
+
+1. **Uitbetalen op elke eerste mogelijkheid**, nooit wachten op een hoger plafond. Uitzondering: de $1.000-buffer
+   in weken met dagen ≥ $150, en die alleen op de sim-kant.
+2. **Nooit meer dan één uitbetaling aan onuitbetaalde winst op een account laten staan.** Op Apex Live: dagelijks
+   alles boven $3.100 eruit; daar kan niets blijven staan.
+3. **Tellers in het register**: FundedNext 15 rewards, Lucid Payout 5, Topstep discretie, Apex-regels zodra bekend.
+   Het aantal lopende rewards per profiel wordt bijgehouden in de Accounts-DB en elke ochtend getoond.
+4. **Payout-radar in de Dagstart-taak** (beheer SM): per account "vandaag uitbetaalbaar: ja/nee, bedrag, wat
+   ontbreekt (dagen, consistentie, buffer)". Dat is de automatisering van regel 1.
+5. **Bonus-vault-achtige regels vooraf kennen**: bij elke nieuwe firma vóór aankoop vastleggen wat er met niet-
+   uitbetaalde winst gebeurt bij live-overgang, sluiting of inactiviteit.
+
+### Wat er nu eerst moet
+
+1. Apex Live: platform, datafeed, bots, termijn, en wat er met niet-uitbetaalde PA-winst gebeurt (vault-regel).
+2. FundedNext: 5 Rapid Pro-evals; Topstep: 5 Combines; Lucid: regels op de site nalezen, dan 5 evals.
+3. Payout-radar in de Dagstart-taak en de tellers in de Accounts-DB (SM).
+4. Meting die nog ontbreekt: correlatie MGC–MNQ op dagbasis; El Rey-pariteit; de ruimte-ladder per firma.

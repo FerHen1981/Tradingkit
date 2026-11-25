@@ -2483,11 +2483,7 @@
       "trading_rules": {
         "min_trading_days": null,
         "max_trading_days": null,
-        "consistency": {
-          "type": "best_day_pct_of_total",
-          "value": 40,
-          "note": "alleen op het consistentiepad: 3 handelsdagen, beste dag ≤ 40% van de netto winst; standaardpad: geen consistentie"
-        },
+        "consistency": null,
         "overnight_allowed": false,
         "weekend_allowed": false,
         "news_allowed": true,
@@ -2498,7 +2494,8 @@
         },
         "scaling_plan": null,
         "trading_day": "17:00 CT – 15:10 CT, alles plat om 15:10 CT",
-        "time_limit": null
+        "time_limit": null,
+        "consistency_note": "standaardpad: geen consistentie (5 winstdagen ≥ $150 per payout); consistentiepad: 3 dagen, beste dag ≤ 40% — niet als preset gemodelleerd"
       },
       "funded": {
         "profit_split": 0.9,

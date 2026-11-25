@@ -117,6 +117,13 @@ export rules(string preset) =>
         dll := 750.0
         consPct := 0.0
         acctSize := 15000.0
+    else if preset == "fundednext_50k_direct_pa"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 1000.0
+        consPct := 20.0
+        acctSize := 50000.0
     else if preset == "fundednext_50k_rapid_eval"
         ddType := "EOD"
         maxLoss := 2000.0
@@ -129,7 +136,7 @@ export rules(string preset) =>
         maxLoss := 2000.0
         goal := 3000.0
         dll := 0.0
-        consPct := 0.0
+        consPct := 40.0
         acctSize := 50000.0
     else if preset == "fundingpips_10k_eval"
         ddType := "Static"
@@ -191,7 +198,14 @@ export rules(string preset) =>
         ddType := "EOD"
         maxLoss := 2000.0
         goal := 3000.0
-        dll := 1000.0
+        dll := 0.0
+        consPct := 55.0
+        acctSize := 50000.0
+    else if preset == "topstep_50k_xfa"
+        ddType := "EOD"
+        maxLoss := 2000.0
+        goal := 3000.0
+        dll := 0.0
         consPct := 0.0
         acctSize := 50000.0
     else if preset == "tradeday_50k_eval"
@@ -232,4 +246,4 @@ export rules(string preset) =>
     [ddType, maxLoss, goal, dll, consPct, acctSize]
 
 // Preset keys (for the strategy's input.string options=[...]):
-// "apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundednext_50k_rapid_eval", "fundednext_50k_rapid_pa", "fundingpips_10k_eval", "mffu_50k_eval", "mffu_50k_pa", "takeprofittrader_50k_eval", "takeprofittrader_50k_pa", "the5ers_hypergrowth_5k", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_50k_growth_eval", "tradeify_50k_growth_pa", "tradeify_advanced_25k_instant"
+// "apex_250k_legacy_eval", "apex_250k_legacy_pa", "apex_25k_legacy_eval", "apex_50k_eod_eval", "apex_50k_eod_pa", "apex_50k_intraday_eval", "apex_50k_intraday_pa", "apex_50k_legacy_eval", "apex_50k_legacy_pa", "blueguardian_50k_standard_eval", "blueguardian_50k_standard_pa", "daytraders_s2f_25k_instant", "daytraders_static_25k_eval", "ftmo_100k_challenge", "fundednext_15k_challenge", "fundednext_50k_direct_pa", "fundednext_50k_rapid_eval", "fundednext_50k_rapid_pa", "fundingpips_10k_eval", "mffu_50k_eval", "mffu_50k_pa", "takeprofittrader_50k_eval", "takeprofittrader_50k_pa", "the5ers_hypergrowth_5k", "topone_50k_elite_eval", "topone_50k_elite_pa", "topstep_50k_eval", "topstep_50k_xfa", "tradeday_50k_eval", "tradeday_50k_pa", "tradeify_50k_growth_eval", "tradeify_50k_growth_pa", "tradeify_advanced_25k_instant"

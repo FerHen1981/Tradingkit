@@ -32,6 +32,20 @@ Per slot, 120 handelsdagen, opnamebeleid $1.000 boven de floor overal, herkopen 
 Direct hoort in het plaatje als cashflow-kandidaat, maar verliest ook op gelijke maat: zijn ene hobbel
 ($2.100 buffer plus de 20%-regel) duurt langer dan eval én buffer bij Rapid Pro samen.
 
+## Correctie 25-11 (avond): Apex valt weg, en geen firma laat sim-accounts naast live bestaan
+
+Ferry: bij Apex Live worden de 19 PA's afgenomen en is nieuwe aankoop uitgesloten. Officieel nagelezen:
+Lucid sluit álle sim-accounts bij live of cash-out (24 uur, geen weigering), trigger o.a. Payout 5;
+FundedNext sluit alles bij selectie na 15 Performance Rewards per profiel, geen weigeroptie beschreven;
+Topstep en DayTraders idem. De rol "blijvend leveren" kan dus bij geen enkele firma op de sim-kant
+gegarandeerd worden; elke firma is een eindig programma met een teller. Gevolg voor het plaatje:
+
+- **Cashflow**: FundedNext Rapid Pro, vijf slots, als eindig programma van ≈ 15 rewards per profiel.
+- **Blijvend**: alleen door te spreiden over firma's (FundedNext 5, Topstep 5, Lucid 5) zodat een
+  live-sluiting bij één firma de andere niet raakt, en door de tellers te kennen.
+- **Live**: een prop-firm-live-account kost altijd de sim-accounts van die firma. Een live-account dat
+  niets afneemt is alleen een eigen brokerage-account op eigen kapitaal.
+
 ## Hoe de drie rollen samenhangen
 
 1. **Instroom** loopt via El Toro-evals: FundedNext Rapid Pro (1 dag), Topstep Combine (4 NQ, 1 hit per

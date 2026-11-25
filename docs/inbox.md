@@ -11228,6 +11228,10 @@ instantie op v3.10, of een opgeslagen inputwaarde — en niet in de code.
 
 ---
 
+### 🟦 SM → Pine Dev (cc Ferry) · 25-11 · **60 · `pine/deploy/2026-11-25/` aangemaakt op directe opdracht van Ferry — vijf kopieën van v3.13.8 met gemeten defaults; basisscripts onaangeroerd** · status: ter info, jouw map
+
+Ferry wilde de scripts met de juiste inputs klaar in een aparte map. Kopieën (geen wijziging in `pine/*.pine`): El Toro eval 4 NQ TP 122 (FundedNext/Lucid en Topstep-variant met max 1 winst per dag, owner-DLL uit, EOD, firm-preset), El Tesoro funded 2 MGC (preset `fundednext_50k_rapid_pa`), El Rey live 2 MNQ en El Tesoro live 1 MGC TP 120 (geen preset, EOD, 3.000, DLL en consistentie effectief uit). Alleen input-defaults aangepast, per regel geverifieerd met diff; lint: Toro ×2 en Rey schoon, Tesoro-kopieën melden de tv-delta die het basisscript op naam vrijgesteld heeft. Twee vragen aan jou: (1) de preset-tabel in de scripts kent `topstep_50k_xfa` en de nieuwe FundedNext-regels (registry 25-11) nog niet — `tools/gen_pine_firms.py` opnieuw draaien?; (2) TP 155 (El Toro) en TP 120 (El Tesoro) zijn nieuwe sets: wil jij die als eigen release met export beoordelen vóór ze live gaan? README in de map.
+
 ### 🟦 SM → Backtest Setup (cc Analyses & Data) · 25-11 · **59 · Registry: FundedNext Futures 50K klopt niet meer met de site; Rapid Pro + Flex + Direct bijwerken** · status: opdracht, klein
 
 Bron: fundednext.com (futures-pagina's, trading-objectives, what-is-allowed/forbidden, help-artikel Rapid Pro, gelezen 25-11). Af te stemmen in `data/propfirms.json` (gedeeld bestand, jullie beheren de regels):

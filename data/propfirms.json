@@ -808,7 +808,7 @@
         "source": "topstep.com/pricing, help.topstep.com: Trading Combine parameters, DLL-artikel, XFA parameters, payout policy, pricing questions; gelezen 2026-11-25 door de SM",
         "as_of": "2026-11-25",
         "verified": true,
-        "notes": "Maandabonnement. Harde DLL bestaat niet: de optionele DLL liquideert maar breacht niet."
+        "notes": "Maandabonnement. Harde DLL bestaat niet: de optionele DLL liquideert maar breacht niet. Geen limiet op het aantal Trading Combines; een geslaagde Combine boven de XFA-limiet gaat on hold."
       },
       "converts_to": null
     },
@@ -1974,7 +1974,7 @@
         "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
         "as_of": "2026-11-25",
         "verified": true,
-        "notes": "Geen DLL (optionele add-on $1.000 soft breach), geen minimum dagen, geen tijdslimiet, geen consistentie in de challenge. Rapid Daily-variant: DLL $1.000, geen consistentie in beide fasen."
+        "notes": "Geen DLL (optionele add-on $1.000 soft breach), geen minimum dagen, geen tijdslimiet, geen consistentie in de challenge. Rapid Daily-variant: DLL $1.000, geen consistentie in beide fasen. Limieten (help 25-11): challenges tot $750.000 gecombineerde allocatie tegelijk, geen maandlimiet op aankopen, onbeperkt resets binnen de cap."
       },
       "converts_to": "fundednext_50k_rapid_pa"
     },
@@ -2063,7 +2063,7 @@
         "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
         "as_of": "2026-11-25",
         "verified": true,
-        "notes": "Ladder van vijf: $1.000 ×3, $1.250 ×2, daarna eindigt het account (max $5.500 bruto). 40% consistentie, min $500 per cyclus, geen activatiefee."
+        "notes": "Ladder van vijf: $1.000 ×3, $1.250 ×2, daarna eindigt het account (max $5.500 bruto). 40% consistentie, min $500 per cyclus, geen activatiefee. Limieten (help 25-11): max 5 actieve FundedNext Accounts tegelijk per persoon/huishouden (Direct telt mee), max 10 uitgegeven per kalendermaand, extra geslaagde accounts gaan on hold. Live: niet verplicht, alleen op discretie van het Risk Desk (reviewpool o.a. na ~15 afgeronde reward-trajecten); bij selectie worden alle sim-accounts afgesloten."
       },
       "converts_to": null
     },
@@ -2444,7 +2444,7 @@
         "source": "fundednext.com/futures (Rapid, Direct), helpfutures.fundednext.com artikelen Rapid Pro (25-11) en Direct all-rules (23-11); gelezen 2026-11-25 door de SM",
         "as_of": "2026-11-25",
         "verified": true,
-        "notes": "Instant funded, geen challenge. Vijf uitbetalingen van max $1.200 (max $6.000 bruto), dan eindigt het account. 20% perpetuele consistentie maakt elke cyclus ≥ 5× de beste dag."
+        "notes": "Instant funded, geen challenge. Vijf uitbetalingen van max $1.200 (max $6.000 bruto), dan eindigt het account. 20% perpetuele consistentie maakt elke cyclus ≥ 5× de beste dag. Telt mee in de limiet van 5 actieve funded accounts. Live alleen op discretie; geen limiet van 3 aankopen gevonden in de help."
       },
       "converts_to": null
     },
@@ -2528,7 +2528,7 @@
         "source": "topstep.com/pricing, help.topstep.com: Trading Combine parameters, DLL-artikel, XFA parameters, payout policy, pricing questions; gelezen 2026-11-25 door de SM",
         "as_of": "2026-11-25",
         "verified": true,
-        "notes": "Geen plafond op het aantal uitbetalingen; inactief > 30 dagen kan sluiten."
+        "notes": "Geen plafond op het aantal uitbetalingen; inactief > 30 dagen kan sluiten. Max 5 actieve XFA's; trade copier over eigen XFA's toegestaan (tot $750K), hedgen over accounts verboden. XFA eindigt alleen op breach of >30 dagen inactiviteit, niet op aantal payouts. Live: op discretie van het Live Accounts Team, geen vaste trigger ('geen 5 payouts nodig'), niet te weigeren (live of XFA sluiten); bij LFA sluiten alle XFA's; LFA start op 20% van het cumulatieve XFA-saldo (min $10.000), rest in reserve; LFA 50K DLL $2.000; sluit onder $1.000; GEEN geautomatiseerde strategieën op de LFA."
       },
       "converts_to": null
     }

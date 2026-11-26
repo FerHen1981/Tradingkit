@@ -1,0 +1,69 @@
+---
+/**
+ * One number, stated plainly. Follows the mockup's KPI treatment: tracked mono
+ * label, large tabular value, quiet note underneath.
+ *
+ * `tone` is the only path to semantic colour, and it exists so that a positive
+ * result reads green and a negative one red — it must never be used to
+ * decorate a neutral metric like a trade count.
+ */
+interface Props {
+  label: string;
+  value: string;
+  note?: string;
+  tone?: "" | "pos" | "neg" | "accent" | "accent-2";
+  /** Doubles the tile width in a grid — for the headline figure. */
+  hero?: boolean;
+}
+
+const { label, value, note, tone = "", hero = false } = Astro.props;
+---
+
+<div class:list={["tile", { "tile--hero": hero }]}>
+  <span class="tile__label">{label}</span>
+  <span class:list={["tile__value", "num", tone && `t-${tone}`]}>{value}</span>
+  {note && <span class="tile__note">{note}</span>}
+</div>
+
+<style>
+  .tile {
+    background: var(--surface);
+    padding: var(--sp-4) var(--sp-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-1);
+    min-width: 0;
+  }
+
+  .tile__label {
+    font-family: var(--mono);
+    font-size: var(--t-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .tile__value {
+    font-size: clamp(1.375rem, 1.2rem + 0.85vw, 1.75rem);
+    font-weight: 620;
+    line-height: 1.15;
+    margin-top: var(--sp-1);
+    overflow-wrap: anywhere;
+  }
+
+  .tile--hero .tile__value {
+    font-size: clamp(1.875rem, 1.4rem + 2.2vw, 2.75rem);
+  }
+
+  .tile__note {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    color: var(--dim);
+    line-height: 1.5;
+  }
+
+  .t-pos { color: var(--pos); }
+  .t-neg { color: var(--neg); }
+  .t-accent { color: var(--accent); }
+  .t-accent-2 { color: var(--accent-2); }
+</style>

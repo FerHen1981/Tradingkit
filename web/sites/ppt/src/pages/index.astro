@@ -1,0 +1,122 @@
+---
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import PostCard from "@mex/brand/components/PostCard.astro";
+import Button from "@mex/brand/components/Button.astro";
+
+import { site } from "../site.config";
+import { allPosts, postPath, tagCloud, readingTime } from "../lib/posts";
+
+const posts = await allPosts();
+const featured = posts.find((p) => p.data.featured) ?? posts[0];
+const rest = posts.filter((p) => p.id !== featured?.id).slice(0, 8);
+const tags = tagCloud(posts).slice(0, 10);
+---
+
+<Base title={site.name} description={site.description}>
+  <Hero
+    eyebrow="Curaçao · sinds 2025"
+    headline="Emigreren als daytrader, zonder de glossy versie"
+    lead="Ik handel voor eigen rekening en verhuisde naar Curaçao. Hier schrijf ik op wat dat werkelijk kost aan tijd, papierwerk en aannames — en wat ik inmiddels anders zou doen."
+  >
+    <Button slot="actions" href="/blog">Alle posts</Button>
+    <Button slot="actions" href="/rss.xml" variant="secondary">RSS</Button>
+  </Hero>
+
+  {featured && (
+    <Section eyebrow="Uitgelicht">
+      <PostCard
+        title={featured.data.title}
+        href={postPath(featured)}
+        summary={featured.data.summary}
+        date={featured.data.date}
+        tags={[...featured.data.tags]}
+        series={featured.data.series}
+        cover={featured.data.cover}
+        readingTime={readingTime(featured.body)}
+        featured
+      />
+    </Section>
+  )}
+
+  <Section eyebrow="Recent" title="Nieuwste notities">
+    <div class="feed">
+      {rest.map((post) => (
+        <PostCard
+          title={post.data.title}
+          href={postPath(post)}
+          summary={post.data.summary}
+          date={post.data.date}
+          tags={[...post.data.tags]}
+          series={post.data.series}
+          cover={post.data.cover}
+          readingTime={readingTime(post.body)}
+        />
+      ))}
+    </div>
+
+    {posts.length > rest.length + 1 && (
+      <p class="more">
+        <Button href="/blog" variant="secondary">Naar het volledige archief</Button>
+      </p>
+    )}
+  </Section>
+
+  {tags.length > 0 && (
+    <Section eyebrow="Onderwerpen" title="Waar het meestal over gaat" raised>
+      <ul class="tags">
+        {tags.map(({ tag, count }) => (
+          <li>
+            <a href={`/tags/${tag}`}>
+              #{tag}<span class="tags__count">{count}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  )}
+</Base>
+
+<style>
+  .feed {
+    border-top: 1px solid var(--line);
+  }
+
+  .more {
+    margin-top: var(--sp-6);
+  }
+
+  .tags {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+    margin: 0;
+    padding: 0;
+  }
+
+  .tags a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sp-2);
+    font-family: var(--mono);
+    font-size: var(--t-small);
+    color: var(--muted);
+    text-decoration: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    padding: 0.35rem 0.85rem;
+    transition: border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .tags a:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .tags__count {
+    color: var(--dim);
+    font-size: 0.6875rem;
+  }
+</style>

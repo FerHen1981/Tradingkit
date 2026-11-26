@@ -1,0 +1,43 @@
+---
+import type { GetStaticPaths } from "astro";
+import { getCollection, render } from "astro:content";
+
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+
+export const getStaticPaths = (async () => {
+  const pages = await getCollection("pages", ({ data }) => !data.draft);
+  return pages.map((page) => ({
+    params: { slug: page.id },
+    props: { page },
+  }));
+}) satisfies GetStaticPaths;
+
+const { page } = Astro.props;
+const { Content } = await render(page);
+---
+
+<Base
+  title={page.data.title}
+  description={page.data.description}
+  noindex={page.data.noindex}
+>
+  <Hero
+    eyebrow={page.data.eyebrow}
+    headline={page.data.title}
+    lead={page.data.lead}
+    size="md"
+  />
+
+  <div class="wrap wrap--narrow body">
+    <article class="prose">
+      <Content />
+    </article>
+  </div>
+</Base>
+
+<style>
+  .body {
+    padding-block: var(--sp-7) var(--sp-8);
+  }
+</style>

@@ -1,0 +1,29 @@
+# Example strategy spec — a price-action-only El Toro variant.
+# Validated against ../registry.yaml by backtest/spec.py before any run.
+# Values must fall within the registry's [min,max]; the optimizer later moves
+# them only on the registry's `step` grid.
+name: El_Toro_v7_PAonly
+base_asset: NQ
+
+policy:
+  price_action_only: true    # only groups tagged price_action:true may be used
+  max_active_groups: 6
+
+groups:
+  fvg:
+    gap_min_ticks: 9
+    gap_max_ticks: 12
+    displacement_body_atr: 1.0
+    mitigation_mode: CE
+    expiry_bars: 12
+  # NB: market_structure is NOT declared here — its presence now enables the BOS
+  # entry generator (see specs/bos.yaml). This spec is FVG-only; the swing pivot
+  # lookback it needs is already set by swing_stops.pivot_k below.
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4
+  cvd_delta:
+    cvd_trend_count: 4
+  vwap:
+    vwap_veto: true
+    vwap_band_ticks: 0

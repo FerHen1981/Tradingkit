@@ -1,0 +1,22 @@
+# Order block mitigation — continuation entry (Level B).
+# An impulse bar (body >= ob_impulse_min_atr*ATR) marks the last opposite candle
+# before it as an OB; a later bar trading back into that zone enters WITH the
+# impulse. Continuation, so trend filters (CVD streak + VWAP veto) apply.
+name: Order_Block
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: true
+  max_active_groups: 5
+groups:
+  order_block:
+    ob_impulse_min_atr: 1.0
+    ob_mitigation_pct: 0.5
+    ob_max_age_bars: 50
+  cvd_delta:
+    cvd_trend_count: 3
+  vwap:
+    vwap_veto: true
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

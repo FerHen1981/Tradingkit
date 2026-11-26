@@ -1,0 +1,21 @@
+# Moving-average trend pullback — trend-following / pullback entry (Level B, classic).
+# In an uptrend (fast MA > slow MA) enter when the bar dips to/through the fast MA
+# but closes back above it (pullback-and-resume); bearish mirror. Trend filters on.
+name: MA_Pullback
+base_asset: NQ
+base_preset: EL_TORO
+policy:
+  price_action_only: false
+  max_active_groups: 4
+groups:
+  moving_average:
+    length_fast: 50
+    length_slow: 200
+    type: EMA
+  cvd_delta:
+    cvd_trend_count: 3
+  vwap:
+    vwap_veto: true
+  swing_stops:
+    pivot_k: 3
+    stop_buffer_ticks: 4

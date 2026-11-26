@@ -1,0 +1,13 @@
+# Elk uur. De snapshot is goedkoop en veroudering is zelf een signaal:
+# staat er een oude timestamp in docs/runtime-snapshot.md, dan draait de timer niet.
+[Unit]
+Description=Ververs de MEX runtime-snapshot elk uur
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=mex-runtime-snapshot.service
+
+[Install]
+WantedBy=timers.target

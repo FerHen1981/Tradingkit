@@ -1,0 +1,13 @@
+{
+  "name": "@mex/brand",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared huisstijl: design tokens + Astro components used by every site in the group.",
+  "exports": {
+    "./styles/*": "./src/styles/*",
+    "./components/*": "./src/components/*",
+    "./units": "./src/units.js",
+    "./package.json": "./package.json"
+  }
+}

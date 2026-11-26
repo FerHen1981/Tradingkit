@@ -1,0 +1,66 @@
+---
+/**
+ * Inline aside for posts and legal pages. `variant="legal"` is the one that
+ * matters commercially: it marks a passage as disclaimer rather than claim.
+ */
+interface Props {
+  variant?: "note" | "tip" | "warning" | "legal";
+  title?: string;
+}
+
+const { variant = "note", title } = Astro.props;
+
+const DEFAULT_TITLE = {
+  note: "Ter info",
+  tip: "Tip",
+  warning: "Let op",
+  legal: "Disclaimer",
+} as const;
+
+const heading = title ?? DEFAULT_TITLE[variant];
+---
+
+<aside class:list={["callout", `callout--${variant}`]}>
+  <p class="callout__title">{heading}</p>
+  <div class="callout__body">
+    <slot />
+  </div>
+</aside>
+
+<style>
+  .callout {
+    margin-block: var(--sp-5);
+    padding: var(--sp-4) var(--sp-5);
+    border: 1px solid var(--line);
+    border-left-width: 3px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 70%, transparent);
+    font-size: 0.9375rem;
+  }
+
+  .callout__title {
+    font-family: var(--mono);
+    font-size: var(--t-eyebrow);
+    letter-spacing: var(--track-eyebrow);
+    text-transform: uppercase;
+    margin-bottom: var(--sp-2);
+  }
+
+  .callout__body {
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  .callout--note { border-left-color: var(--accent-2); }
+  .callout--note .callout__title { color: var(--accent-2); }
+
+  .callout--tip { border-left-color: var(--pos); }
+  .callout--tip .callout__title { color: var(--pos); }
+
+  .callout--warning { border-left-color: var(--warn); }
+  .callout--warning .callout__title { color: var(--warn); }
+
+  .callout--legal { border-left-color: var(--dim); }
+  .callout--legal .callout__title { color: var(--dim); }
+  .callout--legal .callout__body { font-size: 0.8125rem; color: var(--dim); }
+</style>

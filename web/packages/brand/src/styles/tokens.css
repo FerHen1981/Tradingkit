@@ -1,0 +1,199 @@
+/* ==========================================================================
+   MEX GROUP — huisstijl tokens
+
+   Bron: het merkpakket "MEX Traders — merkidentiteit v2" en de bijbehorende
+   site-mockup. Het palet is daaruit ongewijzigd overgenomen; deze laag voegt
+   alleen de semantische namen toe waarmee de componenten werken, plus de
+   lichte modus die het merkpakket niet uitschrijft.
+
+   Twee regels uit de merkgids die hier zijn vastgelegd:
+
+   * Goud is voor het merkteken en voor accenten. Niet voor vlakken en niet
+     voor lopende tekst. Er is daarom geen token dat goud als achtergrond van
+     een paneel aanbiedt.
+   * Op en neer zijn azure en rose, niet groen en rood. Dat is geen smaak: het
+     paar meet ΔE 20,7 bij protanopie tegen de kritieke drempel van 8, waar
+     juist groen/rood het klassieke probleemgeval is. Semantische kleur is
+     gereserveerd voor resultaat en wordt nooit als chrome gebruikt.
+
+   Een site mag --accent en --accent-2 overschrijven in zijn eigen theme.css.
+   Componenten mogen geen ruwe hex-waarden bevatten.
+   ========================================================================== */
+
+:root {
+  /* ---- merkconstanten (nooit per site anders) ---- */
+  --brand-abyss: #030f28;
+  --brand-deep: #081d46;
+  --brand-navy: #0e2a5e;
+  --brand-sand: #f2ebda;
+  --brand-gold: #e8b54f;
+  --brand-gold-deep: #b98526;
+  --brand-azure: #5aa2ff;
+  --brand-rose: #e0796e;
+
+  /* Het merkteken is altijd een verloop van goud naar goud-diep. */
+  --brand-gold-gradient: linear-gradient(135deg, #e8b54f, #b98526);
+
+  /* ---- vlakken: grond naar verhoogd ---- */
+  --bg: var(--brand-abyss);
+  --surface: var(--brand-deep);
+  --surface-2: var(--brand-navy);
+  --surface-3: #14376e;
+  --line: rgba(242, 235, 218, 0.15);
+  --line-strong: rgba(242, 235, 218, 0.28);
+
+  /* ---- inkt ---- */
+  --ink: var(--brand-sand);
+  --muted: rgba(242, 235, 218, 0.58);
+  --dim: rgba(242, 235, 218, 0.42);
+
+  /* ---- accenten (per site overschrijfbaar) ---- */
+  --accent: var(--brand-gold);
+  --accent-dim: var(--brand-gold-deep);
+  --accent-2: var(--brand-azure);
+
+  /* ---- semantisch: uitsluitend voor resultaat ---- */
+  --pos: var(--brand-azure);
+  --neg: var(--brand-rose);
+  --warn: var(--brand-gold);
+  --neutral: var(--muted);
+
+  /* ---- typografie ----
+     Drie rollen: de merknaam claimt (display 800), de lopende tekst
+     beschrijft, en cijfers staan in mono zodat kolommen uitlijnen. */
+  --display: "Bricolage Grotesque", system-ui, -apple-system, sans-serif;
+  --sans: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  --t-eyebrow: 0.6875rem;
+  --t-small: 0.8125rem;
+  --t-body: 1rem;
+  --t-lead: clamp(1.0625rem, 0.98rem + 0.42vw, 1.25rem);
+  --t-h3: clamp(1.125rem, 1.05rem + 0.36vw, 1.3125rem);
+  --t-h2: clamp(1.375rem, 1.18rem + 0.95vw, 1.9375rem);
+  --t-h1: clamp(1.875rem, 1.42rem + 2.25vw, 3.25rem);
+  --t-display: clamp(2.25rem, 1.5rem + 3.6vw, 4.25rem);
+
+  --track-eyebrow: 0.16em;
+  --track-tight: -0.025em;
+
+  /* ---- ritme ---- */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+  --sp-9: 6rem;
+  --section-y: clamp(3.5rem, 2rem + 6vw, 6.5rem);
+
+  /* ---- vorm ---- */
+  --radius: 4px;
+  --radius-sm: 2px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* ---- opmaak ---- */
+  --measure: 68ch;
+  --width: 1180px;
+  --width-narrow: 780px;
+
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 12px 32px -12px rgba(0, 0, 0, 0.55);
+
+  --focus: 2px solid var(--accent);
+  --focus-offset: 3px;
+
+  /* ---- chartlaag ----
+     Datamarkeringen hebben hun eigen tokens omdat de merkkleuren op een sand
+     ondergrond onder de 3:1 zakken die een markering nodig heeft (azure meet
+     daar 2,2). De lichte modus stapt daarom naar donkerdere tinten van
+     dezelfde tonen; beide paren zijn gevalideerd op CVD-scheiding. */
+  --chart-series: var(--brand-azure);
+  --chart-neg: var(--brand-rose);
+  --chart-grid: var(--line);
+  --chart-axis: var(--dim);
+
+  color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+   Lichte modus. Het merk is donker van huis uit; de merkgids beschrijft de
+   lichte variant alleen voor het logo ("type en regel in abyss, merkteken
+   blijft goud"). Dit is die logica doorgetrokken naar een volledige modus,
+   zodat lang lezen en printen werken. Alleen tokens worden opnieuw gezet.
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: var(--brand-sand);
+    --surface: #fbf8f0;
+    --surface-2: #ebe3d0;
+    --surface-3: #e0d7c1;
+    --line: rgba(7, 26, 56, 0.16);
+    --line-strong: rgba(7, 26, 56, 0.3);
+    --ink: var(--brand-abyss);
+    --muted: rgba(3, 15, 40, 0.66);
+    --dim: rgba(3, 15, 40, 0.48);
+    --accent: var(--brand-gold-deep);
+    --accent-dim: #8f6519;
+    --accent-2: #2c6fd1;
+    --pos: #2c6fd1;
+    --neg: #c1443a;
+    --warn: #8f6519;
+    --chart-series: #2c6fd1;
+    --chart-neg: #c1443a;
+    --chart-grid: rgba(7, 26, 56, 0.16);
+    --chart-axis: rgba(3, 15, 40, 0.48);
+    --shadow: 0 1px 2px rgba(3, 15, 40, 0.07), 0 12px 32px -14px rgba(3, 15, 40, 0.2);
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: var(--brand-sand);
+  --surface: #fbf8f0;
+  --surface-2: #ebe3d0;
+  --surface-3: #e0d7c1;
+  --line: rgba(7, 26, 56, 0.16);
+  --line-strong: rgba(7, 26, 56, 0.3);
+  --ink: var(--brand-abyss);
+  --muted: rgba(3, 15, 40, 0.66);
+  --dim: rgba(3, 15, 40, 0.48);
+  --accent: var(--brand-gold-deep);
+  --accent-dim: #8f6519;
+  --accent-2: #2c6fd1;
+  --pos: #2c6fd1;
+  --neg: #c1443a;
+  --warn: #8f6519;
+  --chart-series: #2c6fd1;
+  --chart-neg: #c1443a;
+  --chart-grid: rgba(7, 26, 56, 0.16);
+  --chart-axis: rgba(3, 15, 40, 0.48);
+  --shadow: 0 1px 2px rgba(3, 15, 40, 0.07), 0 12px 32px -14px rgba(3, 15, 40, 0.2);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--brand-abyss);
+  --surface: var(--brand-deep);
+  --surface-2: var(--brand-navy);
+  --surface-3: #14376e;
+  --line: rgba(242, 235, 218, 0.15);
+  --line-strong: rgba(242, 235, 218, 0.28);
+  --ink: var(--brand-sand);
+  --muted: rgba(242, 235, 218, 0.58);
+  --dim: rgba(242, 235, 218, 0.42);
+  --accent: var(--brand-gold);
+  --accent-dim: var(--brand-gold-deep);
+  --accent-2: var(--brand-azure);
+  --pos: var(--brand-azure);
+  --neg: var(--brand-rose);
+  --warn: var(--brand-gold);
+  --chart-series: var(--brand-azure);
+  --chart-neg: var(--brand-rose);
+  --chart-grid: rgba(242, 235, 218, 0.15);
+  --chart-axis: rgba(242, 235, 218, 0.42);
+  color-scheme: dark;
+}

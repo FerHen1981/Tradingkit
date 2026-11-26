@@ -8,3 +8,9 @@
 middleware.yourdomain.com {
     reverse_proxy 127.0.0.1:8000
 }
+
+# Owner cockpit (read-only live fleet dashboard). Point app.mex-traders.com's
+# A-record at the VPS, then reload caddy. TLS is automatic.
+app.mex-traders.com {
+    reverse_proxy 127.0.0.1:8080
+}

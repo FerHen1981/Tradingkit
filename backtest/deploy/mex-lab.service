@@ -1,0 +1,18 @@
+[Unit]
+Description=MEX Backtest Lab cockpit (bck.mex-traders.com)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/mex-journal
+ExecStart=/root/mex-journal/.venv-bt/bin/python -m backtest.lab.lab_viewer
+Environment=LAB_DIR=/data/lab
+Environment=LAB_PORT=8090
+# Secrets (owner password + cookie key) live OFF the repo in this env file:
+#   /etc/mex-lab.env   ->   LAB_PASSWORD=...    LAB_SECRET=<random 32+ chars>
+EnvironmentFile=-/etc/mex-lab.env
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

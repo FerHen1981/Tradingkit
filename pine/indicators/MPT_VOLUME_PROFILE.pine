@@ -1,0 +1,187 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © MEX-traders
+
+//@version=6
+// ============================================================================================
+//  MPT Volume Profile v1.0 — companion indicator to the MEX fleet strategies
+// ============================================================================================
+//  The session volume profile the strategy filters on: POC, VAH and VAL. Built from intrabar
+//  data via request.security_lower_tf, with each bar's volume distributed over body and wicks
+//  the same way [MEX] Volume Pack v1.2 does.
+//
+//  The strategy uses ONE level as a reference — longs only above it, shorts only below — and
+//  which level that is (POC, VAH or VAL) is an input on both sides.
+//
+//  Default follows EL REY MNQ PROD EOD: Daily session, 30 bins, value area 70%, 1m intrabar.
+//
+//  Two things to know:
+//  - Intrabar data keeps changing while the bar forms, so the levels move within the bar.
+//    The strategy reads them on bar close.
+//  - This is the calculation, not the drawing. Ferry's [MEX] Volume Pack remains the version
+//    that renders the full profile; this one shows the three levels the strategy acts on.
+//
+//  SOURCE OF TRUTH IS THE STRATEGY. This script mirrors its calculation for inspection.
+// ============================================================================================
+indicator("MPT Volume Profile v1.0", "MPT VP", overlay=true, max_bars_back=5000)
+
+// === INPUTS =================================================================
+var string GROUP_CALC = "1 · CALCULATION"
+var string GROUP_VIS  = "2 · VISUALS"
+var string GROUP_TBL  = "3 · TABLE"
+var string GROUP_THEME = "4 · THEME"
+
+pocSession    = input.string("Daily", "Session", options=["Daily","Weekly","Tokyo","London","New York"], inline="c", group=GROUP_CALC)
+pocRef        = input.string("POC", "strategy uses", options=["POC","VAH","VAL"], inline="c", group=GROUP_CALC,
+     tooltip="Which level the strategy compares price against. Keep it in sync with the strategy chart.")
+pocResolution = input.int(30, "Bins", minval=5, maxval=100, inline="r", group=GROUP_CALC,
+     tooltip="More bins = finer profile, more computation.")
+pocVaWidth    = input.int(70, "value area %", minval=1, maxval=100, inline="r", group=GROUP_CALC)
+pocLowerTf    = input.timeframe("1", "Intrabar timeframe", group=GROUP_CALC, display=display.none)
+refTz         = input.string("America/New_York", "Session timezone", group=GROUP_CALC, display=display.none)
+
+showPoc = input.bool(true, "POC", inline="v", group=GROUP_VIS)
+showVa  = input.bool(true, "VAH / VAL", inline="v", group=GROUP_VIS)
+showVaFill = input.bool(true, "Shade the value area", group=GROUP_VIS)
+
+showTable  = input.bool(true, "Table", inline="t", group=GROUP_TBL)
+panelPosIn = input.string("Bottom right", "", options=["Bottom left","Bottom center","Bottom right","Middle left","Middle right","Top left","Top center","Top right"], inline="t", group=GROUP_TBL,
+     tooltip="Two tables in the same corner overlap: Pine draws every table at its own position and there is no offset. Give each loaded indicator its own corner.")
+textSizeIn = input.string("Small", "Text size", options=["Tiny","Small","Normal","Large"], group=GROUP_TBL, display=display.none)
+themeIn    = input.string("Auto", "Theme", options=["Auto","Dark","Light"], group=GROUP_THEME)
+
+textSize = switch textSizeIn
+    "Tiny"   => size.tiny
+    "Small"  => size.small
+    "Normal" => size.normal
+    "Large"  => size.large
+    => size.small
+panelPos = switch panelPosIn
+    "Bottom left"   => position.bottom_left
+    "Bottom center" => position.bottom_center
+    "Bottom right"  => position.bottom_right
+    "Middle left"   => position.middle_left
+    "Middle right"  => position.middle_right
+    "Top left"      => position.top_left
+    "Top center"    => position.top_center
+    "Top right"     => position.top_right
+    => position.bottom_right
+
+// === THEME ==================================================================
+float _bgLum = 0.299 * color.r(chart.bg_color) + 0.587 * color.g(chart.bg_color) + 0.114 * color.b(chart.bg_color)
+bool isDark = themeIn == "Dark" ? true : themeIn == "Light" ? false : _bgLum < 128
+color POS = #089981
+color NEG = #F23645
+color pText   = isDark ? #ECECEC : #1E222D
+color pMuted  = isDark ? color.new(#B2B5BE, 15) : color.new(#5A5D68, 0)
+color pLabelBg   = isDark ? color.new(#2A2E39, 25) : color.new(#F0F3FA, 0)
+color pNeutralBg = isDark ? color.new(#2A2E39, 55) : color.new(#E0E3EB, 35)
+color pFrame     = isDark ? color.new(#B2B5BE, 55) : color.new(#9598A1, 35)
+color pBorder    = isDark ? color.new(#B2B5BE, 85) : color.new(#D1D4DC, 40)
+color pGold      = isDark ? #F7C948 : #8F6400
+
+// === CALCULATION (mirrors the strategy) =====================================
+f_volSlice(_y11, _y12, _y21, _y22, _height, _vol) =>
+    nz(math.max(math.min(math.max(_y11, _y12), math.max(_y21, _y22)) - math.max(math.min(_y11, _y12), math.min(_y21, _y22)), 0) * _vol / _height)
+
+var float[] vpVol    = array.new_float(pocResolution, 0.0)
+var float[] vpBounds = array.new_float(pocResolution, 0.0)
+var float[] ltfO = array.new_float(0)
+var float[] ltfH = array.new_float(0)
+var float[] ltfL = array.new_float(0)
+var float[] ltfC = array.new_float(0)
+var float[] ltfV = array.new_float(0)
+var int     vpStart = 0
+
+[_dO, _dC, _dH, _dL, _dV] = request.security_lower_tf(syminfo.tickerid, pocLowerTf, [open, close, high, low, volume])
+
+f_profileAdd(_o, _h, _l, _c, _v, _gap) =>
+    for _i = 0 to array.size(vpVol) - 1
+        float _zTop = array.get(vpBounds, _i)
+        float _zBot = _zTop - _gap
+        float _bodyTop = math.max(_c, _o)
+        float _bodyBot = math.min(_c, _o)
+        float _topWick = _h - _bodyTop
+        float _botWick = _bodyBot - _l
+        float _body    = _bodyTop - _bodyBot
+        float _den     = 2 * _topWick + 2 * _botWick + _body
+        if _den > 0
+            float _bodyVol = _body * _v / _den
+            float _topVol  = 2 * _topWick * _v / _den
+            float _botVol  = 2 * _botWick * _v / _den
+            array.set(vpVol, _i, array.get(vpVol, _i)
+                 + f_volSlice(_zBot, _zTop, _bodyBot, _bodyTop, _body, _bodyVol)
+                 + f_volSlice(_zBot, _zTop, _bodyTop, _h, _topWick, _topVol) / 2
+                 + f_volSlice(_zBot, _zTop, _bodyBot, _l, _botWick, _botVol) / 2)
+
+bool _pocNew = pocSession == "Weekly"   ? weekofyear(time, refTz) != weekofyear(time[1], refTz) :
+     pocSession == "Tokyo"    ? hour(time, refTz) == 19 and hour(time[1], refTz) != 19 :
+     pocSession == "London"   ? hour(time, refTz) == 2  and hour(time[1], refTz) != 2  :
+     pocSession == "New York" ? hour(time, refTz) == 9  and hour(time[1], refTz) != 9  :
+     dayofweek(time, refTz) != dayofweek(time[1], refTz)
+
+float pocVal = na
+float vahVal = na
+float valVal = na
+if _pocNew
+    array.fill(vpVol, 0.0)
+    array.clear(ltfO)
+    array.clear(ltfH)
+    array.clear(ltfL)
+    array.clear(ltfC)
+    array.clear(ltfV)
+    vpStart := bar_index
+if array.size(_dO) > 0
+    for _i = 0 to array.size(_dO) - 1
+        array.push(ltfO, array.get(_dO, _i))
+        array.push(ltfH, array.get(_dH, _i))
+        array.push(ltfL, array.get(_dL, _i))
+        array.push(ltfC, array.get(_dC, _i))
+        array.push(ltfV, array.get(_dV, _i))
+int _lb = math.max(1, bar_index - vpStart)
+float _pHi = ta.highest(high, _lb + 1)
+float _pLo = ta.lowest(low, _lb + 1)
+if _pHi > _pLo and array.size(ltfO) > 0
+    float _gap = (_pHi - _pLo) / pocResolution
+    array.fill(vpVol, 0.0)
+    for _i = 0 to pocResolution - 1
+        array.set(vpBounds, _i, _pHi - _gap * _i)
+    for _j = 0 to array.size(ltfO) - 1
+        f_profileAdd(array.get(ltfO, _j), array.get(ltfH, _j), array.get(ltfL, _j), array.get(ltfC, _j), array.get(ltfV, _j), _gap)
+    int _pocIdx = array.indexof(vpVol, array.max(vpVol))
+    pocVal := array.get(vpBounds, _pocIdx) - _gap / 2
+    float _tot = array.sum(vpVol)
+    float _cnt = array.get(vpVol, _pocIdx)
+    vahVal := pocVal
+    valVal := pocVal
+    for _k = 1 to array.size(vpVol)
+        if _cnt >= _tot * pocVaWidth / 100.0
+            break
+        if _pocIdx + _k < array.size(vpVol)
+            _cnt += array.get(vpVol, _pocIdx + _k)
+            valVal := array.get(vpBounds, _pocIdx + _k) - _gap
+        if _pocIdx - _k >= 0
+            _cnt += array.get(vpVol, _pocIdx - _k)
+            vahVal := array.get(vpBounds, _pocIdx - _k)
+
+float refLevel = pocRef == "VAH" ? vahVal : pocRef == "VAL" ? valVal : pocVal
+bool aboveRef = not na(refLevel) and close > refLevel
+bool belowRef = not na(refLevel) and close < refLevel
+
+// === PLOT ===================================================================
+p_poc = plot(showPoc ? pocVal : na, "POC", color=pGold, linewidth=2, style=plot.style_linebr)
+p_vah = plot(showVa ? vahVal : na, "VAH", color=pMuted, linewidth=1, style=plot.style_linebr)
+p_val = plot(showVa ? valVal : na, "VAL", color=pMuted, linewidth=1, style=plot.style_linebr)
+fill(p_vah, p_val, color=showVaFill ? color.new(pGold, 94) : na, title="Value area")
+
+// === TABLE ==================================================================
+var table panel = na
+if barstate.islast and showTable
+    panel := table.new(panelPos, 2, 4, frame_color=pFrame, frame_width=1, border_width=1, border_color=pBorder)
+    table.cell(panel, 0, 0, "POC", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 0, na(pocVal) ? "—" : str.tostring(pocVal, format.mintick), text_color=pGold, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 1, "VAH / VAL", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 1, na(vahVal) ? "—" : str.tostring(vahVal, format.mintick) + " / " + str.tostring(valVal, format.mintick), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 2, "Reference", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 2, pocRef + (na(refLevel) ? "" : "  " + str.tostring(refLevel, format.mintick)), text_color=pText, bgcolor=pNeutralBg, text_size=textSize, text_halign=text.align_center)
+    table.cell(panel, 0, 3, "Side allowed", text_color=pMuted, bgcolor=pLabelBg, text_size=textSize, text_halign=text.align_right)
+    table.cell(panel, 1, 3, aboveRef ? "LONG" : belowRef ? "SHORT" : "—", text_color=aboveRef or belowRef ? color.white : pText, bgcolor=aboveRef ? color.new(POS, 15) : belowRef ? color.new(NEG, 15) : pNeutralBg, text_size=textSize, text_halign=text.align_center)

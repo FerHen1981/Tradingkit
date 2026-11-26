@@ -1,0 +1,19 @@
+# A pure EMA-crossover strategy — the first non-FVG entry (Level B / B1).
+# No fvg group -> FVG entry is off; the engine enters on the EMA cross instead,
+# with a swing/fixed stop and El Toro's TP/sizing mechanics from the preset.
+name: EMA_Cross_20_50
+base_asset: NQ
+base_preset: EL_TORO
+
+policy:
+  price_action_only: false
+  max_active_groups: 4
+
+groups:
+  ema_cross:
+    fast: 20
+    slow: 50
+  cvd_delta:
+    cvd_trend_count: 3      # keep the CVD confirmation as a filter
+  vwap:
+    vwap_veto: true

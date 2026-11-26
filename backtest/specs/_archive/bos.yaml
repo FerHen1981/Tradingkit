@@ -1,0 +1,24 @@
+# Break-of-structure (BOS) — the first order-flow/price-action ENTRY beyond FVG
+# (Level B / B2). No fvg group -> FVG entry is off; the engine enters on a
+# momentum break of the last confirmed swing (long above the swing high, short
+# below the swing low), with a swing stop on the opposite pivot and El Toro's
+# TP/sizing from the preset. Covers the Breakout / Breakdown / Continuation
+# strategy families. CVD streak + VWAP veto keep it a with-trend break.
+name: BOS_Structure_Break
+base_asset: NQ
+base_preset: EL_TORO
+
+policy:
+  price_action_only: true
+  max_active_groups: 4
+
+groups:
+  market_structure:
+    pivot_k: 3               # fractal lookback for the swing that must break
+  swing_stops:
+    pivot_k: 3               # MUST equal market_structure.pivot_k (registry constraint)
+    stop_buffer_ticks: 4
+  cvd_delta:
+    cvd_trend_count: 3       # keep the CVD confirmation as a filter
+  vwap:
+    vwap_veto: true          # only break WITH the session bias

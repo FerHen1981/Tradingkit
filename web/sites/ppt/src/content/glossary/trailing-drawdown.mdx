@@ -1,0 +1,32 @@
+---
+term: Trailing drawdown
+short: "Een verliesgrens die meebeweegt met je hoogste stand, zodat winst je grens omhoog duwt maar nooit terug omlaag."
+category: propfirms
+aliases:
+  - trailing threshold
+  - meelopende drawdown
+authority: true
+sources:
+  - apex-intraday-dd
+  - apex-eod-dd
+related:
+  - eod-drawdown
+  - drawdown
+  - mark-to-market
+  - evaluatie
+updated: 2026-08-15
+draft: false
+---
+
+Dit is de regel waar de meeste evaluaties op sneuvelen, en zelden omdat de
+handelaar hem niet kende — wel omdat hij hem verkeerd inschatte.
+
+Apex legt het voor de intraday-variant zo uit: de grens ligt een vast bedrag onder
+je hoogste stand, en die hoogste stand wordt gemeten op je *open* vermogen, dus
+ook op niet-gerealiseerde winst. Loopt een positie honderd dollar in de plus en
+geef je die weer terug, dan is je grens toch al honderd dollar meegeschoven.
+
+Volgens de uitleg van Apex stopt het meebewegen zodra de grens zelf het winstdoel
+bereikt — niet zodra je saldo dat doet — en verschilt het gedrag bovendien per
+platform. Dat is precies het soort detail dat je vóór je eerste trade in de
+actuele voorwaarden van je eigen programma moet nakijken.

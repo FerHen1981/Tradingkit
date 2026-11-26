@@ -1,0 +1,11 @@
+# Framework demo · variant 2 — MOMENTUM BREAKOUT, no regime gate (all regimes).
+# Donchian channel break with a CVD participation filter. Ungated on purpose so
+# edge_by_regime can reveal WHERE the breakout edge actually concentrates.
+name: v2_breakout_ungated
+base_asset: NQ
+base_preset: EL_TORO
+setup_class: breakout
+groups:
+  donchian: {}
+  cvd_delta: {}
+  swing_stops: {}

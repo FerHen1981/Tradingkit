@@ -1,0 +1,19 @@
+# MEX LIVE Trade Journal — executor routed-log -> Notion (no browser, no CSV).
+# Reads /root/intent-store/routed_*.jsonl, pairs FILL+EXIT per account, upserts to Notion.
+# Install on mex-mw-01:
+#   1. Deploy middleware/ + a venv (python3 -m venv .venv; .venv/bin/pip install -r requirements.txt)
+#   2. .env with: NOTION_TOKEN=...  NOTION_JOURNAL_DB=1ddb61ea444d813294f8e4eac39809e4
+#                 ROUTED_DIR=/root/intent-store
+#   3. Adjust the paths below, then:
+#      sudo cp deploy/mex-routed-journal.{service,timer} /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-routed-journal.timer
+[Unit]
+Description=MEX live Trade Journal (routed-log -> Notion)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.routed_journal

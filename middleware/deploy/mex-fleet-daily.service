@@ -1,0 +1,26 @@
+# MEX Fleet-daily — Cash History -> Notion Fleet Performance (D-163).
+#
+# Dit draait één keer per dag en schrijft per actief account per handelsdag een rij
+# naar de Fleet Performance-database in Notion (bruto, commissies uit Cash History,
+# netto, trades, contracten) + aparte rijen voor niet-trading-mutaties (payout,
+# reset, activatie, data fee) die de Dagstand-taak als boekingsvoorstel kan oppakken.
+#
+# LEESKANT ONLY: geen raakpunt met `mex-receiver`, orders of PMT.
+#
+# Install op mex-mw-01:
+#   1. middleware/ staat al in /root/mex-journal + venv (zie mex-journal-sync.service)
+#   2. In .env: NOTION_TOKEN=... NOTION_FLEET_DB=ae5105393828447e84a1a87d31562d7d
+#              EXPORTS_DIR=/root/exports
+#   3. sudo cp deploy/mex-fleet-daily.{service,timer} /etc/systemd/system/
+#      sudo systemctl daemon-reload && sudo systemctl enable --now mex-fleet-daily.timer
+
+[Unit]
+Description=MEX Fleet-daily (Cash History -> Notion Fleet Performance)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/mex-journal/middleware
+EnvironmentFile=/root/mex-journal/middleware/.env
+ExecStart=/root/mex-journal/middleware/.venv/bin/python -m app.fleet_daily

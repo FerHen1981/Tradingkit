@@ -1,0 +1,114 @@
+---
+import Base from "../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import StatStrip from "@mex/brand/components/StatStrip.astro";
+import MarketTable from "@mex/brand/components/MarketTable.astro";
+import EquityCurve from "@mex/brand/components/EquityCurve.astro";
+import Callout from "@mex/brand/components/Callout.astro";
+
+import stats from "../data/public-stats.json";
+import { headlineTiles, statsSource, type PublicStats } from "../lib/stats";
+
+const s = stats as PublicStats;
+const tiles = headlineTiles(s);
+
+/**
+ * Niets te publiceren is een echte toestand, geen fout. Zolang de publicatietaak
+ * niet heeft gedraaid staat elk getal op null en is elke lijst leeg; dan toont de
+ * pagina dat ook zo. De vorige opzet vulde de leegte met illustratieve cijfers, en
+ * die cijfers bleken een ingetrokken conclusie te dragen (D-129). Een lege pagina
+ * kan niet verouderen tot een claim.
+ */
+const hasTiles = tiles.length > 0;
+const hasEquity = s.equity.length > 1;
+const hasMarkets = s.markets.length > 0;
+const hasAnything = hasTiles || hasEquity || hasMarkets;
+---
+
+<Base
+  title="Resultaten"
+  description="Historische handelsresultaten van MEX Traders, gepubliceerd in units — ticks en R-multiples. Geen bedragen, geen rekeninggegevens."
+>
+  <Hero
+    eyebrow="Resultaten"
+    headline="Wat de cijfers wél zeggen"
+    lead="Alles op deze pagina staat in units. Een tick is de kleinste prijsbeweging van een contract en is de eenheid waarin uitvoeringskwaliteit ontstaat. Een R-multiple is de opbrengst per eenheid genomen risico, en daarmee de enige grootheid die je over verschillende markten heen mag optellen."
+    size="md"
+  />
+
+  <Section>
+    {!hasAnything && (
+      <Callout variant="warning" title="Nog geen cijfers gepubliceerd">
+        Wij publiceren op deze pagina niets wat wij niet kunnen onderbouwen, en op
+        dit moment is dat niets. De publicatietaak die de cijfers uit het
+        gereconcilieerde journaal haalt draait nog niet; tot die tijd staat hier
+        bewust geen enkel getal — ook geen voorbeeldgetal, omdat een voorbeeld op
+        een resultatenpagina na een week niet meer van een resultaat te
+        onderscheiden is. Hieronder staat wél precies wát wij gaan publiceren en in
+        welke eenheid.
+      </Callout>
+    )}
+
+    {hasTiles && <StatStrip items={tiles} source={statsSource(s)} />}
+  </Section>
+
+  <Section
+    eyebrow="Verloop"
+    title="Cumulatieve R over de looptijd"
+    lead="Elke trade telt mee als veelvoud van het risico dat ervoor is aangegaan. Daardoor is de curve optelbaar over markten heen én volledig los van rekeningomvang — er hoeft geen saldo aan te pas te komen om het verloop te kunnen lezen."
+  >
+    {hasEquity && <EquityCurve
+      points={s.equity}
+      title="Cumulatieve R"
+      valueSuffix="R"
+      baseline={0}
+      caption="Som van de gerealiseerde R-multiples per periode, cumulatief vanaf de start. Samengesteld uit gereconcilieerde, gesloten transacties; kosten en commissies zijn verwerkt. Openstaande posities tellen niet mee."
+    />}
+    {!hasEquity && (
+      <p class="pending">
+        De curve toont de cumulatieve R-multiples per periode. Staat hier zodra de
+        publicatietaak draait.
+      </p>
+    )}
+  </Section>
+
+  <Section
+    eyebrow="Per markt"
+    title="Waar het resultaat vandaan komt"
+    lead="Netto resultaat staat per markt in de eigen eenheid van die markt. Die kolom wordt bewust niet opgeteld: een goud-tick en een S&P-tick zijn verschillende bedragen, dus een totaal eronder zou een rekenfout zijn met een officieel uiterlijk."
+    raised
+  >
+    {hasMarkets ? (
+      <MarketTable
+        markets={s.markets}
+        caption="Status noemt het type rekening waarop de markt draait — funded of evaluatie. Dat is een operationele keuze, geen oordeel over de kwaliteit van het model. Slippage is het verschil tussen de bedoelde prijs en de werkelijke fill, gemiddeld per trade en uitgedrukt in ticks."
+      />
+    ) : (
+      <p class="pending">
+        Per markt: netto resultaat in ticks, aantal trades, win-rate en de
+        gemiddelde slippage. Staat hier zodra de publicatietaak draait.
+      </p>
+    )}
+  </Section>
+
+  <Section narrow>
+    <Callout variant="legal">
+      Historische resultaten van handelsrekeningen van de onderneming zelf. Geen
+      indicatie voor toekomstige resultaten. Handelen in futures brengt een
+      aanzienlijk risico op verlies met zich mee. Deze pagina is een weergave van
+      bedrijfsresultaten en vormt geen aanbod, advies of uitnodiging tot enige
+      transactie. Zie de <a href="/juridisch/disclaimer">volledige disclaimer</a>.
+    </Callout>
+  </Section>
+</Base>
+
+<style>
+  /* Een lege sectie moet leeg lijken, niet stuk. Zelfde toon als een
+     bijschrift: het is uitleg, geen resultaat. */
+  .pending {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    margin: 0;
+  }
+</style>

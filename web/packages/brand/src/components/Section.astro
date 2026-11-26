@@ -1,0 +1,77 @@
+---
+/**
+ * A titled page section. Keeps eyebrow/title/lead rhythm identical everywhere,
+ * so a page assembled from sections never drifts.
+ */
+interface Props {
+  eyebrow?: string;
+  title?: string;
+  lead?: string;
+  /** Renders on a raised surface with a hairline — used to break up long pages. */
+  raised?: boolean;
+  narrow?: boolean;
+  /** Heading level, so page outlines stay valid. */
+  as?: "h2" | "h3";
+  id?: string;
+  align?: "start" | "center";
+}
+
+const {
+  eyebrow,
+  title,
+  lead,
+  raised = false,
+  narrow = false,
+  as: Heading = "h2",
+  id,
+  align = "start",
+} = Astro.props;
+---
+
+<section class:list={["section", { "section--raised": raised }]} id={id}>
+  <div class:list={["wrap", { "wrap--narrow": narrow }]}>
+    {(eyebrow || title || lead) && (
+      <header class:list={["head", `head--${align}`]}>
+        {eyebrow && <span class="eyebrow eyebrow--accent">{eyebrow}</span>}
+        {title && <Heading>{title}</Heading>}
+        {lead && <p class="lead">{lead}</p>}
+      </header>
+    )}
+    <slot />
+  </div>
+</section>
+
+<style>
+  .section--raised {
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+    border-block: 1px solid var(--line);
+    padding-block: var(--section-y);
+  }
+
+  .head {
+    margin-bottom: var(--sp-6);
+  }
+
+  .head--center {
+    text-align: center;
+  }
+
+  .head--center .lead {
+    margin-inline: auto;
+  }
+
+  .head :global(h2),
+  .head :global(h3) {
+    max-width: 22ch;
+  }
+
+  .head--center :global(h2),
+  .head--center :global(h3) {
+    max-width: 26ch;
+    margin-inline: auto;
+  }
+
+  .head .lead {
+    margin-top: var(--sp-4);
+  }
+</style>

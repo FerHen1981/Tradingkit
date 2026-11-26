@@ -1,0 +1,72 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Vlootconfiguratie — huidige stand 03-11-2026</title><style>
+body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#111;margin:18px}
+h1{font-size:18px;margin:0 0 4px} h2{font-size:13px;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:2px}
+h3{font-size:11px;margin:10px 0 4px} p{margin:4px 0} .sub{color:#555;font-size:9.5px}
+table{border-collapse:collapse;width:100%;margin:4px 0 8px} th,td{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+th{background:#eee} .k{background:#fff7d6} .r{color:#a00;font-weight:bold} .g{color:#070;font-weight:bold} .m{color:#777}
+.box{border:1px solid #999;padding:6px 8px;margin:6px 0;background:#fafafa}
+@media print{h2{page-break-after:avoid} table{page-break-inside:auto} tr{page-break-inside:avoid}}
+</style></head><body>
+<h1>MEX Traders — vlootconfiguratie, stand 3 november 2026</h1>
+<p class="sub">Bronnen: alerts-log 30-10 → 02-11 gelezen door Analyses & Data (A-99), oktober-fills (A-98), repo-bron v3.12.0 (03-11), DEPLOYED.md.
+Dit document meet níets op de charts zelf: wat alleen op de chart staat, staat hier als <span class="r">onbekend</span> en vul je zelf in.
+Geen saldi of bedragen (fleet-report-spec §7). Account-ID's als de laatste drie cijfers.</p>
+
+<h2>1. Wat er op TradingView hangt</h2>
+<p>Alle MGC-funded-charts draaien <b>v3.2.0</b> of <b>v3.10</b>. <b>v3.12.0 staat in de repo maar is niet geplakt</b> — hij compileert niet (regel 827, zelfde fout als 8 oktober) en wordt met de tabel-B-defaults als <b>v3.13.0</b> opnieuw uitgegeven. De kolom "ja, hele vloot" in DEPLOYED.md is Pine Dev's claim, niet jouw bevestiging.</p>
+<table><tr><th>Chart-familie</th><th>Script / versie</th><th>Accounts</th><th>Entries</th><th>Regime</th><th>TP / SL</th><th>Dagguards (per ct)</th><th>Firm-profiel</th><th>Fase</th></tr>
+<tr><td><b>A</b></td><td>TES-MGC-C <b>v3.2.0</b></td><td>026 · 027 · 028 · 029 · 030 · 033</td><td>FVG <b>8–23</b> · venster <b>4</b> · OHLCV-proxy, streak 5</td><td>All sessions</td><td>85 fixed / 100t</td><td>150 / 50 / 300</td><td>apex_50k_legacy_pa</td><td>Funded</td></tr>
+<tr><td><b>B</b></td><td>EL TESORO <b>v3.10</b></td><td>013 · 018 · 022 · 031 · 032 · 034 · 037 · 038 · 039 · 040 · 041</td><td>FVG <b>4–11</b> · venster <b>1</b> · <b>TradingView-delta, streak 3</b></td><td>All sessions</td><td>85 fixed / 100t</td><td>150 / 50 / 300 (018: als totalen 600/300/1.200 op qty 4)</td><td class="r">apex_50k_intraday_eval</td><td>Developer óf Funded <span class="r">per account onbekend</span></td></tr>
+<tr><td><b>C</b></td><td>EL TESORO <b>v3.10</b></td><td>035 · 036 (= het 300K)</td><td>als B</td><td class="k">Custom-regime</td><td>85 fixed / 100t</td><td>036: <b>100 / 33 / 200</b>, cap 200/ct</td><td class="r">apex_50k_eod_pa (300K op een 50K-profiel)</td><td><span class="r">onbekend</span></td></tr>
+</table>
+<div class="box"><b>Wat A-99 op deze charts zag:</b> chart A en B gaven 2–19 okt per contract dezelfde dag-P&L; vanaf 20 okt (alerts 013/018/022 opnieuw gezet) lopen de entries uiteen; 20–30 okt per contract A +718–727 · B +640–940 · C +868–900 → binnen de ruis. <b>031 en 032</b> stoppen elke dag na 1–2 trades: de <i>Daily risk-gate</i> (150/10/100) staat daar aan, ≈ $400/ct kwijt. <b>018</b> draait qty 4 op ruimte &lt; 6.000 (advies A-90/A-91: 3) en handelde t/m 19 okt door ná de dagstop (≈ $2.700). <b>036</b> (300K) idem ≈ $2.250 t/m 19 okt; sinds 20 okt op 100/33/200 met 9/9 winstdagen. <b>037</b> meldt "PAYOUT 1 READY" op de script-balans sinds 1 jan terwijl Apex nog +890 nodig heeft. Payouts: 013 #2, 022 #1 ($1.416, 26-10).</div>
+
+<h2>2. Per account — MGC funded (19 PA's)</h2>
+<table><tr><th>Acct</th><th>Chart</th><th>Qty</th><th>Fase</th><th>Account start</th><th>Guards (per ct)</th><th>Firm-profiel</th><th>Bijzonderheden</th></tr>
+<tr><td>013</td><td>B</td><td>3</td><td class="r">?</td><td>20-10-2026 (261020)</td><td>150/50/300</td><td>intraday_eval</td><td>payout #2 gedaan; als eerste aan de drempel voor #3 (A-98)</td></tr>
+<tr><td>018</td><td>B</td><td><b>4</b></td><td>Developer (sinds 06-10)</td><td>20-10-2026 (261020)</td><td class="r">600/300/1.200 als totalen</td><td>intraday_eval</td><td>géén accountremmen actief (Developer); qty boven A-90-advies; alleen door consistency geblokkeerd (+2.504 tot de lat)</td></tr>
+<tr><td>022</td><td>B</td><td>2</td><td class="r">?</td><td>20-10-2026 (261020)</td><td>150/50/300</td><td>intraday_eval</td><td>payout #1 $1.416 op 26-10; referentie-account met day-trail aan</td></tr>
+<tr><td>026</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td>saldo 08-10 klopte op de cent met de fills (A-98)</td></tr>
+<tr><td>027</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td></td></tr>
+<tr><td>028</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td>oktober Asia-zwaar (+987/ct Asia, US −79) — geen vensterknop</td></tr>
+<tr><td>029</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td></td></tr>
+<tr><td>030</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td></td></tr>
+<tr><td>031</td><td>B</td><td class="r">?</td><td>Developer (gevraagd 03-11)</td><td>19-10-2026</td><td>150/50/300</td><td>intraday_eval</td><td class="r">Daily risk-gate AAN (150/10/100); stuurde sinds ~28-10 geen PMT-orders (payout-poort)</td></tr>
+<tr><td>032</td><td>B</td><td class="r">?</td><td>Developer (gevraagd 03-11)</td><td class="r">?</td><td>150/50/300</td><td>intraday_eval</td><td class="r">Daily risk-gate AAN; orders wisselend</td></tr>
+<tr><td>033</td><td>A</td><td class="r">?</td><td>Funded</td><td class="r">?</td><td>150/50/300</td><td>legacy_pa</td><td></td></tr>
+<tr><td>034</td><td>B</td><td class="r">?</td><td>Developer (gevraagd 03-11)</td><td>19-10-2026</td><td>150/50/300</td><td>intraday_eval</td><td class="r">stuurde sinds ~28-10 geen PMT-orders (payout-poort)</td></tr>
+<tr><td>035</td><td>C</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td>150/50/300</td><td>eod_pa</td><td>Custom-regime</td></tr>
+<tr><td>036</td><td>C</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td><b>100/33/200</b> cap 200</td><td class="r">eod_pa op een 300K</td><td>het 300K; 9/9 winstdagen sinds 20-10; registry-regel voor 300K ontbreekt</td></tr>
+<tr><td>037</td><td>B</td><td class="r">?</td><td>Developer (gevraagd 03-11)</td><td class="r">? (script telt sinds 1 jan)</td><td>150/50/300</td><td>intraday_eval</td><td class="r">"PAYOUT 1 READY" op fantoombalans; begint orders te missen (2-11)</td></tr>
+<tr><td>038</td><td>B</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td>150/50/300</td><td>intraday_eval</td><td></td></tr>
+<tr><td>039</td><td>B</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td>150/50/300</td><td>intraday_eval</td><td></td></tr>
+<tr><td>040</td><td>B</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td>150/50/300</td><td>intraday_eval</td><td></td></tr>
+<tr><td>041</td><td>B</td><td class="r">?</td><td class="r">?</td><td class="r">?</td><td>150/50/300</td><td>intraday_eval</td><td>chart van je schermafdruk 03-11: Developer, "no live sync"</td></tr>
+</table>
+<p class="sub">Zeven accounts draaien qty 1 (A-98) — welke, staat alleen in je fills/charts. Alle 19: TP 85 fixed, SL 100t, limit @ 50% FVG, expiry 12.</p>
+
+<h2>3. Evaluaties — EL TORO (NQ)</h2>
+<table><tr><th>Preset (A-86)</th><th>Qty</th><th>TP</th><th>FVG / venster</th><th>Bekende accounts</th></tr>
+<tr><td>50K</td><td>5 NQ</td><td>122</td><td>script-default (4–12 / 2)</td><td>292 · 299 (uit de storing van 02-11); overige <span class="r">onbekend</span></td></tr>
+<tr><td>250K</td><td>22 NQ</td><td>138</td><td>19–27 / 4</td><td class="r">onbekend</td></tr>
+<tr><td>300K</td><td>30 NQ</td><td>138</td><td>19–27</td><td class="r">onbekend</td></tr></table>
+
+<h2>4. Repo-defaults per script (v3.12.0, 03-11) — wat een vérse chart krijgt</h2>
+<p class="sub">Dit zijn de waarden in de bron. Op bijna elke live chart staan ze overschreven (TP 85 fixed i.p.v. R-multiple, FVG-band, regime). Dat verschil is de reden dat drie "El Tesoro's" bestonden.</p>
+<table><tr><th>Script</th><th>qty</th><th>Regime</th><th>FVG</th><th>conf</th><th>Delta</th><th>SL</th><th>TP</th><th>Guards/ct</th><th>Dagstops</th><th>Risk-gate</th><th>Firm</th><th>Fase</th></tr>
+<tr><td>TESORO MGC CON EOD</td><td>7</td><td class="k">Liquidity Core</td><td class="k">11–16</td><td>0</td><td class="k">aan, streak 6</td><td>140t</td><td class="k">R 2,25</td><td>150/50/300</td><td>uit</td><td>uit</td><td class="k">eod_pa</td><td>Funded</td></tr>
+<tr><td>PATRON MGC AGG EOD</td><td>8</td><td>Liquidity Core</td><td>11–16</td><td>0</td><td>aan, 5</td><td>120t</td><td>R 2,25</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa</td><td>Funded</td></tr>
+<tr><td>MATADOR MES PROD EOD</td><td>6</td><td>All sessions</td><td>10–22</td><td>0</td><td>aan, 6</td><td>120t</td><td>R 1,75</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa</td><td>Funded</td></tr>
+<tr><td>REY MNQ PROD EOD / INTRA</td><td>6</td><td>All sessions</td><td>2–8</td><td>0</td><td>aan, 8</td><td>200t</td><td>R 1,25</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa / intraday_pa</td><td>Funded</td></tr>
+<tr><td>LEON MYM PROD EOD</td><td>3</td><td>All sessions</td><td>12–20</td><td>0</td><td>aan, 6</td><td>480t</td><td>R 1,25</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa</td><td>Funded</td></tr>
+<tr><td>LEON MYM CON EOD / INTRA Q2</td><td>2</td><td>All sessions</td><td>12–20</td><td>0</td><td>aan, 6</td><td>480t</td><td>R 1,25</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa / intraday_pa</td><td>Funded</td></tr>
+<tr><td>BANDIDO MYM HF EOD</td><td>5</td><td>All sessions</td><td>4–8</td><td>0</td><td>aan, 3</td><td>160t</td><td>R 1,5</td><td>150/50/300</td><td>uit</td><td>uit</td><td>eod_pa</td><td>Funded</td></tr>
+<tr><td>TORO NQ HF INTRA</td><td>7</td><td>All sessions</td><td>4–12</td><td>2</td><td>aan, 3</td><td>90t</td><td>90 fixed</td><td>totalen: trail 150, cap 300</td><td>uit</td><td>uit</td><td>intraday_eval</td><td>Eval</td></tr>
+<tr><td>TORO NQ SNIPER INTRA</td><td>7</td><td>All sessions</td><td>4–8</td><td>2</td><td>aan, 7</td><td>100t</td><td>90 fixed</td><td>totalen</td><td>uit</td><td>uit</td><td>intraday_eval</td><td>Eval</td></tr>
+<tr><td>TORO ES FAST INTRA</td><td>6</td><td>All sessions</td><td>2–8</td><td>2</td><td>uit</td><td>90t</td><td>44 fixed</td><td>totalen</td><td>uit</td><td>uit</td><td>intraday_eval</td><td>Eval</td></tr>
+<tr><td>TORO GC SNIPER EOD</td><td>5</td><td>All sessions</td><td>10–14</td><td>2</td><td>aan, 6</td><td>90t</td><td>64 fixed</td><td>totalen</td><td>uit</td><td>uit</td><td>eod_eval</td><td>Eval</td></tr></table>
+<p class="sub">Alle 13: owner-DLL 100 × 4 × qty · dagstops default uit · guards op de negen PA-scripts hardgecodeerd "per contract" (v3.12.0). Markering <span class="k">geel</span> = wijkt af van wat de live charts draaien.</p>
+
+<h2>5. Wat alleen jij kunt invullen</h2>
+<p>Per MGC-account: <b>fase</b> (Developer/Funded) · <b>qty</b> · <b>accountstartdatum</b> · of er <b>totalen</b> in de guards staan · of de <b>deltafilter</b> aanstaat. Per eval: welk preset. De snelste bron is de <b>alerts-log</b>: elke alertnaam draagt de volledige chart-config (40+ velden) per account — exporteer hem, wis het PMT-token, en dan is deze tabel in één keer compleet en exact.</p>
+</body></html>

@@ -38,6 +38,30 @@ def _pivot_confirmed(values: np.ndarray, k: int, kind: str) -> np.ndarray:
     return out
 
 
+def cvd_polarity(open_: np.ndarray, close: np.ndarray) -> np.ndarray:
+    """CANONICAL CVD proxy (pipeline v7, ground rule 4) — a deterministic OHLCV
+    price-polarity series, independent of the CSV `Delta` column and of Pine's
+    `ta.requestVolumeDelta()`. Those two are separate experiments and must never
+    silently replace this proxy, because only this one is reproducible in both
+    Python and Pine on any dataset that has OHLC.
+
+    Per bar: close>open -> +1 · close<open -> -1 · doji -> compare to the previous
+    close · still unresolved -> carry the previous polarity forward."""
+    n = len(close)
+    if n == 0:
+        return np.zeros(0, dtype=np.int64)
+    up, dn = close > open_, close < open_
+    pol = np.where(up, 1, np.where(dn, -1, 0)).astype(np.int64)
+    doji = ~up & ~dn
+    prev_close = np.concatenate([[np.nan], close[:-1]])
+    pol = np.where(doji & (close > prev_close), 1, pol)
+    pol = np.where(doji & (close < prev_close), -1, pol)
+    # carry the last resolved polarity forward over the remaining zeros
+    idx = np.where(pol != 0, np.arange(n), 0)
+    np.maximum.accumulate(idx, out=idx)
+    return pol[idx].astype(np.int64)
+
+
 def _run_length_positive(delta: np.ndarray) -> np.ndarray:
     """Consecutive count (incl. current) of strictly-positive delta bars."""
     n = len(delta)
@@ -59,6 +83,222 @@ def _run_length_negative(delta: np.ndarray) -> np.ndarray:
     return out
 
 
+def _ema(x: np.ndarray, length: int) -> np.ndarray:
+    """Exponential moving average (alpha = 2/(n+1)), seeded with the first value."""
+    n = max(int(length), 1)
+    alpha = 2.0 / (n + 1.0)
+    out = np.empty(len(x))
+    out[0] = x[0]
+    for i in range(1, len(x)):
+        out[i] = out[i - 1] + alpha * (x[i] - out[i - 1])
+    return out
+
+
+def _ma(x: np.ndarray, length: int, kind: str = "EMA") -> np.ndarray:
+    """Moving average — EMA (default) or SMA — as a full-length array."""
+    n = max(int(length), 1)
+    if kind == "SMA":
+        return pd.Series(x).rolling(n, min_periods=n).mean().to_numpy()
+    return _ema(x, n)
+
+
+def _wma(x: np.ndarray, length: int) -> np.ndarray:
+    """Linearly weighted MA (Pine ta.wma): weights 1..n, newest heaviest. NaN
+    until the window fills."""
+    n = max(int(length), 1)
+    w = np.arange(1, n + 1, dtype=float)
+    w /= w.sum()
+    out = np.full(len(x), np.nan)
+    for i in range(n - 1, len(x)):
+        out[i] = float(np.dot(x[i - n + 1:i + 1], w))
+    return out
+
+
+def _hma(x: np.ndarray, length: int) -> np.ndarray:
+    """Hull MA (Pine ta.hma): wma(2*wma(n/2) - wma(n), sqrt(n)). The inner short-
+    window NaNs are zero-filled so the outer WMA can seed (matches the nz() the
+    source feeds the smoother)."""
+    n = max(int(length), 1)
+    half = max(n // 2, 1)
+    sq = max(int(np.sqrt(n)), 1)
+    raw = 2.0 * _wma(x, half) - _wma(x, n)
+    return _wma(np.nan_to_num(raw, nan=0.0), sq)
+
+
+def _vwma(x: np.ndarray, vol: np.ndarray, length: int) -> np.ndarray:
+    """Volume-weighted MA (Pine ta.vwma): sum(x*vol)/sum(vol) over the window."""
+    n = max(int(length), 1)
+    pv = pd.Series(x * vol).rolling(n, min_periods=n).sum().to_numpy()
+    vv = pd.Series(vol).rolling(n, min_periods=n).sum().to_numpy()
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(vv > 0, pv / vv, np.nan)
+
+
+def _roll_pop_std(x: np.ndarray, length: int) -> np.ndarray:
+    """Rolling population standard deviation (ddof=0) — matches Pine ta.stdev."""
+    n = max(int(length), 1)
+    return pd.Series(x).rolling(n, min_periods=n).std(ddof=0).to_numpy()
+
+
+def _bbwp(close: np.ndarray, vol: np.ndarray, length: int, lookback: int,
+          basis_type: str) -> np.ndarray:
+    """Bollinger band-width percentile — REPAINT-FREE. Band width = 2*stdev/basis;
+    ranked against the prior `lookback` CLOSED bars only. Faithful to the source
+    f_bbwp: population stdev, fixed-lookback denominator, and pre-history (missing
+    width, nz->0) counts as narrower than any real width. Returns 0..100, NaN where
+    the basis is undefined (gate treats NaN as fail downstream)."""
+    if basis_type == "EMA":
+        basis = _ema(close, length)
+    elif basis_type == "VWMA":
+        basis = _vwma(close, vol, length)
+    else:
+        basis = _ma(close, length, "SMA")
+    dev = _roll_pop_std(close, length)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        bbw = np.where((basis == 0) | np.isnan(basis), np.nan, 2.0 * dev / basis)
+    n = len(close)
+    out = np.full(n, np.nan)
+    lb = max(int(lookback), 1)
+    b0 = np.nan_to_num(bbw, nan=0.0)          # nz(): missing width -> 0 (narrowest)
+    for i in range(n):
+        if np.isnan(bbw[i]):
+            continue
+        past = b0[max(0, i - lb):i]           # up to `lookback` prior closed bars
+        cnt = int(np.count_nonzero(past <= b0[i])) + (lb - past.size)
+        out[i] = 100.0 * cnt / lb
+    return out
+
+
+def _mfi_side(open_: np.ndarray, high: np.ndarray, low: np.ndarray,
+              close: np.ndarray, period: int) -> np.ndarray:
+    """Candle-value money flow, HMA-smoothed and sign-flipped (source * -1). >0
+    favours longs, <0 favours shorts. All inputs are same-bar or prior-bar closed
+    values — no look-ahead."""
+    n = len(close)
+    o4 = (open_ + high + low + close) / 4.0
+    hi = np.maximum.reduce([high, open_, close])
+    lo = np.minimum.reduce([low, open_, close])
+    prev_c = np.empty(n); prev_c[0] = close[0]; prev_c[1:] = close[:-1]
+    prev_o = np.empty(n); prev_o[0] = open_[0]; prev_o[1:] = open_[:-1]
+    mid = (prev_c + prev_o) / 2.0
+    rng = hi - lo
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cv = np.where(rng == 0, np.nan, (mid - o4) / rng)
+    prev_cv = np.empty(n); prev_cv[0] = np.nan; prev_cv[1:] = cv[:-1]
+    filled = np.where(~np.isnan(cv), cv,                       # nz(cv, nz(cv[1], 0))
+                      np.where(~np.isnan(prev_cv), prev_cv, 0.0))
+    return _hma(filled, period) * -1.0
+
+
+def _rsi(close: np.ndarray, length: int) -> np.ndarray:
+    """Wilder RSI (0-100), seeded on the first diff. NaN at bar 0."""
+    n = len(close)
+    out = np.full(n, np.nan)
+    if n < 2:
+        return out
+    avg_gain = avg_loss = 0.0
+    L = max(int(length), 1)
+    for i in range(1, n):
+        ch = close[i] - close[i - 1]
+        g = ch if ch > 0 else 0.0
+        l = -ch if ch < 0 else 0.0
+        if i == 1:
+            avg_gain, avg_loss = g, l
+        else:
+            avg_gain = (avg_gain * (L - 1) + g) / L
+            avg_loss = (avg_loss * (L - 1) + l) / L
+        if avg_loss == 0:
+            out[i] = 100.0
+        else:
+            rs = avg_gain / avg_loss
+            out[i] = 100.0 - 100.0 / (1.0 + rs)
+    return out
+
+
+def _cross_dir(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """+1 the bar `a` crosses above `b`, -1 the bar it crosses below, else 0."""
+    n = len(a)
+    above = a > b
+    out = np.zeros(n, dtype=np.int64)
+    out[1:] = np.where(above[1:] & ~above[:-1], 1,
+                       np.where(~above[1:] & above[:-1], -1, 0))
+    return out
+
+
+def _order_block_dir(open_, high, low, close, atr, impulse_atr, max_age, mit_pct):
+    """Order-block mitigation entry (continuation). An impulse bar (body >=
+    impulse_atr*ATR) marks the last opposite candle before it as an OB zone;
+    a later bar that trades back into that zone fires an entry. Lookahead-safe:
+    the OB is built from bars <= i, mitigation is tested on the current bar, and
+    an OB never fires on the bar that created it. One-shot per zone."""
+    n = len(close)
+    out = np.zeros(n, dtype=np.int64)
+    bull_top = bull_bot = np.nan; bull_age = -1
+    bear_top = bear_bot = np.nan; bear_age = -1
+    for i in range(1, n):
+        # age existing OBs, expire the stale ones
+        if bull_age >= 0:
+            bull_age += 1
+            if bull_age > max_age:
+                bull_top = bull_bot = np.nan; bull_age = -1
+        if bear_age >= 0:
+            bear_age += 1
+            if bear_age > max_age:
+                bear_top = bear_bot = np.nan; bear_age = -1
+        # mitigation (OB set on a prior bar) -> fire, one-shot
+        if not np.isnan(bull_top):
+            trig = bull_top - mit_pct * (bull_top - bull_bot)
+            if low[i] <= trig:
+                out[i] = 1
+                bull_top = bull_bot = np.nan; bull_age = -1
+        if out[i] == 0 and not np.isnan(bear_top):
+            trig = bear_bot + mit_pct * (bear_top - bear_bot)
+            if high[i] >= trig:
+                out[i] = -1
+                bear_top = bear_bot = np.nan; bear_age = -1
+        # detect a new impulse this bar -> record the opposite candle as the OB
+        thr = impulse_atr * atr[i]
+        if thr > 0:
+            body = close[i] - open_[i]
+            if body >= thr:                       # up-impulse -> bullish OB
+                for j in range(i - 1, max(i - 6, -1), -1):
+                    if close[j] < open_[j]:
+                        bull_bot, bull_top, bull_age = low[j], high[j], 0
+                        break
+            elif -body >= thr:                    # down-impulse -> bearish OB
+                for j in range(i - 1, max(i - 6, -1), -1):
+                    if close[j] > open_[j]:
+                        bear_bot, bear_top, bear_age = low[j], high[j], 0
+                        break
+    return out
+
+
+def _cvd_div_dir(low, high, close, cvd, k):
+    """Price/CVD divergence at confirmed pivots (reversal). Bullish = price lower
+    low but CVD higher low; bearish = price higher high but CVD lower high. Uses
+    the same pivot window as _pivot_confirmed (confirmed at b+k), so it is
+    lookahead-safe and fires on the confirmation bar."""
+    n = len(close)
+    out = np.zeros(n, dtype=np.int64)
+    prev_pl = prev_pl_cvd = np.nan
+    prev_ph = prev_ph_cvd = np.nan
+    for i in range(n):
+        b = i - k
+        if b - k < 0 or b + k >= n:
+            continue
+        cl = low[b]
+        if cl < low[b - k:b].min() and cl < low[b + 1:b + k + 1].min():
+            if not np.isnan(prev_pl) and cl < prev_pl and cvd[b] > prev_pl_cvd:
+                out[i] = 1
+            prev_pl, prev_pl_cvd = cl, cvd[b]
+        ch = high[b]
+        if ch > high[b - k:b].max() and ch > high[b + 1:b + k + 1].max():
+            if out[i] == 0 and not np.isnan(prev_ph) and ch > prev_ph and cvd[b] < prev_ph_cvd:
+                out[i] = -1
+            prev_ph, prev_ph_cvd = ch, cvd[b]
+    return out
+
+
 def _atr(high, low, close, length):
     """Wilder's ATR (RMA of true range), matching Pine ta.atr."""
     n = len(close)
@@ -73,6 +313,195 @@ def _atr(high, low, close, length):
     for i in range(1, n):
         atr[i] = atr[i - 1] + alpha * (tr[i] - atr[i - 1])
     return atr
+
+
+def _supertrend_dir(high, low, close, atr_length, mult):
+    """Repaint-free ATR-band trend flip. Returns +1 on the bar the trend flips UP,
+    -1 on the bar it flips DOWN, 0 otherwise — the same 'signal on the flip bar'
+    convention as the EMA cross, so the engine enters next bar (no same-bar fill).
+    Stateful band-tightening, computed causally from confirmed-bar data only.
+
+    Wired from an adopted registry entry as the layer-2 codegen proof (Fase 6)."""
+    n = len(close)
+    atr = _atr(high, low, close, atr_length)
+    hl2 = (high + low) / 2.0
+    up = hl2 + mult * atr
+    lo = hl2 - mult * atr
+    f_up = np.full(n, np.nan)
+    f_lo = np.full(n, np.nan)
+    out = np.zeros(n, dtype=np.int64)
+    prev = 1
+    for i in range(n):
+        if i == 0 or np.isnan(atr[i]):
+            f_up[i], f_lo[i], prev = up[i], lo[i], 1
+            continue
+        f_up[i] = up[i] if (up[i] < f_up[i - 1] or close[i - 1] > f_up[i - 1]) else f_up[i - 1]
+        f_lo[i] = lo[i] if (lo[i] > f_lo[i - 1] or close[i - 1] < f_lo[i - 1]) else f_lo[i - 1]
+        t = (-1 if close[i] < f_lo[i] else 1) if prev == 1 else (1 if close[i] > f_up[i] else -1)
+        if t != prev:
+            out[i] = t                       # flip -> entry on this bar
+        prev = t
+    return out
+
+
+def _adx(high, low, close, length):
+    """Wilder's ADX (trend strength, 0-100). +DM/-DM and TR are Wilder-smoothed
+    (RMA, alpha=1/length), +DI/-DI derived, DX = 100*|+DI--DI|/(+DI+-DI), and ADX
+    is the RMA of DX. Matches Pine ta.adx conventions."""
+    n = len(close)
+    length = max(int(length), 1)
+    tr = np.empty(n); pdm = np.zeros(n); mdm = np.zeros(n)
+    tr[0] = high[0] - low[0]
+    for i in range(1, n):
+        up = high[i] - high[i - 1]
+        dn = low[i - 1] - low[i]
+        pdm[i] = up if (up > dn and up > 0) else 0.0
+        mdm[i] = dn if (dn > up and dn > 0) else 0.0
+        pc = close[i - 1]
+        tr[i] = max(high[i] - low[i], abs(high[i] - pc), abs(low[i] - pc))
+    alpha = 1.0 / length
+    atr = np.empty(n); rpdm = np.empty(n); rmdm = np.empty(n)
+    atr[0], rpdm[0], rmdm[0] = tr[0], pdm[0], mdm[0]
+    for i in range(1, n):
+        atr[i] = atr[i - 1] + alpha * (tr[i] - atr[i - 1])
+        rpdm[i] = rpdm[i - 1] + alpha * (pdm[i] - rpdm[i - 1])
+        rmdm[i] = rmdm[i - 1] + alpha * (mdm[i] - rmdm[i - 1])
+    eps = 1e-12
+    pdi = 100.0 * rpdm / (atr + eps)
+    mdi = 100.0 * rmdm / (atr + eps)
+    dx = 100.0 * np.abs(pdi - mdi) / (pdi + mdi + eps)
+    adx = np.empty(n); adx[0] = dx[0]
+    for i in range(1, n):
+        adx[i] = adx[i - 1] + alpha * (dx[i] - adx[i - 1])
+    return adx
+
+
+# Objective regime labels (framework §6). A defensible v1 subset of the full
+# taxonomy — Transition/Exhaustion/Expansion are left for a later refinement.
+REGIME_LABELS = ("Strong Bull Trend", "Controlled Bull Trend", "Strong Bear Trend",
+                 "Controlled Bear Trend", "Compression", "Low-Volatility Range",
+                 "High-Volatility Range", "Indecision")
+
+
+def classify_regime(df: pd.DataFrame, cfg) -> dict:
+    """L1 regime classifier — the framework's gatekeeper (lab/FRAMEWORK.md §1/§6).
+
+    Combines a 3-EMA trend stack (fast/mid/slow) + slow-MA slope, ADX for trend
+    strength, and an ATR volatility percentile into one per-bar regime label.
+    Pure/objective: same bars + knobs -> same tags. Returns numeric axes
+    (`trend` -2..2, `vol_bucket` 0..2, `vol_dir` -1..1, `adx`) plus the string
+    `regime` array, so both humans and the sampler (step 4) can consume it."""
+    high = df["High"].to_numpy(dtype=float)
+    low = df["Low"].to_numpy(dtype=float)
+    close = df["Close"].to_numpy(dtype=float)
+    n = len(df)
+    fast = _ema(close, cfg.regime_ma_fast)
+    mid = _ema(close, cfg.regime_ma_mid)
+    slow = _ema(close, cfg.regime_ma_slow)
+    adx = _adx(high, low, close, cfg.adx_len)
+    atr = _atr(high, low, close, cfg.atr_len)
+
+    # ATR volatility percentile via rolling quantiles (vectorized, C-backed).
+    w = max(int(cfg.regime_atr_lookback), 5)
+    atr_s = pd.Series(atr)
+    q33 = atr_s.rolling(w, min_periods=w).quantile(0.33).to_numpy()
+    q66 = atr_s.rolling(w, min_periods=w).quantile(0.66).to_numpy()
+    vol_bucket = np.where(np.isnan(q33), 1,
+                          np.where(atr < q33, 0, np.where(atr > q66, 2, 1))).astype(int)
+
+    sl = max(int(cfg.regime_slope_lookback), 1)
+    vol_dir = np.zeros(n, dtype=int)
+    slow_slope = np.zeros(n)
+    if n > sl:
+        vol_dir[sl:] = np.sign(atr[sl:] - atr[:-sl]).astype(int)
+        slow_slope[sl:] = slow[sl:] - slow[:-sl]
+
+    strong = adx >= cfg.adx_trend
+    up_stack = (close > fast) & (fast > mid) & (mid > slow) & (slow_slope > 0)
+    dn_stack = (close < fast) & (fast < mid) & (mid < slow) & (slow_slope < 0)
+    up_soft = (close > slow) & (mid > slow)
+    dn_soft = (close < slow) & (mid < slow)
+
+    trend = np.zeros(n, dtype=int)
+    trend = np.where(up_soft & strong, 1, trend)
+    trend = np.where(dn_soft & strong, -1, trend)
+    trend = np.where(up_stack & ~strong, 1, trend)     # stack but weak ADX = controlled
+    trend = np.where(dn_stack & ~strong, -1, trend)
+    trend = np.where(up_stack & strong, 2, trend)      # full stack + strong ADX
+    trend = np.where(dn_stack & strong, -2, trend)
+
+    warm = np.arange(n) < max(int(cfg.regime_ma_slow), w)
+    regime = np.select(
+        [warm, trend == 2, trend == -2, trend == 1, trend == -1,
+         (trend == 0) & (vol_bucket == 0), (trend == 0) & (vol_bucket == 2)],
+        ["Indecision", "Strong Bull Trend", "Strong Bear Trend",
+         "Controlled Bull Trend", "Controlled Bear Trend",
+         "Compression", "High-Volatility Range"],
+        default="Low-Volatility Range").astype(object)
+    return {"adx": adx, "trend": trend, "vol_bucket": vol_bucket,
+            "vol_dir": vol_dir, "regime": regime}
+
+
+# Above this many bars, classify the regime on a 15-minute resample and
+# broadcast the labels back — regime is a higher-timeframe concept (MA200 +
+# Wilder ADX span days), so the label is unchanged while the cost drops from
+# ~47s to ~2s on a 20-year 1m frame (measured). Single source of truth for the
+# engine's regime gate AND run.py's regime tag / edge attribution.
+REGIME_RESAMPLE_ABOVE = 400_000
+
+
+def _regime_15m_parts(df: pd.DataFrame, cfg):
+    """Classify on a lean 15m HLC resample; return (labels_15m, positions) where
+    positions maps every source bar onto its 15m label index."""
+    s = df[["et", "High", "Low", "Close"]].set_index("et")
+    r = pd.DataFrame({"High": s["High"].resample("15min").max(),
+                      "Low": s["Low"].resample("15min").min(),
+                      "Close": s["Close"].resample("15min").last()}).dropna().reset_index()
+    lab = classify_regime(r, cfg)["regime"]
+    # compare times as int64 ns: .to_numpy() on a tz-aware column yields an OBJECT
+    # array of Timestamps, and searchsorted over 4.3M of those costs ~30s vs 0.7s
+    # on int64 (measured; positions identical).
+    r_ns = r["et"].astype("int64").to_numpy()
+    d_ns = df["et"].astype("int64").to_numpy()
+    pos = np.clip(np.searchsorted(r_ns, d_ns, side="right") - 1, 0, len(lab) - 1)
+    return lab, pos
+
+
+def regime_labels(df: pd.DataFrame, cfg, resample_above: int = REGIME_RESAMPLE_ABOVE):
+    """Per-bar regime labels for `df`, resample-accelerated on big 1m frames."""
+    if len(df) <= resample_above or "et" not in df.columns:
+        return classify_regime(df, cfg)["regime"]
+    lab, pos = _regime_15m_parts(df, cfg)
+    return lab[pos]
+
+
+def regime_gate(df: pd.DataFrame, cfg, allowed, resample_above: int = REGIME_RESAMPLE_ABOVE):
+    """Boolean per-bar gate: is the bar's regime in `allowed`? On big frames the
+    membership test runs on the 15m labels (a few hundred k) and only the BOOLEANS
+    are broadcast — never millions of object strings (np.isin on a 4.3M object
+    array alone cost ~40s; this path is ~3s total)."""
+    allowed = list(allowed)
+    if len(df) <= resample_above or "et" not in df.columns:
+        return np.isin(classify_regime(df, cfg)["regime"], allowed)
+    lab, pos = _regime_15m_parts(df, cfg)
+    return np.isin(lab, allowed)[pos]
+
+
+def regime_summary(labels) -> dict:
+    """Collapse a per-bar regime label array into a run summary: the dominant
+    tradeable regime + a distribution (warm-up 'Indecision' excluded from the
+    shares but reported as its own fraction)."""
+    import collections
+    labels = list(np.asarray(labels, dtype=object))
+    total = len(labels) or 1
+    counts = collections.Counter(labels)
+    indef = counts.pop("Indecision", 0)
+    denom = sum(counts.values()) or 1
+    dist = {k: round(v / denom, 4)
+            for k, v in sorted(counts.items(), key=lambda kv: -kv[1])}
+    dominant = max(counts, key=counts.get) if counts else "Indecision"
+    return {"dominant": dominant, "distribution": dist,
+            "indecision_frac": round(indef / total, 4), "bars": len(labels)}
 
 
 def _session_vwap(hlc3: np.ndarray, vol: np.ndarray, new_session: np.ndarray) -> np.ndarray:
@@ -90,13 +519,23 @@ def _session_vwap(hlc3: np.ndarray, vol: np.ndarray, new_session: np.ndarray) ->
     return out
 
 
-def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
+def compute(df: pd.DataFrame, cfg: Config, progress=None) -> pd.DataFrame:
+    # optional progress ticks so the pre-engine indicator build (≈35s on a 20y 1m
+    # frame) shows movement instead of a silent "starting". 6 milestones over the
+    # expensive early blocks. Off by default (parallel mill passes nothing).
+    _STEPS = 6
+    def _tick(k):
+        if progress:
+            progress(k, _STEPS)
     d = df
     high = d["High"].to_numpy(dtype=float)
     low = d["Low"].to_numpy(dtype=float)
     close = d["Close"].to_numpy(dtype=float)
+    open_ = d["Open"].to_numpy(dtype=float)
     vol = d["Volume"].to_numpy(dtype=float)
     delta = d["Delta"].to_numpy(dtype=float)
+    cvd = (d["CVD_close"].to_numpy(dtype=float) if "CVD_close" in d.columns
+           else np.cumsum(delta))
     new_session = d["new_session"].to_numpy(dtype=bool)
     mintick = cfg.contract.mintick
     n = len(d)
@@ -146,19 +585,31 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
     out["fvg_top"] = fvg_top
     out["fvg_bot"] = fvg_bot
     out["fvg_mid"] = fvg_mid
+    out["fvg_size"] = fvg_size          # price units; /mintick for the tick size
     out["fvg_pass"] = fvg_pass
+    _tick(1)
 
     # --- Swing pivots (confirmed) ---------------------------------------------
     out["piv_low"] = _pivot_confirmed(low, cfg.pivot_k, "low")
     out["piv_high"] = _pivot_confirmed(high, cfg.pivot_k, "high")
+    _tick(2)
 
     # --- Session VWAP ----------------------------------------------------------
     hlc3 = (high + low + close) / 3.0
     out["vwap"] = _session_vwap(hlc3, vol, new_session)
+    _tick(3)
 
-    # --- Volume-delta direction + streak --------------------------------------
-    bull_run = _run_length_positive(delta)
-    bear_run = _run_length_negative(delta)
+    # --- CVD direction + streak ------------------------------------------------
+    # Source is EXPLICIT: the canonical OHLCV polarity proxy by default, the raw
+    # Delta column only when asked for by name (ground rule 4 — never a silent
+    # substitution in either direction).
+    if getattr(cfg, "cvd_source", "proxy") == "native":
+        cvd_series = delta
+    else:
+        cvd_series = cvd_polarity(open_, close).astype(float)
+    out["cvd_polarity"] = cvd_series
+    bull_run = _run_length_positive(cvd_series)
+    bear_run = _run_length_negative(cvd_series)
     if cfg.use_cvd_filter:
         if cfg.use_cvd_streak:
             bull_cvd = bull_run >= cfg.cvd_trend_count
@@ -171,9 +622,22 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         bear_cvd = np.ones(n, dtype=bool)
     out["bull_cvd"] = bull_cvd
     out["bear_cvd"] = bear_cvd
+    _tick(4)
 
     # --- ATR (computed above; reused for the ATR unit mode) -------------------
     out["atr"] = atr
+
+    # --- Regime gate (causal) --------------------------------------------------
+    # Empty filter = trade every regime (all True, no cost). Otherwise the per-bar
+    # regime tag (no look-ahead) must be in the allowed set for an entry to fire.
+    # regime_labels() classifies on a 15m resample above 400k bars (same labels,
+    # ~47s -> ~2s on 20y 1m — this block was the '8% computing indicators' stall)
+    # and keeps the gate consistent with run.py's regime tag / edge attribution.
+    if cfg.regime_filter:
+        out["regime_ok"] = regime_gate(d, cfg, cfg.regime_filter)
+    else:
+        out["regime_ok"] = np.ones(n, dtype=bool)
+    _tick(5)
 
     # --- VWAP veto -------------------------------------------------------------
     if cfg.use_vwap_veto:
@@ -183,4 +647,186 @@ def compute(df: pd.DataFrame, cfg: Config) -> pd.DataFrame:
         out["veto_long"] = True
         out["veto_short"] = True
 
+    # --- BBWP band-width gate (symmetric volatility band-pass) -----------------
+    # Optional research filter (default off). Same posture as the VWAP/CVD vetoes:
+    # an all-True array when off, so every existing preset is byte-identical.
+    if getattr(cfg, "use_bbwp_filter", False):
+        bbwp = _bbwp(close, vol, cfg.bbwp_len, cfg.bbwp_lookback, cfg.bbwp_basis)
+        out["bbwp_pass"] = ((~np.isnan(bbwp)) & (bbwp >= cfg.bbwp_min)
+                            & (bbwp <= cfg.bbwp_max))
+    else:
+        out["bbwp_pass"] = np.ones(n, dtype=bool)
+
+    # --- MFI side gate (candle money-flow, HMA-smoothed) -----------------------
+    # Directional research filter (default off): longs only while the flow is
+    # positive, shorts only while negative.
+    if getattr(cfg, "use_mfi_filter", False):
+        mfi = _mfi_side(open_, high, low, close, cfg.mfi_period)
+        out["mfi_long"] = mfi > 0
+        out["mfi_short"] = mfi < 0
+    else:
+        out["mfi_long"] = np.ones(n, dtype=bool)
+        out["mfi_short"] = np.ones(n, dtype=bool)
+
+    # --- EMA crossover entry (Level B generator) ------------------------------
+    if cfg.use_ema_cross:
+        ef = _ema(close, cfg.ema_fast)
+        es = _ema(close, cfg.ema_slow)
+        above = ef > es
+        cross = np.zeros(n, dtype=np.int64)
+        cross[1:] = np.where(above[1:] & ~above[:-1], 1,
+                             np.where(~above[1:] & above[:-1], -1, 0))
+        out["ema_cross_dir"] = cross
+    else:
+        out["ema_cross_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Break-of-structure entry (Level B generator) -------------------------
+    # Momentum/continuation: a bullish break fires the bar the close crosses
+    # ABOVE the last confirmed swing high; bearish the bar it closes BELOW the
+    # last confirmed swing low. Reuses the same lookahead-safe pivots as the
+    # swing stops (pivot_k) — piv_high/piv_low are the price of the most recently
+    # CONFIRMED pivot as of bar i, so comparing close[i] to them uses no future
+    # data. Fires once on the transition (ta.crossover against a stepped level).
+    if cfg.use_bos_entry:
+        ph = out["piv_high"].to_numpy()
+        pl = out["piv_low"].to_numpy()
+        above = close > ph              # NaN reference (pre-first-pivot) -> False
+        below = close < pl
+        bos = np.zeros(n, dtype=np.int64)
+        bos[1:] = np.where(above[1:] & ~above[:-1], 1,
+                           np.where(below[1:] & ~below[:-1], -1, 0))
+        out["bos_dir"] = bos
+    else:
+        out["bos_dir"] = np.zeros(n, dtype=np.int64)
+
+    ph_arr = out["piv_high"].to_numpy()
+    pl_arr = out["piv_low"].to_numpy()
+
+    # --- Change of character (CHoCH) — first counter-break of structure --------
+    # Reversal complement of BOS: after price has been making the break one way,
+    # the FIRST close back through the opposite confirmed swing flags a regime
+    # flip. Modelled as a crossover the OTHER way vs BOS, so a bullish CHoCH =
+    # close crosses back above the swing high after trading below the swing low.
+    if cfg.use_choch_entry:
+        below_lo = close < pl_arr
+        above_hi = close > ph_arr
+        choch = np.zeros(n, dtype=np.int64)
+        # long CHoCH: was below the swing low, now closes above the swing high
+        # short CHoCH: was above the swing high, now closes below the swing low
+        choch[1:] = np.where(above_hi[1:] & below_lo[:-1], 1,
+                             np.where(below_lo[1:] & above_hi[:-1], -1, 0))
+        out["choch_dir"] = choch
+    else:
+        out["choch_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Liquidity sweep + reclaim (reversal) ---------------------------------
+    # Bullish: the bar's low takes out the last confirmed swing low (sweeps the
+    # resting liquidity) but the CLOSE reclaims back above it. Bearish mirror.
+    if cfg.use_liq_sweep:
+        swept_lo = (low < pl_arr) & (close > pl_arr)
+        swept_hi = (high > ph_arr) & (close < ph_arr)
+        liq = np.where(swept_lo, 1, np.where(swept_hi, -1, 0)).astype(np.int64)
+        out["liq_dir"] = liq
+    else:
+        out["liq_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- CVD divergence at pivots (reversal) ----------------------------------
+    if cfg.use_cvd_div:
+        out["cvddiv_dir"] = _cvd_div_dir(low, high, close, cvd, int(cfg.cvd_div_pivot_k))
+    else:
+        out["cvddiv_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Order-block mitigation (continuation) --------------------------------
+    if cfg.use_order_block:
+        out["ob_dir"] = _order_block_dir(open_, high, low, close, atr,
+                                         cfg.ob_impulse_atr, int(cfg.ob_max_age), cfg.ob_mit_pct)
+    else:
+        out["ob_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Momentum / displacement bar (momentum) -------------------------------
+    # Enter WITH a bar whose body is >= momentum_body_atr * ATR (a displacement /
+    # opening-drive impulse). Direction = sign of the bar body.
+    if cfg.use_momentum:
+        body = close - open_
+        thr = cfg.momentum_body_atr * atr
+        mom = np.where((body >= thr) & (thr > 0), 1,
+                       np.where((-body >= thr) & (thr > 0), -1, 0)).astype(np.int64)
+        out["mom_dir"] = mom
+    else:
+        out["mom_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- MACD line / signal cross (momentum, classic) -------------------------
+    if cfg.use_macd_cross:
+        macd_line = _ema(close, cfg.macd_fast) - _ema(close, cfg.macd_slow)
+        signal = _ema(macd_line, cfg.macd_signal)
+        out["macd_dir"] = _cross_dir(macd_line, signal)
+    else:
+        out["macd_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- RSI reversion — exit of oversold/overbought (mean reversion) ---------
+    if cfg.use_rsi_rev:
+        rsi = _rsi(close, cfg.rsi_length)
+        os_prev = np.zeros(n, dtype=bool); ob_prev = np.zeros(n, dtype=bool)
+        os_prev[1:] = rsi[:-1] <= cfg.rsi_os      # was oversold on the prior bar
+        ob_prev[1:] = rsi[:-1] >= cfg.rsi_ob
+        rr = np.where(os_prev & (rsi > cfg.rsi_os), 1,      # crossed back up out of OS -> long
+                      np.where(ob_prev & (rsi < cfg.rsi_ob), -1, 0)).astype(np.int64)
+        out["rsi_dir"] = rr
+    else:
+        out["rsi_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Donchian channel break (breakout/breakdown, classic) -----------------
+    if cfg.use_donchian:
+        dl = int(cfg.donchian_len)
+        upper = pd.Series(high).rolling(dl, min_periods=dl).max().shift(1).to_numpy()
+        lower = pd.Series(low).rolling(dl, min_periods=dl).min().shift(1).to_numpy()
+        up = close > upper; dn = close < lower
+        don = np.zeros(n, dtype=np.int64)
+        don[1:] = np.where(up[1:] & ~up[:-1], 1, np.where(dn[1:] & ~dn[:-1], -1, 0))
+        out["don_dir"] = don
+    else:
+        out["don_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Moving-average trend pullback (trend following / pullback) -----------
+    # In an uptrend (fast MA > slow MA) enter when the bar dips to/through the
+    # fast MA but closes back above it (a pullback-and-resume). Bearish mirror.
+    if cfg.use_ma_pullback:
+        fast = _ma(close, cfg.ma_fast, cfg.ma_type)
+        slow = _ma(close, cfg.ma_slow, cfg.ma_type)
+        up_tr = fast > slow
+        long_pb = up_tr & (low <= fast) & (close > fast)
+        short_pb = (~up_tr) & (high >= fast) & (close < fast)
+        mp = np.where(long_pb, 1, np.where(short_pb, -1, 0)).astype(np.int64)
+        # guard the NaN warm-up (rolling SMA leaves leading NaN -> comparisons False)
+        mp[np.isnan(slow)] = 0
+        out["mapb_dir"] = mp
+    else:
+        out["mapb_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Bollinger-band extreme reversion (mean reversion / range) ------------
+    # Long when the bar pokes below the lower band but closes back inside;
+    # short when it pokes above the upper band and closes back inside.
+    if cfg.use_bb_revert:
+        bl = int(cfg.bb_len)
+        cs = pd.Series(close)
+        basis = cs.rolling(bl, min_periods=bl).mean().to_numpy()
+        sd = cs.rolling(bl, min_periods=bl).std(ddof=0).to_numpy()
+        upper = basis + cfg.bb_mult * sd
+        lower = basis - cfg.bb_mult * sd
+        long_rv = (low < lower) & (close > lower)
+        short_rv = (high > upper) & (close < upper)
+        bb = np.where(long_rv, 1, np.where(short_rv, -1, 0)).astype(np.int64)
+        bb[np.isnan(sd)] = 0
+        out["bb_dir"] = bb
+    else:
+        out["bb_dir"] = np.zeros(n, dtype=np.int64)
+
+    # --- Supertrend entry (ATR-band trend flip) -------------------------------
+    if cfg.use_supertrend:
+        out["st_dir"] = _supertrend_dir(high, low, close, int(cfg.st_atr_length),
+                                        float(cfg.st_mult))
+    else:
+        out["st_dir"] = np.zeros(n, dtype=np.int64)
+
+    _tick(6)
     return out

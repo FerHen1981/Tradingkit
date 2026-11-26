@@ -1,0 +1,158 @@
+---
+import Base from "../../layouts/Base.astro";
+import Hero from "@mex/brand/components/Hero.astro";
+import Section from "@mex/brand/components/Section.astro";
+import Button from "@mex/brand/components/Button.astro";
+import { formatDate } from "@mex/brand/units";
+
+import { allGuides, byTopic, guidePath, levelLabel } from "../../lib/guides";
+
+const guides = await allGuides();
+const groups = byTopic(guides);
+---
+
+<Base
+  title="Gidsen"
+  description="Evergreen gidsen over emigreren als handelaar, je uitvoering meten, een bankrelatie regelen en de structuur eromheen. Bijgewerkt in plaats van opnieuw geschreven."
+>
+  <Hero
+    eyebrow="Kennisbank"
+    headline="Gidsen"
+    lead="De blog staat op datum; deze stukken staan op onderwerp. Ze worden bijgewerkt in plaats van opnieuw geschreven, dus bij elke gids staat wanneer dat voor het laatst gebeurde."
+    size="md"
+  >
+    <Button slot="actions" href="/start-hier">Nieuw hier? Start hier</Button>
+    <Button slot="actions" href="/begrippen" variant="secondary">Begrippenlijst</Button>
+  </Hero>
+
+  {groups.map((group) => (
+    <Section eyebrow={group.blurb} title={group.label}>
+      <ul class="cards">
+        {group.guides.map((guide) => (
+          <li class="card">
+            <a class="card__link" href={guidePath(guide)}>
+              <span class="card__meta">
+                <span class={`level level--${guide.data.level}`}>
+                  {levelLabel(guide.data.level)}
+                </span>
+                <span class="card__date">
+                  bijgewerkt {formatDate(guide.data.updated)}
+                </span>
+              </span>
+              <h3 class="card__title">{guide.data.title}</h3>
+              <p class="card__summary">{guide.data.summary}</p>
+            </a>
+
+            {guide.data.takeaways.length > 0 && (
+              <ul class="card__takeaways">
+                {guide.data.takeaways.slice(0, 3).map((t) => <li>{t}</li>)}
+              </ul>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Section>
+  ))}
+</Base>
+
+<style>
+  .cards {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: var(--sp-4);
+  }
+
+  @media (min-width: 800px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: var(--sp-5);
+    transition: border-color 0.15s ease;
+  }
+
+  .card:hover { border-color: var(--line-strong); }
+
+  .card__link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+  }
+
+  .card__link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+
+  .card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-3);
+  }
+
+  .level {
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-radius: var(--radius-pill);
+    padding: 0.2rem 0.65rem;
+    border: 1px solid transparent;
+  }
+
+  .level--start {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+
+  .level--verdieping {
+    color: var(--accent-2);
+    border-color: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  }
+
+  .level--gevorderd {
+    color: var(--muted);
+    border-color: var(--line);
+  }
+
+  .card__date {
+    font-family: var(--mono);
+    font-size: 0.625rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .card__title {
+    font-size: var(--t-h3);
+    margin-bottom: var(--sp-2);
+  }
+
+  .card:hover .card__title { color: var(--accent); }
+
+  .card__summary {
+    color: var(--muted);
+    font-size: 0.9375rem;
+    margin: 0;
+  }
+
+  .card__takeaways {
+    margin: var(--sp-4) 0 0;
+    padding: var(--sp-3) 0 0 1.1rem;
+    border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    font-size: 0.8125rem;
+    color: var(--dim);
+  }
+
+  .card__takeaways li + li { margin-top: var(--sp-1); }
+</style>
